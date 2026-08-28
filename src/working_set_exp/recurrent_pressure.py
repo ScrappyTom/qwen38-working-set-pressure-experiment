@@ -28,6 +28,7 @@ PREFIX_CALL_LIMIT = 12
 MIDDLE_CALL_LIMIT = 12
 FINAL_CALL_LIMIT = 8
 OUTPUT_ROOT = r"C:\e7-primary"
+PRIMARY_OUTPUT_ROOT = r"C:\e8-primary"
 MAXIMUM_HTTP_COMPLETION_CALLS = 160
 
 
@@ -178,6 +179,57 @@ def case_definitions() -> tuple[dict[str, Any], ...]:
     return (_source_case(), _observation_case())
 
 
+def _replace_case(value: Any, replacements: tuple[tuple[str, str], ...]) -> Any:
+    if isinstance(value, bytes):
+        text = value.decode("utf-8")
+        for old, new in replacements:
+            text = text.replace(old, new)
+        return text.encode("utf-8")
+    if isinstance(value, str):
+        for old, new in replacements:
+            value = value.replace(old, new)
+        return value
+    if isinstance(value, tuple):
+        return tuple(_replace_case(item, replacements) for item in value)
+    if isinstance(value, list):
+        return [_replace_case(item, replacements) for item in value]
+    if isinstance(value, dict):
+        return {_replace_case(key, replacements): _replace_case(item, replacements) for key, item in value.items()}
+    return value
+
+
+def primary_case_definitions() -> tuple[dict[str, Any], ...]:
+    source = _replace_case(_source_case(), (
+        ("E7-SOURCE", "E8-SOURCE"), ("quartz-", "topaz-"),
+        ("ROUTE_STEM", "CHANNEL_STEM"), ("route_stem", "channel_stem"),
+        ("policy/route.py", "policy/channel.py"), ("policy.route", "policy.channel"),
+        ("route", "channel"), ("amber", "alder"), ("bronze", "birch"),
+        ("cinder", "coral"), ("delta", "drift"), ("ember", "elm"),
+        ("delivery_key", "dispatch_token"), ("delivery_tag", "dispatch_badge"),
+        ("render_delivery", "compose_dispatch"), ("delivery/key.py", "dispatch/token.py"),
+        ("delivery/tag.py", "dispatch/badge.py"), ("delivery/render.py", "dispatch/compose.py"),
+        ("delivery.key", "dispatch.token"), ("delivery.tag", "dispatch.badge"),
+        ("delivery.render", "dispatch.compose"), ("delivery", "dispatch"),
+    ))
+    observation = _replace_case(_observation_case(), (
+        ("E7-OBSERVATION", "E8-OBSERVATION"), ("K4::", "J2@@"), ("M7::", "R8@@"),
+        ("iris", "hazel"), ("juniper", "maple"), ("kestrel", "oak"),
+        ("lumen", "pearl"), ("marrow", "reed"), ("nylon", "silk"), ("osprey", "tulip"),
+        ("session_label", "runtime_nameplate"), ("session_header", "runtime_prefix"),
+        ("encoded_session", "encoded_runtime"), ("session/label.py", "runtime/nameplate.py"),
+        ("session/header.py", "runtime/prefix.py"), ("session/wire.py", "runtime/codec.py"),
+        ("session.label", "runtime.nameplate"), ("session.header", "runtime.prefix"),
+        ("session.wire", "runtime.codec"), ("session_marker", "runtime_marker"), ("session", "runtime"),
+    ))
+    # Preserve an authentic second pressure boundary after the fresh lexical
+    # transformation slightly reduced tokenizer occupancy. This exact inert
+    # custody row is acquired during Phase B and has no task-semantic content.
+    observation["files"]["bridge/tulip.py"] += (
+        b'\nRECURRENT_PRESSURE_RESERVE = "custody-only-001-002-003-004-005-006-007-008"\n'
+    )
+    return source, observation
+
+
 def _candidate_after(case: dict[str, Any], phase: str) -> Candidate:
     candidate = Candidate.create(case["files"])
     patches = [case["phase_a_patch"]]
@@ -223,11 +275,14 @@ class RecurrentFixture:
         )
 
 
-def construct_bank(target: Path, *, replace_preseal: bool = False) -> dict[str, Any]:
+def construct_bank(
+    target: Path, *, replace_preseal: bool = False, definitions: tuple[dict[str, Any], ...] | None = None,
+) -> dict[str, Any]:
     if target.exists() and not replace_preseal:
         raise FileExistsError(target)
     files: dict[str, bytes] = {}
-    for case in case_definitions():
+    definitions = definitions or case_definitions()
+    for case in definitions:
         initial = Candidate.create(case["files"])
         after_a, after_b, known_good = (_candidate_after(case, phase) for phase in ("A", "B", "C"))
         visible = f"model_visible/{case['fixture_id']}"
@@ -268,7 +323,7 @@ def construct_bank(target: Path, *, replace_preseal: bool = False) -> dict[str, 
     inventory = [{"path": path, "size_bytes": len(data), "sha256": sha256_bytes(data)} for path, data in sorted(files.items())]
     manifest = {
         "schema_version": BANK_SCHEMA, "bank_id": "E7BANK-" + sha256_bytes(canonical_json_bytes(inventory)),
-        "case_ids": list(CASE_IDS), "seeds": list(SEEDS), "fresh_before_actor_exposure": True,
+        "case_ids": [case["fixture_id"] for case in definitions], "seeds": list(SEEDS), "fresh_before_actor_exposure": True,
         "selected_before_actor_behavior": True, "evaluator_separate": True, "files": inventory,
     }
     atomic_write(target / "BANK_MANIFEST.json", canonical_json_bytes(manifest))
@@ -523,23 +578,30 @@ def run_middle(
 
 
 def run_final(
-    fixture: RecurrentFixture, middle: MiddleOutcome, *, seed: int, actor: Actor, output_dir: Path,
+    fixture: RecurrentFixture, middle: MiddleOutcome, *, condition: str, seed: int, actor: Actor, output_dir: Path,
 ) -> dict[str, Any]:
-    if middle.binding is None or middle.disposition != "second_boundary_eligible":
-        raise ValueError("final phase requires an eligible recurrent boundary")
+    allowed = (
+        condition == "T25" and middle.disposition == "second_boundary_eligible"
+    ) or (
+        condition == "C50" and middle.disposition == "second_boundary_not_reached"
+    )
+    if middle.binding is None or not allowed:
+        raise ValueError("final phase requires an admitted condition-specific transition")
     if output_dir.exists():
         raise FileExistsError(output_dir)
     output_dir.mkdir(parents=True)
     store = ArtifactStore(output_dir)
-    log = RecordLog(output_dir / "records.jsonl", f"{fixture.fixture_id}-S{seed}-T25-C")
+    log = RecordLog(output_dir / "records.jsonl", f"{fixture.fixture_id}-S{seed}-{condition}-C")
     state = SessionState(candidate=middle.state.candidate, stage="continuation")
     executor = ToolExecutor(
         state, required_full_reads=(), prefork_checker=fixture.phase_a_checker, public_checker=fixture.final_checker,
         final_target=fixture.phase_c_target, probe_id=fixture.probe_id, probe_body=fixture.probe_v2,
         reopenable=middle.reopenable,
     )
-    history = [middle.active_history[-1]]
-    log.append("final_started", {"condition": "T25", "candidate_id": state.candidate.candidate_id, "boundary_binding": middle.binding}, _save_candidate(store, state.candidate, _snapshot_prefix(state.candidate)))
+    history = [middle.active_history[-1]] if condition == "T25" else list(middle.active_history)
+    reconstructed = condition == "T25"
+    active_ceiling = T25_TOTAL_CEILING if reconstructed else PHYSICAL_CONTEXT
+    log.append("final_started", {"condition": condition, "candidate_id": state.candidate.candidate_id, "boundary_binding": middle.binding}, _save_candidate(store, state.candidate, _snapshot_prefix(state.candidate)))
     calls = 0
     http_calls = 0
     maximum_prompt = 0
@@ -548,12 +610,12 @@ def run_final(
         calls += 1
         request = build_recurrent_request(
             fixture, candidate=state.candidate, phase="C", history=history, observations=middle.observations,
-            reconstructed=True, boundary_binding=middle.binding, calls_used=calls - 1,
+            reconstructed=reconstructed, boundary_binding=middle.binding, calls_used=calls - 1,
         )
         try:
             action, result, outcome = _execute_call(
                 actor=actor, request=request, stage="continuation", probe_id=fixture.probe_id,
-                call_id=f"{fixture.fixture_id}-S{seed}-T25-C{calls:02d}", active_total_ceiling=T25_TOTAL_CEILING,
+                call_id=f"{fixture.fixture_id}-S{seed}-{condition}-C{calls:02d}", active_total_ceiling=active_ceiling,
                 executor=executor, store=store, log=log, artifact_prefix=f"transcript/{calls:03d}",
             )
         except CapacityStopped as exc:
@@ -570,7 +632,7 @@ def run_final(
         "public_check_passed": state.public_check_passed, "capacity_stop": capacity_stop,
     }, [])
     summary = {
-        "schema_version": "experiment-007-final-summary-v1", "fixture_id": fixture.fixture_id, "condition": "T25",
+        "schema_version": "experiment-007-final-summary-v1", "fixture_id": fixture.fixture_id, "condition": condition,
         "seed": seed, "disposition": disposition, "calls": calls, "prepared_invocations": calls,
         "http_completion_calls": http_calls, "candidate_id": state.candidate.candidate_id,
         "submitted": state.submitted, "public_check_passed": state.public_check_passed,
@@ -636,16 +698,19 @@ def verify_package(target: Path, *, bank: Path, schedule_path: Path, profile: Ru
     return {"verified": True, "package_id": manifest["package_id"], "file_count": len(files)}
 
 
-def build_closure(repo: Path) -> dict[str, Any]:
+def build_closure(repo: Path, *, entrypoint: str = "scripts/run_recurrent_pressure.py") -> dict[str, Any]:
     paths = sorted((repo / "src" / "working_set_exp").glob("*.py"))
-    paths.append(repo / "scripts" / "run_recurrent_pressure.py")
+    paths.append(repo / Path(*entrypoint.split("/")))
     rows = [{"path": path.relative_to(repo).as_posix(), "size_bytes": path.stat().st_size, "sha256": sha256_file(path)} for path in paths]
     return {"schema_version": CLOSURE_SCHEMA, "files": rows, "aggregate_sha256": sha256_bytes(canonical_json_bytes(rows))}
 
 
 def verify_closure(repo: Path, path: Path) -> dict[str, Any]:
     expected = load_json_strict(path.read_bytes())
-    observed = build_closure(repo)
+    entrypoints = [row["path"] for row in expected["files"] if not row["path"].startswith("src/working_set_exp/")]
+    if len(entrypoints) != 1:
+        raise ValueError("recurrent closure entrypoint differs")
+    observed = build_closure(repo, entrypoint=entrypoints[0])
     if canonical_json_bytes(expected) != canonical_json_bytes(observed):
         raise ValueError("recurrent closure differs")
     return {"verified": True, "aggregate_sha256": observed["aggregate_sha256"], "file_count": len(observed["files"])}
@@ -677,6 +742,41 @@ def validate_authorization(experiment: Path) -> dict[str, Any]:
     expected = expected_authorization(experiment)
     if canonical_json_bytes(observed) != canonical_json_bytes(expected):
         raise ValueError("recurrent authorization differs")
+    return {"verified": True, "authorization_sha256": sha256_file(experiment / "MEASURED_AUTHORIZATION.json")}
+
+
+def expected_primary_authorization(experiment: Path) -> dict[str, Any]:
+    bank = load_json_strict((experiment / "fresh_bank" / "BANK_MANIFEST.json").read_bytes())
+    package = load_json_strict((experiment / "execution_package" / "PACKAGE_MANIFEST.json").read_bytes())
+    closure = load_json_strict((experiment / "EXECUTABLE_CLOSURE.json").read_bytes())
+    profile = load_json_strict((experiment / "RUNTIME_PROFILE.json").read_bytes())
+    return {
+        "schema_version": "experiment-008-recurrent-pressure-authorization-v1",
+        "status": "owner_authorized_exact_fresh_corrected_recurrent_pressure_execution",
+        "owner_statement": "Go ahead and work on the next experiment.",
+        "attempt1_disposition": "immutable_apparatus_evidence_not_reused_or_reclassified",
+        "attempt1_response_seal_sha256": sha256_file(
+            experiment.parent / "007_recurrent_bounded_pressure" / "attempt1_apparatus_run" / "RESPONSE_SEAL.json"
+        ),
+        "bank_id": bank["bank_id"], "bank_manifest_sha256": sha256_file(experiment / "fresh_bank" / "BANK_MANIFEST.json"),
+        "package_id": package["package_id"], "package_manifest_sha256": sha256_file(experiment / "execution_package" / "PACKAGE_MANIFEST.json"),
+        "closure_manifest_sha256": sha256_file(experiment / "EXECUTABLE_CLOSURE.json"),
+        "closure_aggregate_sha256": closure["aggregate_sha256"], "schedule_sha256": sha256_file(experiment / "SCHEDULE.json"),
+        "runtime_profile_sha256": sha256_file(experiment / "RUNTIME_PROFILE.json"), "actor_sha256": profile["model_sha256"],
+        "conditions": ["C50-R1", "T25-R1-recurrent"], "cases": 2, "seeds_per_case": 2,
+        "prefixes": 4, "middle_branches": 8, "maximum_final_branches": 8,
+        "continue_c50_phase_c_when_physically_admitted": True,
+        "maximum_http_completion_calls": MAXIMUM_HTTP_COMPLETION_CALLS, "attempts_per_call": 1,
+        "retries": 0, "repairs": 0, "rescues": 0, "response_seal_before_evaluator_access": True,
+        "output_root": PRIMARY_OUTPUT_ROOT, "automatic_successor": False, "server_reasoning_budget_tokens": REASONING_BUDGET,
+    }
+
+
+def validate_primary_authorization(experiment: Path) -> dict[str, Any]:
+    observed = load_json_strict((experiment / "MEASURED_AUTHORIZATION.json").read_bytes())
+    expected = expected_primary_authorization(experiment)
+    if canonical_json_bytes(observed) != canonical_json_bytes(expected):
+        raise ValueError("fresh corrected recurrent authorization differs")
     return {"verified": True, "authorization_sha256": sha256_file(experiment / "MEASURED_AUTHORIZATION.json")}
 
 

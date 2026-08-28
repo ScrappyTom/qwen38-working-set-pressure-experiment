@@ -118,7 +118,7 @@ def main() -> None:
                     cell["middle"][condition] = summary
                     if condition == "T25" and middle.disposition == "second_boundary_eligible":
                         final = run_final(
-                            fixture, middle, seed=row["seed"],
+                            fixture, middle, condition="T25", seed=row["seed"],
                             actor=LiveActor(profile, seed=row["seed"], reasoning_enabled=True),
                             output_dir=cell_root / condition / "phase-c",
                         )

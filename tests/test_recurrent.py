@@ -14,9 +14,27 @@ from working_set_exp.tools import SessionState, ToolExecutor, action_schema
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPERIMENT = ROOT / "experiments" / "007_recurrent_bounded_pressure"
+PRIMARY = ROOT / "experiments" / "008_recurrent_bounded_pressure_primary"
 
 
 class RecurrentPressureTests(unittest.TestCase):
+    def test_fresh_corrected_primary_bank_and_known_good_candidates(self) -> None:
+        result = verify_bank(PRIMARY / "fresh_bank")
+        self.assertEqual(result["file_count"], 62)
+        for fixture_id in ("E8-SOURCE", "E8-OBSERVATION"):
+            fixture = load_recurrent_fixture(PRIMARY / "fresh_bank", fixture_id)
+            known_good = fixture.initial
+            import json
+            truth = json.loads((PRIMARY / "fresh_bank" / "evaluator_only" / fixture_id / "TRUTH.json").read_text())
+            for key in ("phase_a_patch", "phase_b_patch", "phase_c_patch"):
+                row = truth[key]
+                known_good, _ = known_good.patch(
+                    path=row["path"], old=row["old"], new=row["new"],
+                    expected_candidate_id=known_good.candidate_id,
+                    expected_file_sha256=known_good.file_sha256(row["path"]),
+                )
+            self.assertTrue(hidden_grade(fixture, known_good)["passed"])
+
     def test_fresh_bank_and_known_good_candidates(self) -> None:
         result = verify_bank(EXPERIMENT / "fresh_bank")
         self.assertEqual(result["file_count"], 62)

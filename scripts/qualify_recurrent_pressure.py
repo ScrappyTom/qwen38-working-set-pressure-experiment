@@ -111,7 +111,8 @@ def _run_case(fixture_id: str, seed: int) -> dict:
         return apply(executor, action, middle_history)
 
     if fixture.family == "recurrent_source_continuity":
-        middle_apply({"action": "read", "path": "policy/route.py", "start_line": 1, "line_count": 500})
+        governing_path = truth["governing"]["path"]
+        middle_apply({"action": "read", "path": governing_path, "start_line": 1, "line_count": 500})
     else:
         handle = next(row["handle"] for row in observations if row["action"] == "probe")
         middle_apply({"action": "reopen_observation", "handle": handle})
@@ -159,7 +160,7 @@ def _run_case(fixture_id: str, seed: int) -> dict:
         return apply(final_executor, action, final_history)
 
     if fixture.family == "recurrent_source_continuity":
-        final_apply({"action": "read", "path": "policy/route.py", "start_line": 1, "line_count": 500})
+        final_apply({"action": "read", "path": governing_path, "start_line": 1, "line_count": 500})
     else:
         current = next(row["handle"] for row in reversed(observations) if row["action"] == "probe" and row["candidate_id"] == final_state.candidate.candidate_id)
         final_apply({"action": "reopen_observation", "handle": current})
