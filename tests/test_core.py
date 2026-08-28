@@ -8,6 +8,7 @@ from working_set_exp.bank import construct_bank, verify_bank
 from working_set_exp.candidate import Candidate, CandidateError
 from working_set_exp.fixture import load_fixture, load_truth
 from working_set_exp.isolation import run_checker
+from working_set_exp.measured import build_executable_closure, construct_execution_package, verify_execution_package
 from working_set_exp.p0 import build_p0
 from working_set_exp.request import build_request
 from working_set_exp.tools import SessionState, ToolError, ToolExecutor, action_schema, strict_action
@@ -146,6 +147,34 @@ class CoreTests(unittest.TestCase):
                 self.assertTrue(run_checker(known, fixture.public_checker)["passed"])
                 hidden = (bank / "evaluator_only" / fixture_id / "hidden.py").read_bytes()
                 self.assertTrue(run_checker(known, hidden)["passed"])
+
+    def test_measured_package_reconstructs_exact_initial_calls(self):
+        root = Path(__file__).resolve().parents[1]
+        experiment = root / "experiments" / "002_single_boundary_reconstruction"
+        with tempfile.TemporaryDirectory(prefix="e2-pkg-test-") as raw:
+            package = Path(raw) / "package"
+            manifest = construct_execution_package(
+                package,
+                bank_root=experiment / "fresh_bank",
+                schedule_path=experiment / "MEASURED_SCHEDULE.json",
+                runtime_profile_path=experiment / "RUNTIME_PROFILE.json",
+            )
+            self.assertEqual(len(manifest["cells"]), 4)
+            self.assertTrue(
+                verify_execution_package(
+                    package,
+                    bank_root=experiment / "fresh_bank",
+                    schedule_path=experiment / "MEASURED_SCHEDULE.json",
+                    runtime_profile_path=experiment / "RUNTIME_PROFILE.json",
+                )["verified"]
+            )
+
+    def test_executable_closure_covers_package_and_entrypoint(self):
+        root = Path(__file__).resolve().parents[1]
+        closure = build_executable_closure(root)
+        paths = {row["path"] for row in closure["files"]}
+        self.assertIn("src/working_set_exp/measured.py", paths)
+        self.assertIn("scripts/run_measured.py", paths)
 
 
 if __name__ == "__main__":
