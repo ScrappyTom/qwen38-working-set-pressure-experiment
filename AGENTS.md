@@ -1,8 +1,8 @@
 # Experiment operating rules
 
-This repository exists only to test single-boundary exact-context
-reconstruction and its directly earned evidence-to-action diagnostic. Keep it
-smaller than its evidence donors.
+This repository exists only to test exact-context reconstruction across one or
+more authentic pressure boundaries and its directly earned evidence-to-action
+diagnostics. Keep it smaller than its evidence donors.
 
 Read in order:
 
@@ -26,8 +26,10 @@ Non-negotiable rules:
   embeddings, ranking, or semantic host routing;
 - one invocation yields at most one strict JSON action;
 - one attempt, no retry, repair, rescue, or cross-cell history;
-- C50 and T25 must fork from the same exact task, candidate, chronology, and
-  pending work within each family/seed;
+- C50 and T25 must begin from the same exact first-boundary task, candidate,
+  chronology, and pending work within each family/seed; later recurrent state
+  must preserve exact ancestry and may diverge only through observed actor
+  behavior or mechanical capacity stops;
 - any feature or patch must be earned by a directly observed need;
 - seal responses before evaluator access;
 - measured work is incomplete until every transcript receives a durable direct

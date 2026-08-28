@@ -31,8 +31,8 @@ TOOL_CONTRACT = {
     "read": "exact current whole-line page with non-guessing continuation",
     "patch": "one exact candidate/file-bound replacement",
     "check": "stage-bound exact check on the expected candidate",
-    "probe": "prefix-only exact external runtime observation when listed",
-    "fork_ready": "prefix-only mechanical gate after required reads and prefork check",
+    "probe": "stage-bound exact external runtime observation when listed",
+    "fork_ready": "mechanical boundary gate after required reads and the current stage check",
     "reopen_observation": "continuation-only exact reopen by listed handle",
     "submit": "continuation-only terminal candidate submission",
 }
@@ -70,6 +70,11 @@ def available_actions(stage: str, *, probe_id: str | None) -> list[str]:
         return result
     if stage == "continuation":
         return ["tree", "search", "read", "patch", "check", "reopen_observation", "submit"]
+    if stage == "recurrent":
+        result = ["tree", "search", "read", "patch", "check", "reopen_observation", "fork_ready"]
+        if probe_id is not None:
+            result.append("probe")
+        return result
     raise ValueError("invalid request stage")
 
 

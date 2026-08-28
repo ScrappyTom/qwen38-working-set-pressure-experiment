@@ -237,6 +237,12 @@ class ToolExecutor:
         )
         previous = self.state.candidate.candidate_id
         self.state.candidate = successor
+        # A successful mutation invalidates any check result bound to the
+        # predecessor. Historical experiments always checked after their last
+        # patch, so this strengthens version integrity without changing their
+        # model-visible trajectories.
+        self.state.prefork_check_passed = False
+        self.state.public_check_passed = False
         return self._bounded(
             {
                 "accepted": True,
@@ -257,7 +263,7 @@ class ToolExecutor:
         if check_id == "prefork" and self.state.stage == "prefix":
             result = run_checker(self.state.candidate, self.prefork_checker)
             self.state.prefork_check_passed = result["passed"]
-        elif check_id == "public" and self.state.stage == "continuation":
+        elif check_id == "public" and self.state.stage in {"continuation", "recurrent"}:
             result = run_checker(self.state.candidate, self.public_checker)
             self.state.public_check_passed = result["passed"]
         else:
@@ -272,7 +278,7 @@ class ToolExecutor:
         )
 
     def _probe(self, action: dict[str, Any]) -> dict[str, Any]:
-        if set(action) != {"action", "probe_id"} or self.state.stage != "prefix":
+        if set(action) != {"action", "probe_id"} or self.state.stage not in {"prefix", "recurrent"}:
             raise ToolError("probe action is unavailable")
         if self.probe_id is None or action["probe_id"] != self.probe_id or self.probe_body is None:
             raise ToolError("probe ID is unavailable")
@@ -287,15 +293,16 @@ class ToolExecutor:
         )
 
     def _fork_ready(self, action: dict[str, Any]) -> dict[str, Any]:
-        if set(action) != {"action", "expected_candidate_id"} or self.state.stage != "prefix":
+        if set(action) != {"action", "expected_candidate_id"} or self.state.stage not in {"prefix", "recurrent"}:
             raise ToolError("fork_ready action is unavailable")
         if action["expected_candidate_id"] != self.state.candidate.candidate_id:
             raise ToolError("stale fork candidate binding")
         missing = sorted(set(self.required_full_reads) - self.state.complete_reads)
         if missing:
             raise ToolError("required complete reads remain: " + ",".join(missing))
-        if not self.state.prefork_check_passed:
-            raise ToolError("prefork check has not passed")
+        check_passed = self.state.prefork_check_passed if self.state.stage == "prefix" else self.state.public_check_passed
+        if not check_passed:
+            raise ToolError("current boundary check has not passed")
         if self.probe_id is not None and not self.state.probe_done:
             raise ToolError("required compatibility probe has not run")
         self.state.fork_ready = True
@@ -309,7 +316,7 @@ class ToolExecutor:
         )
 
     def _reopen(self, action: dict[str, Any]) -> dict[str, Any]:
-        if set(action) != {"action", "handle"} or self.state.stage != "continuation":
+        if set(action) != {"action", "handle"} or self.state.stage not in {"continuation", "recurrent"}:
             raise ToolError("reopen_observation is unavailable")
         handle = action["handle"]
         if handle not in self.reopenable:
@@ -367,6 +374,11 @@ def action_schema(stage: str, *, probe_id: str | None) -> dict[str, Any]:
         schema = {"oneOf": options}
     elif stage == "continuation":
         options = [tree, search, read, patch, check, reopen, submit]
+        schema = {"oneOf": options}
+    elif stage == "recurrent":
+        options = [tree, search, read, patch, check, reopen, fork]
+        if probe_id is not None:
+            options.append(obj({"action": const("probe"), "probe_id": {"type": "string", "const": probe_id}}, ["action", "probe_id"]))
         schema = {"oneOf": options}
     else:
         raise ValueError("invalid response stage")

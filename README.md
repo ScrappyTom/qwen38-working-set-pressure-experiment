@@ -21,15 +21,25 @@ Both branches retain exact external custody and the earned P0 readable
 path/symbol directory. T25 receives no summary and no host-selected relevant
 facts. It must reacquire exact source or prior observations itself.
 
-See `experiments/006_authentic_bounded_pressure/SPEC.md` for the active study
-and `experiments/002_single_boundary_reconstruction/SPEC.md` for the original
-reasoning-off pressure attempt.
+See `experiments/007_recurrent_bounded_pressure/SPEC.md` for the active study,
+`experiments/006_authentic_bounded_pressure/SPEC.md` for the successful first
+authentic transition, and `experiments/002_single_boundary_reconstruction/SPEC.md`
+for the original reasoning-off pressure attempt.
 
 Experiment 006 completed successfully. Two fresh authentic prefixes crossed
 the 25k boundary, and both reconstructed continuations reacquired their exact
 governing source/observation, passed hidden grading, checked, and submitted.
 See `experiments/006_authentic_bounded_pressure/RESULTS.md` and
 `experiments/006_authentic_bounded_pressure/DIRECT_TRANSCRIPT_AUDIT.md`.
+
+Experiment 007 is the earned recurrent-boundary test. It freezes two fresh
+three-phase geometries and two seeds each. The same minimal controller must
+cross two prospective 25k transitions, reuse or reacquire an unchanged source
+fact, and distinguish a current candidate-bound runtime observation from an
+older exact but stale one. No new metadata, summary, retrieval, or reasoning
+feature is added. The offline scripted paths place the first transitions at
+28,344/28,761 tokens and the second transitions at 22,091/22,086 prompt tokens;
+all last pre-transition calls remain admitted under 25k.
 
 Development live rehearsal is complete. From one exact 32k-token shared
 prefix, C50 used retained chronology to make a hidden-correct repair and
