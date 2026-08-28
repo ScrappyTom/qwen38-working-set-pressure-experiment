@@ -8,7 +8,7 @@ from working_set_exp.fixture import load_fixture
 from working_set_exp.jsonutil import load_json_strict
 from working_set_exp.reasoning import CASE_IDS, construct_bank, progress_pointer, verify_bank
 from working_set_exp.request import REASONING_DIAGNOSTIC_SYSTEM_PROMPT, render_reasoning_prompt
-from working_set_exp.runtime import REASONING_BUDGET, RuntimeProfile, endpoint_request
+from working_set_exp.runtime import OwnedServer, REASONING_BUDGET, RuntimeProfile, endpoint_request
 
 
 class ReasoningDiagnosticTests(unittest.TestCase):
@@ -41,7 +41,7 @@ class ReasoningDiagnosticTests(unittest.TestCase):
         self.assertTrue(on.endswith(b"<|im_start|>assistant\n<think>\n"))
         self.assertNotIn(b"</think>", on.rsplit(b"<|im_start|>assistant", 1)[1])
 
-    def test_reasoning_endpoint_is_bounded_and_final_content_remains_schema_bound(self) -> None:
+    def test_reasoning_endpoint_requests_budget_and_final_content_remains_schema_bound(self) -> None:
         profile = self.profile()
         request = b'{"stage":"continuation"}'
         off = load_json_strict(endpoint_request(profile, request, stage="continuation", probe_id=None, seed=7))
@@ -59,6 +59,15 @@ class ReasoningDiagnosticTests(unittest.TestCase):
         self.assertTrue(on["chat_template_kwargs"]["enable_thinking"])
         self.assertEqual(on["response_format"], off["response_format"])
         self.assertEqual(on["max_tokens"], off["max_tokens"])
+
+    def test_server_reasoning_budget_is_explicitly_configurable(self) -> None:
+        server = OwnedServer(
+            self.profile(), Path("evidence"), reasoning_mode="auto",
+            reasoning_budget=REASONING_BUDGET,
+        )
+        self.assertEqual(server.reasoning_budget, REASONING_BUDGET)
+        with self.assertRaises(ValueError):
+            OwnedServer(self.profile(), Path("evidence"), reasoning_mode="auto", reasoning_budget=-2)
 
 
 if __name__ == "__main__":

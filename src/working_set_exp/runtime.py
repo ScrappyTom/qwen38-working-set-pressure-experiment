@@ -343,13 +343,17 @@ class OwnedServer:
         *,
         port: int = PORT,
         reasoning_mode: str = "off",
+        reasoning_budget: int | None = None,
     ):
         if reasoning_mode not in {"off", "auto"}:
             raise ValueError("invalid server reasoning mode")
+        if reasoning_budget is not None and reasoning_budget < -1:
+            raise ValueError("invalid server reasoning budget")
         self.profile = profile
         self.run_root = run_root
         self.port = port
         self.reasoning_mode = reasoning_mode
+        self.reasoning_budget = reasoning_budget
         self.process: subprocess.Popen[bytes] | None = None
         self.stdout: Any = None
         self.stderr: Any = None
@@ -361,6 +365,11 @@ class OwnedServer:
         runtime.mkdir(parents=True, exist_ok=False)
         slots = runtime / "slots"
         slots.mkdir()
+        server_reasoning_budget = (
+            self.reasoning_budget
+            if self.reasoning_budget is not None
+            else (-1 if self.reasoning_mode == "auto" else 0)
+        )
         arguments = [
             "-m", str(self.profile.model_path), "--alias", self.profile.model_alias,
             "--host", "127.0.0.1", "--port", str(self.port), "--gpu-layers", "all",
@@ -368,7 +377,7 @@ class OwnedServer:
             "--kv-unified", "-b", "512", "-ub", "256", "--threads", "7", "--threads-batch", "8",
             "--parallel", "1", "--cache-prompt", "--cache-ram", "0", "--slot-save-path", str(slots),
             "--no-context-shift", "--jinja", "--reasoning", self.reasoning_mode, "--reasoning-format", "deepseek",
-            "--reasoning-budget", "-1" if self.reasoning_mode == "auto" else "0", "--no-reasoning-preserve", "--temp", "0.7", "--top-p", "0.8",
+            "--reasoning-budget", str(server_reasoning_budget), "--no-reasoning-preserve", "--temp", "0.7", "--top-p", "0.8",
             "--top-k", "20", "--min-p", "0.0", "--presence-penalty", "1.5", "--repeat-penalty", "1.0",
             "--metrics", "--slots", "--no-mmproj", "--verbose", "--log-file", str(runtime / "llama-server.log"),
         ]
