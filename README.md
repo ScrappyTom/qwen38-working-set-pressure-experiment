@@ -55,3 +55,12 @@ cap was not enforced by the per-request llama.cpp field, so this is exploratory
 reasoning-enabled evidence rather than a qualified bounded-reasoning result.
 See `experiments/004_reasoning_transition_diagnostic/ATTEMPT1_RESULTS_DECISION.md`,
 the direct transcript audit, and `docs/DONOR_AUDIT.md`.
+
+A development-only follow-up moved the 512-token control to the llama-server
+launch and verified an actual maximum of 511 private tokens. On the already
+exposed source case, both modes remained hidden-correct, while bounded reasoning
+used P0 ranges to reduce exact read content by 84.7% and cumulative prompt
+tokens by 47.5%, at the cost of one call, 2,542 completion tokens, and 68
+seconds. This earns a minimal fresh constructed-fork replication; it is not
+itself measured evidence. See
+`experiments/004_reasoning_transition_diagnostic/SERVER_BUDGET_DEVELOPMENT_FINDING.md`.
