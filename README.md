@@ -43,3 +43,11 @@ an exact historical observation. It was not sufficient: the reasoning-off actor
 still failed to mutate after acquiring the required facts. See
 `experiments/003_progress_pointer_diagnostic/RESULTS.md` and
 `experiments/003_progress_pointer_diagnostic/DIRECT_TRANSCRIPT_AUDIT.md`.
+
+Experiment 004 is the next narrow diagnostic. It holds the earned P0 and
+verbatim progress-pointer reconstruction fixed and compares reasoning off with
+low private reasoning capped at 512 tokens on two fresh sibling geometries.
+The fresh bank and exact execution package are offline-qualified; model
+exposure is gated by a development-only live reasoning uptake check. See
+`experiments/004_reasoning_transition_diagnostic/SPEC.md` and the expanded
+`docs/DONOR_AUDIT.md`.

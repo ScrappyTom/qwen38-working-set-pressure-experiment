@@ -185,6 +185,10 @@ def _execute_call(
         store.put(f"{artifact_prefix}-endpoint-response.json", outcome.raw_endpoint_response),
         store.put(f"{artifact_prefix}-assistant-content.json", outcome.assistant_content),
     ]
+    if outcome.reasoning_content:
+        response_artifacts.append(
+            store.put(f"{artifact_prefix}-assistant-reasoning.txt", outcome.reasoning_content)
+        )
     try:
         action = strict_action(outcome.assistant_content)
         result = executor.execute(action)
@@ -196,23 +200,27 @@ def _execute_call(
     artifacts = [*response_artifacts, result_artifact]
     if action.get("action") == "patch" and result.get("accepted"):
         artifacts.extend(_save_candidate(store, executor.state.candidate, _snapshot_prefix(executor.state.candidate)))
-    log.append(
-        "action_result",
-        {
-            "call_id": call_id,
-            "action": action,
-            "result": result,
-            "candidate_id": executor.state.candidate.candidate_id,
-            "offline_prompt_tokens": outcome.offline_prompt_tokens,
-            "server_reported_prompt_tokens": outcome.server_prompt_tokens,
-            "server_usage_semantics": "may_exclude_exact_cached_prefix_tokens",
-            "completion_tokens": outcome.completion_tokens,
-            "accounting_delta": outcome.accounting_delta,
-            "elapsed_ms": outcome.elapsed_ms,
-            "response_id": outcome.response_id,
-        },
-        artifacts,
-    )
+    action_payload = {
+        "call_id": call_id,
+        "action": action,
+        "result": result,
+        "candidate_id": executor.state.candidate.candidate_id,
+        "offline_prompt_tokens": outcome.offline_prompt_tokens,
+        "server_reported_prompt_tokens": outcome.server_prompt_tokens,
+        "server_usage_semantics": "may_exclude_exact_cached_prefix_tokens",
+        "completion_tokens": outcome.completion_tokens,
+        "accounting_delta": outcome.accounting_delta,
+        "elapsed_ms": outcome.elapsed_ms,
+        "response_id": outcome.response_id,
+    }
+    if outcome.reasoning_content:
+        action_payload.update(
+            {
+                "reasoning_content_bytes": len(outcome.reasoning_content),
+                "reasoning_content_sha256": sha256_bytes(outcome.reasoning_content),
+            }
+        )
+    log.append("action_result", action_payload, artifacts)
     return action, result, outcome
 
 
@@ -385,7 +393,7 @@ def run_branch(
     prefix_call_limit: int = PREFIX_CALL_LIMIT,
     branch_call_limit: int = BRANCH_CALL_LIMIT,
 ) -> dict[str, Any]:
-    if condition not in {"C50", "T25", "T25-M", "T25-P"}:
+    if condition not in {"C50", "T25", "T25-M", "T25-P", "R0", "R1"}:
         raise ValueError("invalid branch condition")
     if output_dir.exists():
         raise FileExistsError(output_dir)

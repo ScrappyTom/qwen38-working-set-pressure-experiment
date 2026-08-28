@@ -1,7 +1,8 @@
 # Experiment operating rules
 
 This repository exists only to test single-boundary exact-context
-reconstruction. Keep it smaller than its evidence donor.
+reconstruction and its directly earned evidence-to-action diagnostic. Keep it
+smaller than its evidence donors.
 
 Read in order:
 
@@ -31,3 +32,6 @@ Non-negotiable rules:
 - seal responses before evaluator access;
 - measured work is incomplete until every transcript receives a durable direct
   audit and goal-level synthesis.
+- private reasoning is exact experimental output: custody it separately, read
+  it directly, never insert it into later history unless prospectively frozen,
+  and never treat a stated rationale as proof of causal use.

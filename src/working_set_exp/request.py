@@ -15,6 +15,15 @@ SYSTEM_PROMPT = (
     "Treat candidate and file bindings as exact. Never invent paths, handles, check IDs, or facts."
 )
 
+REASONING_DIAGNOSTIC_SYSTEM_PROMPT = (
+    "You are the coding actor in a controlled context-reconstruction experiment. "
+    "Follow the exact staged task and current request. Return one strict bare JSON action object in final content and no prose or wrapper. "
+    "If private reasoning is enabled, keep it only in the separate reasoning channel; the final content must still be exactly one action. "
+    "P0 is a complete task-independent readable directory, not a relevance judgment. Read exact current source before mutation and reacquire any absent governing fact. "
+    "Observation directory rows are identities, not their exact bodies; use reopen_observation before relying on a historical dynamic result. "
+    "Treat candidate and file bindings as exact. Never invent paths, handles, check IDs, or facts."
+)
+
 
 TOOL_CONTRACT = {
     "tree": "shallow deterministic candidate-relative directory page",
@@ -134,6 +143,25 @@ def render_prompt(request: bytes) -> bytes:
         + "<|im_end|>\n<|im_start|>user\n"
         + user
         + "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+    ).encode("utf-8")
+
+
+def render_reasoning_prompt(request: bytes, *, enabled: bool) -> bytes:
+    user = request.decode("utf-8").strip()
+    reasoning_instruction = (
+        "Reasoning effort is set to low. Keep your thinking brief and focused, moving directly to the conclusion without unnecessary elaboration.\n\n"
+        if enabled
+        else ""
+    )
+    assistant_prefix = "<think>\n" if enabled else "<think>\n\n</think>\n\n"
+    return (
+        "<|im_start|>system\n"
+        + reasoning_instruction
+        + REASONING_DIAGNOSTIC_SYSTEM_PROMPT
+        + "<|im_end|>\n<|im_start|>user\n"
+        + user
+        + "<|im_end|>\n<|im_start|>assistant\n"
+        + assistant_prefix
     ).encode("utf-8")
 
 

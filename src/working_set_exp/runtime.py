@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .jsonutil import canonical_json_bytes, load_json_strict, sha256_bytes, sha256_file
-from .request import SYSTEM_PROMPT, render_prompt
+from .request import REASONING_DIAGNOSTIC_SYSTEM_PROMPT, SYSTEM_PROMPT, render_prompt, render_reasoning_prompt
 from .tools import action_schema
 
 
@@ -24,6 +24,7 @@ PHYSICAL_CONTEXT = 50_176
 C50_PROMPT_CEILING = 47_000
 T25_TOTAL_CEILING = 25_000
 PORT = 18_110
+REASONING_BUDGET = 512
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,7 @@ class CallOutcome:
     accounting_delta: int
     elapsed_ms: int
     response_id: str
+    reasoning_content: bytes = b""
 
 
 @dataclass(frozen=True)
@@ -129,15 +131,21 @@ def tokenizer_count(profile: RuntimeProfile, rendered: bytes) -> int:
     return int(matches[0])
 
 
-def guard(profile: RuntimeProfile, request: bytes, *, active_total_ceiling: int) -> dict[str, Any]:
-    rendered = render_prompt(request)
+def guard(
+    profile: RuntimeProfile,
+    request: bytes,
+    *,
+    active_total_ceiling: int,
+    reasoning_enabled: bool = False,
+) -> dict[str, Any]:
+    rendered = render_reasoning_prompt(request, enabled=reasoning_enabled) if reasoning_enabled else render_prompt(request)
     count = tokenizer_count(profile, rendered)
     adjusted = count + RUNTIME_ALLOWANCE
     if active_total_ceiling == T25_TOTAL_CEILING:
         authorized = adjusted + OUTPUT_TOKENS <= T25_TOTAL_CEILING
     else:
         authorized = adjusted <= C50_PROMPT_CEILING and adjusted + OUTPUT_TOKENS <= PHYSICAL_CONTEXT
-    return {
+    result = {
         "authorized": authorized,
         "offline_prompt_tokens": count,
         "runtime_allowance_tokens": RUNTIME_ALLOWANCE,
@@ -147,13 +155,27 @@ def guard(profile: RuntimeProfile, request: bytes, *, active_total_ceiling: int)
         "rendered_prompt_sha256": sha256_bytes(rendered),
         "rendered_prompt_bytes": len(rendered),
     }
+    if reasoning_enabled:
+        result.update({"reasoning_enabled": True, "reasoning_budget_tokens": REASONING_BUDGET})
+    return result
 
 
-def endpoint_request(profile: RuntimeProfile, request: bytes, *, stage: str, probe_id: str | None, seed: int) -> bytes:
+def endpoint_request(
+    profile: RuntimeProfile,
+    request: bytes,
+    *,
+    stage: str,
+    probe_id: str | None,
+    seed: int,
+    reasoning_enabled: bool = False,
+) -> bytes:
     body = {
         "model": profile.model_alias,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {
+                "role": "system",
+                "content": REASONING_DIAGNOSTIC_SYSTEM_PROMPT if reasoning_enabled else SYSTEM_PROMPT,
+            },
             {"role": "user", "content": request.decode("utf-8")},
         ],
         "response_format": action_schema(stage, probe_id=probe_id),
@@ -166,8 +188,13 @@ def endpoint_request(profile: RuntimeProfile, request: bytes, *, stage: str, pro
         "min_p": 0.0,
         "presence_penalty": 1.5,
         "repeat_penalty": 1.0,
-        "reasoning_budget": 0,
-        "chat_template_kwargs": {"enable_thinking": False, "preserve_thinking": False},
+        "reasoning_budget": REASONING_BUDGET if reasoning_enabled else 0,
+        **({"reasoning_effort": "low"} if reasoning_enabled else {}),
+        "chat_template_kwargs": {
+            "enable_thinking": reasoning_enabled,
+            "preserve_thinking": False,
+            **({"reasoning_effort": "low"} if reasoning_enabled else {}),
+        },
     }
     return canonical_json_bytes(body)
 
@@ -180,10 +207,18 @@ def _bounded_read(response: Any) -> bytes:
 
 
 class LiveActor:
-    def __init__(self, profile: RuntimeProfile, *, seed: int, port: int = PORT):
+    def __init__(
+        self,
+        profile: RuntimeProfile,
+        *,
+        seed: int,
+        port: int = PORT,
+        reasoning_enabled: bool = False,
+    ):
         self.profile = profile
         self.seed = seed
         self.url = f"http://127.0.0.1:{port}/v1/chat/completions"
+        self.reasoning_enabled = reasoning_enabled
         self.call_ids: set[str] = set()
 
     def prepare(
@@ -198,9 +233,21 @@ class LiveActor:
         if call_id in self.call_ids:
             raise RuntimeError("call ID reused; retries are prohibited")
         self.call_ids.add(call_id)
-        rendered = render_prompt(request)
-        admission = guard(self.profile, request, active_total_ceiling=active_total_ceiling)
-        body = endpoint_request(self.profile, request, stage=stage, probe_id=probe_id, seed=self.seed)
+        rendered = render_reasoning_prompt(request, enabled=True) if self.reasoning_enabled else render_prompt(request)
+        admission = guard(
+            self.profile,
+            request,
+            active_total_ceiling=active_total_ceiling,
+            reasoning_enabled=self.reasoning_enabled,
+        )
+        body = endpoint_request(
+            self.profile,
+            request,
+            stage=stage,
+            probe_id=probe_id,
+            seed=self.seed,
+            reasoning_enabled=self.reasoning_enabled,
+        )
         return PreparedCall(
             call_id=call_id,
             endpoint_request=body,
@@ -244,6 +291,9 @@ class LiveActor:
         content = choice["message"].get("content")
         if not isinstance(content, str):
             raise RuntimeError("assistant content is not a string")
+        reasoning = choice["message"].get("reasoning_content", "")
+        if not isinstance(reasoning, str):
+            raise RuntimeError("assistant reasoning content is not a string")
         usage = value.get("usage")
         if not isinstance(usage, dict):
             raise RuntimeError("endpoint usage is absent")
@@ -272,6 +322,7 @@ class LiveActor:
             accounting_delta=delta,
             elapsed_ms=elapsed,
             response_id=str(value.get("id", "")),
+            reasoning_content=reasoning.encode("utf-8"),
         )
 
 
@@ -285,10 +336,20 @@ def port_free(port: int = PORT) -> bool:
 
 
 class OwnedServer:
-    def __init__(self, profile: RuntimeProfile, run_root: Path, *, port: int = PORT):
+    def __init__(
+        self,
+        profile: RuntimeProfile,
+        run_root: Path,
+        *,
+        port: int = PORT,
+        reasoning_mode: str = "off",
+    ):
+        if reasoning_mode not in {"off", "auto"}:
+            raise ValueError("invalid server reasoning mode")
         self.profile = profile
         self.run_root = run_root
         self.port = port
+        self.reasoning_mode = reasoning_mode
         self.process: subprocess.Popen[bytes] | None = None
         self.stdout: Any = None
         self.stderr: Any = None
@@ -306,8 +367,8 @@ class OwnedServer:
             "--fit", "off", "-c", "50000", "--flash-attn", "on", "-ctk", "q4_0", "-ctv", "q4_0",
             "--kv-unified", "-b", "512", "-ub", "256", "--threads", "7", "--threads-batch", "8",
             "--parallel", "1", "--cache-prompt", "--cache-ram", "0", "--slot-save-path", str(slots),
-            "--no-context-shift", "--jinja", "--reasoning", "off", "--reasoning-format", "deepseek",
-            "--reasoning-budget", "0", "--no-reasoning-preserve", "--temp", "0.7", "--top-p", "0.8",
+            "--no-context-shift", "--jinja", "--reasoning", self.reasoning_mode, "--reasoning-format", "deepseek",
+            "--reasoning-budget", "-1" if self.reasoning_mode == "auto" else "0", "--no-reasoning-preserve", "--temp", "0.7", "--top-p", "0.8",
             "--top-k", "20", "--min-p", "0.0", "--presence-penalty", "1.5", "--repeat-penalty", "1.0",
             "--metrics", "--slots", "--no-mmproj", "--verbose", "--log-file", str(runtime / "llama-server.log"),
         ]

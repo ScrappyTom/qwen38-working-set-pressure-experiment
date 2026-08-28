@@ -19,3 +19,8 @@ that affected mutation and closure. Dynamic observations count as information.
 The owner may receive a concise executive summary only after the complete
 analysis is saved as Markdown.
 
+For reasoning-enabled conditions, inspect the exact private reasoning field and
+the final action separately. Report whether the reasoning identified the
+governing fact, mutation target, exact patch, check, and stopping condition;
+then report whether the external actions actually followed that plan. Do not
+credit reasoning content that never changes or supports observable behavior.
