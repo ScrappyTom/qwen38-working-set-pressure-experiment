@@ -18,14 +18,16 @@ OUTPUT = EXPERIMENT / "development_live_rehearsal"
 def main() -> None:
     if OUTPUT.exists():
         raise FileExistsError("development rehearsal is immutable and already exists")
-    OUTPUT.mkdir(parents=True)
     bank = EXPERIMENT / "development_bank"
     bank_verification = verify_bank(bank)
     fixture = load_fixture(bank, "DEV-RECONSTRUCTION")
-    longest_candidate_path = max(len(path) for path, _ in fixture.initial.files)
-    prospective_path_chars = len(str(OUTPUT / "prefix" / "snap" / ("f" * 32))) + longest_candidate_path + 24
+    prospective_path_chars = max(
+        len(str(OUTPUT / "prefix" / "snap" / ("f" * 32) / Path(path).parent / ".tmp-xxxxxxxx"))
+        for path, _ in fixture.initial.files
+    )
     if prospective_path_chars >= 248:
         raise RuntimeError("development custody path budget is unsafe before server launch")
+    OUTPUT.mkdir(parents=True)
     profile_path = EXPERIMENT / "RUNTIME_PROFILE.json"
     profile = load_runtime(profile_path)
     receipt: dict[str, object] = {
