@@ -5,11 +5,11 @@ reconstruction. Keep it smaller than its evidence donor.
 
 Read in order:
 
-1. `experiments/002_single_boundary_reconstruction/SPEC.md`
-2. `experiments/002_single_boundary_reconstruction/IMPLEMENTATION_PLAN.md`
-3. `docs/DONOR_AUDIT.md`
-4. `docs/ANALYSIS_GOVERNANCE.md`
-5. `README.md`
+1. the active experiment `SPEC.md`;
+2. its frozen authorization, schedule, and execution package;
+3. `docs/ANALYSIS_GOVERNANCE.md`;
+4. prior experiment results and direct transcript audits;
+5. `README.md`.
 
 Authority order is direct owner instruction, the active `SPEC.md`, the
 implementation plan, analysis governance, then explanatory documents.
@@ -31,4 +31,3 @@ Non-negotiable rules:
 - seal responses before evaluator access;
 - measured work is incomplete until every transcript receives a durable direct
   audit and goal-level synthesis.
-

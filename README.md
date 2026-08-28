@@ -35,3 +35,11 @@ the source pair after redundant reacquisition. The current no-summary T25
 controller is not promoted. See
 `experiments/002_single_boundary_reconstruction/RESULTS.md` and
 `experiments/002_single_boundary_reconstruction/DIRECT_TRANSCRIPT_AUDIT.md`.
+
+Experiment 003 tested the narrow earned remedy: a byte-exact user-authored
+Phase B pointer, with no semantic host summary. The pointer materially improved
+post-reset orientation and source economics, and the actor successfully reopened
+an exact historical observation. It was not sufficient: the reasoning-off actor
+still failed to mutate after acquiring the required facts. See
+`experiments/003_progress_pointer_diagnostic/RESULTS.md` and
+`experiments/003_progress_pointer_diagnostic/DIRECT_TRANSCRIPT_AUDIT.md`.
