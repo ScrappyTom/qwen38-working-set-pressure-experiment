@@ -336,10 +336,11 @@ def action_schema(stage: str, *, probe_id: str | None) -> dict[str, Any]:
     path = {"type": "string", "minLength": 1, "maxLength": 160}
     sha = {"type": "string", "pattern": "^[0-9a-f]{64}$"}
     begin = obj({"action": const("begin")}, ["action"])
-    tree = obj({"action": const("tree"), "path": path, "offset": {"type": "integer", "minimum": 0}, "limit": {"type": "integer", "minimum": 1, "maximum": 16}}, ["action", "path", "offset", "limit"])
-    search = obj({"action": const("search"), "path": path, "query": {"type": "string", "minLength": 1, "maxLength": 128}, "offset": {"type": "integer", "minimum": 0}, "limit": {"type": "integer", "minimum": 1, "maximum": 16}}, ["action", "path", "query", "offset", "limit"])
-    read = obj({"action": const("read"), "path": path, "start_line": {"type": "integer", "minimum": 1}, "line_count": {"type": "integer", "minimum": 1, "maximum": 500}}, ["action", "path", "start_line", "line_count"])
-    patch = obj({"action": const("patch"), "path": path, "old": {"type": "string", "maxLength": 2_000}, "new": {"type": "string", "maxLength": 2_000}, "expected_candidate_id": sha, "expected_file_sha256": sha}, ["action", "path", "old", "new", "expected_candidate_id", "expected_file_sha256"])
+    tree = obj({"action": const("tree"), "path": path, "offset": {"type": "integer", "minimum": 0, "maximum": 128}, "limit": {"type": "integer", "minimum": 1, "maximum": 16}}, ["action", "path", "offset", "limit"])
+    search = obj({"action": const("search"), "path": path, "query": {"type": "string", "minLength": 1, "maxLength": 128}, "offset": {"type": "integer", "minimum": 0, "maximum": 2_000_000}, "limit": {"type": "integer", "minimum": 1, "maximum": 16}}, ["action", "path", "query", "offset", "limit"])
+    read = obj({"action": const("read"), "path": path, "start_line": {"type": "integer", "minimum": 1, "maximum": 2_000_000}, "line_count": {"type": "integer", "minimum": 1, "maximum": 500}}, ["action", "path", "start_line", "line_count"])
+    patch_fragment = {"type": "string", "minLength": 0, "maxLength": 512}
+    patch = obj({"action": const("patch"), "path": path, "old": patch_fragment, "new": patch_fragment, "expected_candidate_id": sha, "expected_file_sha256": sha}, ["action", "path", "old", "new", "expected_candidate_id", "expected_file_sha256"])
     check = obj({"action": const("check"), "check_id": {"type": "string", "enum": ["prefork", "public"]}, "expected_candidate_id": sha}, ["action", "check_id", "expected_candidate_id"])
     fork = obj({"action": const("fork_ready"), "expected_candidate_id": sha}, ["action", "expected_candidate_id"])
     reopen = obj({"action": const("reopen_observation"), "handle": {"type": "string", "pattern": "^OBS-[0-9]{4}$"}}, ["action", "handle"])
