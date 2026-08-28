@@ -22,6 +22,7 @@ class SessionState:
     candidate: Candidate
     stage: str = "prefix"
     complete_reads: set[str] = field(default_factory=set)
+    read_coverage: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
     prefork_check_passed: bool = False
     public_check_passed: bool = False
     probe_done: bool = False
@@ -33,6 +34,7 @@ class SessionState:
             candidate=self.candidate,
             stage="continuation",
             complete_reads=set(self.complete_reads),
+            read_coverage={path: list(ranges) for path, ranges in self.read_coverage.items()},
             prefork_check_passed=self.prefork_check_passed,
             public_check_passed=False,
             probe_done=self.probe_done,
@@ -191,8 +193,19 @@ class ToolExecutor:
         returned_end = start + len(selected) - 1 if selected else None
         next_line = returned_end + 1 if returned_end is not None and returned_end < len(lines) else None
         complete = next_line is None
-        if start == 1 and complete:
+        if not lines and start == 1:
             self.state.complete_reads.add(path)
+        elif selected and returned_end is not None:
+            ranges = [*self.state.read_coverage.get(path, []), (start, returned_end)]
+            merged: list[tuple[int, int]] = []
+            for first, last in sorted(ranges):
+                if not merged or first > merged[-1][1] + 1:
+                    merged.append((first, last))
+                else:
+                    merged[-1] = (merged[-1][0], max(merged[-1][1], last))
+            self.state.read_coverage[path] = merged
+            if merged[0][0] == 1 and merged[0][1] >= len(lines):
+                self.state.complete_reads.add(path)
         return self._bounded(
             {
                 "accepted": True,

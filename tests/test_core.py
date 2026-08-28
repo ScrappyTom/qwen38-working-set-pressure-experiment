@@ -35,6 +35,25 @@ class CoreTests(unittest.TestCase):
         beyond = executor.execute({"action": "read", "path": "one.py", "start_line": 3, "line_count": 1})
         self.assertEqual(beyond["content"], "")
 
+    def test_complete_read_is_union_of_exact_pages(self):
+        candidate = Candidate.create({"paged.py": b"one\ntwo\nthree\n"})
+        state = SessionState(candidate)
+        executor = ToolExecutor(
+            state,
+            required_full_reads=("paged.py",),
+            prefork_checker=b"print('ok')\n",
+            public_checker=b"print('ok')\n",
+            final_target="paged.py",
+            probe_id=None,
+            probe_body=None,
+        )
+        first = executor.execute({"action": "read", "path": "paged.py", "start_line": 1, "line_count": 2})
+        self.assertFalse(first["complete"])
+        self.assertNotIn("paged.py", state.complete_reads)
+        second = executor.execute({"action": "read", "path": "paged.py", "start_line": 3, "line_count": 2})
+        self.assertTrue(second["complete"])
+        self.assertIn("paged.py", state.complete_reads)
+
     def test_candidate_rejects_oversized_line(self):
         with self.assertRaises(CandidateError):
             Candidate.create({"bad.py": ("x" * 513).encode("utf-8")})
