@@ -113,7 +113,11 @@ def main() -> None:
             )
             verify_run(OUTPUT / "R1")
         records = (OUTPUT / "R1" / "records.jsonl").read_text(encoding="utf-8").splitlines()
-        action_records = [load_json_strict(line) for line in records if load_json_strict(line)["kind"] == "action_result"]
+        action_records = [
+            load_json_strict(line)
+            for line in records
+            if load_json_strict(line)["record_type"] == "action_result"
+        ]
         reasoning_records = [row for row in action_records if row["payload"].get("reasoning_content_bytes", 0) > 0]
         actions = [row["payload"]["action"].get("action") for row in action_records]
         seal = seal_response_tree(OUTPUT)
