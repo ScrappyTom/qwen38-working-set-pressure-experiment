@@ -105,6 +105,12 @@ def _save_candidate(store: ArtifactStore, candidate: Candidate, prefix: str) -> 
     return artifacts
 
 
+def _snapshot_prefix(candidate: Candidate) -> str:
+    # The complete candidate identity remains in the record payload. A 128-bit
+    # directory component keeps Windows custody paths below the legacy limit.
+    return f"snap/{candidate.candidate_id[:32]}"
+
+
 def _dynamic_observation_target(action: dict[str, Any]) -> str:
     if action["action"] == "check":
         return action["check_id"]
@@ -163,7 +169,7 @@ def _execute_call(
     result_artifact = store.put(f"{artifact_prefix}-result.json", result_bytes)
     artifacts = [*response_artifacts, result_artifact]
     if action.get("action") == "patch" and result.get("accepted"):
-        artifacts.extend(_save_candidate(store, executor.state.candidate, f"snapshots/{executor.state.candidate.candidate_id}"))
+        artifacts.extend(_save_candidate(store, executor.state.candidate, _snapshot_prefix(executor.state.candidate)))
     log.append(
         "action_result",
         {
@@ -214,7 +220,7 @@ def run_prefix(
     log.append(
         "prefix_started",
         {"fixture_id": fixture.fixture_id, "seed": seed, "candidate_id": state.candidate.candidate_id},
-        _save_candidate(store, state.candidate, f"snapshots/{state.candidate.candidate_id}"),
+        _save_candidate(store, state.candidate, _snapshot_prefix(state.candidate)),
     )
     calls = 0
     while calls < PREFIX_CALL_LIMIT and not state.fork_ready:
@@ -375,7 +381,7 @@ def run_branch(
             "candidate_id": state.candidate.candidate_id,
             "prefix_summary_sha256": sha256_bytes((prefix.output_dir / "SUMMARY.json").read_bytes()),
         },
-        _save_candidate(store, state.candidate, f"snapshots/{state.candidate.candidate_id}"),
+        _save_candidate(store, state.candidate, _snapshot_prefix(state.candidate)),
     )
     calls = 0
     maximum_prompt = 0

@@ -22,6 +22,10 @@ def main() -> None:
     bank = EXPERIMENT / "development_bank"
     bank_verification = verify_bank(bank)
     fixture = load_fixture(bank, "DEV-RECONSTRUCTION")
+    longest_candidate_path = max(len(path) for path, _ in fixture.initial.files)
+    prospective_path_chars = len(str(OUTPUT / "prefix" / "snap" / ("f" * 32))) + longest_candidate_path + 24
+    if prospective_path_chars >= 248:
+        raise RuntimeError("development custody path budget is unsafe before server launch")
     profile_path = EXPERIMENT / "RUNTIME_PROFILE.json"
     profile = load_runtime(profile_path)
     receipt: dict[str, object] = {
