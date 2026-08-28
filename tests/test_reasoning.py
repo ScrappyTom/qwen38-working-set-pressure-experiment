@@ -7,6 +7,12 @@ from pathlib import Path
 from working_set_exp.fixture import load_fixture
 from working_set_exp.jsonutil import load_json_strict
 from working_set_exp.reasoning import CASE_IDS, construct_bank, progress_pointer, verify_bank
+from working_set_exp.reasoning_replication import (
+    CASE_IDS as REPLICATION_CASE_IDS,
+    construct_bank as construct_replication_bank,
+    progress_pointer as replication_pointer,
+    verify_bank as verify_replication_bank,
+)
 from working_set_exp.request import REASONING_DIAGNOSTIC_SYSTEM_PROMPT, render_reasoning_prompt
 from working_set_exp.runtime import OwnedServer, REASONING_BUDGET, RuntimeProfile, endpoint_request
 
@@ -68,6 +74,17 @@ class ReasoningDiagnosticTests(unittest.TestCase):
         self.assertEqual(server.reasoning_budget, REASONING_BUDGET)
         with self.assertRaises(ValueError):
             OwnedServer(self.profile(), Path("evidence"), reasoning_mode="auto", reasoning_budget=-2)
+
+    def test_replication_bank_is_fresh_and_mechanically_valid(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            bank = Path(raw) / "bank"
+            construct_replication_bank(bank)
+            self.assertTrue(verify_replication_bank(bank)["verified"])
+            for fixture_id in REPLICATION_CASE_IDS:
+                fixture = load_fixture(bank, fixture_id)
+                pointer = replication_pointer(bank, fixture_id)
+                self.assertIn(fixture.final_target, pointer["active_step_verbatim"])
+                self.assertFalse(pointer["semantic_host_summary"])
 
 
 if __name__ == "__main__":

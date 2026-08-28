@@ -64,3 +64,9 @@ tokens by 47.5%, at the cost of one call, 2,542 completion tokens, and 68
 seconds. This earns a minimal fresh constructed-fork replication; it is not
 itself measured evidence. See
 `experiments/004_reasoning_transition_diagnostic/SERVER_BUDGET_DEVELOPMENT_FINDING.md`.
+
+Experiment 005 is the earned fresh replication: two new source-reacquisition
+geometries, exact mechanically constructed post-reset forks, and four frozen
+R0/R1 branches. It removes live-prefix policy from the comparison and enforces
+the 512-token private-reasoning limit at server launch. See
+`experiments/005_bounded_reasoning_source_replication/SPEC.md`.
