@@ -224,6 +224,9 @@ def run_prefix(
     output_dir: Path,
     profile: RuntimeProfile,
     fixed_record_timestamp: str | None = None,
+    prefix_call_limit: int = PREFIX_CALL_LIMIT,
+    continuation_call_limit: int = BRANCH_CALL_LIMIT,
+    one_shot_probe: bool = False,
 ) -> PrefixOutcome:
     if output_dir.exists():
         raise FileExistsError(output_dir)
@@ -250,9 +253,10 @@ def run_prefix(
         _save_candidate(store, state.candidate, _snapshot_prefix(state.candidate)),
     )
     calls = 0
-    while calls < PREFIX_CALL_LIMIT and not state.fork_ready:
+    while calls < prefix_call_limit and not state.fork_ready:
         calls += 1
         stage = "setup" if calls == 1 else "prefix"
+        visible_probe_id = None if one_shot_probe and state.probe_done else fixture.probe_id
         request = build_request(
             fixture_id=fixture.fixture_id,
             task=fixture.task,
@@ -261,17 +265,19 @@ def run_prefix(
             visible_history=history,
             prefix_calls_used=calls - 1,
             continuation_calls_used=0,
-            probe_id=fixture.probe_id,
+            probe_id=visible_probe_id,
             observations=observations,
             reconstructed=False,
             fork_binding=None,
+            prefix_call_limit=prefix_call_limit,
+            continuation_call_limit=continuation_call_limit,
         )
         call_id = f"{fixture.fixture_id}-S{seed}-P{calls:02d}"
         action, result, _ = _execute_call(
             actor=actor,
             request=request,
             stage=stage,
-            probe_id=fixture.probe_id,
+            probe_id=visible_probe_id,
             call_id=call_id,
             active_total_ceiling=PHYSICAL_CONTEXT,
             executor=executor,
@@ -320,6 +326,8 @@ def run_prefix(
             observations=observations,
             reconstructed=False,
             fork_binding=binding,
+            prefix_call_limit=prefix_call_limit,
+            continuation_call_limit=continuation_call_limit,
         )
         pressure = guard(profile, prospective, active_total_ceiling=T25_TOTAL_CEILING)
         c50 = guard(profile, prospective, active_total_ceiling=PHYSICAL_CONTEXT)
@@ -373,8 +381,11 @@ def run_branch(
     actor: Actor,
     output_dir: Path,
     fixed_record_timestamp: str | None = None,
+    progress_pointer: dict[str, Any] | None = None,
+    prefix_call_limit: int = PREFIX_CALL_LIMIT,
+    branch_call_limit: int = BRANCH_CALL_LIMIT,
 ) -> dict[str, Any]:
-    if condition not in {"C50", "T25"}:
+    if condition not in {"C50", "T25", "T25-M", "T25-P"}:
         raise ValueError("invalid branch condition")
     if output_dir.exists():
         raise FileExistsError(output_dir)
@@ -397,6 +408,7 @@ def run_branch(
         reopenable=prefix.reopenable,
     )
     latest = prefix.history[-1]
+    reconstructed = condition != "C50"
     base_history = list(prefix.history) if condition == "C50" else [latest]
     branch_history: list[dict[str, Any]] = []
     log.append(
@@ -413,7 +425,7 @@ def run_branch(
     calls = 0
     maximum_prompt = 0
     capacity_stop: dict[str, Any] | None = None
-    while calls < BRANCH_CALL_LIMIT and not state.submitted:
+    while calls < branch_call_limit and not state.submitted:
         calls += 1
         visible_history = [*base_history, *branch_history]
         request = build_request(
@@ -426,8 +438,11 @@ def run_branch(
             continuation_calls_used=calls - 1,
             probe_id=fixture.probe_id,
             observations=prefix.observations,
-            reconstructed=condition == "T25",
+            reconstructed=reconstructed,
             fork_binding=prefix.binding,
+            progress_pointer=progress_pointer,
+            prefix_call_limit=prefix_call_limit,
+            continuation_call_limit=branch_call_limit,
         )
         call_id = f"{fixture.fixture_id}-S{seed}-{condition}-{calls:02d}"
         try:
@@ -437,7 +452,7 @@ def run_branch(
                 stage="continuation",
                 probe_id=fixture.probe_id,
                 call_id=call_id,
-                active_total_ceiling=T25_TOTAL_CEILING if condition == "T25" else PHYSICAL_CONTEXT,
+                active_total_ceiling=T25_TOTAL_CEILING if reconstructed else PHYSICAL_CONTEXT,
                 executor=executor,
                 store=store,
                 log=log,

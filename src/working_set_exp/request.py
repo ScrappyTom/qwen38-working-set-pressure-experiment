@@ -77,10 +77,17 @@ def build_request(
     observations: list[dict[str, Any]],
     reconstructed: bool,
     fork_binding: dict[str, Any] | None,
+    progress_pointer: dict[str, Any] | None = None,
+    prefix_call_limit: int = 14,
+    continuation_call_limit: int = 8,
 ) -> bytes:
     p0 = build_p0(candidate)
     value: dict[str, Any] = {
-        "schema_version": "experiment-002-coding-request-v1",
+        "schema_version": (
+            "experiment-002-coding-request-v1"
+            if progress_pointer is None and prefix_call_limit == 14 and continuation_call_limit == 8
+            else "experiment-003-progress-pointer-coding-request-v1"
+        ),
         "fixture_id": fixture_id,
         "stage": stage,
         "task": task,
@@ -99,8 +106,8 @@ def build_request(
         ),
         "older_chronology_present": not reconstructed,
         "invocation_budget": {
-            "prefix": {"used": prefix_calls_used, "limit": 14},
-            "continuation": {"used": continuation_calls_used, "limit": 8},
+            "prefix": {"used": prefix_calls_used, "limit": prefix_call_limit},
+            "continuation": {"used": continuation_calls_used, "limit": continuation_call_limit},
         },
         "available_check_ids": ["prefork"] if stage == "prefix" else (["public"] if stage == "continuation" else []),
         "available_probe_ids": [probe_id] if stage == "prefix" and probe_id else [],
@@ -109,6 +116,8 @@ def build_request(
         "observation_directory": observation_directory(observations) if stage == "continuation" else None,
         "fork_binding": fork_binding,
     }
+    if progress_pointer is not None:
+        value["progress_pointer"] = progress_pointer
     if reconstructed:
         value["reconstruction_notice"] = (
             "Older exact chronology is externally custodied but absent from this active context. "
@@ -155,4 +164,3 @@ def fork_binding(
         "prefix_last_record_sha256": last_record_sha256,
         "pending_stage": "continuation",
     }
-
