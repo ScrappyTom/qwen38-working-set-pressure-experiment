@@ -22,3 +22,8 @@ facts. It must reacquire exact source or prior observations itself.
 
 See `experiments/002_single_boundary_reconstruction/SPEC.md`.
 
+Development live rehearsal is complete. From one exact 32k-token shared
+prefix, C50 used retained chronology to make a hidden-correct repair and
+submit, while T25 restarted the large Phase A reads and exhausted its 25k
+envelope before acting. See
+`experiments/002_single_boundary_reconstruction/DEVELOPMENT_REHEARSAL_RESULTS.md`.
