@@ -196,7 +196,8 @@ def _execute_call(
             "result": result,
             "candidate_id": executor.state.candidate.candidate_id,
             "offline_prompt_tokens": outcome.offline_prompt_tokens,
-            "server_prompt_tokens": outcome.server_prompt_tokens,
+            "server_reported_prompt_tokens": outcome.server_prompt_tokens,
+            "server_usage_semantics": "may_exclude_exact_cached_prefix_tokens",
             "completion_tokens": outcome.completion_tokens,
             "accounting_delta": outcome.accounting_delta,
             "elapsed_ms": outcome.elapsed_ms,
@@ -432,7 +433,7 @@ def run_branch(
             log=log,
             artifact_prefix=f"transcript/{calls:03d}",
         )
-        maximum_prompt = max(maximum_prompt, outcome.server_prompt_tokens)
+        maximum_prompt = max(maximum_prompt, outcome.offline_prompt_tokens)
         branch_history.append({"response": action, "result": result})
     disposition = "submitted" if state.submitted else "continuation_budget_exhausted"
     stopped = log.append(
@@ -458,7 +459,7 @@ def run_branch(
         "candidate_id": state.candidate.candidate_id,
         "submitted": state.submitted,
         "public_check_passed": state.public_check_passed,
-        "maximum_server_prompt_tokens": maximum_prompt,
+        "maximum_offline_prompt_tokens": maximum_prompt,
         "branch_history_sha256": sha256_bytes(canonical_json_bytes(branch_history)),
         "last_record_sha256": stopped["record_sha256"],
     }

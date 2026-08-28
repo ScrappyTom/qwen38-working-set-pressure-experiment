@@ -97,7 +97,17 @@ def tokenizer_count(profile: RuntimeProfile, rendered: bytes) -> int:
         prompt = Path(raw) / "prompt.bin"
         prompt.write_bytes(rendered)
         completed = subprocess.run(
-            [str(profile.tokenizer_path), "--offline", "--model", str(profile.model_path), "--file", str(prompt), "--show-count", "--no-bos"],
+            [
+                str(profile.tokenizer_path),
+                "--offline",
+                "--model",
+                str(profile.model_path),
+                "--file",
+                str(prompt),
+                "--show-count",
+                "--no-bos",
+                "--no-escape",
+            ],
             env={**os.environ, "LLAMA_ARG_OFFLINE": "1"},
             capture_output=True,
             text=True,
@@ -234,8 +244,15 @@ class LiveActor:
         if not isinstance(server_prompt, int) or not isinstance(completion, int):
             raise RuntimeError("endpoint token accounting differs")
         delta = server_prompt - prepared.offline_prompt_tokens
-        if abs(delta) > RUNTIME_ALLOWANCE:
-            raise RuntimeError("runtime prompt accounting delta exceeds allowance")
+        # With --cache-prompt this llama.cpp build reports only newly evaluated
+        # prompt tokens in API usage. A negative delta is cache reuse, not lower
+        # context occupancy. Positive unexplained growth remains fail-closed.
+        if delta > RUNTIME_ALLOWANCE:
+            raise TransportStopped(
+                "runtime prompt accounting delta exceeds allowance",
+                response_body=raw,
+                http_status=status,
+            )
         return CallOutcome(
             endpoint_request=prepared.endpoint_request,
             rendered_prompt=prepared.rendered_prompt,
