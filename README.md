@@ -25,6 +25,12 @@ See `experiments/006_authentic_bounded_pressure/SPEC.md` for the active study
 and `experiments/002_single_boundary_reconstruction/SPEC.md` for the original
 reasoning-off pressure attempt.
 
+Experiment 006 completed successfully. Two fresh authentic prefixes crossed
+the 25k boundary, and both reconstructed continuations reacquired their exact
+governing source/observation, passed hidden grading, checked, and submitted.
+See `experiments/006_authentic_bounded_pressure/RESULTS.md` and
+`experiments/006_authentic_bounded_pressure/DIRECT_TRANSCRIPT_AUDIT.md`.
+
 Development live rehearsal is complete. From one exact 32k-token shared
 prefix, C50 used retained chronology to make a hidden-correct repair and
 submit, while T25 restarted the large Phase A reads and exhausted its 25k
