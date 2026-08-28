@@ -10,7 +10,7 @@ from working_set_exp.fixture import load_fixture, load_truth
 from working_set_exp.isolation import run_checker
 from working_set_exp.p0 import build_p0
 from working_set_exp.request import build_request
-from working_set_exp.tools import SessionState, ToolError, ToolExecutor, strict_action
+from working_set_exp.tools import SessionState, ToolError, ToolExecutor, action_schema, strict_action
 
 
 class CoreTests(unittest.TestCase):
@@ -102,6 +102,11 @@ class CoreTests(unittest.TestCase):
             strict_action(b'{"action":"begin","action":"begin"}')
         with self.assertRaises(ToolError):
             strict_action(b'Here is the action: {"action":"begin"}')
+
+    def test_setup_response_schema_is_direct_object(self):
+        schema = action_schema("setup", probe_id=None)["json_schema"]["schema"]
+        self.assertEqual(schema["type"], "object")
+        self.assertNotIn("oneOf", schema)
 
     def test_known_good_candidates_pass_both_graders(self):
         with tempfile.TemporaryDirectory(prefix="e2-grade-test-") as raw:

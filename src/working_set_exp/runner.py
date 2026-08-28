@@ -18,6 +18,7 @@ from .runtime import (
     CallOutcome,
     PreparedCall,
     RuntimeProfile,
+    TransportStopped,
     endpoint_request,
     guard,
     render_prompt,
@@ -154,7 +155,24 @@ def _execute_call(
         },
         prepared_artifacts,
     )
-    outcome = actor.invoke(prepared)
+    try:
+        outcome = actor.invoke(prepared)
+    except TransportStopped as exc:
+        artifacts: list[dict[str, Any]] = []
+        if exc.response_body is not None:
+            artifacts.append(store.put(f"{artifact_prefix}-endpoint-error-response.bin", exc.response_body))
+        log.append(
+            "external_call_stopped",
+            {
+                "call_id": call_id,
+                "stage": stage,
+                "http_status": exc.http_status,
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            },
+            artifacts,
+        )
+        raise
     response_artifacts = [
         store.put(f"{artifact_prefix}-endpoint-response.json", outcome.raw_endpoint_response),
         store.put(f"{artifact_prefix}-assistant-content.json", outcome.assistant_content),

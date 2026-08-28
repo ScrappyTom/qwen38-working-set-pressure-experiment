@@ -345,13 +345,15 @@ def action_schema(stage: str, *, probe_id: str | None) -> dict[str, Any]:
     reopen = obj({"action": const("reopen_observation"), "handle": {"type": "string", "pattern": "^OBS-[0-9]{4}$"}}, ["action", "handle"])
     submit = obj({"action": const("submit"), "expected_candidate_id": sha}, ["action", "expected_candidate_id"])
     if stage == "setup":
-        options = [begin]
+        schema = begin
     elif stage == "prefix":
         options = [tree, search, read, patch, check, fork]
         if probe_id is not None:
             options.append(obj({"action": const("probe"), "probe_id": {"type": "string", "const": probe_id}}, ["action", "probe_id"]))
+        schema = {"oneOf": options}
     elif stage == "continuation":
         options = [tree, search, read, patch, check, reopen, submit]
+        schema = {"oneOf": options}
     else:
         raise ValueError("invalid response stage")
     return {
@@ -359,6 +361,6 @@ def action_schema(stage: str, *, probe_id: str | None) -> dict[str, Any]:
         "json_schema": {
             "name": f"experiment_002_{stage}_action",
             "strict": True,
-            "schema": {"oneOf": options},
+            "schema": schema,
         },
     }

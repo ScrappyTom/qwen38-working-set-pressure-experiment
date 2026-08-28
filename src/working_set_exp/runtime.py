@@ -62,6 +62,13 @@ class PreparedCall:
     active_total_ceiling: int
 
 
+class TransportStopped(RuntimeError):
+    def __init__(self, message: str, *, response_body: bytes | None = None, http_status: int | None = None):
+        super().__init__(message)
+        self.response_body = response_body
+        self.http_status = http_status
+
+
 def load_runtime(path: Path) -> RuntimeProfile:
     value = load_json_strict(path.read_bytes())
     profile = RuntimeProfile(
@@ -198,11 +205,18 @@ class LiveActor:
             with urllib.request.urlopen(http_request, timeout=600) as response:
                 raw = _bounded_read(response)
                 status = response.status
+        except urllib.error.HTTPError as exc:
+            raw = _bounded_read(exc)
+            raise TransportStopped(
+                f"endpoint HTTP status {exc.code}",
+                response_body=raw,
+                http_status=exc.code,
+            ) from exc
         except (urllib.error.URLError, OSError, TimeoutError) as exc:
-            raise RuntimeError(f"endpoint transport failure: {exc}") from exc
+            raise TransportStopped(f"endpoint transport failure: {exc}") from exc
         elapsed = round((time.perf_counter() - started) * 1000)
         if status != 200:
-            raise RuntimeError(f"endpoint HTTP status {status}")
+            raise TransportStopped(f"endpoint HTTP status {status}", response_body=raw, http_status=status)
         value = load_json_strict(raw)
         if not isinstance(value, dict) or not isinstance(value.get("choices"), list) or len(value["choices"]) != 1:
             raise RuntimeError("endpoint envelope choices differ")
