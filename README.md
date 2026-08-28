@@ -44,10 +44,14 @@ still failed to mutate after acquiring the required facts. See
 `experiments/003_progress_pointer_diagnostic/RESULTS.md` and
 `experiments/003_progress_pointer_diagnostic/DIRECT_TRANSCRIPT_AUDIT.md`.
 
-Experiment 004 is the next narrow diagnostic. It holds the earned P0 and
-verbatim progress-pointer reconstruction fixed and compares reasoning off with
-low private reasoning capped at 512 tokens on two fresh sibling geometries.
-The fresh bank and exact execution package are offline-qualified; model
-exposure is gated by a development-only live reasoning uptake check. See
-`experiments/004_reasoning_transition_diagnostic/SPEC.md` and the expanded
-`docs/DONOR_AUDIT.md`.
+Experiment 004 tested the next narrow diagnostic. One source prefix exhausted
+its call budget before either treatment was exposed. In the completed
+observation pair, reasoning-off and reasoning-enabled Qwen both reopened the
+governing historical result, made a hidden-correct repair, checked, and
+submitted in five calls. Reasoning changed acquisition order and produced the
+exact known-good patch, but did not improve success or call count and added
+1,674 completion tokens and 88 seconds. The intended hard 512-token reasoning
+cap was not enforced by the per-request llama.cpp field, so this is exploratory
+reasoning-enabled evidence rather than a qualified bounded-reasoning result.
+See `experiments/004_reasoning_transition_diagnostic/ATTEMPT1_RESULTS_DECISION.md`,
+the direct transcript audit, and `docs/DONOR_AUDIT.md`.
