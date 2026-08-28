@@ -70,3 +70,13 @@ geometries, exact mechanically constructed post-reset forks, and four frozen
 R0/R1 branches. It removes live-prefix policy from the comparison and enforces
 the 512-token private-reasoning limit at server launch. See
 `experiments/005_bounded_reasoning_source_replication/SPEC.md`.
+
+The replication is complete. Both modes produced hidden-correct code in both
+cases, but bounded reasoning checked and submitted 2/2 while reasoning-off
+closed only 1/2: its unnecessary large reacquisitions made the remaining check
+request exceed 25k. Bounded reasoning reduced exact read content by 88.6%,
+cumulative prompt tokens by 59.6%, and total prompt-plus-completion tokens by
+55.6%, at the cost of two calls and 61 seconds. This earns a symmetric
+reasoning-enabled C50/T25 authentic-boundary study. See
+`experiments/005_bounded_reasoning_source_replication/RESULTS.md` and the direct
+transcript audit.
