@@ -60,6 +60,8 @@ class PreparedCall:
     rendered_prompt: bytes
     offline_prompt_tokens: int
     active_total_ceiling: int
+    authorized: bool
+    admission: dict[str, Any]
 
 
 class TransportStopped(RuntimeError):
@@ -67,6 +69,12 @@ class TransportStopped(RuntimeError):
         super().__init__(message)
         self.response_body = response_body
         self.http_status = http_status
+
+
+class CapacityStopped(RuntimeError):
+    def __init__(self, admission: dict[str, Any]):
+        super().__init__("capacity guard denied endpoint call")
+        self.admission = admission
 
 
 def load_runtime(path: Path) -> RuntimeProfile:
@@ -192,8 +200,6 @@ class LiveActor:
         self.call_ids.add(call_id)
         rendered = render_prompt(request)
         admission = guard(self.profile, request, active_total_ceiling=active_total_ceiling)
-        if not admission["authorized"]:
-            raise RuntimeError("capacity guard denied endpoint call")
         body = endpoint_request(self.profile, request, stage=stage, probe_id=probe_id, seed=self.seed)
         return PreparedCall(
             call_id=call_id,
@@ -201,6 +207,8 @@ class LiveActor:
             rendered_prompt=rendered,
             offline_prompt_tokens=admission["offline_prompt_tokens"],
             active_total_ceiling=active_total_ceiling,
+            authorized=admission["authorized"],
+            admission=admission,
         )
 
     def invoke(self, prepared: PreparedCall) -> CallOutcome:

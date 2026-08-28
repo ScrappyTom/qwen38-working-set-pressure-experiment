@@ -11,6 +11,7 @@ from .jsonutil import atomic_write, canonical_json_bytes, load_json_strict, sha2
 from .request import build_request, fork_binding
 from .runtime import (
     C50_PROMPT_CEILING,
+    CapacityStopped,
     OUTPUT_TOKENS,
     PHYSICAL_CONTEXT,
     RUNTIME_ALLOWANCE,
@@ -49,8 +50,6 @@ class ScriptedActor:
             raise RuntimeError("scripted call ID reused")
         self.call_ids.add(call_id)
         admission = guard(self.profile, request, active_total_ceiling=active_total_ceiling)
-        if not admission["authorized"]:
-            raise RuntimeError("scripted request failed capacity guard")
         self.requests[call_id] = request
         return PreparedCall(
             call_id=call_id,
@@ -58,6 +57,8 @@ class ScriptedActor:
             rendered_prompt=render_prompt(request),
             offline_prompt_tokens=admission["offline_prompt_tokens"],
             active_total_ceiling=active_total_ceiling,
+            authorized=admission["authorized"],
+            admission=admission,
         )
 
     def invoke(self, prepared: PreparedCall) -> CallOutcome:
@@ -155,6 +156,13 @@ def _execute_call(
         },
         prepared_artifacts,
     )
+    if not prepared.authorized:
+        log.append(
+            "capacity_stopped",
+            {"call_id": call_id, "stage": stage, "admission": prepared.admission, "http_calls": 0},
+            [],
+        )
+        raise CapacityStopped(prepared.admission)
     try:
         outcome = actor.invoke(prepared)
     except TransportStopped as exc:
@@ -404,6 +412,7 @@ def run_branch(
     )
     calls = 0
     maximum_prompt = 0
+    capacity_stop: dict[str, Any] | None = None
     while calls < BRANCH_CALL_LIMIT and not state.submitted:
         calls += 1
         visible_history = [*base_history, *branch_history]
@@ -421,21 +430,32 @@ def run_branch(
             fork_binding=prefix.binding,
         )
         call_id = f"{fixture.fixture_id}-S{seed}-{condition}-{calls:02d}"
-        action, result, outcome = _execute_call(
-            actor=actor,
-            request=request,
-            stage="continuation",
-            probe_id=fixture.probe_id,
-            call_id=call_id,
-            active_total_ceiling=T25_TOTAL_CEILING if condition == "T25" else PHYSICAL_CONTEXT,
-            executor=executor,
-            store=store,
-            log=log,
-            artifact_prefix=f"transcript/{calls:03d}",
-        )
+        try:
+            action, result, outcome = _execute_call(
+                actor=actor,
+                request=request,
+                stage="continuation",
+                probe_id=fixture.probe_id,
+                call_id=call_id,
+                active_total_ceiling=T25_TOTAL_CEILING if condition == "T25" else PHYSICAL_CONTEXT,
+                executor=executor,
+                store=store,
+                log=log,
+                artifact_prefix=f"transcript/{calls:03d}",
+            )
+        except CapacityStopped as exc:
+            capacity_stop = exc.admission
+            maximum_prompt = max(maximum_prompt, exc.admission["offline_prompt_tokens"])
+            break
         maximum_prompt = max(maximum_prompt, outcome.offline_prompt_tokens)
         branch_history.append({"response": action, "result": result})
-    disposition = "submitted" if state.submitted else "continuation_budget_exhausted"
+    disposition = (
+        "submitted"
+        if state.submitted
+        else "capacity_stopped_before_http"
+        if capacity_stop is not None
+        else "continuation_budget_exhausted"
+    )
     stopped = log.append(
         "branch_stopped",
         {
@@ -445,6 +465,7 @@ def run_branch(
             "candidate_id": state.candidate.candidate_id,
             "submitted": state.submitted,
             "public_check_passed": state.public_check_passed,
+            "capacity_stop": capacity_stop,
         },
         [],
     )
@@ -459,6 +480,7 @@ def run_branch(
         "candidate_id": state.candidate.candidate_id,
         "submitted": state.submitted,
         "public_check_passed": state.public_check_passed,
+        "capacity_stop": capacity_stop,
         "maximum_offline_prompt_tokens": maximum_prompt,
         "branch_history_sha256": sha256_bytes(canonical_json_bytes(branch_history)),
         "last_record_sha256": stopped["record_sha256"],
@@ -473,6 +495,78 @@ def verify_run(run_dir: Path) -> dict[str, Any]:
     if records[-1]["record_sha256"] != summary["last_record_sha256"]:
         raise ValueError("summary record binding differs")
     return {"verified": True, "record_count": len(records), "disposition": summary["disposition"]}
+
+
+def replay_prefix(fixture: Fixture, run_dir: Path) -> PrefixOutcome:
+    records = verify_records(run_dir / "records.jsonl", run_dir)
+    summary = load_json_strict((run_dir / "SUMMARY.json").read_bytes())
+    state = SessionState(fixture.initial)
+    executor = ToolExecutor(
+        state,
+        required_full_reads=fixture.required_full_reads,
+        prefork_checker=fixture.prefork_checker,
+        public_checker=fixture.public_checker,
+        final_target=fixture.final_target,
+        probe_id=fixture.probe_id,
+        probe_body=fixture.probe_body,
+    )
+    history: list[dict[str, Any]] = []
+    observations: list[dict[str, Any]] = []
+    reopenable: dict[str, bytes] = {}
+    last_action_record_sha256 = ""
+    for record in records:
+        if record["record_type"] != "action_result":
+            continue
+        action = record["payload"]["action"]
+        expected = record["payload"]["result"]
+        observed = executor.execute(action)
+        if canonical_json_bytes(observed) != canonical_json_bytes(expected):
+            raise ValueError(f"prefix replay result differs at sequence {record['sequence']}")
+        if state.candidate.candidate_id != record["payload"]["candidate_id"]:
+            raise ValueError("prefix replay candidate differs")
+        history.append({"response": action, "result": expected})
+        if action.get("action") in {"probe", "check", "fork_ready"} and expected.get("accepted"):
+            body = canonical_json_bytes(expected)
+            handle = f"OBS-{len(observations) + 1:04d}"
+            reopenable[handle] = body
+            observations.append(
+                {
+                    "handle": handle,
+                    "sequence": len(history),
+                    "action": action["action"],
+                    "target": _dynamic_observation_target(action),
+                    "candidate_id": expected.get(
+                        "checked_candidate_id", expected.get("candidate_id", state.candidate.candidate_id)
+                    ),
+                    "size_bytes": len(body),
+                    "sha256": sha256_bytes(body),
+                }
+            )
+        last_action_record_sha256 = record["record_sha256"]
+    if not state.fork_ready or summary["disposition"] != "fork_eligible":
+        raise ValueError("prefix replay is not fork eligible")
+    binding = fork_binding(
+        fixture_id=fixture.fixture_id,
+        seed=summary["seed"],
+        task=fixture.task,
+        candidate=state.candidate,
+        prefix_history=history,
+        observations=observations,
+        last_record_sha256=last_action_record_sha256,
+    )
+    if canonical_json_bytes(binding) != canonical_json_bytes(summary["fork_binding"]):
+        raise ValueError("prefix replay fork binding differs")
+    if summary["history_sha256"] != sha256_bytes(canonical_json_bytes(history)):
+        raise ValueError("prefix replay history differs")
+    return PrefixOutcome(
+        state=state,
+        history=history,
+        observations=observations,
+        reopenable=reopenable,
+        binding=binding,
+        calls=summary["calls"],
+        output_dir=run_dir,
+    )
 
 
 def scripted_policy(fixture: Fixture, *, condition: str) -> Callable[[dict[str, Any]], dict[str, Any]]:
