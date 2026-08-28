@@ -235,6 +235,7 @@ def run_prefix(
     prefix_call_limit: int = PREFIX_CALL_LIMIT,
     continuation_call_limit: int = BRANCH_CALL_LIMIT,
     one_shot_probe: bool = False,
+    reasoning_enabled: bool = False,
 ) -> PrefixOutcome:
     if output_dir.exists():
         raise FileExistsError(output_dir)
@@ -261,6 +262,7 @@ def run_prefix(
         _save_candidate(store, state.candidate, _snapshot_prefix(state.candidate)),
     )
     calls = 0
+    http_completion_calls = 0
     while calls < prefix_call_limit and not state.fork_ready:
         calls += 1
         stage = "setup" if calls == 1 else "prefix"
@@ -293,6 +295,7 @@ def run_prefix(
             log=log,
             artifact_prefix=f"transcript/{calls:03d}",
         )
+        http_completion_calls += 1
         history.append({"response": action, "result": result})
         if action.get("action") in {"probe", "check", "fork_ready"} and result.get("accepted"):
             body = canonical_json_bytes(result)
@@ -337,8 +340,18 @@ def run_prefix(
             prefix_call_limit=prefix_call_limit,
             continuation_call_limit=continuation_call_limit,
         )
-        pressure = guard(profile, prospective, active_total_ceiling=T25_TOTAL_CEILING)
-        c50 = guard(profile, prospective, active_total_ceiling=PHYSICAL_CONTEXT)
+        pressure = guard(
+            profile,
+            prospective,
+            active_total_ceiling=T25_TOTAL_CEILING,
+            reasoning_enabled=reasoning_enabled,
+        )
+        c50 = guard(
+            profile,
+            prospective,
+            active_total_ceiling=PHYSICAL_CONTEXT,
+            reasoning_enabled=reasoning_enabled,
+        )
         if pressure["authorized"] or not c50["authorized"]:
             disposition = "pressure_boundary_not_eligible"
         else:
@@ -358,7 +371,14 @@ def run_prefix(
         )
     stopped = log.append(
         "prefix_stopped",
-        {"disposition": disposition, "calls": calls, "candidate_id": state.candidate.candidate_id, "fork_binding": binding},
+        {
+            "disposition": disposition,
+            "calls": calls,
+            "prepared_invocations": calls,
+            "http_completion_calls": http_completion_calls,
+            "candidate_id": state.candidate.candidate_id,
+            "fork_binding": binding,
+        },
         [],
     )
     summary = {
@@ -368,6 +388,8 @@ def run_prefix(
         "seed": seed,
         "disposition": disposition,
         "calls": calls,
+        "prepared_invocations": calls,
+        "http_completion_calls": http_completion_calls,
         "candidate_id": state.candidate.candidate_id,
         "history_sha256": sha256_bytes(canonical_json_bytes(history)),
         "observation_count": len(observations),
@@ -431,6 +453,7 @@ def run_branch(
         _save_candidate(store, state.candidate, _snapshot_prefix(state.candidate)),
     )
     calls = 0
+    http_completion_calls = 0
     maximum_prompt = 0
     capacity_stop: dict[str, Any] | None = None
     while calls < branch_call_limit and not state.submitted:
@@ -471,6 +494,7 @@ def run_branch(
             maximum_prompt = max(maximum_prompt, exc.admission["offline_prompt_tokens"])
             break
         maximum_prompt = max(maximum_prompt, outcome.offline_prompt_tokens)
+        http_completion_calls += 1
         branch_history.append({"response": action, "result": result})
     disposition = (
         "submitted"
@@ -485,6 +509,8 @@ def run_branch(
             "disposition": disposition,
             "condition": condition,
             "calls": calls,
+            "prepared_invocations": calls,
+            "http_completion_calls": http_completion_calls,
             "candidate_id": state.candidate.candidate_id,
             "submitted": state.submitted,
             "public_check_passed": state.public_check_passed,
@@ -500,6 +526,8 @@ def run_branch(
         "fork_binding": prefix.binding,
         "disposition": disposition,
         "calls": calls,
+        "prepared_invocations": calls,
+        "http_completion_calls": http_completion_calls,
         "candidate_id": state.candidate.candidate_id,
         "submitted": state.submitted,
         "public_check_passed": state.public_check_passed,

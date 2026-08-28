@@ -5,6 +5,12 @@ import unittest
 from pathlib import Path
 
 from working_set_exp.fixture import load_fixture
+from working_set_exp.authentic_pressure import (
+    CASE_IDS as PRESSURE_CASE_IDS,
+    construct_bank as construct_pressure_bank,
+    progress_pointer as pressure_pointer,
+    verify_bank as verify_pressure_bank,
+)
 from working_set_exp.jsonutil import load_json_strict
 from working_set_exp.reasoning import CASE_IDS, construct_bank, progress_pointer, verify_bank
 from working_set_exp.reasoning_replication import (
@@ -85,6 +91,17 @@ class ReasoningDiagnosticTests(unittest.TestCase):
                 pointer = replication_pointer(bank, fixture_id)
                 self.assertIn(fixture.final_target, pointer["active_step_verbatim"])
                 self.assertFalse(pointer["semantic_host_summary"])
+
+    def test_authentic_pressure_bank_is_fresh_and_pointer_is_verbatim(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            bank = Path(raw) / "bank"
+            construct_pressure_bank(bank)
+            self.assertTrue(verify_pressure_bank(bank)["verified"])
+            for fixture_id in PRESSURE_CASE_IDS:
+                fixture = load_fixture(bank, fixture_id)
+                pointer = pressure_pointer(bank, fixture_id)
+                self.assertIn(fixture.final_target, pointer["text"])
+                self.assertFalse(pointer["host_inference"])
 
 
 if __name__ == "__main__":
