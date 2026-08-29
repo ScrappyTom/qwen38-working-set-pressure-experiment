@@ -175,6 +175,7 @@ def endpoint_request(
     seed: int,
     reasoning_enabled: bool = False,
     read_mode: str = "actor_selected_count",
+    hierarchical_p0: bool = False,
 ) -> bytes:
     body = {
         "model": profile.model_alias,
@@ -185,7 +186,7 @@ def endpoint_request(
             },
             {"role": "user", "content": request.decode("utf-8")},
         ],
-        "response_format": action_schema(stage, probe_id=probe_id, read_mode=read_mode),
+        "response_format": action_schema(stage, probe_id=probe_id, read_mode=read_mode, hierarchical_p0=hierarchical_p0),
         "max_tokens": OUTPUT_TOKENS,
         "stream": False,
         "seed": seed,
@@ -222,12 +223,14 @@ class LiveActor:
         port: int = PORT,
         reasoning_enabled: bool = False,
         read_mode: str = "actor_selected_count",
+        hierarchical_p0: bool = False,
     ):
         self.profile = profile
         self.seed = seed
         self.url = f"http://127.0.0.1:{port}/v1/chat/completions"
         self.reasoning_enabled = reasoning_enabled
         self.read_mode = read_mode
+        self.hierarchical_p0 = hierarchical_p0
         self.call_ids: set[str] = set()
 
     def prepare(
@@ -257,6 +260,7 @@ class LiveActor:
             seed=self.seed,
             reasoning_enabled=self.reasoning_enabled,
             read_mode=self.read_mode,
+            hierarchical_p0=self.hierarchical_p0,
         )
         return PreparedCall(
             call_id=call_id,

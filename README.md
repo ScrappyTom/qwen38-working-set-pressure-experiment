@@ -21,7 +21,7 @@ Both branches retain exact external custody and the earned P0 readable
 path/symbol directory. T25 receives no summary and no host-selected relevant
 facts. It must reacquire exact source or prior observations itself.
 
-See `experiments/009_recurrent_observation_validity/SPEC.md` for the latest study,
+See `experiments/012_large_world_recurrent_continuity/SPEC.md` for the latest study,
 `experiments/006_authentic_bounded_pressure/SPEC.md` for the successful first
 authentic transition, and `experiments/002_single_boundary_reconstruction/SPEC.md`
 for the original reasoning-off pressure attempt.
@@ -128,6 +128,16 @@ remains incomplete; the resulting four-pair view is explicitly mixed-source
 descriptive evidence. See `COMPLETION_APPARATUS_FINDING.md`,
 `COMPLETION_DIRECT_TRANSCRIPT_AUDIT.md`, and `COMBINED_RESULTS_DECISION.md` in
 the Experiment 011 folder.
+
+Experiment 012 now carries the earned controller into two fresh 160-file,
+four-phase worlds. The controller remains exact and summary-free. The only
+scaling addition is a bounded hierarchical P0 root/page surface because the
+complete small-world P0 inventory no longer fits its original contract. The
+offline scripted paths establish repeated authentic T25 reconstructions,
+hidden-correct final candidates, and expected C50 physical stops. No Qwen
+actor exposure has occurred yet. See
+`experiments/012_large_world_recurrent_continuity/SPEC.md` and
+`PRELIVE_FINDING.md`.
 
 Development live rehearsal is complete. From one exact 32k-token shared
 prefix, C50 used retained chronology to make a hidden-correct repair and

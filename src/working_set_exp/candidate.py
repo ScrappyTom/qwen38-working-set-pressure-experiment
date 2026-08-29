@@ -8,8 +8,8 @@ from typing import Iterable
 from .jsonutil import canonical_json_bytes, sha256_bytes
 
 
-MAX_FILES = 20
-MAX_TOTAL_BYTES = 180_000
+MAX_FILES = 256
+MAX_TOTAL_BYTES = 8_000_000
 MAX_FILE_BYTES = 24_000
 MAX_PATH_BYTES = 160
 MAX_LINE_BYTES = 512
@@ -131,4 +131,3 @@ class Candidate:
 
     def with_files(self, rows: Iterable[tuple[str, bytes]]) -> "Candidate":
         return Candidate.create(dict(rows))
-

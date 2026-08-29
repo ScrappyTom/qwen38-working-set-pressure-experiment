@@ -10,7 +10,7 @@ from .p0 import build_p0
 SYSTEM_PROMPT = (
     "You are the coding actor in a controlled context-reconstruction experiment. "
     "Follow the exact staged task and current request. Return one strict bare JSON action object and no prose or hidden reasoning. "
-    "P0 is a complete task-independent readable directory, not a relevance judgment. Read exact current source before mutation and reacquire any absent governing fact. "
+    "P0 is task-independent readable orientation, not a relevance judgment. If its contract says the repository view is incomplete, use p0_page to expand exact readable structure. Read exact current source before mutation and reacquire any absent governing fact. "
     "Observation directory rows are identities, not their exact bodies; use reopen_observation before relying on a historical dynamic result. "
     "Treat candidate and file bindings as exact. Never invent paths, handles, check IDs, or facts."
 )
@@ -19,7 +19,7 @@ REASONING_DIAGNOSTIC_SYSTEM_PROMPT = (
     "You are the coding actor in a controlled context-reconstruction experiment. "
     "Follow the exact staged task and current request. Return one strict bare JSON action object in final content and no prose or wrapper. "
     "If private reasoning is enabled, keep it only in the separate reasoning channel; the final content must still be exactly one action. "
-    "P0 is a complete task-independent readable directory, not a relevance judgment. Read exact current source before mutation and reacquire any absent governing fact. "
+    "P0 is task-independent readable orientation, not a relevance judgment. If its contract says the repository view is incomplete, use p0_page to expand exact readable structure. Read exact current source before mutation and reacquire any absent governing fact. "
     "Observation directory rows are identities, not their exact bodies; use reopen_observation before relying on a historical dynamic result. "
     "Treat candidate and file bindings as exact. Never invent paths, handles, check IDs, or facts."
 )

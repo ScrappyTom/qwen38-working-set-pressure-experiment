@@ -10,6 +10,8 @@ from scripts.run_observation_final_development import _constructed_middle
 from working_set_exp.candidate import Candidate
 from working_set_exp.custody import verify_records
 from working_set_exp.jsonutil import canonical_json_bytes, load_json_strict
+from working_set_exp.hierarchical_p0 import build_p0_root, p0_page
+from working_set_exp.large_world import CASE_IDS as E12_CASE_IDS, hidden_grade as large_hidden_grade, load_fixture as load_large_fixture, verify_bank as verify_large_bank
 from working_set_exp.observation_recurrence import CASE_IDS as E9_CASE_IDS
 from working_set_exp.recurrent_acquisition_completion import expected_authorization, verify_prior_partial
 from working_set_exp.recurrent_host_v2 import run_t25_final_operational
@@ -30,6 +32,7 @@ EXPERIMENT = ROOT / "experiments" / "007_recurrent_bounded_pressure"
 PRIMARY = ROOT / "experiments" / "008_recurrent_bounded_pressure_primary"
 OBSERVATION_PRIMARY = ROOT / "experiments" / "009_recurrent_observation_validity"
 RECURRENT_ACQUISITION = ROOT / "experiments" / "011_recurrent_acquisition_granularity"
+LARGE_WORLD = ROOT / "experiments" / "012_large_world_recurrent_continuity"
 FINAL_TIMEOUT_ATTEMPT = OBSERVATION_PRIMARY / "final_path_rehearsal" / "attempt1_timeout"
 
 
@@ -69,6 +72,49 @@ class QueueActor:
 
 
 class RecurrentPressureTests(unittest.TestCase):
+    def test_large_world_bank_and_hierarchical_p0(self) -> None:
+        result = verify_large_bank(LARGE_WORLD / "fresh_bank")
+        self.assertEqual(result["file_count"], 667)
+        for fixture_id in E12_CASE_IDS:
+            fixture = load_large_fixture(LARGE_WORLD / "fresh_bank", fixture_id)
+            self.assertEqual(len(fixture.initial.files), 160)
+            root = build_p0_root(fixture.initial)
+            self.assertFalse(root["complete_for_repository"])
+            self.assertLessEqual(len(canonical_json_bytes(root)), 6_000)
+            directory = p0_page(fixture.initial, path="policies" if "SOURCE" in fixture_id else "codec", offset=0)
+            self.assertTrue(directory["accepted"])
+            self.assertTrue(directory["entries"])
+            truth = load_json_strict((LARGE_WORLD / "fresh_bank" / "evaluator_only" / fixture_id / "TRUTH.json").read_bytes())
+            candidate = fixture.initial
+            for patch in truth["patches"]:
+                candidate, _ = candidate.patch(
+                    path=patch["path"], old=patch["old"], new=patch["new"],
+                    expected_candidate_id=candidate.candidate_id,
+                    expected_file_sha256=candidate.file_sha256(patch["path"]),
+                )
+            self.assertTrue(large_hidden_grade(fixture, candidate)["passed"])
+
+    def test_hierarchical_p0_tool_is_exact_and_opt_in(self) -> None:
+        fixture = load_large_fixture(LARGE_WORLD / "fresh_bank", "E12-SOURCE-ORBIT")
+        state = SessionState(fixture.initial, stage="recurrent")
+        phase = fixture.phases["B"]
+        enabled = ToolExecutor(
+            state, required_full_reads=(), prefork_checker=phase.checker, public_checker=phase.checker,
+            final_target="__none__", probe_id=None, probe_body=None, read_mode="maximal_bounded_page",
+            hierarchical_p0=True,
+        )
+        page = enabled.execute({"action": "p0_page", "path": "policies/current.py", "offset": 0})
+        self.assertTrue(page["accepted"])
+        self.assertEqual(page["kind"], "file_outline")
+        self.assertEqual(page["entries"][0]["name"], "active_policy_prefix")
+        disabled = ToolExecutor(
+            SessionState(fixture.initial, stage="recurrent"), required_full_reads=(), prefork_checker=phase.checker,
+            public_checker=phase.checker, final_target="__none__", probe_id=None, probe_body=None,
+            read_mode="maximal_bounded_page",
+        )
+        rejected = disabled.execute({"action": "p0_page", "path": "policies", "offset": 0})
+        self.assertFalse(rejected["accepted"])
+
     def test_recurrent_acquisition_completion_binds_only_missing_pair_and_partial_seal(self) -> None:
         prior = verify_prior_partial(RECURRENT_ACQUISITION)
         self.assertEqual(prior["http_completion_calls"], 108)

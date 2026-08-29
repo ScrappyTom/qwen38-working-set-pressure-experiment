@@ -5,6 +5,7 @@ from typing import Any
 
 from .candidate import Candidate, CandidateError, canonical_path
 from .isolation import run_checker
+from .hierarchical_p0 import p0_page
 from .jsonutil import canonical_json_bytes, load_json_strict, sha256_bytes
 
 
@@ -68,6 +69,7 @@ class ToolExecutor:
         probe_body: str | None,
         reopenable: dict[str, bytes] | None = None,
         read_mode: str = "actor_selected_count",
+        hierarchical_p0: bool = False,
     ):
         self.state = state
         self.required_full_reads = required_full_reads
@@ -80,6 +82,7 @@ class ToolExecutor:
         if read_mode not in {"actor_selected_count", "maximal_bounded_page"}:
             raise ValueError("unknown read mode")
         self.read_mode = read_mode
+        self.hierarchical_p0 = hierarchical_p0
 
     def _bounded(self, result: dict[str, Any]) -> dict[str, Any]:
         if len(canonical_json_bytes(result)) > MAX_RESULT_BYTES:
@@ -93,6 +96,8 @@ class ToolExecutor:
                 return self._bounded({"accepted": True, "stage": self.state.stage})
             if name == "tree":
                 return self._tree(action)
+            if name == "p0_page":
+                return self._p0_page(action)
             if name == "search":
                 return self._search(action)
             if name == "read":
@@ -112,6 +117,13 @@ class ToolExecutor:
             raise ToolError("unknown action")
         except (CandidateError, ToolError, KeyError, TypeError, ValueError) as exc:
             return self._bounded({"accepted": False, "error_code": "tool_rejected", "detail": str(exc)})
+
+    def _p0_page(self, action: dict[str, Any]) -> dict[str, Any]:
+        if not self.hierarchical_p0:
+            raise ToolError("p0_page is unavailable")
+        if set(action) != {"action", "path", "offset"}:
+            raise ToolError("p0_page action shape differs")
+        return self._bounded(p0_page(self.state.candidate, path=action["path"], offset=action["offset"]))
 
     def _tree(self, action: dict[str, Any]) -> dict[str, Any]:
         if set(action) != {"action", "path", "offset", "limit"}:
@@ -367,6 +379,7 @@ def action_schema(
     *,
     probe_id: str | None,
     read_mode: str = "actor_selected_count",
+    hierarchical_p0: bool = False,
 ) -> dict[str, Any]:
     def obj(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
         return {"type": "object", "properties": properties, "required": required, "additionalProperties": False}
@@ -377,6 +390,7 @@ def action_schema(
     sha = {"type": "string", "pattern": "^[0-9a-f]{64}$"}
     begin = obj({"action": const("begin")}, ["action"])
     tree = obj({"action": const("tree"), "path": path, "offset": {"type": "integer", "minimum": 0, "maximum": 128}, "limit": {"type": "integer", "minimum": 1, "maximum": 16}}, ["action", "path", "offset", "limit"])
+    p0 = obj({"action": const("p0_page"), "path": path, "offset": {"type": "integer", "minimum": 0, "maximum": 2_000_000}}, ["action", "path", "offset"])
     search = obj({"action": const("search"), "path": path, "query": {"type": "string", "minLength": 1, "maxLength": 128}, "offset": {"type": "integer", "minimum": 0, "maximum": 2_000_000}, "limit": {"type": "integer", "minimum": 1, "maximum": 16}}, ["action", "path", "query", "offset", "limit"])
     if read_mode == "actor_selected_count":
         read = obj({"action": const("read"), "path": path, "start_line": {"type": "integer", "minimum": 1, "maximum": 2_000_000}, "line_count": {"type": "integer", "minimum": 1, "maximum": 500}}, ["action", "path", "start_line", "line_count"])
@@ -394,14 +408,20 @@ def action_schema(
         schema = begin
     elif stage == "prefix":
         options = [tree, search, read, patch, check, fork]
+        if hierarchical_p0:
+            options.insert(0, p0)
         if probe_id is not None:
             options.append(obj({"action": const("probe"), "probe_id": {"type": "string", "const": probe_id}}, ["action", "probe_id"]))
         schema = {"oneOf": options}
     elif stage == "continuation":
         options = [tree, search, read, patch, check, reopen, submit]
+        if hierarchical_p0:
+            options.insert(0, p0)
         schema = {"oneOf": options}
     elif stage == "recurrent":
         options = [tree, search, read, patch, check, reopen, fork]
+        if hierarchical_p0:
+            options.insert(0, p0)
         if probe_id is not None:
             options.append(obj({"action": const("probe"), "probe_id": {"type": "string", "const": probe_id}}, ["action", "probe_id"]))
         schema = {"oneOf": options}
