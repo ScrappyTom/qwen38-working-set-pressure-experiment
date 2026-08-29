@@ -11,6 +11,7 @@ from working_set_exp.candidate import Candidate
 from working_set_exp.custody import verify_records
 from working_set_exp.jsonutil import canonical_json_bytes, load_json_strict
 from working_set_exp.observation_recurrence import CASE_IDS as E9_CASE_IDS
+from working_set_exp.recurrent_acquisition_completion import expected_authorization, verify_prior_partial
 from working_set_exp.recurrent_host_v2 import run_t25_final_operational
 from working_set_exp.recurrent_pressure import (
     CandidateBoundProbeExecutor,
@@ -68,6 +69,16 @@ class QueueActor:
 
 
 class RecurrentPressureTests(unittest.TestCase):
+    def test_recurrent_acquisition_completion_binds_only_missing_pair_and_partial_seal(self) -> None:
+        prior = verify_prior_partial(RECURRENT_ACQUISITION)
+        self.assertEqual(prior["http_completion_calls"], 108)
+        authorization = expected_authorization(RECURRENT_ACQUISITION, ROOT)
+        self.assertEqual(authorization["cell_ordinal"], 4)
+        self.assertEqual(authorization["fixture_id"], "E11-OBS-KAPPA")
+        self.assertEqual(authorization["seed"], 223607)
+        self.assertEqual(authorization["branch_order"], ["T25-L0", "T25-L1"])
+        self.assertTrue(authorization["no_resume_or_rewrite_of_prior_partial"])
+
     def test_recurrent_acquisition_request_preserves_mode_after_phase_b_override(self) -> None:
         fixture = load_recurrent_fixture(RECURRENT_ACQUISITION / "fresh_bank", "E11-OBS-IOTA")
         request = load_json_strict(build_recurrent_request(
