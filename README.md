@@ -109,6 +109,15 @@ ranking, or host-selected relevance. See
 `experiments/011_recurrent_acquisition_granularity/SPEC.md` and
 `PRELIVE_FINDING.md`.
 
+The exact primary run ended prematurely when its external execution host
+terminated during cell 4's shared prefix, so the four-pair comparison is not
+formally scorable. Three complete pairs remain valid sealed partial evidence.
+L1 converted one L0 capacity stop into a hidden-correct recurrent completion;
+the other two pairs tied on completion and hidden quality. All five completed
+Phase-C paths selected the current candidate-bound observation, passed hidden
+grading, checked, and submitted. See `APPARATUS_FINDING.md`,
+`DIRECT_TRANSCRIPT_AUDIT.md`, and `RESULTS.md` in the Experiment 011 folder.
+
 Development live rehearsal is complete. From one exact 32k-token shared
 prefix, C50 used retained chronology to make a hidden-correct repair and
 submit, while T25 restarted the large Phase A reads and exhausted its 25k
