@@ -68,6 +68,12 @@ The sealed run cannot be changed. Future recurrent runners must either:
 2. classify the fixture/trajectory as boundary-not-instantiated without using
    noncompletion as a model-quality result.
 
+The successor implementation now takes the first option. See
+`HOST_V2_QUALIFICATION.md` and
+`src/working_set_exp/recurrent_host_v2.py`. It continues admitted Phase-C work
+and performs reconstruction only when the exact pre-request guard actually
+denies a later request.
+
 ## Host rule 2: observation T25 exhausted a visible action budget
 
 At call 12, Qwen saw:
@@ -152,6 +158,9 @@ chain under an output root and reports the globally latest record and any
 prepared invocation without an accepted result. On this sealed run it points
 to `E8-SOURCE-S223607-C50-C02`, the actual interrupted call, rather than the
 completed observation branch.
+
+Both corrections are offline-qualified. The historical runner and sealed
+evidence remain unchanged at their source commit.
 
 ## Hypotheses earned for the next study
 

@@ -55,6 +55,12 @@ The accompanying `HOST_PATH_AUDIT.md` distinguishes model actions from
 host-withheld work, mechanical capacity denial, visible call-budget exhaustion,
 and the operator interruption.
 
+The corrected successor host is now qualified offline. It continues admitted
+T25 work, reconstructs only at an actual pre-request pressure event (including
+mid-phase), separates prepared calls from model completions, and uses a global
+record-chain monitor. See
+`experiments/008_recurrent_bounded_pressure_primary/HOST_V2_QUALIFICATION.md`.
+
 Development live rehearsal is complete. From one exact 32k-token shared
 prefix, C50 used retained chronology to make a hidden-correct repair and
 submit, while T25 restarted the large Phase A reads and exhausted its 25k
