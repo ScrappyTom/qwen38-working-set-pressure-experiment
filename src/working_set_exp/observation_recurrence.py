@@ -13,6 +13,7 @@ SEEDS = (173205, 223607)
 OUTPUT_ROOT = r"C:\e9-primary"
 DEVELOPMENT_OUTPUT_ROOT = r"C:\e9-dev"
 FINAL_DEVELOPMENT_OUTPUT_ROOT = r"C:\e9-final-dev"
+FINAL_DEVELOPMENT_V2_OUTPUT_ROOT = r"C:\e9-final-dev2"
 MAXIMUM_HTTP_COMPLETION_CALLS = 160
 AUTHORIZATION_SCHEMA = "experiment-009-recurrent-observation-authorization-v1"
 
@@ -146,6 +147,20 @@ def final_development_case_definition() -> dict[str, Any]:
         bridge_names=("cerulean", "scarlet", "tan", "viridian"),
         marker_v1="F7&&",
         marker_v2="V3&&",
+    )
+
+
+def final_development_v2_case_definition() -> dict[str, Any]:
+    return _fresh_observation_case(
+        fixture_id="E9-DEV-OBS-EPSILON",
+        namespace="portal",
+        label_name="portal_label",
+        header_name="portal_header",
+        codec_name="encoded_portal",
+        archive_names=("cypress", "dogwood", "redwood"),
+        bridge_names=("azure", "maroon", "peach", "slate"),
+        marker_v1="G8++",
+        marker_v2="W6++",
     )
 
 

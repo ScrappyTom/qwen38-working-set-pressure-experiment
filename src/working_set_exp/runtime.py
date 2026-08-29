@@ -25,6 +25,11 @@ C50_PROMPT_CEILING = 47_000
 T25_TOTAL_CEILING = 25_000
 PORT = 18_110
 REASONING_BUDGET = 512
+# The RTX 3060 reference host evaluates long prompts at roughly 7 tokens/s and
+# the frozen actor can generate at roughly 1.1 tokens/s. A physically admitted
+# 50k prompt plus the 2,500-token output allowance can therefore legitimately
+# exceed two hours. This is a transport-hang bound, not a model time budget.
+HTTP_TIMEOUT_SECONDS = 14_400
 
 
 @dataclass(frozen=True)
@@ -267,7 +272,7 @@ class LiveActor:
         )
         started = time.perf_counter()
         try:
-            with urllib.request.urlopen(http_request, timeout=600) as response:
+            with urllib.request.urlopen(http_request, timeout=HTTP_TIMEOUT_SECONDS) as response:
                 raw = _bounded_read(response)
                 status = response.status
         except urllib.error.HTTPError as exc:

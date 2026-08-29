@@ -19,7 +19,7 @@ from working_set_exp.recurrent_pressure import (
     load_recurrent_fixture,
     verify_bank,
 )
-from working_set_exp.runtime import CallOutcome, PreparedCall
+from working_set_exp.runtime import CallOutcome, HTTP_TIMEOUT_SECONDS, PreparedCall
 from working_set_exp.tools import SessionState, ToolExecutor, action_schema
 
 
@@ -27,6 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 EXPERIMENT = ROOT / "experiments" / "007_recurrent_bounded_pressure"
 PRIMARY = ROOT / "experiments" / "008_recurrent_bounded_pressure_primary"
 OBSERVATION_PRIMARY = ROOT / "experiments" / "009_recurrent_observation_validity"
+FINAL_TIMEOUT_ATTEMPT = OBSERVATION_PRIMARY / "final_path_rehearsal" / "attempt1_timeout"
 
 
 class QueueActor:
@@ -65,6 +66,16 @@ class QueueActor:
 
 
 class RecurrentPressureTests(unittest.TestCase):
+    def test_live_http_timeout_covers_qualified_physical_worst_case(self) -> None:
+        conservative_seconds = (50_176 / 7.0) + (2_500 / 1.1)
+        self.assertGreater(HTTP_TIMEOUT_SECONDS, conservative_seconds)
+
+    def test_global_monitor_treats_transport_stop_as_resolved_invocation(self) -> None:
+        result = live_monitor_snapshot(FINAL_TIMEOUT_ATTEMPT)
+        self.assertEqual(result["prepared_invocations_seen"], 1)
+        self.assertEqual(result["resolved_invocations_seen"], 1)
+        self.assertIsNone(result["in_flight_prepared_call_id"])
+
     def test_constructed_final_rehearsal_exposes_stale_and_current_candidate_bindings(self) -> None:
         fixture, middle = _constructed_middle()
         self.assertEqual(middle.disposition, "second_boundary_eligible")
@@ -72,9 +83,9 @@ class RecurrentPressureTests(unittest.TestCase):
         stale, current = middle.observations
         self.assertNotEqual(stale["candidate_id"], middle.state.candidate.candidate_id)
         self.assertEqual(current["candidate_id"], middle.state.candidate.candidate_id)
-        self.assertIn(b"F7&&", middle.reopenable[stale["handle"]])
-        self.assertIn(b"V3&&", middle.reopenable[current["handle"]])
-        self.assertEqual(fixture.phase_c_target, "gateway/header.py")
+        self.assertIn(b"G8++", middle.reopenable[stale["handle"]])
+        self.assertIn(b"W6++", middle.reopenable[current["handle"]])
+        self.assertEqual(fixture.phase_c_target, "portal/header.py")
 
     def test_observation_recurrence_bank_is_fresh_valid_and_has_action_headroom(self) -> None:
         result = verify_bank(OBSERVATION_PRIMARY / "fresh_bank")

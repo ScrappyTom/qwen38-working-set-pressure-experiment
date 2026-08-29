@@ -21,12 +21,15 @@ def snapshot(root: Path) -> dict[str, Any]:
     rows = _rows(root)
     prepared = [item for item in rows if item[1].get("record_type") == "external_call_prepared"]
     completed = [item for item in rows if item[1].get("record_type") == "action_result"]
+    resolved = [
+        item for item in rows
+        if item[1].get("record_type") in {"action_result", "external_call_stopped", "capacity_stopped"}
+    ]
     latest = max(rows, key=lambda item: item[1].get("created_at_utc", "")) if rows else None
     latest_prepared = max(prepared, key=lambda item: item[1].get("created_at_utc", "")) if prepared else None
-    latest_completed = max(completed, key=lambda item: item[1].get("created_at_utc", "")) if completed else None
     prepared_call = latest_prepared[1].get("payload", {}).get("call_id") if latest_prepared else None
-    completed_call = latest_completed[1].get("payload", {}).get("call_id") if latest_completed else None
-    in_flight = prepared_call if prepared_call != completed_call else None
+    resolved_calls = {item[1].get("payload", {}).get("call_id") for item in resolved}
+    in_flight = prepared_call if prepared_call not in resolved_calls else None
     receipt_path = root / "RECEIPT.json"
     receipt = json.loads(receipt_path.read_text(encoding="utf-8")) if receipt_path.is_file() else None
     return {
@@ -35,6 +38,7 @@ def snapshot(root: Path) -> dict[str, Any]:
         "receipt_status": receipt.get("status") if receipt else None,
         "record_chain_count": len(rows),
         "prepared_invocations_seen": len(prepared),
+        "resolved_invocations_seen": len(resolved),
         "completed_actions_seen": len(completed),
         "latest_record": None if latest is None else {
             "records_path": latest[0].relative_to(root).as_posix(),
@@ -46,7 +50,7 @@ def snapshot(root: Path) -> dict[str, Any]:
         },
         "in_flight_prepared_call_id": in_flight,
         "interpretation": (
-            "one globally latest prepared invocation has no accepted action_result"
+            "one globally latest prepared invocation has no terminal action, transport-stop, or capacity-stop record"
             if in_flight else "no unmatched globally latest prepared invocation"
         ),
         "operator_rule": "never interrupt from a cell-scoped file count; inspect global record progress and the owned server first",

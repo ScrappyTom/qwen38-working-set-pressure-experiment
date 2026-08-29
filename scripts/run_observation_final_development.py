@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 
 from working_set_exp.jsonutil import atomic_write, canonical_json_bytes, load_json_strict, sha256_bytes, sha256_file, utc_now
-from working_set_exp.observation_recurrence import FINAL_DEVELOPMENT_OUTPUT_ROOT
+from working_set_exp.observation_recurrence import FINAL_DEVELOPMENT_V2_OUTPUT_ROOT
 from working_set_exp.reasoning_measured import seal_response_tree
 from working_set_exp.recurrent_host_v2 import run_t25_final_operational
 from working_set_exp.recurrent_pressure import (
@@ -23,12 +23,12 @@ from working_set_exp.tools import SessionState
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPERIMENT = ROOT / "experiments" / "009_recurrent_observation_validity"
-DEVELOPMENT = EXPERIMENT / "final_path_rehearsal"
-OUTPUT = Path(FINAL_DEVELOPMENT_OUTPUT_ROOT)
+DEVELOPMENT = EXPERIMENT / "final_path_rehearsal_v2"
+OUTPUT = Path(FINAL_DEVELOPMENT_V2_OUTPUT_ROOT)
 
 
 def _constructed_middle() -> tuple[object, MiddleOutcome]:
-    fixture = load_recurrent_fixture(DEVELOPMENT / "bank", "E9-DEV-OBS-DELTA")
+    fixture = load_recurrent_fixture(DEVELOPMENT / "bank", "E9-DEV-OBS-EPSILON")
     truth = load_json_strict((DEVELOPMENT / "bank" / "evaluator_only" / fixture.fixture_id / "TRUTH.json").read_bytes())
     after_a, _ = fixture.initial.patch(
         path=truth["phase_a_patch"]["path"],
