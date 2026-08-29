@@ -34,6 +34,7 @@ TOOL_CONTRACT = {
     "probe": "stage-bound exact external runtime observation when listed",
     "fork_ready": "mechanical boundary gate after required reads and the current stage check",
     "reopen_observation": "continuation-only exact reopen by listed handle",
+    "reopen_result": "exact reopen of a result body named by an active-phase receipt handle",
     "submit": "continuation-only terminal candidate submission",
 }
 

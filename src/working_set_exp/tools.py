@@ -68,6 +68,7 @@ class ToolExecutor:
         probe_id: str | None,
         probe_body: str | None,
         reopenable: dict[str, bytes] | None = None,
+        result_reopenable: dict[str, bytes] | None = None,
         read_mode: str = "actor_selected_count",
         hierarchical_p0: bool = False,
     ):
@@ -79,6 +80,7 @@ class ToolExecutor:
         self.probe_id = probe_id
         self.probe_body = probe_body
         self.reopenable = reopenable if reopenable is not None else {}
+        self.result_reopenable = result_reopenable if result_reopenable is not None else {}
         if read_mode not in {"actor_selected_count", "maximal_bounded_page"}:
             raise ValueError("unknown read mode")
         self.read_mode = read_mode
@@ -112,6 +114,8 @@ class ToolExecutor:
                 return self._fork_ready(action)
             if name == "reopen_observation":
                 return self._reopen(action)
+            if name == "reopen_result":
+                return self._reopen_result(action)
             if name == "submit":
                 return self._submit(action)
             raise ToolError("unknown action")
@@ -359,6 +363,21 @@ class ToolExecutor:
             }
         )
 
+    def _reopen_result(self, action: dict[str, Any]) -> dict[str, Any]:
+        if set(action) != {"action", "handle"} or self.state.stage not in {"continuation", "recurrent"}:
+            raise ToolError("reopen_result is unavailable")
+        handle = action["handle"]
+        if handle not in self.result_reopenable:
+            raise ToolError("result handle is unavailable")
+        body = self.result_reopenable[handle]
+        return self._bounded({
+            "accepted": True,
+            "handle": handle,
+            "exact_result_utf8": body.decode("utf-8"),
+            "exact_result_sha256": sha256_bytes(body),
+            "size_bytes": len(body),
+        })
+
     def _submit(self, action: dict[str, Any]) -> dict[str, Any]:
         if set(action) != {"action", "expected_candidate_id"} or self.state.stage != "continuation":
             raise ToolError("submit action is unavailable")
@@ -380,6 +399,7 @@ def action_schema(
     probe_id: str | None,
     read_mode: str = "actor_selected_count",
     hierarchical_p0: bool = False,
+    result_reopen: bool = False,
 ) -> dict[str, Any]:
     def obj(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
         return {"type": "object", "properties": properties, "required": required, "additionalProperties": False}
@@ -403,6 +423,7 @@ def action_schema(
     check = obj({"action": const("check"), "check_id": {"type": "string", "enum": ["prefork", "public"]}, "expected_candidate_id": sha}, ["action", "check_id", "expected_candidate_id"])
     fork = obj({"action": const("fork_ready"), "expected_candidate_id": sha}, ["action", "expected_candidate_id"])
     reopen = obj({"action": const("reopen_observation"), "handle": {"type": "string", "pattern": "^OBS-[0-9]{4}$"}}, ["action", "handle"])
+    reopen_result = obj({"action": const("reopen_result"), "handle": {"type": "string", "pattern": "^RES-[0-9]{4}$"}}, ["action", "handle"])
     submit = obj({"action": const("submit"), "expected_candidate_id": sha}, ["action", "expected_candidate_id"])
     if stage == "setup":
         schema = begin
@@ -415,11 +436,15 @@ def action_schema(
         schema = {"oneOf": options}
     elif stage == "continuation":
         options = [tree, search, read, patch, check, reopen, submit]
+        if result_reopen:
+            options.append(reopen_result)
         if hierarchical_p0:
             options.insert(0, p0)
         schema = {"oneOf": options}
     elif stage == "recurrent":
         options = [tree, search, read, patch, check, reopen, fork]
+        if result_reopen:
+            options.append(reopen_result)
         if hierarchical_p0:
             options.insert(0, p0)
         if probe_id is not None:
@@ -433,6 +458,8 @@ def action_schema(
             "name": (
                 f"experiment_002_{stage}_action"
                 if read_mode == "actor_selected_count"
+                else f"experiment_013_{stage}_receipt_action"
+                if result_reopen
                 else f"experiment_010_{stage}_maximal_read_action"
             ),
             "strict": True,

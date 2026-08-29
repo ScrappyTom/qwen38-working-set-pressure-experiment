@@ -12,6 +12,10 @@ from working_set_exp.custody import verify_records
 from working_set_exp.jsonutil import canonical_json_bytes, load_json_strict
 from working_set_exp.hierarchical_p0 import build_p0_root, p0_page
 from working_set_exp.large_world import CASE_IDS as E12_CASE_IDS, hidden_grade as large_hidden_grade, load_fixture as load_large_fixture, verify_bank as verify_large_bank
+from working_set_exp.phase_receipts import (
+    _receipt as phase_receipt, build_request as build_receipt_request,
+    load_fixture as load_receipt_fixture, verify_bank as verify_receipt_bank,
+)
 from working_set_exp.observation_recurrence import CASE_IDS as E9_CASE_IDS
 from working_set_exp.recurrent_acquisition_completion import expected_authorization, verify_prior_partial
 from working_set_exp.recurrent_host_v2 import run_t25_final_operational
@@ -33,6 +37,7 @@ PRIMARY = ROOT / "experiments" / "008_recurrent_bounded_pressure_primary"
 OBSERVATION_PRIMARY = ROOT / "experiments" / "009_recurrent_observation_validity"
 RECURRENT_ACQUISITION = ROOT / "experiments" / "011_recurrent_acquisition_granularity"
 LARGE_WORLD = ROOT / "experiments" / "012_large_world_recurrent_continuity"
+PHASE_RECEIPTS = ROOT / "experiments" / "013_active_phase_receipts"
 FINAL_TIMEOUT_ATTEMPT = OBSERVATION_PRIMARY / "final_path_rehearsal" / "attempt1_timeout"
 
 
@@ -93,6 +98,59 @@ class RecurrentPressureTests(unittest.TestCase):
                     expected_file_sha256=candidate.file_sha256(patch["path"]),
                 )
             self.assertTrue(large_hidden_grade(fixture, candidate)["passed"])
+
+    def test_exact_result_reopen_is_opt_in_and_hash_bound(self) -> None:
+        fixture = load_large_fixture(LARGE_WORLD / "fresh_bank", "E12-SOURCE-ORBIT")
+        body = canonical_json_bytes({"accepted": True, "path": "api/name.py", "content": "exact"})
+        enabled = ToolExecutor(
+            SessionState(fixture.initial, stage="continuation"), required_full_reads=(),
+            prefork_checker=fixture.phases["B"].checker, public_checker=fixture.phases["B"].checker,
+            final_target="__none__", probe_id=None, probe_body=None,
+            result_reopenable={"RES-0001": body},
+        )
+        result = enabled.execute({"action": "reopen_result", "handle": "RES-0001"})
+        self.assertTrue(result["accepted"])
+        self.assertEqual(result["exact_result_utf8"], body.decode())
+        disabled = ToolExecutor(
+            SessionState(fixture.initial, stage="continuation"), required_full_reads=(),
+            prefork_checker=fixture.phases["B"].checker, public_checker=fixture.phases["B"].checker,
+            final_target="__none__", probe_id=None, probe_body=None,
+        )
+        self.assertFalse(disabled.execute({"action": "reopen_result", "handle": "RES-0001"})["accepted"])
+
+    def test_phase_receipt_contains_only_exact_mechanical_fields(self) -> None:
+        action = {"action": "read", "path": "records_b/module_000.py", "start_line": 1}
+        result = {
+            "accepted": True, "path": action["path"], "candidate_id": "a" * 64,
+            "file_sha256": "b" * 64, "requested_start_line": 1, "returned_start_line": 1,
+            "returned_end_line": 177, "next_start_line": None, "complete": True, "content": "large exact body",
+        }
+        receipt = phase_receipt(action, result, sequence=1, handle="RES-0001")
+        self.assertEqual(receipt["path"], action["path"])
+        self.assertTrue(receipt["complete"])
+        self.assertNotIn("content", receipt)
+        self.assertNotIn("relevant", receipt)
+        self.assertNotIn("sufficient", receipt)
+
+    def test_receipt_bank_and_request_separate_ledger_from_exact_body(self) -> None:
+        self.assertEqual(verify_receipt_bank(PHASE_RECEIPTS / "fresh_bank")["file_count"], 657)
+        fixture = load_receipt_fixture(PHASE_RECEIPTS / "fresh_bank", "E13-SOURCE-LUMEN")
+        receipt = phase_receipt(
+            {"action": "read", "path": "api/name.py", "start_line": 1},
+            {"accepted": True, "path": "api/name.py", "candidate_id": fixture.initial.candidate_id,
+             "file_sha256": fixture.initial.file_sha256("api/name.py"), "returned_start_line": 1,
+             "returned_end_line": 2, "next_start_line": None, "complete": True, "content": "secret body"},
+            sequence=1, handle="RES-0001",
+        )
+        request = load_json_strict(build_receipt_request(
+            fixture, candidate=fixture.initial, phase_id="B", history=[], observations=[], completed=["A"],
+            reconstructed=True, boundary_binding={}, calls_used=3, stage="continuation",
+            condition="T25-RECEIPTS", receipt_entries=[receipt], externalized_receipt_count=1,
+        ))
+        self.assertNotIn("condition", request)
+        self.assertEqual(request["active_phase_receipt_ledger"]["entries"][0]["result_handle"], "RES-0001")
+        self.assertNotIn("secret body", canonical_json_bytes(request).decode())
+        self.assertIn("reopen_result", request["available_actions"])
 
     def test_hierarchical_p0_tool_is_exact_and_opt_in(self) -> None:
         fixture = load_large_fixture(LARGE_WORLD / "fresh_bank", "E12-SOURCE-ORBIT")

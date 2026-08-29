@@ -176,6 +176,7 @@ def endpoint_request(
     reasoning_enabled: bool = False,
     read_mode: str = "actor_selected_count",
     hierarchical_p0: bool = False,
+    result_reopen: bool = False,
 ) -> bytes:
     body = {
         "model": profile.model_alias,
@@ -186,7 +187,10 @@ def endpoint_request(
             },
             {"role": "user", "content": request.decode("utf-8")},
         ],
-        "response_format": action_schema(stage, probe_id=probe_id, read_mode=read_mode, hierarchical_p0=hierarchical_p0),
+        "response_format": action_schema(
+            stage, probe_id=probe_id, read_mode=read_mode,
+            hierarchical_p0=hierarchical_p0, result_reopen=result_reopen,
+        ),
         "max_tokens": OUTPUT_TOKENS,
         "stream": False,
         "seed": seed,
@@ -224,6 +228,7 @@ class LiveActor:
         reasoning_enabled: bool = False,
         read_mode: str = "actor_selected_count",
         hierarchical_p0: bool = False,
+        result_reopen: bool = False,
     ):
         self.profile = profile
         self.seed = seed
@@ -231,6 +236,7 @@ class LiveActor:
         self.reasoning_enabled = reasoning_enabled
         self.read_mode = read_mode
         self.hierarchical_p0 = hierarchical_p0
+        self.result_reopen = result_reopen
         self.call_ids: set[str] = set()
 
     def prepare(
@@ -261,6 +267,7 @@ class LiveActor:
             reasoning_enabled=self.reasoning_enabled,
             read_mode=self.read_mode,
             hierarchical_p0=self.hierarchical_p0,
+            result_reopen=self.result_reopen,
         )
         return PreparedCall(
             call_id=call_id,

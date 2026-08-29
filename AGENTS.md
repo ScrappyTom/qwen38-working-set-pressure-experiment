@@ -6,7 +6,7 @@ diagnostics. Keep it smaller than its evidence donors.
 
 Read in order:
 
-1. the active Experiment 012 `SPEC.md`;
+1. the active Experiment 013 `SPEC.md`;
 2. its frozen authorization, schedule, and execution package;
 3. `docs/ANALYSIS_GOVERNANCE.md`;
 4. prior experiment results and direct transcript audits;

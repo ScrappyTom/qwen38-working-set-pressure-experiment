@@ -1,5 +1,13 @@
 # Qwen3.8 Single-Boundary Working-Set Experiment
 
+## Active study
+
+Experiment 013 prospectively isolates the progress-state gap found in
+Experiment 012. It compares the old 25k latest-result reset with an exact
+compact active-phase receipt ledger and on-demand exact result reopening. No
+semantic summary, ranking, relationship graph, or read suppression is added.
+See `experiments/013_active_phase_receipts/SPEC.md`.
+
 ## Current result
 
 Experiment 012 completed the first 160-file, approximately 2.2 MiB recurrent
