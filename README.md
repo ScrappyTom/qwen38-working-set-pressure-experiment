@@ -68,8 +68,16 @@ eight actions rather than the prior geometry's 10–12, leaving four actor-chose
 calls of headroom without changing the frozen budget. Exact-token qualification
 places the first T25 transition at 28,553/28,589 prompt tokens and the second at
 22,132/22,194; both remain physically admitted at 50k. The measured bank has
-not been exposed. A separate fresh development-only live rehearsal must pass
-and receive transcript-level review before measured authorization.
+not been exposed. A focused fresh development-only second-boundary rehearsal
+passed: Qwen selected the current candidate-bound observation over an older
+exact record, reopened `W6++`, read the governing source, produced the exact
+hidden-correct repair, checked, and submitted in five calls. Direct transcript
+review and the post-seal grade are in
+`experiments/009_recurrent_observation_validity/final_path_rehearsal_v2/`.
+The rehearsal also exposed an insufficient port-only shutdown receipt. The
+prospective host now records and verifies the exact owned PID as well as port
+release; the measured bank remains unexposed while that lifecycle amendment is
+qualified and the executable package is refreshed.
 
 Development live rehearsal is complete. From one exact 32k-token shared
 prefix, C50 used retained chronology to make a hidden-correct repair and

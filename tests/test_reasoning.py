@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import subprocess
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from working_set_exp.fixture import load_fixture
@@ -20,7 +22,13 @@ from working_set_exp.reasoning_replication import (
     verify_bank as verify_replication_bank,
 )
 from working_set_exp.request import REASONING_DIAGNOSTIC_SYSTEM_PROMPT, render_reasoning_prompt
-from working_set_exp.runtime import OwnedServer, REASONING_BUDGET, RuntimeProfile, endpoint_request
+from working_set_exp.runtime import (
+    OwnedServer,
+    REASONING_BUDGET,
+    RuntimeProfile,
+    endpoint_request,
+    running_process_ids,
+)
 
 
 class ReasoningDiagnosticTests(unittest.TestCase):
@@ -80,6 +88,44 @@ class ReasoningDiagnosticTests(unittest.TestCase):
         self.assertEqual(server.reasoning_budget, REASONING_BUDGET)
         with self.assertRaises(ValueError):
             OwnedServer(self.profile(), Path("evidence"), reasoning_mode="auto", reasoning_budget=-2)
+
+    def test_server_shutdown_is_not_inferred_from_port_release_alone(self) -> None:
+        class LingeringProcess:
+            pid = 41
+
+            def poll(self):
+                return None
+
+            def terminate(self):
+                pass
+
+            def wait(self, timeout):
+                raise subprocess.TimeoutExpired("server", timeout)
+
+            def kill(self):
+                pass
+
+        server = OwnedServer(self.profile(), Path("evidence"))
+        server.process = LingeringProcess()
+        with tempfile.TemporaryDirectory() as raw:
+            server.run_root = Path(raw)
+            (server.run_root / "runtime").mkdir()
+            with mock.patch("working_set_exp.runtime.port_free", return_value=True):
+                with self.assertRaisesRegex(RuntimeError, "process_terminated=False"):
+                    server._shutdown()
+        self.assertFalse(server.shutdown_verified)
+
+    def test_windows_process_preflight_parses_only_exact_runtime_name(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0,
+            stdout='"llama-server.exe","4160","Console","1","12,000 K"\n'
+                   '"other.exe","7","Console","1","1,000 K"\n',
+            stderr="",
+        )
+        with mock.patch("working_set_exp.runtime.os.name", "nt"), mock.patch(
+            "working_set_exp.runtime.subprocess.run", return_value=completed
+        ):
+            self.assertEqual(running_process_ids("llama-server.exe"), (4160,))
 
     def test_replication_bank_is_fresh_and_mechanically_valid(self) -> None:
         with tempfile.TemporaryDirectory() as raw:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import os
 import re
 import socket
@@ -340,6 +341,32 @@ def port_free(port: int = PORT) -> bool:
     return True
 
 
+def running_process_ids(image_name: str) -> tuple[int, ...]:
+    """Return exact-name process IDs for the dedicated runtime preflight."""
+    if os.name == "nt":
+        completed = subprocess.run(
+            ["tasklist", "/FI", f"IMAGENAME eq {image_name}", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            check=True,
+            text=True,
+            errors="replace",
+        )
+        rows = csv.reader(completed.stdout.splitlines())
+        return tuple(
+            sorted(
+                int(row[1])
+                for row in rows
+                if len(row) >= 2 and row[0].casefold() == image_name.casefold() and row[1].isdigit()
+            )
+        )
+    completed = subprocess.run(
+        ["pgrep", "-x", image_name], capture_output=True, check=False, text=True, errors="replace"
+    )
+    if completed.returncode not in {0, 1}:
+        raise RuntimeError(f"process preflight failed for {image_name}")
+    return tuple(sorted(int(line) for line in completed.stdout.splitlines() if line.strip().isdigit()))
+
+
 class OwnedServer:
     def __init__(
         self,
@@ -362,10 +389,14 @@ class OwnedServer:
         self.process: subprocess.Popen[bytes] | None = None
         self.stdout: Any = None
         self.stderr: Any = None
+        self.shutdown_verified = False
 
     def __enter__(self) -> "OwnedServer":
         if not port_free(self.port):
             raise RuntimeError(f"dedicated port {self.port} is occupied")
+        competing = running_process_ids(self.profile.server_path.name)
+        if competing:
+            raise RuntimeError(f"competing {self.profile.server_path.name} process IDs exist: {competing}")
         runtime = self.run_root / "runtime"
         runtime.mkdir(parents=True, exist_ok=False)
         slots = runtime / "slots"
@@ -386,7 +417,6 @@ class OwnedServer:
             "--top-k", "20", "--min-p", "0.0", "--presence-penalty", "1.5", "--repeat-penalty", "1.0",
             "--metrics", "--slots", "--no-mmproj", "--verbose", "--log-file", str(runtime / "llama-server.log"),
         ]
-        (runtime / "launch.json").write_bytes(canonical_json_bytes({"executable": str(self.profile.server_path), "arguments": arguments}))
         self.stdout = (runtime / "server-stdout.bin").open("wb")
         self.stderr = (runtime / "server-stderr.bin").open("wb")
         self.process = subprocess.Popen(
@@ -396,9 +426,19 @@ class OwnedServer:
             stderr=self.stderr,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
+        (runtime / "launch.json").write_bytes(
+            canonical_json_bytes(
+                {
+                    "executable": str(self.profile.server_path),
+                    "arguments": arguments,
+                    "owned_pid": self.process.pid,
+                }
+            )
+        )
         deadline = time.monotonic() + 180
         while time.monotonic() < deadline:
             if self.process.poll() is not None:
+                self._shutdown()
                 raise RuntimeError("llama-server exited before readiness")
             try:
                 with urllib.request.urlopen(f"http://127.0.0.1:{self.port}/health", timeout=2) as response:
@@ -406,16 +446,21 @@ class OwnedServer:
                         return self
             except Exception:
                 time.sleep(0.5)
+        self._shutdown()
         raise RuntimeError("llama-server readiness timed out")
 
-    def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> None:
+    def _shutdown(self) -> None:
+        self.shutdown_verified = False
         if self.process is not None and self.process.poll() is None:
             self.process.terminate()
             try:
                 self.process.wait(timeout=30)
             except subprocess.TimeoutExpired:
                 self.process.kill()
-                self.process.wait(timeout=30)
+                try:
+                    self.process.wait(timeout=30)
+                except subprocess.TimeoutExpired:
+                    pass
         if self.stdout is not None:
             self.stdout.close()
         if self.stderr is not None:
@@ -423,5 +468,28 @@ class OwnedServer:
         deadline = time.monotonic() + 30
         while time.monotonic() < deadline and not port_free(self.port):
             time.sleep(0.25)
-        if not port_free(self.port):
-            raise RuntimeError("server port was not released")
+        process_terminated = self.process is not None and self.process.poll() is not None
+        port_released = port_free(self.port)
+        self.shutdown_verified = process_terminated and port_released
+        runtime = self.run_root / "runtime"
+        if runtime.is_dir():
+            (runtime / "shutdown.json").write_bytes(
+                canonical_json_bytes(
+                    {
+                        "owned_pid": self.process.pid if self.process is not None else None,
+                        "process_returncode": self.process.poll() if self.process is not None else None,
+                        "process_terminated": process_terminated,
+                        "port": self.port,
+                        "port_released": port_released,
+                        "verified": self.shutdown_verified,
+                    }
+                )
+            )
+        if not self.shutdown_verified:
+            raise RuntimeError(
+                "owned llama-server shutdown was not verified "
+                f"(process_terminated={process_terminated}, port_released={port_released})"
+            )
+
+    def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> None:
+        self._shutdown()

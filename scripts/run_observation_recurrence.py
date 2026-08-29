@@ -84,7 +84,8 @@ def main() -> None:
     http_total = 0
     try:
         verify_closure(ROOT, EXPERIMENT / "EXECUTABLE_CLOSURE.json")
-        with OwnedServer(profile, OUTPUT, port=PORT, reasoning_mode="auto", reasoning_budget=REASONING_BUDGET):
+        server = OwnedServer(profile, OUTPUT, port=PORT, reasoning_mode="auto", reasoning_budget=REASONING_BUDGET)
+        with server:
             for row in schedule["cells"]:
                 fixture = load_recurrent_fixture(EXPERIMENT / "fresh_bank", row["fixture_id"])
                 cell_root = OUTPUT / f"cell-{row['ordinal']:02d}"
@@ -185,7 +186,7 @@ def main() -> None:
                 "completed_at_utc": utc_now(),
                 "response_seal_sha256": sha256_file(OUTPUT / "RESPONSE_SEAL.json"),
                 "response_aggregate_sha256": seal["aggregate_sha256"],
-                "server_shutdown_verified": port_free(PORT),
+                "server_shutdown_verified": server.shutdown_verified,
                 "evaluator_reads_before_seal": False,
             }
         )
@@ -196,7 +197,7 @@ def main() -> None:
                 "completed_at_utc": utc_now(),
                 "error_type": type(exc).__name__,
                 "error": str(exc),
-                "server_shutdown_verified": port_free(PORT),
+                "server_shutdown_verified": server.shutdown_verified if "server" in locals() else False,
             }
         )
         atomic_write(OUTPUT / "RECEIPT.json", canonical_json_bytes(receipt))
