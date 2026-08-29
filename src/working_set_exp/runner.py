@@ -38,12 +38,20 @@ class Actor(Protocol):
 
 
 class ScriptedActor:
-    def __init__(self, profile: RuntimeProfile, seed: int, policy: Callable[[dict[str, Any]], dict[str, Any]]):
+    def __init__(
+        self,
+        profile: RuntimeProfile,
+        seed: int,
+        policy: Callable[[dict[str, Any]], dict[str, Any]],
+        *,
+        read_mode: str = "actor_selected_count",
+    ):
         self.profile = profile
         self.seed = seed
         self.policy = policy
         self.requests: dict[str, bytes] = {}
         self.call_ids: set[str] = set()
+        self.read_mode = read_mode
 
     def prepare(self, request: bytes, *, stage: str, probe_id: str | None, call_id: str, active_total_ceiling: int) -> PreparedCall:
         if call_id in self.call_ids:
@@ -53,7 +61,14 @@ class ScriptedActor:
         self.requests[call_id] = request
         return PreparedCall(
             call_id=call_id,
-            endpoint_request=endpoint_request(self.profile, request, stage=stage, probe_id=probe_id, seed=self.seed),
+            endpoint_request=endpoint_request(
+                self.profile,
+                request,
+                stage=stage,
+                probe_id=probe_id,
+                seed=self.seed,
+                read_mode=self.read_mode,
+            ),
             rendered_prompt=render_prompt(request),
             offline_prompt_tokens=admission["offline_prompt_tokens"],
             active_total_ceiling=active_total_ceiling,
@@ -236,6 +251,9 @@ def run_prefix(
     continuation_call_limit: int = BRANCH_CALL_LIMIT,
     one_shot_probe: bool = False,
     reasoning_enabled: bool = False,
+    read_mode: str = "actor_selected_count",
+    acquisition_contract: bool = False,
+    require_pressure_eligible: bool = True,
 ) -> PrefixOutcome:
     if output_dir.exists():
         raise FileExistsError(output_dir)
@@ -252,6 +270,7 @@ def run_prefix(
         final_target=fixture.final_target,
         probe_id=fixture.probe_id,
         probe_body=fixture.probe_body,
+        read_mode=read_mode,
     )
     history: list[dict[str, Any]] = []
     observations: list[dict[str, Any]] = []
@@ -281,6 +300,8 @@ def run_prefix(
             fork_binding=None,
             prefix_call_limit=prefix_call_limit,
             continuation_call_limit=continuation_call_limit,
+            read_mode=read_mode,
+            acquisition_contract=acquisition_contract,
         )
         call_id = f"{fixture.fixture_id}-S{seed}-P{calls:02d}"
         action, result, _ = _execute_call(
@@ -339,6 +360,8 @@ def run_prefix(
             fork_binding=binding,
             prefix_call_limit=prefix_call_limit,
             continuation_call_limit=continuation_call_limit,
+            read_mode=read_mode,
+            acquisition_contract=acquisition_contract,
         )
         pressure = guard(
             profile,
@@ -397,7 +420,7 @@ def run_prefix(
         "last_record_sha256": stopped["record_sha256"],
     }
     atomic_write(output_dir / "SUMMARY.json", canonical_json_bytes(summary))
-    if disposition != "fork_eligible":
+    if require_pressure_eligible and disposition != "fork_eligible":
         raise RuntimeError(f"prefix did not reach an eligible fork: {disposition}")
     return PrefixOutcome(state, history, observations, reopenable, binding, calls, output_dir)
 
@@ -548,7 +571,13 @@ def verify_run(run_dir: Path) -> dict[str, Any]:
     return {"verified": True, "record_count": len(records), "disposition": summary["disposition"]}
 
 
-def replay_prefix(fixture: Fixture, run_dir: Path) -> PrefixOutcome:
+def replay_prefix(
+    fixture: Fixture,
+    run_dir: Path,
+    *,
+    read_mode: str = "actor_selected_count",
+    require_pressure_eligible: bool = True,
+) -> PrefixOutcome:
     records = verify_records(run_dir / "records.jsonl", run_dir)
     summary = load_json_strict((run_dir / "SUMMARY.json").read_bytes())
     state = SessionState(fixture.initial)
@@ -560,6 +589,7 @@ def replay_prefix(fixture: Fixture, run_dir: Path) -> PrefixOutcome:
         final_target=fixture.final_target,
         probe_id=fixture.probe_id,
         probe_body=fixture.probe_body,
+        read_mode=read_mode,
     )
     history: list[dict[str, Any]] = []
     observations: list[dict[str, Any]] = []
@@ -594,7 +624,7 @@ def replay_prefix(fixture: Fixture, run_dir: Path) -> PrefixOutcome:
                 }
             )
         last_action_record_sha256 = record["record_sha256"]
-    if not state.fork_ready or summary["disposition"] != "fork_eligible":
+    if not state.fork_ready or (require_pressure_eligible and summary["disposition"] != "fork_eligible"):
         raise ValueError("prefix replay is not fork eligible")
     binding = fork_binding(
         fixture_id=fixture.fixture_id,

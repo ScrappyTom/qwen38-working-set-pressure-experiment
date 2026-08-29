@@ -80,6 +80,15 @@ metadata or semantic memory is earned. The recommended follow-up is a small
 fresh comparison of actor-selected read page size versus a deterministic
 largest-bounded exact page.
 
+Experiment 010 is that narrow follow-up. It freezes two fresh 198-line
+full-acquisition geometries, two seeds, and an eight-cell L0/L1 comparison.
+L0 retains actor-selected `line_count`; L1 returns the deterministic largest
+exact whole-line page that fits the existing result bound. No duplicate-read
+suppression or semantic feature is included. The fresh bank, exact initial-call
+package, scripted all-condition paths, source closure, and observation-directory
+v2 correction are qualified offline with zero actor exposure. See
+`experiments/010_acquisition_granularity/SPEC.md`.
+
 Development live rehearsal is complete. From one exact 32k-token shared
 prefix, C50 used retained chronology to make a hidden-correct repair and
 submit, while T25 restarted the large Phase A reads and exhausted its 25k

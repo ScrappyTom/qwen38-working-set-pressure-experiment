@@ -5,12 +5,14 @@ import unittest
 from pathlib import Path
 
 from working_set_exp.bank import construct_bank, verify_bank
+from working_set_exp.acquisition_granularity import construct_bank as construct_acquisition_bank
+from working_set_exp.acquisition_granularity import verify_bank as verify_acquisition_bank
 from working_set_exp.candidate import Candidate, CandidateError
 from working_set_exp.fixture import load_fixture, load_truth
 from working_set_exp.isolation import run_checker
 from working_set_exp.measured import build_executable_closure, construct_execution_package, verify_execution_package
 from working_set_exp.p0 import build_p0
-from working_set_exp.request import build_request
+from working_set_exp.request import build_request, observation_directory_v2
 from working_set_exp.tools import SessionState, ToolError, ToolExecutor, action_schema, strict_action
 
 
@@ -55,6 +57,46 @@ class CoreTests(unittest.TestCase):
         self.assertTrue(second["complete"])
         self.assertIn("paged.py", state.complete_reads)
 
+    def test_maximal_bounded_read_removes_actor_page_size_decision(self):
+        lines = [f"ROW_{index:04d} = {'x' * 80!r}\n" for index in range(1, 221)]
+        candidate = Candidate.create({"ledger.py": "".join(lines).encode("utf-8")})
+        state = SessionState(candidate)
+        executor = ToolExecutor(
+            state,
+            required_full_reads=("ledger.py",),
+            prefork_checker=b"print('ok')\n",
+            public_checker=b"print('ok')\n",
+            final_target="unused.py",
+            probe_id=None,
+            probe_body=None,
+            read_mode="maximal_bounded_page",
+        )
+        first = executor.execute({"action": "read", "path": "ledger.py", "start_line": 1})
+        self.assertTrue(first["accepted"])
+        self.assertEqual(first["paging_mode"], "maximal_bounded_page")
+        self.assertIsNotNone(first["next_start_line"])
+        self.assertLessEqual(len(first["content"].encode("utf-8")), 18_000)
+        second = executor.execute(
+            {"action": "read", "path": "ledger.py", "start_line": first["next_start_line"]}
+        )
+        self.assertTrue(second["complete"])
+        self.assertIn("ledger.py", state.complete_reads)
+        rejected = executor.execute(
+            {"action": "read", "path": "ledger.py", "start_line": 1, "line_count": 50}
+        )
+        self.assertFalse(rejected["accepted"])
+
+    def test_observation_directory_v2_uses_literal_capture_order(self):
+        rows = [
+            {"handle": "OBS-0007", "sequence": 9, "action": "probe", "target": "alpha", "candidate_id": "a" * 64, "size_bytes": 5, "sha256": "b" * 64},
+            {"handle": "OBS-0005", "sequence": 5, "action": "probe", "target": "beta", "candidate_id": "c" * 64, "size_bytes": 6, "sha256": "d" * 64},
+        ]
+        directory = observation_directory_v2(rows)
+        self.assertEqual(directory["ordering"], "capture_ordinal_ascending")
+        self.assertEqual([row["capture_ordinal"] for row in directory["entries"]], [1, 2])
+        self.assertEqual([row["source_stage_sequence"] for row in directory["entries"]], [9, 5])
+        self.assertNotIn("sequence_ascending", str(directory))
+
     def test_candidate_rejects_oversized_line(self):
         with self.assertRaises(CandidateError):
             Candidate.create({"bad.py": ("x" * 513).encode("utf-8")})
@@ -86,6 +128,17 @@ class CoreTests(unittest.TestCase):
                 visible_bytes = b"\n".join(path.read_bytes() for path in model_root.rglob("*") if path.is_file())
                 self.assertNotIn(b"XP9:", visible_bytes)
                 self.assertFalse((model_root / "checks").exists())
+
+    def test_acquisition_granularity_bank_is_fresh_and_reproducible(self):
+        with tempfile.TemporaryDirectory(prefix="e10-bank-test-") as raw:
+            bank = Path(raw) / "bank"
+            manifest = construct_acquisition_bank(bank)
+            self.assertEqual(len(manifest["cases"]), 2)
+            self.assertTrue(verify_acquisition_bank(bank)["verified"])
+            for fixture_id in ("E10-PAGE-ALPHA", "E10-PAGE-BETA"):
+                fixture = load_fixture(bank, fixture_id)
+                self.assertEqual(len(fixture.required_full_reads), 2)
+                self.assertNotIn(b"known_good", (bank / "model_visible" / fixture_id / "TASK.txt").read_bytes())
 
     def test_observation_body_is_execution_only(self):
         with tempfile.TemporaryDirectory(prefix="e2-leak-test-") as raw:
@@ -127,6 +180,15 @@ class CoreTests(unittest.TestCase):
         schema = action_schema("setup", probe_id=None)["json_schema"]["schema"]
         self.assertEqual(schema["type"], "object")
         self.assertNotIn("oneOf", schema)
+
+    def test_maximal_read_schema_omits_line_count(self):
+        schema = action_schema("prefix", probe_id=None, read_mode="maximal_bounded_page")
+        read = next(
+            row for row in schema["json_schema"]["schema"]["oneOf"]
+            if row["properties"]["action"].get("const") == "read"
+        )
+        self.assertEqual(read["required"], ["action", "path", "start_line"])
+        self.assertNotIn("line_count", read["properties"])
 
     def test_known_good_candidates_pass_both_graders(self):
         with tempfile.TemporaryDirectory(prefix="e2-grade-test-") as raw:

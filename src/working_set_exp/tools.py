@@ -67,6 +67,7 @@ class ToolExecutor:
         probe_id: str | None,
         probe_body: str | None,
         reopenable: dict[str, bytes] | None = None,
+        read_mode: str = "actor_selected_count",
     ):
         self.state = state
         self.required_full_reads = required_full_reads
@@ -76,6 +77,9 @@ class ToolExecutor:
         self.probe_id = probe_id
         self.probe_body = probe_body
         self.reopenable = reopenable if reopenable is not None else {}
+        if read_mode not in {"actor_selected_count", "maximal_bounded_page"}:
+            raise ValueError("unknown read mode")
+        self.read_mode = read_mode
 
     def _bounded(self, result: dict[str, Any]) -> dict[str, Any]:
         if len(canonical_json_bytes(result)) > MAX_RESULT_BYTES:
@@ -166,14 +170,23 @@ class ToolExecutor:
         )
 
     def _read(self, action: dict[str, Any]) -> dict[str, Any]:
-        if set(action) != {"action", "path", "start_line", "line_count"}:
+        expected = (
+            {"action", "path", "start_line", "line_count"}
+            if self.read_mode == "actor_selected_count"
+            else {"action", "path", "start_line"}
+        )
+        if set(action) != expected:
             raise ToolError("read action shape differs")
         path = canonical_path(action["path"])
-        start, count = action["start_line"], action["line_count"]
+        start = action["start_line"]
         if not isinstance(start, int) or isinstance(start, bool) or start < 1:
             raise ToolError("read start_line invalid")
-        if not isinstance(count, int) or isinstance(count, bool) or not 1 <= count <= 500:
-            raise ToolError("read line_count invalid")
+        if self.read_mode == "actor_selected_count":
+            count = action["line_count"]
+            if not isinstance(count, int) or isinstance(count, bool) or not 1 <= count <= 500:
+                raise ToolError("read line_count invalid")
+        else:
+            count = 2_000_000
         data = self.state.candidate.file_map.get(path)
         if data is None:
             raise ToolError("read path does not exist")
@@ -206,12 +219,10 @@ class ToolExecutor:
             self.state.read_coverage[path] = merged
             if merged[0][0] == 1 and merged[0][1] >= len(lines):
                 self.state.complete_reads.add(path)
-        return self._bounded(
-            {
+        result = {
                 "accepted": True,
                 "path": path,
                 "requested_start_line": start,
-                "requested_line_count": count,
                 "returned_start_line": start if selected else None,
                 "returned_end_line": returned_end,
                 "next_start_line": next_line,
@@ -219,8 +230,12 @@ class ToolExecutor:
                 "content": content,
                 "candidate_id": self.state.candidate.candidate_id,
                 "file_sha256": sha256_bytes(data),
-            }
-        )
+        }
+        if self.read_mode == "actor_selected_count":
+            result["requested_line_count"] = count
+        else:
+            result["paging_mode"] = self.read_mode
+        return self._bounded(result)
 
     def _patch(self, action: dict[str, Any]) -> dict[str, Any]:
         required = {"action", "path", "old", "new", "expected_candidate_id", "expected_file_sha256"}
@@ -347,7 +362,12 @@ class ToolExecutor:
         )
 
 
-def action_schema(stage: str, *, probe_id: str | None) -> dict[str, Any]:
+def action_schema(
+    stage: str,
+    *,
+    probe_id: str | None,
+    read_mode: str = "actor_selected_count",
+) -> dict[str, Any]:
     def obj(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
         return {"type": "object", "properties": properties, "required": required, "additionalProperties": False}
 
@@ -358,7 +378,12 @@ def action_schema(stage: str, *, probe_id: str | None) -> dict[str, Any]:
     begin = obj({"action": const("begin")}, ["action"])
     tree = obj({"action": const("tree"), "path": path, "offset": {"type": "integer", "minimum": 0, "maximum": 128}, "limit": {"type": "integer", "minimum": 1, "maximum": 16}}, ["action", "path", "offset", "limit"])
     search = obj({"action": const("search"), "path": path, "query": {"type": "string", "minLength": 1, "maxLength": 128}, "offset": {"type": "integer", "minimum": 0, "maximum": 2_000_000}, "limit": {"type": "integer", "minimum": 1, "maximum": 16}}, ["action", "path", "query", "offset", "limit"])
-    read = obj({"action": const("read"), "path": path, "start_line": {"type": "integer", "minimum": 1, "maximum": 2_000_000}, "line_count": {"type": "integer", "minimum": 1, "maximum": 500}}, ["action", "path", "start_line", "line_count"])
+    if read_mode == "actor_selected_count":
+        read = obj({"action": const("read"), "path": path, "start_line": {"type": "integer", "minimum": 1, "maximum": 2_000_000}, "line_count": {"type": "integer", "minimum": 1, "maximum": 500}}, ["action", "path", "start_line", "line_count"])
+    elif read_mode == "maximal_bounded_page":
+        read = obj({"action": const("read"), "path": path, "start_line": {"type": "integer", "minimum": 1, "maximum": 2_000_000}}, ["action", "path", "start_line"])
+    else:
+        raise ValueError("unknown read mode")
     patch_fragment = {"type": "string", "minLength": 0, "maxLength": 512}
     patch = obj({"action": const("patch"), "path": path, "old": patch_fragment, "new": patch_fragment, "expected_candidate_id": sha, "expected_file_sha256": sha}, ["action", "path", "old", "new", "expected_candidate_id", "expected_file_sha256"])
     check = obj({"action": const("check"), "check_id": {"type": "string", "enum": ["prefork", "public"]}, "expected_candidate_id": sha}, ["action", "check_id", "expected_candidate_id"])
@@ -385,7 +410,11 @@ def action_schema(stage: str, *, probe_id: str | None) -> dict[str, Any]:
     return {
         "type": "json_schema",
         "json_schema": {
-            "name": f"experiment_002_{stage}_action",
+            "name": (
+                f"experiment_002_{stage}_action"
+                if read_mode == "actor_selected_count"
+                else f"experiment_010_{stage}_maximal_read_action"
+            ),
             "strict": True,
             "schema": schema,
         },
