@@ -2,19 +2,19 @@ $ErrorActionPreference = 'Stop'
 
 $repo = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $python = 'C:\Users\danmc\Isolated experiments 8.24.2026\_venvs\qwen38_metadata_working_set\Scripts\python.exe'
-$stdout = 'C:\e11-completion-runner.stdout.log'
-$stderr = 'C:\e11-completion-runner.stderr.log'
-$pidRecord = 'C:\e11-completion-runner.pid'
+$launcherRoot = 'C:\e11-launch'
+$stdout = Join-Path $launcherRoot 'runner.stdout.log'
+$stderr = Join-Path $launcherRoot 'runner.stderr.log'
+$pidRecord = Join-Path $launcherRoot 'runner.pid'
 
-foreach ($path in @($stdout, $stderr, $pidRecord)) {
-    if (Test-Path -LiteralPath $path) {
-        throw "Completion launcher artifact already exists: $path"
-    }
+if (Test-Path -LiteralPath $launcherRoot) {
+    throw "Completion launcher root already exists: $launcherRoot"
 }
 if (Test-Path -LiteralPath 'C:\e11-completion') {
     throw 'Completion output root already exists'
 }
 
+New-Item -ItemType Directory -Path $launcherRoot | Out-Null
 $env:PYTHONPATH = Join-Path $repo 'src'
 $process = Start-Process -FilePath $python `
     -ArgumentList 'scripts\run_recurrent_acquisition_completion.py' `
