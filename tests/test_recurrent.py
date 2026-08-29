@@ -15,6 +15,7 @@ from working_set_exp.recurrent_host_v2 import run_t25_final_operational
 from working_set_exp.recurrent_pressure import (
     CandidateBoundProbeExecutor,
     MiddleOutcome,
+    build_recurrent_request,
     hidden_grade,
     load_recurrent_fixture,
     verify_bank,
@@ -27,6 +28,7 @@ ROOT = Path(__file__).resolve().parents[1]
 EXPERIMENT = ROOT / "experiments" / "007_recurrent_bounded_pressure"
 PRIMARY = ROOT / "experiments" / "008_recurrent_bounded_pressure_primary"
 OBSERVATION_PRIMARY = ROOT / "experiments" / "009_recurrent_observation_validity"
+RECURRENT_ACQUISITION = ROOT / "experiments" / "011_recurrent_acquisition_granularity"
 FINAL_TIMEOUT_ATTEMPT = OBSERVATION_PRIMARY / "final_path_rehearsal" / "attempt1_timeout"
 
 
@@ -66,6 +68,18 @@ class QueueActor:
 
 
 class RecurrentPressureTests(unittest.TestCase):
+    def test_recurrent_acquisition_request_preserves_mode_after_phase_b_override(self) -> None:
+        fixture = load_recurrent_fixture(RECURRENT_ACQUISITION / "fresh_bank", "E11-OBS-IOTA")
+        request = load_json_strict(build_recurrent_request(
+            fixture, candidate=fixture.initial, phase="B", history=[], observations=[], reconstructed=True,
+            boundary_binding={}, calls_used=0, read_mode="maximal_bounded_page",
+            observation_directory_version=2, acquisition_contract=True,
+        ))
+        self.assertEqual(request["schema_version"], "experiment-011-recurrent-acquisition-request-v1")
+        self.assertEqual(request["read_paging_mode"], "maximal_bounded_page")
+        self.assertIn("largest exact current whole-line page", request["tool_contract"]["read"])
+        self.assertEqual(request["observation_directory"]["schema_version"], "exact-observation-directory-v2")
+
     def test_live_http_timeout_covers_qualified_physical_worst_case(self) -> None:
         conservative_seconds = (50_176 / 7.0) + (2_500 / 1.1)
         self.assertGreater(HTTP_TIMEOUT_SECONDS, conservative_seconds)

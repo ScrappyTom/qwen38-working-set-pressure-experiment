@@ -99,6 +99,16 @@ narrowly promoted into one fresh recurrent-pressure replication. See
 `experiments/010_acquisition_granularity/RESULTS.md` and
 `DIRECT_TRANSCRIPT_AUDIT.md`.
 
+Experiment 011 carries that narrow L0/L1 distinction into the actual recurrent
+25k controller. Four fresh shared prefixes each fork into actor-selected and
+maximal-bounded read branches only after the first authentic boundary. The
+fresh bank, exact initial-call package, observation-directory v2 surface,
+two-boundary scripted paths, tokenizer admission, and executable closure are
+qualified offline. There is still no read suppression, caching, summary,
+ranking, or host-selected relevance. See
+`experiments/011_recurrent_acquisition_granularity/SPEC.md` and
+`PRELIVE_FINDING.md`.
+
 Development live rehearsal is complete. From one exact 32k-token shared
 prefix, C50 used retained chronology to make a hidden-correct repair and
 submit, while T25 restarted the large Phase A reads and exhausted its 25k

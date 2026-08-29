@@ -35,7 +35,14 @@ def _bound(action: dict, state: SessionState, path: str) -> dict:
     }
 
 
-def _run_case(fixture_id: str, seed: int) -> dict:
+def _run_case(
+    fixture_id: str,
+    seed: int,
+    *,
+    read_mode: str = "actor_selected_count",
+    acquisition_contract: bool = False,
+    observation_directory_version: int = 1,
+) -> dict:
     fixture = load_recurrent_fixture(EXPERIMENT / "fresh_bank", fixture_id)
     profile = load_runtime(EXPERIMENT / "RUNTIME_PROFILE.json")
     state = SessionState(fixture.initial)
@@ -43,6 +50,7 @@ def _run_case(fixture_id: str, seed: int) -> dict:
         state, required_full_reads=fixture.phase_a_required, prefork_checker=fixture.phase_a_checker,
         public_checker=fixture.final_checker, final_target=fixture.phase_b_target,
         probe_id=fixture.probe_id, probe_body=fixture.probe_v1,
+        read_mode=read_mode,
     )
     prefix_history = []
     observations = []
@@ -60,9 +68,15 @@ def _run_case(fixture_id: str, seed: int) -> dict:
         return result
 
     apply(prefix_executor, {"action": "begin"}, prefix_history)
+    def read(path: str, start_line: int = 1) -> dict:
+        action = {"action": "read", "path": path, "start_line": start_line}
+        if read_mode == "actor_selected_count":
+            action["line_count"] = 500
+        return action
+
     for path in fixture.phase_a_required:
-        apply(prefix_executor, {"action": "read", "path": path, "start_line": 1, "line_count": 500}, prefix_history)
-    stage_result = apply(prefix_executor, {"action": "read", "path": "stage/ready.py", "start_line": 1, "line_count": 100}, prefix_history)
+        apply(prefix_executor, read(path), prefix_history)
+    stage_result = apply(prefix_executor, read("stage/ready.py"), prefix_history)
     apply(prefix_executor, _bound({
         "action": "patch", "path": "stage/ready.py", "old": "    return 0", "new": "    return len(PHASE_A_GROUPS)"
     }, state, "stage/ready.py"), prefix_history)
@@ -77,6 +91,8 @@ def _run_case(fixture_id: str, seed: int) -> dict:
     next1 = build_recurrent_request(
         fixture, candidate=state.candidate, phase="B", history=prefix_history, observations=observations,
         reconstructed=False, boundary_binding=binding1, calls_used=0,
+        read_mode=read_mode, acquisition_contract=acquisition_contract,
+        observation_directory_version=observation_directory_version,
     )
     boundary1_t25 = guard(profile, next1, active_total_ceiling=T25_TOTAL_CEILING, reasoning_enabled=True)
     boundary1_c50 = guard(profile, next1, active_total_ceiling=PHYSICAL_CONTEXT, reasoning_enabled=True)
@@ -94,6 +110,7 @@ def _run_case(fixture_id: str, seed: int) -> dict:
         public_checker=fixture.phase_b_checker, final_target=fixture.phase_c_target,
         probe_id=fixture.probe_id, probe_body=fixture.probe_v1, reopenable=reopenable,
         baseline_candidate_id=state.candidate.candidate_id, probe_v1=fixture.probe_v1, probe_v2=fixture.probe_v2,
+        read_mode=read_mode,
     )
     middle_history = [prefix_history[-1]]
     guards = []
@@ -103,6 +120,8 @@ def _run_case(fixture_id: str, seed: int) -> dict:
             fixture, candidate=middle_state.candidate, phase="B", history=middle_history,
             observations=observations, reconstructed=True, boundary_binding=binding1,
             calls_used=len(middle_history) - 1,
+            read_mode=read_mode, acquisition_contract=acquisition_contract,
+            observation_directory_version=observation_directory_version,
         )
         admission = guard(profile, request, active_total_ceiling=T25_TOTAL_CEILING, reasoning_enabled=True)
         guards.append(admission)
@@ -112,19 +131,19 @@ def _run_case(fixture_id: str, seed: int) -> dict:
 
     if fixture.family == "recurrent_source_continuity":
         governing_path = truth["governing"]["path"]
-        middle_apply({"action": "read", "path": governing_path, "start_line": 1, "line_count": 500})
+        middle_apply(read(governing_path))
     else:
         handle = next(row["handle"] for row in observations if row["action"] == "probe")
         middle_apply({"action": "reopen_observation", "handle": handle})
     target = fixture.phase_b_target
-    middle_apply({"action": "read", "path": target, "start_line": 1, "line_count": 100})
+    middle_apply(read(target))
     patch = truth["phase_b_patch"]
     middle_apply(_bound({"action": "patch", "path": target, "old": patch["old"], "new": patch["new"]}, middle_state, target))
     middle_apply({"action": "check", "check_id": "public", "expected_candidate_id": middle_state.candidate.candidate_id})
     if fixture.probe_id:
         middle_apply({"action": "probe", "probe_id": fixture.probe_id})
     for path in fixture.phase_b_required:
-        middle_apply({"action": "read", "path": path, "start_line": 1, "line_count": 500})
+        middle_apply(read(path))
     middle_apply({"action": "fork_ready", "expected_candidate_id": middle_state.candidate.candidate_id})
     binding2 = recurrent_binding(
         fixture, seed=seed, condition="T25", candidate=middle_state.candidate,
@@ -134,6 +153,8 @@ def _run_case(fixture_id: str, seed: int) -> dict:
     next2 = build_recurrent_request(
         fixture, candidate=middle_state.candidate, phase="C", history=middle_history,
         observations=observations, reconstructed=True, boundary_binding=binding2, calls_used=0,
+        read_mode=read_mode, acquisition_contract=acquisition_contract,
+        observation_directory_version=observation_directory_version,
     )
     boundary2_t25 = guard(profile, next2, active_total_ceiling=T25_TOTAL_CEILING, reasoning_enabled=True)
     boundary2_c50 = guard(profile, next2, active_total_ceiling=PHYSICAL_CONTEXT, reasoning_enabled=True)
@@ -145,6 +166,7 @@ def _run_case(fixture_id: str, seed: int) -> dict:
         final_state, required_full_reads=(), prefork_checker=fixture.phase_a_checker,
         public_checker=fixture.final_checker, final_target=fixture.phase_c_target,
         probe_id=fixture.probe_id, probe_body=fixture.probe_v2, reopenable=reopenable,
+        read_mode=read_mode,
     )
     final_history = [middle_history[-1]]
 
@@ -153,6 +175,8 @@ def _run_case(fixture_id: str, seed: int) -> dict:
             fixture, candidate=final_state.candidate, phase="C", history=final_history,
             observations=observations, reconstructed=True, boundary_binding=binding2,
             calls_used=len(final_history) - 1,
+            read_mode=read_mode, acquisition_contract=acquisition_contract,
+            observation_directory_version=observation_directory_version,
         )
         admission = guard(profile, request, active_total_ceiling=T25_TOTAL_CEILING, reasoning_enabled=True)
         if not admission["authorized"]:
@@ -160,12 +184,12 @@ def _run_case(fixture_id: str, seed: int) -> dict:
         return apply(final_executor, action, final_history)
 
     if fixture.family == "recurrent_source_continuity":
-        final_apply({"action": "read", "path": governing_path, "start_line": 1, "line_count": 500})
+        final_apply(read(governing_path))
     else:
         current = next(row["handle"] for row in reversed(observations) if row["action"] == "probe" and row["candidate_id"] == final_state.candidate.candidate_id)
         final_apply({"action": "reopen_observation", "handle": current})
     target = fixture.phase_c_target
-    final_apply({"action": "read", "path": target, "start_line": 1, "line_count": 100})
+    final_apply(read(target))
     patch = truth["phase_c_patch"]
     final_apply(_bound({"action": "patch", "path": target, "old": patch["old"], "new": patch["new"]}, final_state, target))
     final_apply({"action": "check", "check_id": "public", "expected_candidate_id": final_state.candidate.candidate_id})
@@ -174,7 +198,7 @@ def _run_case(fixture_id: str, seed: int) -> dict:
     if not hidden["passed"]:
         raise AssertionError((fixture_id, hidden))
     return {
-        "fixture_id": fixture_id, "seed": seed, "boundary1_t25": boundary1_t25,
+        "fixture_id": fixture_id, "seed": seed, "read_mode": read_mode, "boundary1_t25": boundary1_t25,
         "boundary1_c50": boundary1_c50, "phase_b_admitted_calls": len(guards),
         "phase_b_peak_prompt_tokens": max(row["offline_prompt_tokens"] for row in guards),
         "boundary2_t25": boundary2_t25, "boundary2_c50": boundary2_c50,

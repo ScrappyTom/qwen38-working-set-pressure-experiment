@@ -24,6 +24,10 @@ def run_t25_final_operational(
     seed: int,
     actor: Actor,
     output_dir: Path,
+    read_mode: str = "actor_selected_count",
+    observation_directory_version: int = 1,
+    acquisition_contract: bool = False,
+    condition_label: str | None = None,
 ) -> dict[str, Any]:
     """Continue admitted T25 work and reconstruct only at an actual pressure event.
 
@@ -41,6 +45,7 @@ def run_t25_final_operational(
     store = ArtifactStore(output_dir)
     log = RecordLog(output_dir / "records.jsonl", f"{fixture.fixture_id}-S{seed}-T25-C-v2")
     state = SessionState(candidate=middle.state.candidate, stage="continuation")
+    recorded_condition = condition_label or "T25"
     executor = ToolExecutor(
         state,
         required_full_reads=(),
@@ -50,6 +55,7 @@ def run_t25_final_operational(
         probe_id=fixture.probe_id,
         probe_body=fixture.probe_v2,
         reopenable=middle.reopenable,
+        read_mode=read_mode,
     )
 
     initial_reset = middle.disposition == "second_boundary_eligible"
@@ -59,7 +65,7 @@ def run_t25_final_operational(
     log.append(
         "operational_final_started",
         {
-            "condition": "T25",
+            "condition": recorded_condition,
             "candidate_id": state.candidate.candidate_id,
             "middle_disposition": middle.disposition,
             "continued_admitted_history": not initial_reset,
@@ -85,6 +91,9 @@ def run_t25_final_operational(
             reconstructed=True,
             boundary_binding=boundary_binding,
             calls_used=http_calls,
+            read_mode=read_mode,
+            observation_directory_version=observation_directory_version,
+            acquisition_contract=acquisition_contract,
         )
         try:
             action, result, outcome = _execute_call(
@@ -92,7 +101,7 @@ def run_t25_final_operational(
                 request=request,
                 stage="continuation",
                 probe_id=fixture.probe_id,
-                call_id=f"{fixture.fixture_id}-S{seed}-T25-C-P{prepared_calls:02d}",
+                call_id=f"{fixture.fixture_id}-S{seed}-{recorded_condition}-C-P{prepared_calls:02d}",
                 active_total_ceiling=T25_TOTAL_CEILING,
                 executor=executor,
                 store=store,
@@ -108,7 +117,7 @@ def run_t25_final_operational(
             boundary_binding = recurrent_binding(
                 fixture,
                 seed=seed,
-                condition="T25",
+                condition=recorded_condition,
                 candidate=state.candidate,
                 active_history=history,
                 observations=middle.observations,
@@ -158,7 +167,7 @@ def run_t25_final_operational(
     summary = {
         "schema_version": "recurrent-operational-final-summary-v2",
         "fixture_id": fixture.fixture_id,
-        "condition": "T25",
+        "condition": recorded_condition,
         "seed": seed,
         "disposition": disposition,
         "middle_disposition": middle.disposition,

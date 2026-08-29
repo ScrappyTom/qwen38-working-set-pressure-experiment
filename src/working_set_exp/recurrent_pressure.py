@@ -377,6 +377,8 @@ def progress_pointer(fixture: RecurrentFixture, phase: str) -> dict[str, Any]:
 def build_recurrent_request(
     fixture: RecurrentFixture, *, candidate: Candidate, phase: str, history: list[dict[str, Any]],
     observations: list[dict[str, Any]], reconstructed: bool, boundary_binding: dict[str, Any], calls_used: int,
+    read_mode: str = "actor_selected_count", observation_directory_version: int = 1,
+    acquisition_contract: bool = False,
 ) -> bytes:
     stage = "recurrent" if phase == "B" else "continuation"
     base = load_json_strict(build_request(
@@ -386,9 +388,14 @@ def build_recurrent_request(
         fork_binding=boundary_binding, progress_pointer=progress_pointer(fixture, phase),
         prefix_call_limit=PREFIX_CALL_LIMIT,
         continuation_call_limit=MIDDLE_CALL_LIMIT if phase == "B" else FINAL_CALL_LIMIT,
+        read_mode=read_mode, observation_directory_version=observation_directory_version,
+        acquisition_contract=acquisition_contract,
     ))
     base.update({
-        "schema_version": "experiment-007-recurrent-coding-request-v1", "stage": stage, "phase": phase,
+        "schema_version": (
+            "experiment-011-recurrent-acquisition-request-v1"
+            if acquisition_contract else "experiment-007-recurrent-coding-request-v1"
+        ), "stage": stage, "phase": phase,
         "completed_phase_ids": ["A"] if phase == "B" else ["A", "B"],
         "available_check_ids": ["public"],
     })
@@ -401,6 +408,13 @@ def build_recurrent_request(
             base["available_probe_ids"] = []
         base["available_actions"] = actions
         base["tool_contract"] = {name: TOOL_CONTRACT[name] for name in actions}
+        if acquisition_contract:
+            base["tool_contract"]["read"] = (
+                "exact current whole-line page with actor-selected count and non-guessing continuation"
+                if read_mode == "actor_selected_count"
+                else "largest exact current whole-line page that fits the frozen result bound, with non-guessing continuation"
+            )
+            base["read_paging_mode"] = read_mode
     return canonical_json_bytes(base)
 
 
@@ -477,9 +491,12 @@ def _capture_observation(
 
 def run_middle(
     fixture: RecurrentFixture, prefix: PrefixOutcome, *, condition: str, seed: int, actor: Actor, output_dir: Path,
+    read_mode: str = "actor_selected_count", observation_directory_version: int = 1,
+    acquisition_contract: bool = False, condition_label: str | None = None,
 ) -> MiddleOutcome:
     if condition not in {"C50", "T25"}:
         raise ValueError("invalid recurrent condition")
+    recorded_condition = condition_label or condition
     if output_dir.exists():
         raise FileExistsError(output_dir)
     output_dir.mkdir(parents=True)
@@ -497,10 +514,11 @@ def run_middle(
         public_checker=fixture.phase_b_checker, final_target=fixture.phase_c_target, probe_id=fixture.probe_id,
         probe_body=fixture.probe_v1, reopenable=reopenable, baseline_candidate_id=prefix.state.candidate.candidate_id,
         probe_v1=fixture.probe_v1, probe_v2=fixture.probe_v2,
+        read_mode=read_mode,
     )
     base_history = list(prefix.history) if condition == "C50" else [prefix.history[-1]]
     middle_history: list[dict[str, Any]] = []
-    log.append("middle_started", {"condition": condition, "candidate_id": state.candidate.candidate_id, "prior_binding": prefix.binding}, _save_candidate(store, state.candidate, _snapshot_prefix(state.candidate)))
+    log.append("middle_started", {"condition": recorded_condition, "candidate_id": state.candidate.candidate_id, "prior_binding": prefix.binding}, _save_candidate(store, state.candidate, _snapshot_prefix(state.candidate)))
     calls = 0
     http_calls = 0
     maximum_prompt = 0
@@ -511,11 +529,13 @@ def run_middle(
         request = build_recurrent_request(
             fixture, candidate=state.candidate, phase="B", history=active, observations=observations,
             reconstructed=condition == "T25", boundary_binding=prefix.binding, calls_used=calls - 1,
+            read_mode=read_mode, observation_directory_version=observation_directory_version,
+            acquisition_contract=acquisition_contract,
         )
         try:
             action, result, outcome = _execute_call(
                 actor=actor, request=request, stage="recurrent", probe_id=fixture.probe_id,
-                call_id=f"{fixture.fixture_id}-S{seed}-{condition}-B{calls:02d}",
+                call_id=f"{fixture.fixture_id}-S{seed}-{recorded_condition}-B{calls:02d}",
                 active_total_ceiling=T25_TOTAL_CEILING if condition == "T25" else PHYSICAL_CONTEXT,
                 executor=executor, store=store, log=log, artifact_prefix=f"transcript/{calls:03d}",
             )
@@ -531,12 +551,14 @@ def run_middle(
     if state.fork_ready:
         active = [*base_history, *middle_history]
         binding = recurrent_binding(
-            fixture, seed=seed, condition=condition, candidate=state.candidate, active_history=active,
+            fixture, seed=seed, condition=recorded_condition, candidate=state.candidate, active_history=active,
             observations=observations, prior_binding=prefix.binding, last_record_sha256=log.previous or "",
         )
         prospective = build_recurrent_request(
             fixture, candidate=state.candidate, phase="C", history=active, observations=observations,
             reconstructed=condition == "T25", boundary_binding=binding, calls_used=0,
+            read_mode=read_mode, observation_directory_version=observation_directory_version,
+            acquisition_contract=acquisition_contract,
         )
         own_guard = guard(
             actor.profile, prospective,
@@ -560,12 +582,12 @@ def run_middle(
     else:
         disposition = "phase_b_budget_exhausted"
     stopped = log.append("middle_stopped", {
-        "condition": condition, "disposition": disposition, "calls": calls, "prepared_invocations": calls,
+        "condition": recorded_condition, "disposition": disposition, "calls": calls, "prepared_invocations": calls,
         "http_completion_calls": http_calls, "candidate_id": state.candidate.candidate_id,
         "public_check_passed": state.public_check_passed, "capacity_stop": capacity_stop, "boundary_binding": binding,
     }, [])
     summary = {
-        "schema_version": "experiment-007-middle-summary-v1", "fixture_id": fixture.fixture_id, "condition": condition,
+        "schema_version": "experiment-007-middle-summary-v1", "fixture_id": fixture.fixture_id, "condition": recorded_condition,
         "seed": seed, "disposition": disposition, "calls": calls, "prepared_invocations": calls,
         "http_completion_calls": http_calls, "candidate_id": state.candidate.candidate_id,
         "public_check_passed": state.public_check_passed, "capacity_stop": capacity_stop,
