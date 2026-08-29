@@ -1,5 +1,23 @@
 # Qwen3.8 Single-Boundary Working-Set Experiment
 
+## Current result
+
+Experiment 012 completed the first 160-file, approximately 2.2 MiB recurrent
+stress study. The result is valid but negative for the controller as frozen.
+
+Qwen found the right policy/observation evidence and produced the correct
+Phase-B mutation in all eight branches. Append-only C50 preserved progress and
+closed Phase B, but later exhausted its 50k slot. Reconstructed T25 used 70.8%
+fewer prompt tokens, but after each in-phase reset it saw only the latest full
+action/result pair and no compact receipts for earlier completed reads. It
+therefore repeated already-complete acquisition and failed to close Phase B.
+
+The next earned component is a bounded exact active-phase receipt ledger plus
+on-demand reopening of externalized large result bodies. Richer metadata,
+semantic summaries, ranking, relationships, and read suppression remain
+unearned. See
+`experiments/012_large_world_recurrent_continuity/RESULTS.md`.
+
 This is the lean successor to the metadata working-set evidence repository.
 The current program tests the original claim directly: whether
 the same Qwen actor, using the earned P0 directory and server-bounded reasoning,
