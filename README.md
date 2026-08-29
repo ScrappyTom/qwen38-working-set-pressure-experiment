@@ -61,24 +61,24 @@ mid-phase), separates prepared calls from model completions, and uses a global
 record-chain monitor. See
 `experiments/008_recurrent_bounded_pressure_primary/HOST_V2_QUALIFICATION.md`.
 
-Experiment 009 is the fresh observation-only successor. It uses two new
-candidate-bound observation tasks and host v2 to test current-versus-stale
-evidence after two authentic transitions. The compliant Phase-B path now needs
-eight actions rather than the prior geometry's 10–12, leaving four actor-chosen
-calls of headroom without changing the frozen budget. Exact-token qualification
-places the first T25 transition at 28,553/28,589 prompt tokens and the second at
-22,132/22,194; both remain physically admitted at 50k. The measured bank has
-not been exposed. A focused fresh development-only second-boundary rehearsal
-passed: Qwen selected the current candidate-bound observation over an older
-exact record, reopened `W6++`, read the governing source, produced the exact
-hidden-correct repair, checked, and submitted in five calls. Direct transcript
-review and the post-seal grade are in
-`experiments/009_recurrent_observation_validity/final_path_rehearsal_v2/`.
-The rehearsal also exposed an insufficient port-only shutdown receipt. The
-prospective host now records and verifies the exact owned PID as well as port
-release. A zero-completion-call live lifecycle check then verified exact PID
-termination, port release, and no residual runtime process. The measured bank
-remains unexposed while the executable package is refreshed.
+Experiment 009 is complete. Two of four T25 trajectories crossed two authentic
+25k transitions, selected the current candidate-bound observation over an older
+stale record, reopened the exact marker, produced the exact hidden-correct
+repair, checked, and submitted. The other two T25 trajectories made the correct
+Phase-B repair but lost closure to redundant or conservative exact reads. All
+four C50 append-only branches made the correct Phase-B repair and then hit the
+physical 50,176-token ceiling before Phase C. The run sealed 112 completion
+calls with no rejected action, retry, repair, rescue, checker fault, or runtime
+accounting discrepancy. See
+`experiments/009_recurrent_observation_validity/RESULTS.md`,
+`DIRECT_TRANSCRIPT_AUDIT.md`, and `HOST_PATH_AUDIT.md`.
+
+The result demonstrates recurrent current-versus-stale observation selection
+when the decision point is reached. It also identifies actor-selected paging
+and redundant confirmation as the remaining reliability constraint. No richer
+metadata or semantic memory is earned. The recommended follow-up is a small
+fresh comparison of actor-selected read page size versus a deterministic
+largest-bounded exact page.
 
 Development live rehearsal is complete. From one exact 32k-token shared
 prefix, C50 used retained chronology to make a hidden-correct repair and
