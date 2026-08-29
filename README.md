@@ -89,6 +89,16 @@ package, scripted all-condition paths, source closure, and observation-directory
 v2 correction are qualified offline with zero actor exposure. See
 `experiments/010_acquisition_granularity/SPEC.md`.
 
+The live eight-cell result is complete. Both L0 and L1 were hidden-correct and
+closed 4/4. L1 removed every fragmented ledger transfer, reducing ledger-read
+actions from 12 to 8, total calls from 32 to 29, and cumulative prompt tokens
+by 4.5%. It won economics in three of four pairs; one L1 cell reread an
+unchanged two-line target after bounded reasoning stalled, confirming that
+page granularity and duplicate confirmation are separate problems. L1 is
+narrowly promoted into one fresh recurrent-pressure replication. See
+`experiments/010_acquisition_granularity/RESULTS.md` and
+`DIRECT_TRANSCRIPT_AUDIT.md`.
+
 Development live rehearsal is complete. From one exact 32k-token shared
 prefix, C50 used retained chronology to make a hidden-correct repair and
 submit, while T25 restarted the large Phase A reads and exhausted its 25k
