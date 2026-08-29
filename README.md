@@ -76,8 +76,9 @@ review and the post-seal grade are in
 `experiments/009_recurrent_observation_validity/final_path_rehearsal_v2/`.
 The rehearsal also exposed an insufficient port-only shutdown receipt. The
 prospective host now records and verifies the exact owned PID as well as port
-release; the measured bank remains unexposed while that lifecycle amendment is
-qualified and the executable package is refreshed.
+release. A zero-completion-call live lifecycle check then verified exact PID
+termination, port release, and no residual runtime process. The measured bank
+remains unexposed while the executable package is refreshed.
 
 Development live rehearsal is complete. From one exact 32k-token shared
 prefix, C50 used retained chronology to make a hidden-correct repair and
