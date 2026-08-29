@@ -118,6 +118,17 @@ Phase-C paths selected the current candidate-bound observation, passed hidden
 grading, checked, and submitted. See `APPARATUS_FINDING.md`,
 `DIRECT_TRANSCRIPT_AUDIT.md`, and `RESULTS.md` in the Experiment 011 folder.
 
+The previously missing KAPPA/223607 pair was later run once as a separately
+authorized fresh-prefix completion supplement under a detached OS-owned
+lifecycle. Both L0 and L1 crossed both boundaries, selected and reopened the
+current candidate-bound observation, produced the same hidden-correct repair,
+checked, and submitted in 13 branch calls. L0 already selected 200-line pages,
+so deterministic maximal paging was neutral in that pair. The original primary
+remains incomplete; the resulting four-pair view is explicitly mixed-source
+descriptive evidence. See `COMPLETION_APPARATUS_FINDING.md`,
+`COMPLETION_DIRECT_TRANSCRIPT_AUDIT.md`, and `COMBINED_RESULTS_DECISION.md` in
+the Experiment 011 folder.
+
 Development live rehearsal is complete. From one exact 32k-token shared
 prefix, C50 used retained chronology to make a hidden-correct repair and
 submit, while T25 restarted the large Phase A reads and exhausted its 25k
