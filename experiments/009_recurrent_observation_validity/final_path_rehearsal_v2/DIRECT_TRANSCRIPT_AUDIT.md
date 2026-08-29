@@ -133,10 +133,16 @@ endpoint compute was about 69.3 minutes on the RTX 3060 reference host.
 Prompt ingestion ran at roughly 6.3--6.8 tokens/second and generation at
 roughly 1.0--1.15 tokens/second. After the first call, llama.cpp reported only
 166 cached prompt tokens on every turn. Therefore most of each full rendered
-request was reevaluated. This did not affect correctness or capacity, but it is
-a major execution-cost finding for the planned large-prompt study. Any cache-
-local request-layout optimization must be prospectively qualified because JSON
-field order changes model-visible bytes even when JSON meaning is unchanged.
+request was reevaluated. This did not affect correctness or capacity.
+
+The throughput observation is not yet a clean baseline. An untracked
+`llama-server.exe` process was found after the run, and the historical host did
+not record enough PID custody to determine whether it overlapped the five
+calls. Runtime contention is therefore a plausible confound. The next run's
+new prelaunch process check and exact owned-PID custody should distinguish a
+clean-host baseline from a request-layout problem. No model-visible JSON layout
+change is earned yet; such a change would require prospective qualification
+because field order changes bytes even when JSON meaning is unchanged.
 
 ## Host finding discovered after the run
 
@@ -170,9 +176,10 @@ writes a shutdown record, and fails closed unless both are true.
    This focused rehearsal qualified the second-boundary path; it did not test
    whether Qwen can first create the correct old/current observation pair under
    Phase-B pressure.
-5. **Prompt serialization, not token capacity, is the dominant local runtime
-   cost.** A separately qualified cache-local layout could reduce time, but it
-   must not be silently introduced into the frozen measured treatment.
+5. **Runtime economics require clean-process measurement.** If a clean run
+   still reports only a 166-token cache prefix and similarly low throughput,
+   cache-local request layout becomes an earned follow-up. It must not be
+   silently introduced into the frozen measured treatment.
 
 No host defect affected Qwen's five observed decisions or the hidden-correct
 successor. The shutdown-certification defect affects lifecycle custody and is
