@@ -51,6 +51,9 @@ correctly handled candidate-bound observations in Phase B but did not reach
 the second reset. See
 `experiments/008_recurrent_bounded_pressure_primary/RESULTS.md` and
 `experiments/008_recurrent_bounded_pressure_primary/DIRECT_TRANSCRIPT_AUDIT.md`.
+The accompanying `HOST_PATH_AUDIT.md` distinguishes model actions from
+host-withheld work, mechanical capacity denial, visible call-budget exhaustion,
+and the operator interruption.
 
 Development live rehearsal is complete. From one exact 32k-token shared
 prefix, C50 used retained chronology to make a hidden-correct repair and

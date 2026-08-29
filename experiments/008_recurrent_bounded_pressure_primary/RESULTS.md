@@ -22,7 +22,7 @@ second reset remains untested.
 | cell | condition | measured outcome | interpretation |
 |---|---|---|---|
 | E8-SOURCE / 173205 | C50 | final hidden pass, checked, submitted | successful append-only control |
-| E8-SOURCE / 173205 | T25 | Phase B passed; no authentic second boundary | actor trajectory stayed below pressure |
+| E8-SOURCE / 173205 | T25 | Phase B passed; host withheld Phase C because no authentic second boundary occurred | boundary not instantiated; not a model failure |
 | E8-OBSERVATION / 173205 | T25 | correct reopen/mutation/new probe; call budget exhausted | observation semantics worked; closure economics failed |
 | E8-OBSERVATION / 173205 | C50 | correct reopen/mutation/new probe; physical capacity stop | append-only 50k did not finish Phase B |
 | E8-SOURCE / 223607 | T25 | two authentic resets; final hidden pass and submit | recurrent source-continuity existence proof |
@@ -32,6 +32,13 @@ second reset remains untested.
 The run contains 87 completed calls, 89 prepared invocations, zero retries,
 zero repairs, and zero rescues. All 87 completed prompts, outputs, private
 reasoning fields, and results were directly reviewed.
+
+The source-level `HOST_PATH_AUDIT.md` additionally traces every non-success
+disposition through the exact Qwen request/output and the following host
+decision. It found no rejected completed action, checker defect, protocol
+failure, stale binding, or false result. It did find that the frozen runner
+withheld Phase C from a correct T25 branch when pressure failed to instantiate;
+that branch is therefore excluded from model-quality noncompletion counts.
 
 ## Primary gates
 
@@ -72,6 +79,12 @@ not reveal:
 2. call budgets and exact paging can prevent a second transition even when
    active token occupancy is small.
 
+The first point is also a controller-policy lesson. A production 25k
+controller must continue any admitted work and reset only at the actual
+pressure event. An experimental runner may stop when a required boundary is
+absent, but must label the outcome `host-withheld / boundary-not-instantiated`,
+not model noncompletion.
+
 ## Architecture decision
 
 Retain the current architecture unchanged:
@@ -107,6 +120,19 @@ run must expose both the stale pre-mutation observation and the current
 post-mutation observation with exact bindings. The primary behavior is whether
 the actor reopens and uses the current object after reset rather than relying on
 the stale exact body.
+
+Prospectively test these hypotheses:
+
+1. the exact active-step pointer prevents completed-stage reactivation across
+   repeated resets;
+2. candidate-ID bindings alone let Qwen choose current over stale exact
+   observations;
+3. prior observation failure was caused by action economics, not semantic
+   confusion;
+4. P0 line ranges are understood but page-size use varies by trajectory.
+
+Reasoning was already enabled and directly inspected. Its traces explain the
+observed decisions, so no thinking-on rerun of exposed cases is justified.
 
 This is a follow-up diagnostic, not a retroactive completion of Experiment
 008. It requires fresh fixtures and a new authorization.

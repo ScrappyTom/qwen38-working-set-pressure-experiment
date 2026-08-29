@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
+from scripts.monitor_live_run import snapshot as live_monitor_snapshot
 from working_set_exp.recurrent_pressure import (
     CandidateBoundProbeExecutor,
     hidden_grade,
@@ -18,6 +19,13 @@ PRIMARY = ROOT / "experiments" / "008_recurrent_bounded_pressure_primary"
 
 
 class RecurrentPressureTests(unittest.TestCase):
+    def test_global_monitor_finds_interrupted_call_not_stale_prior_cell(self) -> None:
+        result = live_monitor_snapshot(PRIMARY / "partial_measured_run")
+        self.assertEqual(result["prepared_invocations_seen"], 89)
+        self.assertEqual(result["completed_actions_seen"], 87)
+        self.assertEqual(result["in_flight_prepared_call_id"], "E8-SOURCE-S223607-C50-C02")
+        self.assertIn("cell-03/C50/phase-c", result["latest_record"]["records_path"])
+
     def test_fresh_corrected_primary_bank_and_known_good_candidates(self) -> None:
         result = verify_bank(PRIMARY / "fresh_bank")
         self.assertEqual(result["file_count"], 62)

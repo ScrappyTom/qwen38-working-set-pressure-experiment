@@ -110,9 +110,12 @@ This branch did not enter Phase C because the exact actor-created Phase-B
 history was too compact to produce an authentic second 25k denial. Its peak
 prompt was 15,757 tokens. The scripted qualification path had crossed the
 second boundary, but the live actor's smaller line requests and compact tool
-results changed the actual occupancy.
+results changed the actual occupancy. The frozen host runner launches T25
+Phase C only after a 25k denial, so it withheld the next phase despite Qwen's
+correct Phase-B closure.
 
-This is neither a behavioral failure nor a recurrent success. It reveals that
+This is neither a behavioral failure nor a recurrent success. It is a
+host-withheld, boundary-not-instantiated path. It reveals that
 a task whose boundary depends on the actor's own acquisition footprint may
 fail to instantiate the intended pressure point for an efficient trajectory.
 
