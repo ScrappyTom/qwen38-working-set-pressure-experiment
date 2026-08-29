@@ -12,6 +12,7 @@ CASE_IDS = ("E9-OBS-ALPHA", "E9-OBS-BETA")
 SEEDS = (173205, 223607)
 OUTPUT_ROOT = r"C:\e9-primary"
 DEVELOPMENT_OUTPUT_ROOT = r"C:\e9-dev"
+FINAL_DEVELOPMENT_OUTPUT_ROOT = r"C:\e9-final-dev"
 MAXIMUM_HTTP_COMPLETION_CALLS = 160
 AUTHORIZATION_SCHEMA = "experiment-009-recurrent-observation-authorization-v1"
 
@@ -131,6 +132,20 @@ def development_case_definition() -> dict[str, Any]:
         bridge_names=("crimson", "saffron", "teal", "violet"),
         marker_v1="D5##",
         marker_v2="T2##",
+    )
+
+
+def final_development_case_definition() -> dict[str, Any]:
+    return _fresh_observation_case(
+        fixture_id="E9-DEV-OBS-DELTA",
+        namespace="gateway",
+        label_name="gateway_label",
+        header_name="gateway_header",
+        codec_name="encoded_gateway",
+        archive_names=("hemlock", "magnolia", "sequoia"),
+        bridge_names=("cerulean", "scarlet", "tan", "viridian"),
+        marker_v1="F7&&",
+        marker_v2="V3&&",
     )
 
 

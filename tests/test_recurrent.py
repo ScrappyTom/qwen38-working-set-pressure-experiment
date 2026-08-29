@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from scripts.monitor_live_run import snapshot as live_monitor_snapshot
+from scripts.run_observation_final_development import _constructed_middle
 from working_set_exp.candidate import Candidate
 from working_set_exp.custody import verify_records
 from working_set_exp.jsonutil import canonical_json_bytes, load_json_strict
@@ -64,6 +65,17 @@ class QueueActor:
 
 
 class RecurrentPressureTests(unittest.TestCase):
+    def test_constructed_final_rehearsal_exposes_stale_and_current_candidate_bindings(self) -> None:
+        fixture, middle = _constructed_middle()
+        self.assertEqual(middle.disposition, "second_boundary_eligible")
+        self.assertEqual(len(middle.observations), 2)
+        stale, current = middle.observations
+        self.assertNotEqual(stale["candidate_id"], middle.state.candidate.candidate_id)
+        self.assertEqual(current["candidate_id"], middle.state.candidate.candidate_id)
+        self.assertIn(b"F7&&", middle.reopenable[stale["handle"]])
+        self.assertIn(b"V3&&", middle.reopenable[current["handle"]])
+        self.assertEqual(fixture.phase_c_target, "gateway/header.py")
+
     def test_observation_recurrence_bank_is_fresh_valid_and_has_action_headroom(self) -> None:
         result = verify_bank(OBSERVATION_PRIMARY / "fresh_bank")
         self.assertEqual(result["file_count"], 58)
