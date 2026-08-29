@@ -1,7 +1,7 @@
 # Qwen3.8 Single-Boundary Working-Set Experiment
 
 This is the lean successor to the metadata working-set evidence repository.
-The active Experiment 006 tests the program's original claim directly: whether
+The current program tests the original claim directly: whether
 the same Qwen actor, using the earned P0 directory and server-bounded reasoning,
 can continue correctly after exact chronology no longer fits a 25,000-token
 active context.
@@ -21,7 +21,7 @@ Both branches retain exact external custody and the earned P0 readable
 path/symbol directory. T25 receives no summary and no host-selected relevant
 facts. It must reacquire exact source or prior observations itself.
 
-See `experiments/007_recurrent_bounded_pressure/SPEC.md` for the active study,
+See `experiments/008_recurrent_bounded_pressure_primary/SPEC.md` for the latest study,
 `experiments/006_authentic_bounded_pressure/SPEC.md` for the successful first
 authentic transition, and `experiments/002_single_boundary_reconstruction/SPEC.md`
 for the original reasoning-off pressure attempt.
@@ -40,6 +40,17 @@ older exact but stale one. No new metadata, summary, retrieval, or reasoning
 feature is added. The offline scripted paths place the first transitions at
 28,344/28,761 tokens and the second transitions at 22,091/22,086 prompt tokens;
 all last pre-transition calls remain admitted under 25k.
+
+Experiment 008 executed a fresh corrected recurrent study. An operator
+monitoring error interrupted the primary run after 87 completed calls, so the
+four-cell paired result is incomplete and will not be repaired or rerun. The
+sealed evidence nevertheless contains the first genuine two-boundary T25
+success: one source trajectory reacquired its governing exact fact after both
+resets, passed hidden grading, checked, and submitted. The observation case
+correctly handled candidate-bound observations in Phase B but did not reach
+the second reset. See
+`experiments/008_recurrent_bounded_pressure_primary/RESULTS.md` and
+`experiments/008_recurrent_bounded_pressure_primary/DIRECT_TRANSCRIPT_AUDIT.md`.
 
 Development live rehearsal is complete. From one exact 32k-token shared
 prefix, C50 used retained chronology to make a hidden-correct repair and
