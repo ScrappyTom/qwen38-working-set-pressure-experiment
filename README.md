@@ -21,7 +21,7 @@ Both branches retain exact external custody and the earned P0 readable
 path/symbol directory. T25 receives no summary and no host-selected relevant
 facts. It must reacquire exact source or prior observations itself.
 
-See `experiments/008_recurrent_bounded_pressure_primary/SPEC.md` for the latest study,
+See `experiments/009_recurrent_observation_validity/SPEC.md` for the latest study,
 `experiments/006_authentic_bounded_pressure/SPEC.md` for the successful first
 authentic transition, and `experiments/002_single_boundary_reconstruction/SPEC.md`
 for the original reasoning-off pressure attempt.
@@ -60,6 +60,16 @@ T25 work, reconstructs only at an actual pre-request pressure event (including
 mid-phase), separates prepared calls from model completions, and uses a global
 record-chain monitor. See
 `experiments/008_recurrent_bounded_pressure_primary/HOST_V2_QUALIFICATION.md`.
+
+Experiment 009 is the fresh observation-only successor. It uses two new
+candidate-bound observation tasks and host v2 to test current-versus-stale
+evidence after two authentic transitions. The compliant Phase-B path now needs
+eight actions rather than the prior geometry's 10–12, leaving four actor-chosen
+calls of headroom without changing the frozen budget. Exact-token qualification
+places the first T25 transition at 28,553/28,589 prompt tokens and the second at
+22,132/22,194; both remain physically admitted at 50k. The measured bank has
+not been exposed. A separate fresh development-only live rehearsal must pass
+and receive transcript-level review before measured authorization.
 
 Development live rehearsal is complete. From one exact 32k-token shared
 prefix, C50 used retained chronology to make a hidden-correct repair and

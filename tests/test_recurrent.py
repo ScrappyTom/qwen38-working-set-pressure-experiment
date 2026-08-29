@@ -9,6 +9,7 @@ from scripts.monitor_live_run import snapshot as live_monitor_snapshot
 from working_set_exp.candidate import Candidate
 from working_set_exp.custody import verify_records
 from working_set_exp.jsonutil import canonical_json_bytes, load_json_strict
+from working_set_exp.observation_recurrence import CASE_IDS as E9_CASE_IDS
 from working_set_exp.recurrent_host_v2 import run_t25_final_operational
 from working_set_exp.recurrent_pressure import (
     CandidateBoundProbeExecutor,
@@ -24,6 +25,7 @@ from working_set_exp.tools import SessionState, ToolExecutor, action_schema
 ROOT = Path(__file__).resolve().parents[1]
 EXPERIMENT = ROOT / "experiments" / "007_recurrent_bounded_pressure"
 PRIMARY = ROOT / "experiments" / "008_recurrent_bounded_pressure_primary"
+OBSERVATION_PRIMARY = ROOT / "experiments" / "009_recurrent_observation_validity"
 
 
 class QueueActor:
@@ -62,6 +64,27 @@ class QueueActor:
 
 
 class RecurrentPressureTests(unittest.TestCase):
+    def test_observation_recurrence_bank_is_fresh_valid_and_has_action_headroom(self) -> None:
+        result = verify_bank(OBSERVATION_PRIMARY / "fresh_bank")
+        self.assertEqual(result["file_count"], 58)
+        for fixture_id in E9_CASE_IDS:
+            fixture = load_recurrent_fixture(OBSERVATION_PRIMARY / "fresh_bank", fixture_id)
+            self.assertEqual(len(fixture.phase_a_required), 3)
+            self.assertEqual(len(fixture.phase_b_required), 2)
+            self.assertNotEqual(fixture.probe_id, "signal")
+            known_good = fixture.initial
+            truth = json.loads(
+                (OBSERVATION_PRIMARY / "fresh_bank" / "evaluator_only" / fixture_id / "TRUTH.json").read_text()
+            )
+            for key in ("phase_a_patch", "phase_b_patch", "phase_c_patch"):
+                row = truth[key]
+                known_good, _ = known_good.patch(
+                    path=row["path"], old=row["old"], new=row["new"],
+                    expected_candidate_id=known_good.candidate_id,
+                    expected_file_sha256=known_good.file_sha256(row["path"]),
+                )
+            self.assertTrue(hidden_grade(fixture, known_good)["passed"])
+
     def _source_middle_and_actions(self) -> tuple[object, MiddleOutcome, list[dict], str]:
         fixture = load_recurrent_fixture(PRIMARY / "fresh_bank", "E8-SOURCE")
         run = PRIMARY / "partial_measured_run" / "cell-01" / "T25" / "phase-b"
