@@ -134,7 +134,11 @@ def main() -> None:
                 grade = hidden_grade(fixture, candidate)
                 if condition == "X25" and (not summary["submitted"] or not grade["passed"]):
                     raise RuntimeError("scripted X25 branch did not complete hidden-correct")
-                rows.append({**summary, "hidden_passed": grade["passed"]})
+                # The record-chain tail includes custody timestamps. Preserve
+                # exact logs in the temporary run, but keep the qualification
+                # receipt limited to reproducible substantive fields.
+                normalized = {key: value for key, value in summary.items() if key != "last_record_sha256"}
+                rows.append({**normalized, "hidden_passed": grade["passed"]})
     if len(rows) != 8 or not all(row["hidden_passed"] for row in rows if row["condition"] == "X25"):
         raise RuntimeError("scripted qualification rows differ")
     qualification_path = EXPERIMENT / "OFFLINE_QUALIFICATION.json"
