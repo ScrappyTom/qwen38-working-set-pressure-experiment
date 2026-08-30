@@ -2,6 +2,26 @@
 
 ## Current result
 
+Experiment 016 completed the offline worst-case capacity proof required after
+the Experiment 015 placement result. The exact V1 event frame is not safe as
+the planned X25 reconstruction representation.
+
+The proof constructed sixteen real accepted candidate-bound patch events. In
+the decisive case, each exact action plus the full private-reasoning allowance
+fit the 2,500-token completion envelope, but all sixteen action payloads used
+29,565 tokens. Externalizing every result body still left the complete request
+at 35,516 prompt tokens, 13,528 tokens over the X25 total envelope. The exact
+guard denied the call before HTTP.
+
+The placement direction remains valid; the V1 payload layout does not. The
+next earned candidate should retain one structural event plane while moving
+large historical action payloads and result bodies behind one exact event
+handle. It must pass offline capacity and exposed live placement qualification
+before fresh large-world fixtures are built. See
+`experiments/016_event_frame_capacity_stress/RESULTS.md`.
+
+## Prior result
+
 Experiment 015 is complete, sealed, and directly audited as a development-only
 placement qualification. It tested the concern that moving active progress
 from the qualified dual `history` plus receipt presentation into one exact
@@ -27,7 +47,7 @@ append-only context-size comparison. See
 `experiments/015_event_frame_placement_qualification/RESULTS.md` and
 `DIRECT_TRANSCRIPT_AUDIT.md`.
 
-## Prior result
+## Earlier result
 
 Experiment 014 established one monotonically sequenced exact active-phase
 receipt plane. All eight candidates passed hidden grading; unified receipts

@@ -39,11 +39,14 @@ Non-negotiable rules:
   it directly, never insert it into later history unless prospectively frozen,
   and never treat a stated rationale as proof of causal use.
 
-Experiment 015 is complete as development-only placement evidence. It shows
-that Qwen can close correctly from one monotonic event frame, but the current
-exact encoding is more prompt-expensive than compact legacy receipts. A future
-R50/X25 comparison must use the same event renderer before pressure and vary
-only exact result-body residency after pressure. First perform an offline
-worst-case event-frame capacity stress proof. No suppression, cache
+Experiment 016 completed the required offline worst-case event-frame capacity
+stress. V1 fails the X25 reconstruction contract because full historical patch
+actions remain resident after every result body is externalized. Sixteen real
+accepted actions, each individually compatible with the reasoning/output
+allowance, produce a fully result-externalized request 13,528 tokens over X25.
+Do not construct fresh large-world fixtures against V1. The only earned next
+change is a V2 candidate that externalizes large historical action payload
+fields behind an exact phase-scoped event handle, followed by renewed offline
+capacity and exposed live placement qualification. No suppression, cache
 substitution, summary, ranking, relationship, embedding, semantic routing, or
-automatic successor is authorized.
+automatic large-world successor is authorized.
