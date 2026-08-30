@@ -1,0 +1,45 @@
+Let me analyze the current state:
+
+1. I've reopened observation OBS-0002 which shows two failures:
+   - `reject_absolute_and_parent_paths`: expected "rejected", observed "accepted"
+   - `bounded_timeout`: expected "inclusive 1..60 clamp", observed "minimum 60"
+
+2. I've read all files except `src/addressable_information_layer/artifact_units.py` which is the last one in the frozen acceptance set.
+
+3. Now I need to read `src/addressable_information_layer/artifact_units.py` before making any mutations.
+
+Let me look at the issues:
+
+**Issue 1: `_safe_relative_path` function (in verifiers.py)**
+```python
+def _safe_relative_path(path_or_name: str) -> PurePosixPath | None:
+    normalized = path_or_name.replace("\\", "/")
+    path = PurePosixPath(normalized)
+    if path.is_absolute() and ".." in path.parts or not path.parts:
+        return None
+    return path
+```
+
+The problem here is operator precedence. The condition is:
+`path.is_absolute() and ".." in path.parts or not path.parts`
+
+Due to Python's operator precedence, this evaluates as:
+`(path.is_absolute() and ".." in path.parts) or (not path.parts)`
+
+So:
+- An absolute path like `/etc/passwd` → `path.is_absolute()` is True, `".." in path.parts` is False → first part is False. Then `not path.parts` is also False (it has parts). So it returns the path! That's wrong - absolute paths should be rejected.
+- A parent traversal like `../../etc/passwd` → `path.is_absolute()` is False, so first part is False. `not path.parts` is False. Returns the path! Wrong.
+- An empty string → `PurePosixPath("")` has no parts, so `not path.parts` is True → returns None. Correct.
+
+The fix should be:
+```python
+def _safe_relative_path(path_or_name: str) -> PurePosixPath | None:
+    normalized = path_or_name.replace("\\", "/")
+    path = PurePosixPath(normalized)
+    if not path.parts or path.is_absolute() or ".." in path.parts:
+        return None
+    return path
+```
+
+This rejects:
+- Empty paths (no

@@ -1,0 +1,42 @@
+Let me analyze the current state. I'm at sequence 13, and I've completed:
+1. Reopened OBS-0002 (the verifier observation showing two failures)
+2. Read all 10 files in the frozen acceptance set
+
+The observation body shows:
+```json
+{
+  "candidate_id": "a8ccf6bcf04177b0199148e6a91dad4ac9f1818c0898403b0fc91cceb43dcadd",
+  "failures": [
+    {"expected": "rejected", "observed": "accepted", "test": "reject_absolute_and_parent_paths"},
+    {"expected": "inclusive 1..60 clamp", "observed": "minimum 60", "test": "bounded_timeout"}
+  ],
+  "status": "failed",
+  "suite": "offline verifier safety"
+}
+```
+
+So I need to fix two issues in `verifiers.py`:
+
+1. **Path rejection**: The `_safe_relative_path` function needs to reject absolute paths, parent traversal (`..`), and empty paths. Let me look at the current implementation:
+
+```python
+def _safe_relative_path(path_or_name: str) -> PurePosixPath | None:
+    normalized = path_or_name.replace("\\", "/")
+    path = PurePosixPath(normalized)
+    if path.is_absolute() and ".." in path.parts or not path.parts:
+        return None
+    return path
+```
+
+The issue is the condition `path.is_absolute() and ".." in path.parts`. Due to operator precedence, this is parsed as `(path.is_absolute() and ".." in path.parts) or (not path.parts)`. So it only rejects when BOTH absolute AND has `..`, OR empty. It does NOT reject:
+- Absolute paths without `..` (e.g., `/etc/passwd`)
+- Parent traversal in relative paths (e.g., `../../etc/passwd`)
+
+The fix should be:
+```python
+def _safe_relative_path(path_or_name: str) -> PurePosixPath | None:
+    normalized = path_or_name.replace("\\", "/")
+    if not normalized:
+        return None
+    path = PurePosixPath(normalized)
+    if path.is_absolute() or ".."

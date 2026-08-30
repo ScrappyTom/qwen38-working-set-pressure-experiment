@@ -1,0 +1,47 @@
+Let me analyze the current state:
+
+1. I've completed reading all 10 files in the frozen acceptance set (sequences 2-11)
+2. I've reopened OBS-0002 (sequence 12) which shows the two safety regressions:
+   - `reject_absolute_and_parent_paths`: expected "rejected", observed "accepted"
+   - `bounded_timeout`: expected "inclusive 1..60 clamp", observed "minimum 60"
+
+3. I've reopened RES-0002 (sequence 13) to get the exact current source of verifiers.py
+
+Now I need to fix two issues in `src/addressable_information_layer/verifiers.py`:
+
+**Issue 1: `_safe_relative_path` doesn't properly reject absolute paths, parent traversal, and empty paths.**
+
+Current code:
+```python
+def _safe_relative_path(path_or_name: str) -> PurePosixPath | None:
+    normalized = path_or_name.replace("\\", "/")
+    path = PurePosixPath(normalized)
+    if path.is_absolute() and ".." in path.parts or not path.parts:
+        return None
+    return path
+```
+
+The problem is the logic: `if path.is_absolute() and ".." in path.parts or not path.parts` - due to operator precedence, this is `(path.is_absolute() and ".." in path.parts) or (not path.parts)`. So it only rejects when BOTH absolute AND has "..", OR when empty. But it should reject:
+- Absolute paths (always)
+- Parent traversal (always, even for relative paths like `../foo`)
+- Empty paths
+
+The fix should be:
+```python
+def _safe_relative_path(path_or_name: str) -> PurePosixPath | None:
+    normalized = path_or_name.replace("\\", "/")
+    if not normalized or not normalized.strip():
+        return None
+    path = PurePosixPath(normalized)
+    if path.is_absolute() or ".." in path.parts or not path.parts:
+        return None
+    return path
+```
+
+Wait, let me think more carefully. The requirement says "absolute paths, parent traversal, and empty paths are rejected while canonical relative paths remain accepted."
+
+So:
+- `/etc/passwd` → absolute → reject
+- `../foo` → parent traversal → reject
+- `..` → parent traversal → reject
+-

@@ -1,0 +1,30 @@
+Let me analyze the current state. I'm at sequence 14, with 10 calls remaining out of 24 total.
+
+Looking at what's been done:
+1. Read all 11 files in the frozen acceptance set (sequences 1-11)
+2. First patch attempt failed (sequence 12) - "patch must change exact bytes"
+3. Re-read importers.py (sequence 13)
+4. Second patch succeeded (sequence 14) - changed `>=` to `>` for max_file_bytes and `>` to `>=` for max_files
+
+Now I need to identify the four regressions mentioned in the task:
+
+The boundary contract is:
+1. A file whose byte size equals max_file_bytes is eligible → current code has `if path.stat().st_size >= max_file_bytes: continue` which EXCLUDES files equal to max. Should be `>` (strictly greater than). ✅ FIXED in sequence 14.
+
+2. max_files=N admits at most the first N eligible files → current code had `if len(artifacts) > max_files: break` which allows max_files+1 files. Should be `>=` to stop at exactly N. ✅ FIXED in sequence 14.
+
+3. JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion → Let me check saved_runs.py. The code has:
+```python
+for idx, item in enumerate(_read_jsonl_lines(path), start=1):
+    if idx >= MAX_JSONL_LINES:
+        break
+```
+This means when idx == MAX_JSONL_LINES (e.g., 1000), it breaks BEFORE processing that record. So records 1 through MAX_JSONL_LINES-1 are eligible, and record MAX_JSONL_LINES is NOT eligible. The contract says records 1 through MAX_JSONL_LINES ARE eligible. So the fix should be `if idx > MAX_JSONL_LINES: break` instead of `if idx >= MAX_JSONL_LINES: break`.
+
+4. An embedded artifact on line MAX_JSONL_LINES is eligible → Same issue in `_embedded_artifacts_from_jsonl`:
+```python
+for idx, item in enumerate(_read_jsonl_lines(path), start=1):
+    if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+        break
+```
+Same fix needed: `if idx >

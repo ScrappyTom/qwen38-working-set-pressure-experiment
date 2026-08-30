@@ -1,0 +1,30 @@
+Let me analyze the task. I need to repair four regressions in the offline audit package based on the boundary contract:
+
+1. A file whose byte size equals `max_file_bytes` is eligible (currently uses `>=` which excludes it)
+2. `max_files=N` admits at most the first N eligible files (currently uses `>` which allows N+1 files)
+3. JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion (currently uses `>=` which excludes record at MAX_JSONL_LINES)
+4. An embedded artifact on line MAX_JSONL_LINES is eligible (currently uses `>=` which excludes it)
+
+Let me look at the current code:
+
+**In `importers.py`:**
+- Line: `if path.stat().st_size >= max_file_bytes:` — This should be `> max_file_bytes` (strictly greater than), because a file whose byte size EQUALS max_file_bytes is eligible.
+- Line: `if len(artifacts) > max_files:` — This allows N+1 files to be added before breaking. It should be `>= max_files` to admit at most the first N eligible files. Wait, let me re-read...
+
+Actually, looking more carefully:
+- `if path.stat().st_size >= max_file_bytes:` — This skips files whose size is >= max_file_bytes. But the contract says a file whose byte size EQUALS max_file_bytes IS eligible. So this should be `> max_file_bytes` (skip only if strictly larger).
+- `if len(artifacts) > max_files:` — After adding, it checks if len > max_files. This means it adds the (N+1)th file before breaking. So for max_files=N, it would admit N+1 files. The fix should be to check BEFORE adding: `if len(artifacts) >= max_files: break` or change the condition. Actually wait - let me re-read the loop:
+
+```python
+for path in sorted(root.rglob("*")):
+    if not path.is_file():
+        continue
+    if _is_excluded(path, root):
+        continue
+    if path.suffix.lower() not in TEXT_EXTENSIONS:
+        continue
+    if path.stat().st_size >= max_file_bytes:
+        continue
+    rel = path.relative_to(root).as_posix()
+    artifacts.append({"path": rel})
+    if len(artifacts)

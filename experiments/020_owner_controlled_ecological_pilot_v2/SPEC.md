@@ -90,7 +90,10 @@ candidate, check, and host decision must be read directly before diagnosis.
 
 ## Current authority
 
-The bank, initial-call package, executable closure, and model-free ideal paths
-are offline qualified. No Experiment 020 authorization record exists. No Qwen
-completion, endpoint request, GPU launch, or model-server process is authorized
-by this preparation.
+The exact owner authorization was recorded and consumed by one completed live
+run. The run made 106 completions, sealed all response evidence before
+evaluator access, passed all eight public and hidden outcomes, and shut down
+its owned server. The authorization permits no retry or automatic successor.
+
+See `APPARATUS_FINDING.md`, `DIRECT_TRANSCRIPT_AUDIT.md`, and `RESULTS.md` for
+post-seal interpretation.

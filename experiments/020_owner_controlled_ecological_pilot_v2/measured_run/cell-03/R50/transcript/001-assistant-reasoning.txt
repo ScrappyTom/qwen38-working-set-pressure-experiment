@@ -1,0 +1,47 @@
+Let me analyze the current state:
+
+1. I've completed reading all 10 files in the frozen acceptance set (sequences 2-11).
+2. The observation OBS-0002 was reopened (sequence 1) showing two failures:
+   - `reject_absolute_and_parent_paths`: expected "rejected", observed "accepted"
+   - `bounded_timeout`: expected "inclusive 1..60 clamp", observed "minimum 60"
+
+Now I need to fix the verifier in `src/addressable_information_layer/verifiers.py`. Let me analyze the two bugs:
+
+**Bug 1: `_safe_relative_path` doesn't properly reject absolute paths and parent traversal.**
+
+Current code:
+```python
+def _safe_relative_path(path_or_name: str) -> PurePosixPath | None:
+    normalized = path_or_name.replace("\\", "/")
+    path = PurePosixPath(normalized)
+    if path.is_absolute() and ".." in path.parts or not path.parts:
+        return None
+    return path
+```
+
+The issue is operator precedence. The condition `path.is_absolute() and ".." in path.parts or not path.parts` is evaluated as `(path.is_absolute() and ".." in path.parts) or (not path.parts)`. 
+
+So it only rejects if the path is BOTH absolute AND contains `..`, OR if the path has no parts (empty). But:
+- An absolute path WITHOUT `..` like `/etc/passwd` would NOT be rejected
+- A relative path with `..` like `../foo` would NOT be rejected
+- Empty string would result in `PurePosixPath("")` which has empty parts, so that's caught
+
+The fix should be: reject if the path is absolute OR contains `..` in its parts OR has no parts.
+
+```python
+def _safe_relative_path(path_or_name: str) -> PurePosixPath | None:
+    normalized = path_or_name.replace("\\", "/")
+    path = PurePosixPath(normalized)
+    if not path.parts or path.is_absolute() or ".." in path.parts:
+        return None
+    return path
+```
+
+**Bug 2: `_bounded_timeout` doesn't clamp to inclusive range 1..MAX_COMMAND_TIMEOUT_SECONDS.**
+
+Current code:
+```python
+def _bounded_timeout(value) -> int:
+    try:
+        timeout = int(value)
+    except

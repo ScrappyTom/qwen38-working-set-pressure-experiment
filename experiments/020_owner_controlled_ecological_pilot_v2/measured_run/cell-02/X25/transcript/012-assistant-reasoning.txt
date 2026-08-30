@@ -1,0 +1,32 @@
+Let me analyze the current state:
+
+1. I've completed reading all 11 files in the frozen acceptance set (sequences 1-11)
+2. I've made three patches so far:
+   - Patch 1 (EVT-0016): Changed `>=` to `>` for `max_file_bytes` check in importers.py
+   - Patch 2 (EVT-0018): Moved the `len(artifacts) >= max_files` check before appending in importers.py
+   - Patch 3 (EVT-0020): Changed `>=` to `>` for `MAX_JSONL_LINES` in saved_runs.py `_events_from_jsonl`
+
+Now I need to identify the fourth regression. The boundary contract states:
+- A file whose byte size equals max_file_bytes is eligible → fixed (changed `>=` to `>`)
+- max_files=N admits at most the first N eligible files → fixed (moved check before append, using `>=`)
+- JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion → fixed (changed `>=` to `>`)
+- An embedded artifact on line MAX_JSONL_LINES is eligible → This is the fourth regression
+
+Looking at `_embedded_artifacts_from_jsonl` in saved_runs.py:
+```python
+for idx, item in enumerate(_read_jsonl_lines(path), start=1):
+    if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+        break
+```
+
+The condition `idx >= MAX_JSONL_LINES` means that when `idx == MAX_JSONL_LINES`, the record is NOT eligible (it breaks before processing). But per the contract, "an embedded artifact on line MAX_JSONL_LINES is eligible." So I need to change `>=` to `>` here as well.
+
+Wait, let me re-read. The enumerate starts at 1. So:
+- idx=1: first record
+- idx=MAX_JSONL_LINES: the MAX_JSONL_LINES-th record
+
+With `idx >= MAX_JSONL_LINES`, when idx equals MAX_JSONL_LINES, it breaks BEFORE processing that record. So record MAX_JSONL_LINES is NOT eligible.
+
+The contract says "an embedded artifact on line MAX_JSONL_LINES is eligible." So I need to change this to `idx > MAX_JSONL_LINES`.
+
+Let me verify the current state of saved_runs

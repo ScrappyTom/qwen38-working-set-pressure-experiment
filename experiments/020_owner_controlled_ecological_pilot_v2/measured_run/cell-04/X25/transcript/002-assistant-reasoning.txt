@@ -1,0 +1,39 @@
+Let me analyze the current state. I need to:
+
+1. Reopen observation OBS-0002 (the current candidate-bound verifier observation)
+2. I've already read all 10 files in the frozen acceptance set (sequences 2-11, and sequence 12 re-reads verifiers.py)
+3. Now I need to repair the verifier based on the task description
+
+The task says:
+- "Repair the verifier so absolute paths, parent traversal, and empty paths are rejected while canonical relative paths remain accepted"
+- "verifier timeouts must clamp to the inclusive range 1..MAX_COMMAND_TIMEOUT_SECONDS, with invalid values defaulting to 20"
+- "Preserve command-prefix enforcement, workspace containment, deterministic receipts, and public APIs"
+
+Let me look at the current `_bounded_timeout` function:
+```python
+def _bounded_timeout(value) -> int:
+    try:
+        timeout = int(value)
+    except (TypeError, ValueError):
+        timeout = 20
+    return max(1, max(timeout, MAX_COMMAND_TIMEOUT_SECONDS))
+```
+
+This has a bug: `max(1, max(timeout, MAX_COMMAND_TIMEOUT_SECONDS))` means if timeout is 30, it returns 60 (MAX_COMMAND_TIMEOUT_SECONDS). If timeout is 90, it still returns 60. But if timeout is 5, it returns 60 as well! That's wrong. The correct behavior should be to clamp: `min(max(timeout, 1), MAX_COMMAND_TIMEOUT_SECONDS)`.
+
+Now for the path safety issues, let me look at `_safe_relative_path`:
+```python
+def _safe_relative_path(path_or_name: str) -> PurePosixPath | None:
+    normalized = path_or_name.replace("\\", "/")
+    path = PurePosixPath(normalized)
+    if path.is_absolute() and ".." in path.parts or not path.parts:
+        return None
+    return path
+```
+
+The bug here is operator precedence. The condition is:
+`if (path.is_absolute() and ".." in path.parts) or not path.parts:`
+
+This means:
+- If path is absolute AND contains "..", OR if path has no parts → reject
+- But a path like `/etc/passwd` (absolute, no "..") would NOT be rejected because `path.is_absolute()` is True but `".." in path.parts` is False, so the

@@ -110,14 +110,15 @@ actual completion artifacts on failure, and labels pre-boundary submissions.
 Any future ecological fixture must mechanically prove that necessary correct
 work reaches an authentic boundary before completion without padding.
 
-Experiment 020 is the fresh successor and is offline qualified only. Its two
-owner-controlled audit tasks require exact complete inspection of 11 and 10
-real source files before mutation. The model-free actual-tool/tokenizer paths
-cross 25k after 9 and 11 calls, then reach the exact donor successor, check, and
-submit with a full correction-cycle action reserve. X25 preserves at least
-1,000 total tokens of operating headroom by externalizing additional oldest
-exact payloads mechanically. Do not alter the controller, bank, package,
-closure, schedule, actor, or task bytes. No Qwen/GPU execution is authorized
-until a separate exact owner authorization is recorded. After any live run,
-directly audit every saved prompt, private reasoning field, action, result, and
-host decision before reporting outcomes.
+Experiment 020 is complete, sealed, and directly audited. Both R50 and X25
+passed hidden grading, checked, and submitted 4/4 fresh owner-controlled
+trajectories after exact complete inspection of 11 and 10 real source files.
+X25 reduced peak resident prompt size by 25–41%, retained its 1,000-token
+operating reserve, and preserved quality, but used 12 more conceptual calls;
+cumulative prompt processing was almost identical. Treat externalization as a
+capacity mechanism, not an unconditional efficiency win. Canonical payload
+identity prevented result-of-result address chains, but Qwen still sometimes
+chose conservative exact reacquisition. Do not add summaries, ranking,
+relationships, suppression, caching, more reasoning, or an automatic
+successor. Any future ecological use must preserve direct transcript and host
+path audit before interpretation.

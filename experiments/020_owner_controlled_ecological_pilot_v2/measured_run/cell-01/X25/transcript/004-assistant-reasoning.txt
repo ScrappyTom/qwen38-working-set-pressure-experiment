@@ -1,0 +1,37 @@
+Let me analyze the current state. I've completed reading all 11 files in the frozen acceptance set (sequences 1-11), and I reopened RES-0001 for saved_runs.py (sequence 12). 
+
+Now I need to understand the four regressions based on the boundary contract:
+1. "a file whose byte size equals max_file_bytes is eligible" - files at exactly max_file_bytes should be included (not excluded)
+2. "max_files=N admits at most the first N eligible files" - off-by-one in file counting
+3. "JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion" - records up to and including MAX_JSONL_LINES
+4. "an embedded artifact on line MAX_JSONL_LINES is eligible" - artifacts on exactly line MAX_JSONL_LINES should be included
+
+Let me look at the code I've read:
+
+From saved_runs.py (RES-0001, sequence 12):
+```python
+MAX_JSONL_BYTES = 2_000_000
+MAX_JSONL_LINES = 1000
+MAX_EMBEDDED_ARTIFACTS = 80
+MAX_EMBEDDED_TEXT_CHARS = 80_000
+```
+
+In `_events_from_jsonl`:
+```python
+def _events_from_jsonl(root: Path, detected: str) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    for path in sorted(root.rglob("*.jsonl")):
+        if path.stat().st_size > MAX_JSONL_BYTES:
+            continue
+        if not _looks_like_saved_run_jsonl(path):
+            continue
+        for idx, item in enumerate(_read_jsonl_lines(path), start=1):
+            if idx >= MAX_JSONL_LINES:
+                break
+```
+
+Wait - the contract says "JSONL records 1 through MAX_JSONL_LINES are eligible". So record at line MAX_JSONL_LINES (i.e., idx == MAX_JSONL_LINES) should be included. But the code says `if idx >= MAX_JSONL_LINES: break` which means it stops BEFORE processing idx == MAX_JSONL_LINES. That's a regression - it should be `if idx > MAX_JSONL_LINES: break`.
+
+Similarly for embedded artifacts:
+```python
+def _embedded_artifacts_from_jsonl(root: Path) -> list[dict[str

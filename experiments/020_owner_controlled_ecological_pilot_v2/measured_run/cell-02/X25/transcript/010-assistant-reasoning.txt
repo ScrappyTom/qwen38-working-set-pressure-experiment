@@ -1,0 +1,28 @@
+Let me analyze the current state:
+
+1. I've completed reading all 11 files in the frozen acceptance set (sequences 1-11)
+2. I've made two patches to `importers.py`:
+   - Changed `>=` to `>` for max_file_bytes comparison (sequence 16)
+   - Moved the `max_files` check before the append and changed `>` to `>=` (sequence 18)
+
+Now I need to check the boundary contract:
+- A file whose byte size equals max_file_bytes is eligible → `st_size > max_file_bytes` means files with size == max_file_bytes are NOT skipped, so they ARE eligible. ✓
+- max_files=N admits at most the first N eligible files → The check `if len(artifacts) >= max_files: break` before appending means when we have N items already, we stop. So we get at most N files. ✓
+- JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion → In saved_runs.py, the loop is `for idx, item in enumerate(_read_jsonl_lines(path), start=1): if idx >= MAX_JSONL_LINES: break`. This means when idx == MAX_JSONL_LINES (i.e., record number MAX_JSONL_LINES), it breaks BEFORE processing. So records 1 through MAX_JSONL_LINES-1 are eligible, and record MAX_JSONL_LINES is NOT eligible. That's wrong - we need records 1 through MAX_JSONL_LINES to be eligible.
+
+Wait, let me re-read: "JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion"
+
+The current code:
+```python
+for idx, item in enumerate(_read_jsonl_lines(path), start=1):
+    if idx >= MAX_JSONL_LINES:
+        break
+```
+
+When idx=1 (first record), idx >= 1000 is False, so it's processed.
+When idx=999, idx >= 1000 is False, so it's processed.
+When idx=1000, idx >= 1000 is True, so it breaks.
+
+So records 1 through 999 are eligible, record 1000 (MAX_JSONL_LINES) is NOT eligible.
+
+The contract says records 1 through MAX_JSONL_LINES should be eligible. So we need to change `idx >= MAX_JSONL_LINES` to

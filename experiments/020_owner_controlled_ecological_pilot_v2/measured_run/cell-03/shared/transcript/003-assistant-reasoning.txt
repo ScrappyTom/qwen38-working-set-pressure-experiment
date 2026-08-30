@@ -1,0 +1,44 @@
+I've read verifiers.py (the first file in the frozen acceptance set). I need to continue reading the remaining files before making any mutations. Let me read the next file: records.py.
+
+Looking at the current state:
+- I've completed 2 calls (reopen_observation OBS-0002, and read of verifiers.py)
+- I have 22 calls remaining
+- I need to read 9 more files before making mutations
+- Then I need to patch verifiers.py (fixing the two issues: path safety and timeout clamping)
+- Then run check `public`
+- Then submit
+
+The two bugs I can see in verifiers.py:
+
+1. **Path safety** (`_safe_relative_path`): The current logic is:
+```python
+def _safe_relative_path(path_or_name: str) -> PurePosixPath | None:
+    normalized = path_or_name.replace("\\", "/")
+    path = PurePosixPath(normalized)
+    if path.is_absolute() and ".." in path.parts or not path.parts:
+        return None
+    return path
+```
+
+The condition `path.is_absolute() and ".." in path.parts or not path.parts` has a logic bug. Due to operator precedence, this is `(path.is_absolute() and ".." in path.parts) or (not path.parts)`. So it rejects absolute paths with `..` and empty paths, but does NOT reject:
+- Absolute paths without `..` (e.g., `/etc/passwd`)
+- Relative paths with `..` that could escape (e.g., `../../etc/passwd`)
+
+The fix should reject:
+- Absolute paths (any absolute path)
+- Paths containing `..` (parent traversal)
+- Empty paths
+
+So the condition should be: `if not path.parts or path.is_absolute() or ".." in path.parts: return None`
+
+2. **Timeout clamping** (`_bounded_timeout`): The current logic is:
+```python
+def _bounded_timeout(value) -> int:
+    try:
+        timeout = int(value)
+    except (TypeError, ValueError):
+        timeout = 20
+    return max(1, max(timeout, MAX_COMMAND_TIMEOUT_SECONDS))
+```
+
+This returns `max(1, max(timeout, 60))`. So if timeout is 5, it returns 60. If timeout is 100, it

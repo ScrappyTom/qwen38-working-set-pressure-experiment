@@ -1,0 +1,40 @@
+Let me analyze the current state:
+
+1. I've completed 8 events so far (sequences 1-8)
+2. I need to read the remaining files in the frozen acceptance set before making any mutations
+3. Files already read: verifiers.py, records.py, hashing.py, readiness.py, policy.py, routing.py, reducers.py
+4. Files still to read: verifier_logs.py, storage.py, artifact_units.py
+
+The observation (OBS-0002) shows two failures:
+- `reject_absolute_and_parent_paths`: expected "rejected" but got "accepted" 
+- `bounded_timeout`: expected "inclusive 1..60 clamp" but got "minimum 60"
+
+Looking at the current `_bounded_timeout` function in verifiers.py:
+```python
+def _bounded_timeout(value) -> int:
+    try:
+        timeout = int(value)
+    except (TypeError, ValueError):
+        timeout = 20
+    return max(1, max(timeout, MAX_COMMAND_TIMEOUT_SECONDS))
+```
+
+This has a bug: `max(1, max(timeout, MAX_COMMAND_TIMEOUT_SECONDS))` means it always returns at least 60. The correct behavior should be to clamp to the inclusive range 1..60, so it should be `min(max(timeout, 1), MAX_COMMAND_TIMEOUT_SECONDS)` which is `min(max(timeout, 1), 60)`.
+
+For `_safe_relative_path`, looking at the current code:
+```python
+def _safe_relative_path(path_or_name: str) -> PurePosixPath | None:
+    normalized = path_or_name.replace("\\", "/")
+    path = PurePosixPath(normalized)
+    if path.is_absolute() and ".." in path.parts or not path.parts:
+        return None
+    return path
+```
+
+The issue is the condition `path.is_absolute() and ".." in path.parts or not path.parts`. Due to operator precedence, this is `(path.is_absolute() and ".." in path.parts) or (not path.parts)`. So it only rejects absolute paths that ALSO contain "..", but doesn't reject:
+- Absolute paths without ".." (e.g., "/etc/passwd")
+- Parent traversal without absolute path (e.g., "../foo")
+
+The fix should be: reject if the path is absolute, OR if it contains ".." in its parts, OR if it has no parts.
+
+Let

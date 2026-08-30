@@ -1,0 +1,22 @@
+Let me analyze the current state. I've made one patch so far (changing `>=` to `>` in importers.py). Now I need to fix three more regressions based on the boundary contract:
+
+1. **File whose byte size equals max_file_bytes is eligible** - FIXED: Changed `>=` to `>` in importers.py
+2. **max_files=N admits at most the first N eligible files** - Current code says `if len(artifacts) > max_files: break` which means it allows N+1 files (it adds the file first, then checks). It should be `if len(artifacts) >= max_files: break` to admit at most N files. Wait, let me re-read: "max_files=N admits at most the first N eligible files". So if max_files=200, we should get at most 200 files. Current code: appends file, then checks `if len(artifacts) > max_files: break`. This means it appends file #201 before breaking. So we need to change to `if len(artifacts) >= max_files: break` — but wait, that would check AFTER appending. Let me think again.
+
+Actually the current code is:
+```python
+artifacts.append({"path": rel})
+if len(artifacts) > max_files:
+    break
+```
+
+This appends first, then checks. So if max_files=200, it will append files 1-201 (201st makes len=201 which is > 200, so it breaks). That means it admits 201 files, not 200. The fix should be to check BEFORE appending, or change the condition.
+
+The correct approach: "max_files=N admits at most the first N eligible files". So we should break when we already have N files. The cleanest fix is:
+```python
+if len(artifacts) >= max_files:
+    break
+```
+This way, after appending the Nth file, len becomes N, and on the next iteration it breaks. Wait no - it checks AFTER appending. So after appending file #200, len is 200, which is >= 200, so it breaks. That means we get exactly 200 files. That's correct!
+
+Wait, let me re-examine. The loop:

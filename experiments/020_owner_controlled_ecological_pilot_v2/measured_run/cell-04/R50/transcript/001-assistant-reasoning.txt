@@ -1,0 +1,44 @@
+Let me analyze the current state. I've completed all 10 required file reads (sequences 2-11) and the observation reopen (sequence 1). Now I need to fix two safety regressions in `src/addressable_information_layer/verifiers.py`:
+
+1. **Path rejection**: The `_safe_relative_path` function needs to reject absolute paths, parent traversal (`..`), and empty paths, while accepting canonical relative paths.
+2. **Timeout clamping**: The `_bounded_timeout` function should clamp to inclusive range 1..MAX_COMMAND_TIMEOUT_SECONDS (i.e., 1..60), with invalid values defaulting to 20.
+
+Let me look at the current code:
+
+**Current `_safe_relative_path`:**
+```python
+def _safe_relative_path(path_or_name: str) -> PurePosixPath | None:
+    normalized = path_or_name.replace("\\", "/")
+    path = PurePosixPath(normalized)
+    if path.is_absolute() and ".." in path.parts or not path.parts:
+        return None
+    return path
+```
+
+The issue here is operator precedence. `path.is_absolute() and ".." in path.parts or not path.parts` is parsed as `(path.is_absolute() and ".." in path.parts) or (not path.parts)`. This means:
+- It rejects if (absolute AND has `..`) OR (empty parts)
+- But it does NOT reject absolute paths without `..` (e.g., `/etc/passwd`)
+- It does NOT reject relative paths with `..` (e.g., `../../etc/passwd`)
+
+The fix should be: reject if absolute, OR if has `..`, OR if empty parts.
+
+```python
+def _safe_relative_path(path_or_name: str) -> PurePosixPath | None:
+    normalized = path_or_name.replace("\\", "/")
+    path = PurePosixPath(normalized)
+    if not path.parts or path.is_absolute() or ".." in path.parts:
+        return None
+    return path
+```
+
+**Current `_bounded_timeout`:**
+```python
+def _bounded_timeout(value) -> int:
+    try:
+        timeout = int(value)
+    except (TypeError, ValueError):
+        timeout = 20
+    return max(1, max(timeout, MAX_COMMAND_TIMEOUT_SECONDS))
+```
+
+The issue: `max(1, max(timeout, MAX

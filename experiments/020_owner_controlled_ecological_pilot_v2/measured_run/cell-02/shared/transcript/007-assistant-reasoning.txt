@@ -1,0 +1,33 @@
+Let me analyze the current state. I'm in a continuation phase where I've already read 6 files from the frozen acceptance set. I still need to read:
+- src/addressable_information_layer/hashing.py
+- src/addressable_information_layer/storage.py
+- src/addressable_information_layer/renderer.py
+- src/addressable_information_layer/policy.py
+- src/addressable_information_layer/readiness.py
+
+The task requires me to:
+1. Complete the full inspection (read all 11 files)
+2. Repair four regressions related to import boundaries
+3. The boundary contract is:
+   - A file whose byte size equals max_file_bytes is eligible (currently uses `>=` which would exclude it)
+   - max_files=N admits at most the first N eligible files
+   - JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion
+   - An embedded artifact on line MAX_JSONL_LINES is eligible
+
+Let me look at the current code to identify the four regressions:
+
+1. In `importers.py` line 63: `if path.stat().st_size >= max_file_bytes:` - This uses `>=` which means a file whose byte size EQUALS max_file_bytes would be excluded. The contract says "a file whose byte size equals max_file_bytes is eligible", so this should be `> max_file_bytes` (strictly greater than).
+
+2. In `importers.py` line 67: `if len(artifacts) > max_files:` - This checks AFTER appending, so it admits N+1 files before stopping. Wait, let me re-read. The code appends first, then checks `if len(artifacts) > max_files: break`. So if max_files=N, it would append the (N+1)th file and then break. That means it admits N+1 files. The contract says "max_files=N admits at most the first N eligible files". So we should check BEFORE appending, or use `>=` instead of `>`. Actually wait - let me re-read:
+
+```python
+for path in sorted(root.rglob("*")):
+    if not path.is_file():
+        continue
+    if _is_excluded(path, root):
+        continue
+    if path.suffix.lower() not in TEXT_EXTENSIONS:
+        continue
+    if path.stat().st_size >= max_file_bytes:
+        continue
+    rel = path.relative_to(root).as_posix

@@ -1,0 +1,41 @@
+Let me analyze the current state. I'm in a continuation phase where I need to:
+
+1. Complete the import-boundary audit
+2. Repair four regressions related to boundary conditions
+3. The boundary contract is:
+   - A file whose byte size equals max_file_bytes is eligible (currently uses `>=` which excludes it)
+   - max_files=N admits at most the first N eligible files (need to check if off-by-one)
+   - JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion
+   - An embedded artifact on line MAX_JSONL_LINES is eligible
+
+Let me look at the code I've read so far:
+
+**importers.py** (line 56):
+```python
+if path.stat().st_size >= max_file_bytes:
+    continue
+```
+This means a file whose size EQUALS max_file_bytes is EXCLUDED. The contract says it should be ELIGIBLE. So this should be `>` instead of `>=`.
+
+**importers.py** (line 59):
+```python
+if len(artifacts) > max_files:
+    break
+```
+This means after adding a file, if len exceeds max_files, we break. So the first max_files files are admitted (indices 0 to max_files-1), and the (max_files+1)-th would trigger the break. Wait, let me re-read:
+
+```python
+artifacts.append({"path": rel})
+if len(artifacts) > max_files:
+    break
+```
+
+So after appending, if len > max_files, break. This means:
+- After 1st append: len=1, not > max_files (if max_files >= 1)
+- ...
+- After Nth append: len=N, not > max_files (if max_files = N)
+- After (N+1)th append: len=N+1, > max_files, break
+
+So it admits N+1 files when max_files=N. The contract says "max_files=N admits at most the first N eligible files". So this is off by one - it should be `>=` instead of `>`.
+
+Wait, let me re-read: "max_files=N admits at most the first N eligible files". So if max_files=5, we should admit exactly 5 files. With `>`, we'd admit 6 (the 6th triggers the break but it's already

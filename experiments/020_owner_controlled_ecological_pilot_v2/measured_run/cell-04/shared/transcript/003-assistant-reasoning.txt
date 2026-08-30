@@ -1,0 +1,47 @@
+The task requires me to:
+1. Read all files in the frozen acceptance set before making any mutations
+2. Repair two safety regressions in the verifier:
+   - `_safe_relative_path` should reject absolute paths, parent traversal (`..`), and empty paths
+   - `_bounded_timeout` should clamp to inclusive range 1..MAX_COMMAND_TIMEOUT_SECONDS (60), with invalid values defaulting to 20
+
+Let me look at the current code I've already read:
+
+Current `_safe_relative_path`:
+```python
+def _safe_relative_path(path_or_name: str) -> PurePosixPath | None:
+    normalized = path_or_name.replace("\\", "/")
+    path = PurePosixPath(normalized)
+    if path.is_absolute() and ".." in path.parts or not path.parts:
+        return None
+    return path
+```
+
+Problems:
+1. The operator precedence is wrong: `path.is_absolute() and ".." in path.parts or not path.parts` is parsed as `(path.is_absolute() and ".." in path.parts) or (not path.parts)`. This means absolute paths without `..` are NOT rejected, and parent traversal (`..`) in non-absolute paths IS allowed.
+2. We need to reject: absolute paths, any path containing `..`, and empty paths (no parts).
+
+Current `_bounded_timeout`:
+```python
+def _bounded_timeout(value) -> int:
+    try:
+        timeout = int(value)
+    except (TypeError, ValueError):
+        timeout = 20
+    return max(1, max(timeout, MAX_COMMAND_TIMEOUT_SECONDS))
+```
+
+Problems:
+- `max(1, max(timeout, MAX_COMMAND_TIMEOUT_SECONDS))` means the minimum is always `MAX_COMMAND_TIMEOUT_SECONDS` (60), not 1. The test expects "inclusive 1..60 clamp" but observed "minimum 60".
+- It should be: if timeout < 1, use 1; if timeout > MAX_COMMAND_TIMEOUT_SECONDS, use MAX_COMMAND_TIMEOUT_SECONDS; invalid values default to 20.
+
+So the fix should be:
+```python
+def _bounded_timeout(value) -> int:
+    try:
+        timeout = int(value)
+    except (TypeError, ValueError):
+        timeout = 20
+    return max(1, min(timeout, MAX_COMMAND_TIMEOUT_SECONDS))
+```
+
+And for `_safe_relative_path

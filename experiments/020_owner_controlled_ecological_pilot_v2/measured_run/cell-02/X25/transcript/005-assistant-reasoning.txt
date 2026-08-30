@@ -1,0 +1,33 @@
+Let me analyze the current state. I'm in a continuation phase where I've already read all 11 files in the frozen acceptance set. The task requires me to:
+
+1. Perform a complete import-boundary audit
+2. Repair four regressions in the offline audit package
+3. The exact boundary contract is:
+   - A file whose byte size equals max_file_bytes is eligible (currently uses `>=` which excludes it)
+   - max_files=N admits at most the first N eligible files (need to check if this is correct)
+   - JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion
+   - An embedded artifact on line MAX_JSONL_LINES is eligible
+
+Let me look at the current code to identify the four regressions:
+
+**In `importers.py`:**
+- Line: `if path.stat().st_size >= max_file_bytes:` — This excludes files whose size EQUALS max_file_bytes. The contract says "a file whose byte size equals max_file_bytes is eligible." So this should be `>` not `>=`.
+- Line: `if len(artifacts) > max_files: break` — Wait, let me re-read. The loop iterates and appends, then checks if `len(artifacts) > max_files`. This means it allows max_files+1 files to be admitted before breaking. The contract says "max_files=N admits at most the first N eligible files." So if max_files=200, we should admit at most 200 files. The current code appends first, then checks if len > max_files, which means it allows 201 files. Wait no - let me re-read:
+
+```python
+for path in sorted(root.rglob("*")):
+    if not path.is_file():
+        continue
+    if _is_excluded(path, root):
+        continue
+    if path.suffix.lower() not in TEXT_EXTENSIONS:
+        continue
+    if path.stat().st_size >= max_file_bytes:
+        continue
+    rel = path.relative_to(root).as_posix()
+    artifacts.append({"path": rel})
+    if len(artifacts) > max_files:
+        break
+```
+
+So it appends, then checks if len > max_files. This means it will append the (max_files+1)th file before breaking. So it admits max_files+1 files. The contract says "at most the first

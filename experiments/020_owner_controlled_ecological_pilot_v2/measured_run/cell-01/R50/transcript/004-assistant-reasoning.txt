@@ -1,0 +1,42 @@
+Let me analyze the current state. I'm at sequence 12, having made a patch to `importers.py` that introduced an extra blank line in the DEFAULT_EXCLUDES set. Looking at the diff from EVT-0012:
+
+```
+@@ -34,6 +34,7 @@
+     "__pycache__",
+     ".pytest_cache",
+     "node_modules",
++
+     "dist",
+     "build",
+     ".ail_runs",
+```
+
+This added an extra blank line between "node_modules" and "dist". That's not what I want - that was likely an unintended artifact of the patch. Let me look at what I need to do.
+
+The task says:
+1. Perform a complete import-boundary audit and repair four regressions
+2. The boundary contract is:
+   - A file whose byte size equals max_file_bytes is eligible (so `>=` should be `>`)
+   - max_files=N admits at most the first N eligible files (so `>` should be `>=` for the break, or rather the condition should be `len(artifacts) >= max_files`)
+   - JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion (so `idx >= MAX_JSONL_LINES` should be `idx > MAX_JSONL_LINES`)
+   - An embedded artifact on line MAX_JSONL_LINES is eligible (same boundary fix)
+
+Let me look at the current code in `importers.py`:
+```python
+if path.stat().st_size >= max_file_bytes:
+    continue
+```
+This should be `> max_file_bytes` (strictly greater than, so that a file whose size equals max_file_bytes is still eligible).
+
+```python
+if len(artifacts) > max_files:
+    break
+```
+Wait, let me re-read. "max_files=N admits at most the first N eligible files". So if we've already added N files, we should stop. The current code checks `len(artifacts) > max_files` before breaking. But the append happens before the check:
+```python
+artifacts.append({"path": rel})
+if len(artifacts) > max_files:
+    break
+```
+
+So it appends first, then checks if len > max_files. This means it admits N+1 files (it adds the (N+1)th file, then breaks). To admit at

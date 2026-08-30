@@ -1,0 +1,28 @@
+Let me analyze the task. I need to repair four regressions in the import-boundary code. The boundary contract is:
+
+1. A file whose byte size equals `max_file_bytes` is eligible (currently uses `>=`, should be `>`)
+2. `max_files=N` admits at most the first N eligible files (need to check off-by-one)
+3. JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion (currently uses `idx >= MAX_JSONL_LINES` which would exclude line MAX_JSONL_LINES)
+4. An embedded artifact on line MAX_JSONL_LINES is eligible (same issue)
+
+Let me look at the current code:
+
+**In `importers.py`:**
+```python
+if path.stat().st_size >= max_file_bytes:
+    continue
+```
+This excludes files whose size equals `max_file_bytes`. The contract says a file whose byte size **equals** `max_file_bytes` is eligible. So this should be `>` not `>=`.
+
+```python
+artifacts.append({"path": rel})
+if len(artifacts) > max_files:
+    break
+```
+This appends the file first, then checks if `len(artifacts) > max_files`. If N=1, it appends 1 file, then checks `1 > 1` which is False, so it continues. On the next iteration it appends a 2nd file, then checks `2 > 1` which is True, so it breaks. So this admits N+1 files. The contract says "at most the first N eligible files". So we should check before appending, or change the condition. Actually wait - let me re-read. It appends, then checks if len > max_files. If max_files=200, after appending the 201st file, len is 201, which is > 200, so it breaks. So it admits 201 files. The fix should be to check before appending: `if len(artifacts) >= max_files: break` or change to `if len(artifacts) > max_files: break` → `if len(artifacts) >= max_files: break`.
+
+Wait, let me re-think. The loop is:
+```python
+for path in sorted(root.rglob("*")):
+    if not path.is_file(): continue
+    if _is_excluded(path

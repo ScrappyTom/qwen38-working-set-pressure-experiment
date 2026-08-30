@@ -1,0 +1,23 @@
+Let me analyze the current state. I've read all 11 files in the frozen acceptance set. Now I need to understand the boundary contract and identify the four regressions:
+
+1. **File whose byte size equals max_file_bytes is eligible** - In `importers.py`, line 69 has `if path.stat().st_size >= max_file_bytes:` which means a file EXACTLY at max_file_bytes is EXCLUDED (not eligible). The contract says it should be ELIGIBLE. So the fix is to change `>=` to `>`.
+
+2. **max_files=N admits at most the first N eligible files** - In `importers.py`, line 73 has `if len(artifacts) > max_files:` which means it allows N+1 files (it breaks AFTER adding the (N+1)th). The contract says "at most the first N". So we need to check BEFORE adding, or change the condition. Let me look more carefully:
+   ```python
+   for path in sorted(root.rglob("*")):
+       if not path.is_file():
+           continue
+       if _is_excluded(path, root):
+           continue
+       if path.suffix.lower() not in TEXT_EXTENSIONS:
+           continue
+       if path.stat().st_size >= max_file_bytes:
+           continue
+       rel = path.relative_to(root).as_posix()
+       artifacts.append({"path": rel})
+       if len(artifacts) > max_files:
+           break
+   ```
+   The `if len(artifacts) > max_files` check happens AFTER appending. So when `len(artifacts)` becomes `max_files + 1`, it breaks. That means it allows N+1 files. The fix should be to check BEFORE appending, or change to `>=`. Actually, let me re-read: "max_files=N admits at most the first N eligible files". So we want exactly N files max. The current code appends then checks if > max_files, so it would have N+1 items before breaking. Fix: change to check before append, or use `>=` instead of `>`.
+
+   Actually wait - let me re-read the loop. After appending, if len > max_files, break. So if max_files=5, we'd have 6 items before breaking. The fix is to change `>` to `>=` so that after appending the 5th item (len becomes

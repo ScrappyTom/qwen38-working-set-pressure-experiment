@@ -1,0 +1,21 @@
+Let me analyze the current state. I've read all 11 files in the frozen acceptance set. Now I need to identify and fix four regressions based on the boundary contract:
+
+1. **A file whose byte size equals `max_file_bytes` is eligible** - Currently in `importers.py`, line 65: `if path.stat().st_size >= max_file_bytes:` uses `>=` which excludes files exactly at the boundary. Should be `>` (strictly greater than).
+
+2. **`max_files=N` admits at most the first N eligible files** - Currently in `importers.py`, line 68: `if len(artifacts) > max_files:` breaks after adding the (N+1)th file, meaning it admits N+1 files. Should be `>=` to admit at most N files. Wait, let me re-read... The loop adds a file then checks `if len(artifacts) > max_files: break`. So if max_files=5, after adding the 6th file, len is 6 > 5, so it breaks. That means 6 files are admitted (indices 0-5). But we want at most N eligible files. So it should be `if len(artifacts) >= max_files: break` - wait no. Let me think again.
+
+Actually the check is AFTER appending. So:
+- After appending file 1: len=1, 1 > 200? No
+- ...
+- After appending file 200: len=200, 200 > 200? No
+- After appending file 201: len=201, 201 > 200? Yes, break
+
+So it admits 201 files when max_files=200. The contract says "at most the first N eligible files". So we need to check BEFORE or use `>=`:
+- If we change to `if len(artifacts) >= max_files: break` - but this is after appending, so:
+  - After appending file 200: len=200, 200 >= 200? Yes, break
+  So it admits exactly 200 files. That's correct for "at most the first N".
+
+Wait, actually let me re-read the code more carefully:
+
+```python
+for path in sorted

@@ -1,0 +1,36 @@
+Let me analyze the current state. I'm at sequence 14, having made a patch to `importers.py` that fixed one of the four regressions (the boundary condition for file size and max_files). 
+
+The task says there are four regressions to fix:
+1. A file whose byte size equals max_file_bytes is eligible (was using `>=`, should be `>`) - FIXED in importers.py
+2. max_files=N admits at most the first N eligible files (was checking after append with `>`, now checks before append with `>=`) - FIXED in importers.py
+3. JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion
+4. An embedded artifact on line MAX_JSONL_LINES is eligible
+
+Let me look at the saved_runs.py code (from EVT-0012 reopen) to find regressions 3 and 4:
+
+In `_events_from_jsonl`:
+```python
+for idx, item in enumerate(_read_jsonl_lines(path), start=1):
+    if idx >= MAX_JSONL_LINES:
+        break
+```
+
+This means records 1 through MAX_JSONL_LINES-1 are eligible (since it breaks when idx >= MAX_JSONL_LINES). But the contract says "JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion." So record at index MAX_JSONL_LINES should be included. The fix should be `if idx > MAX_JSONL_LINES: break`.
+
+In `_embedded_artifacts_from_jsonl`:
+```python
+for idx, item in enumerate(_read_jsonl_lines(path), start=1):
+    if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+        break
+```
+
+Same issue - "an embedded artifact on line MAX_JSONL_LINES is eligible" means the condition should be `if idx > MAX_JSONL_LINES` instead of `if idx >= MAX_JSONL_LINES`.
+
+So I need to patch saved_runs.py. Let me look at the exact current content. From EVT-0012, the file content shows:
+
+In `_events_from_jsonl`:
+```python
+def _events_from_jsonl(root: Path, detected: str) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    for path in sorted(root.rglob("*.jsonl")):
+        if path.stat().st_size

@@ -1,0 +1,47 @@
+Let me analyze the current state:
+
+1. The observation OBS-0002 reports two failures:
+   - `reject_absolute_and_parent_paths`: expected "rejected" but observed "accepted"
+   - `bounded_timeout`: expected "inclusive 1..60 clamp" but observed "minimum 60"
+
+2. I've already read all the required files (sequences 2-11) and reopened the observation (sequence 12).
+
+3. I've already patched `_bounded_timeout` to fix the timeout clamping issue (sequence 14), changing it from `max(1, max(timeout, MAX_COMMAND_TIMEOUT_SECONDS))` to `min(max(timeout, 1), MAX_COMMAND_TIMEOUT_SECONDS)`.
+
+4. Now I need to fix the second issue: `_safe_relative_path` needs to reject absolute paths, parent traversal (`..`), and empty paths.
+
+Looking at the current `_safe_relative_path`:
+```python
+def _safe_relative_path(path_or_name: str) -> PurePosixPath | None:
+    normalized = path_or_name.replace("\\", "/")
+    path = PurePosixPath(normalized)
+    if path.is_absolute() and ".." in path.parts or not path.parts:
+        return None
+    return path
+```
+
+The problem is the condition: `path.is_absolute() and ".." in path.parts or not path.parts`
+
+Due to operator precedence, this is parsed as:
+`(path.is_absolute() and ".." in path.parts) or (not path.parts)`
+
+So it only rejects when ALL of these are true for the first part: path is absolute AND contains "..". But:
+- An absolute path WITHOUT ".." would NOT be rejected (e.g., `/etc/passwd`)
+- A relative path WITH ".." would NOT be rejected (e.g., `../../etc/passwd`)
+- Empty paths ARE rejected (correct)
+
+The fix should reject:
+1. Absolute paths (any absolute path)
+2. Parent traversal (any path containing "..")
+3. Empty paths (no parts)
+
+The corrected condition should be:
+```python
+if path.is_absolute() or ".." in path.parts or not path.parts:
+    return None
+```
+
+This uses `or` instead of the implicit `and`/`or` mix that was causing the bug.
+
+Let me verify this is correct:
+- `/etc/passwd` → `path.is_absolute

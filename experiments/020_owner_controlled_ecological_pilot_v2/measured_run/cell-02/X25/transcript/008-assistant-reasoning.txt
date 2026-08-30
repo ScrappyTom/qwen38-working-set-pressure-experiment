@@ -1,0 +1,36 @@
+Let me analyze the current state. I've made one patch so far (changing `>=` to `>` in importers.py for the max_file_bytes check). Now I need to identify and fix the remaining three regressions.
+
+The boundary contract states:
+1. A file whose byte size equals max_file_bytes is eligible → Already fixed (`>` instead of `>=`)
+2. max_files=N admits at most the first N eligible files → Need to check importers.py
+3. JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion → Need to check saved_runs.py
+4. An embedded artifact on line MAX_JSONL_LINES is eligible → Need to check saved_runs.py
+
+Let me look at the current code in importers.py (after my patch):
+```python
+for path in sorted(root.rglob("*")):
+    if not path.is_file():
+        continue
+    if _is_excluded(path, root):
+        continue
+    if path.suffix.lower() not in TEXT_EXTENSIONS:
+        continue
+    if path.stat().st_size > max_file_bytes:  # FIXED
+        continue
+    rel = path.relative_to(root).as_posix()
+    artifacts.append({"path": rel})
+    if len(artifacts) > max_files:
+        break
+```
+
+The issue with `max_files=N admits at most the first N eligible files`: The current code appends first, then checks `if len(artifacts) > max_files: break`. This means it allows N+1 files (it appends one more before breaking). It should be `>=` to stop after exactly N. Wait, let me think again...
+
+If max_files=200, the loop:
+- Iterates file 1: append → len=1, 1 > 200? No
+- ...
+- Iterates file 200: append → len=200, 200 > 200? No
+- Iterates file 201: append → len=201, 201 > 200? Yes, break
+
+So it admits 201 files. The contract says "at most the first N eligible files". So we need to check BEFORE appending, or change the condition.
+
+The fix should be: check `if len(artifacts) >= max_files:` before appending, or change `>` to `>=`. Wait

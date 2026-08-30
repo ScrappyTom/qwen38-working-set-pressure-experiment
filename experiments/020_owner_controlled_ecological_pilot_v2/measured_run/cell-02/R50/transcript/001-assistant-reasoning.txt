@@ -1,0 +1,34 @@
+Let me analyze the current state. I'm in a continuation phase where I need to:
+
+1. Read the remaining files that haven't been read yet (policy.py and readiness.py)
+2. Understand the four regressions in the import boundaries
+3. Fix them
+4. Run the `public` check
+5. Submit
+
+Let me look at what's been done so far:
+- 9 events completed (reads of saved_runs.py, importers.py, fixture_packs.py, records.py, content_log.py, artifact_units.py, hashing.py, storage.py, renderer.py)
+- Still need to read: policy.py and readiness.py
+
+The boundary contract states:
+1. A file whose byte size equals max_file_bytes is eligible (currently `path.stat().st_size >= max_file_bytes` excludes it - should be `>`)
+2. max_files=N admits at most the first N eligible files (currently `if len(artifacts) > max_files` breaks after adding, so it admits N+1 - should check before adding or use `>=`)
+3. JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion (currently `if idx >= MAX_JSONL_LINES: break` which means record MAX_JSONL_LINES is excluded since enumerate starts at 1... wait, let me re-read)
+4. An embedded artifact on line MAX_JSONL_LINES is eligible (same issue as #3)
+
+Let me look at the current code more carefully:
+
+**Regression 1: `importers.py` - file size boundary**
+Current: `if path.stat().st_size >= max_file_bytes: continue`
+This excludes files whose size equals max_file_bytes. The contract says "a file whose byte size equals max_file_bytes is eligible." So it should be `> max_file_bytes`.
+
+**Regression 2: `importers.py` - max_files boundary**
+Current:
+```python
+artifacts.append({"path": rel})
+if len(artifacts) > max_files:
+    break
+```
+This appends first, then checks. So if max_files=5, it will append the 6th file and then break. This means it admits N+1 files. The contract says "max_files=N admits at most the first N eligible files." So we should check before appending: `if len(artifacts) >= max_files: break` (before the append).
+
+**Regression 3: `saved

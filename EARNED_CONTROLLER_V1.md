@@ -64,3 +64,28 @@ path were not reached. V1 remains retained, but Experiment 019 adds no
 comparative or live canonical-identity evidence. Prospective host hardening
 rejects no-op patches and permits byte-identical content-addressed snapshot
 reuse.
+
+## Experiment 020 outcome
+
+Experiment 020 is the fresh, qualified ecological result for V1. Both R50 and
+X25 completed, checked, passed hidden grading, and submitted all four fresh
+owner-controlled trajectories. X25 reduced peak resident prompt size by
+25–41% while preserving quality. It used 12 more conceptual calls, and its
+explicit reacquisition made aggregate prompt processing nearly equal to R50.
+
+The result promotes no new component. It strengthens the existing controller
+claim:
+
+> Exact old bodies may leave residence at authentic pressure if readable
+> action/target/status/binding signal and one canonical exact payload address
+> remain available for model-selected reacquisition.
+
+Canonical payload identity worked mechanically: repeated access retained the
+original exact source and provenance rather than manufacturing a competing
+result-of-result address. Qwen still sometimes reread or reopened evidence,
+which is measured actor behavior rather than an identity defect.
+
+The economic qualification is important. Externalization is earned as a peak
+capacity and executability mechanism, not as an unconditional reduction in
+cumulative token processing. Keep exact bodies resident while affordable;
+externalize oldest bodies only when the active envelope requires it.

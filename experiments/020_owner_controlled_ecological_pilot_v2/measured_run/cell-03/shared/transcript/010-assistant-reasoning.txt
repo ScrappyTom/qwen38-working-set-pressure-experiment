@@ -1,0 +1,36 @@
+Let me analyze the current state:
+
+1. I've completed reading 8 out of 10 required files (verifiers.py, records.py, hashing.py, readiness.py, policy.py, routing.py, reducers.py, verifier_logs.py)
+2. I still need to read: storage.py and artifact_units.py
+3. After that, I need to fix the two safety regressions in verifiers.py:
+   - `_safe_relative_path` should reject absolute paths, parent traversal (`..`), and empty paths
+   - `_bounded_timeout` should clamp to inclusive range 1..MAX_COMMAND_TIMEOUT_SECONDS (60), with invalid values defaulting to 20
+
+Let me look at the current code issues:
+
+**Issue 1: `_safe_relative_path`**
+Current code:
+```python
+def _safe_relative_path(path_or_name: str) -> PurePosixPath | None:
+    normalized = path_or_name.replace("\\", "/")
+    path = PurePosixPath(normalized)
+    if path.is_absolute() and ".." in path.parts or not path.parts:
+        return None
+    return path
+```
+
+Problems:
+- The condition `path.is_absolute() and ".." in path.parts` only rejects when BOTH absolute AND has `..`. It should reject absolute paths OR parent traversal separately.
+- Empty paths (no parts) are rejected, but what about paths like `".."` or `"../foo"`? The `not path.parts` check handles empty string but not `".."` which has parts `("..",)`.
+- Actually wait, let me re-read: `if path.is_absolute() and ".." in path.parts or not path.parts:` - due to operator precedence, this is `(path.is_absolute() and ".." in path.parts) or (not path.parts)`. So it rejects if (absolute AND has ..) OR (empty). But it should reject absolute paths regardless of `..`, and reject any path with `..` components regardless of being absolute.
+
+The fix should be:
+```python
+def _safe_relative_path(path_or_name: str) -> PurePosixPath | None:
+    normalized = path_or_name.replace("\\", "/")
+    if not normalized or not normalized.strip():
+        return None
+    path = PurePosixPath(normalized)
+    if path.is_absolute() or ".." in path.parts or not path.parts:
+        return None
+    return

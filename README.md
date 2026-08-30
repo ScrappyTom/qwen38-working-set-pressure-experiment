@@ -2,22 +2,31 @@
 
 ## Current experiment
 
-Experiment 019 attempted to carry [Earned Controller V1](EARNED_CONTROLLER_V1.md)
-into two owner-controlled repairs. The one authorized run stopped during cell
-2 on an exact-custody defect after 13 saved completions, before any R50/X25
-branch or observation case. The partial response tree is sealed and directly
-audited; the paired experiment is unscorable and will not be retried under its
-consumed authorization.
+Experiment 020 carried [Earned Controller V1](EARNED_CONTROLLER_V1.md) into two
+fresh owner-controlled repairs under an exact eight-branch R50/X25 schedule.
+The run is complete, sealed, mechanically valid, and directly audited across
+all 106 model calls.
 
 ## Current result
 
-Experiment 019 still produced one useful grounded result: seed 173205 read all
-four required owner-source files, made both exact repairs, passed public and
-post-seal hidden checks, and submitted. It completed at 16,265 prompt tokens,
-so the source fixture never reached the context treatment. Seed 223607 reasoned
-to the correct edits but emitted a strict no-op patch; no-op patches are now
-bounded rejections and identical candidate snapshots are idempotent. See
-`experiments/019_owner_controlled_ecological_pilot/RESULTS.md`.
+Both Experiment 020 conditions passed all four trajectories: 8/8 submitted
+candidates passed public and hidden grading, and every frozen inspection
+obligation completed before mutation. X25 reduced peak resident prompt size
+by 25–41% while retaining at least 1,000 adjusted tokens of headroom. It used
+12 more conceptual calls than R50, so cumulative prompt processing was almost
+identical rather than cheaper.
+
+The direct transcript result is that readable event/observation signal plus
+canonical exact custody preserved grounding after externalization. Qwen chose
+the current candidate-bound verifier observation, reopened exact bodies, and
+produced correct repairs. Its remaining cost was conservative reacquisition:
+completion signal was visible, but Qwen sometimes wanted exact source again
+before acting. Canonical identity fixed provenance/address indirection; it did
+not and should not suppress model-selected rereads.
+
+See `experiments/020_owner_controlled_ecological_pilot_v2/RESULTS.md`,
+`DIRECT_TRANSCRIPT_AUDIT.md`, `HOST_PATH_AUDIT.md`, and
+`APPARATUS_FINDING.md`.
 
 Experiment 018 is complete. In all four fresh large-world trajectories, the
 fully resident R50 event plane reached the physical 50,176-token boundary

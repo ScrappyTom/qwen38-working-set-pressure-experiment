@@ -1,0 +1,43 @@
+Let me analyze the current state:
+
+1. I've reopened observation OBS-0002 which shows two failures:
+   - `reject_absolute_and_parent_paths`: expected "rejected", observed "accepted"
+   - `bounded_timeout`: expected "inclusive 1..60 clamp", observed "minimum 60"
+
+2. I've read all files except `src/addressable_information_layer/artifact_units.py` which is the last one in the frozen acceptance set.
+
+3. Now I need to:
+   - Read `src/addressable_information_layer/artifact_units.py` (the last unread file)
+   - Then patch `verifiers.py` to fix the two issues:
+     a. `_safe_relative_path` needs to properly reject absolute paths, parent traversal (`..`), and empty paths
+     b. `_bounded_timeout` needs to clamp to inclusive range 1..60 (not just minimum 60)
+
+Let me look at the current code:
+
+```python
+def _bounded_timeout(value) -> int:
+    try:
+        timeout = int(value)
+    except (TypeError, ValueError):
+        timeout = 20
+    return max(1, max(timeout, MAX_COMMAND_TIMEOUT_SECONDS))
+```
+
+This is wrong. `max(timeout, MAX_COMMAND_TIMEOUT_SECONDS)` means the minimum value returned is always `MAX_COMMAND_TIMEOUT_SECONDS` (60). The test expects "inclusive 1..60 clamp" meaning the timeout should be clamped to [1, 60]. So valid values like 30 should stay 30, values > 60 should become 60, values < 1 should become 1.
+
+The fix should be: `return min(max(timeout, 1), MAX_COMMAND_TIMEOUT_SECONDS)`
+
+Now for `_safe_relative_path`:
+
+```python
+def _safe_relative_path(path_or_name: str) -> PurePosixPath | None:
+    normalized = path_or_name.replace("\\", "/")
+    path = PurePosixPath(normalized)
+    if path.is_absolute() and ".." in path.parts or not path.parts:
+        return None
+    return path
+```
+
+The issue here is the operator precedence. `path.is_absolute() and ".." in path.parts or not path.parts` is evaluated as `(path.is_absolute() and ".." in path.parts) or (not path.parts)`. 
+
+But the test says "absolute paths, parent traversal

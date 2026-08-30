@@ -1,0 +1,48 @@
+Let me analyze the current state:
+
+1. I've completed 7 events so far (sequences 1-7)
+2. I need to read the remaining files in the frozen acceptance set before making any mutations
+3. Files already read: verifiers.py, records.py, hashing.py, readiness.py, policy.py, routing.py
+4. Files still to read: reducers.py, verifier_logs.py, storage.py, artifact_units.py
+
+The observation (OBS-0002) was reopened in sequence 1 and shows two failures:
+- `reject_absolute_and_parent_paths`: expected "rejected", observed "accepted"
+- `bounded_timeout`: expected "inclusive 1..60 clamp", observed "minimum 60"
+
+Looking at the current code in verifiers.py:
+
+For `_safe_relative_path`:
+```python
+def _safe_relative_path(path_or_name: str) -> PurePosixPath | None:
+    normalized = path_or_name.replace("\\", "/")
+    path = PurePosixPath(normalized)
+    if path.is_absolute() and ".." in path.parts or not path.parts:
+        return None
+    return path
+```
+
+The issue here is operator precedence. `path.is_absolute() and ".." in path.parts or not path.parts` is evaluated as `(path.is_absolute() and ".." in path.parts) or (not path.parts)`. This means:
+- An absolute path WITHOUT ".." would NOT be rejected (only absolute paths WITH ".." are rejected)
+- The condition should reject ALL absolute paths, ALL parent traversal, AND empty paths
+
+The fix should be:
+```python
+def _safe_relative_path(path_or_name: str) -> PurePosixPath | None:
+    normalized = path_or_name.replace("\\", "/")
+    path = PurePosixPath(normalized)
+    if not path.parts or path.is_absolute() or ".." in path.parts:
+        return None
+    return path
+```
+
+For `_bounded_timeout`:
+```python
+def _bounded_timeout(value) -> int:
+    try:
+        timeout = int(value)
+    except (TypeError, ValueError):
+        timeout = 20
+    return max(1, max(timeout, MAX_COMMAND_TIMEOUT_SECONDS))
+```
+
+The issue is that `max(timeout, MAX_COMMAND_TIMEOUT_SECONDS)` means the minimum value is always `MAX_COMMAND_TIMEOUT_SECONDS` (60). The test expects an "inclusive

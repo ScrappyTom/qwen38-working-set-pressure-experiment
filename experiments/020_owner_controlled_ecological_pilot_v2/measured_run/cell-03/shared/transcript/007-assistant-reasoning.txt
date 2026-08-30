@@ -1,0 +1,38 @@
+Let me analyze the current state:
+
+1. I've completed reading 5 of the 10 required files (verifiers.py, records.py, hashing.py, readiness.py, policy.py)
+2. I still need to read: routing.py, reducers.py, verifier_logs.py, storage.py, and artifact_units.py
+3. After that, I need to fix two issues in verifiers.py:
+   - `_safe_relative_path` should reject absolute paths, parent traversal (..), and empty paths
+   - `_bounded_timeout` should clamp to inclusive range 1..MAX_COMMAND_TIMEOUT_SECONDS (60), with invalid values defaulting to 20
+
+Let me look at the current implementation of these two functions:
+
+```python
+def _bounded_timeout(value) -> int:
+    try:
+        timeout = int(value)
+    except (TypeError, ValueError):
+        timeout = 20
+    return max(1, max(timeout, MAX_COMMAND_TIMEOUT_SECONDS))
+```
+
+The bug here: `max(1, max(timeout, MAX_COMMAND_TIMEOUT_SECONDS))` - this means if timeout is 5, it returns max(1, max(5, 60)) = 60. But the expected behavior is to clamp to 1..60, so a value of 5 should stay 5, and a value of 100 should become 60. The fix should be `min(max(timeout, 1), MAX_COMMAND_TIMEOUT_SECONDS)`.
+
+```python
+def _safe_relative_path(path_or_name: str) -> PurePosixPath | None:
+    normalized = path_or_name.replace("\\", "/")
+    path = PurePosixPath(normalized)
+    if path.is_absolute() and ".." in path.parts or not path.parts:
+        return None
+    return path
+```
+
+The bug here: The condition `path.is_absolute() and ".." in path.parts or not path.parts` has operator precedence issues. Due to Python's operator precedence, this is evaluated as `(path.is_absolute() and ".." in path.parts) or (not path.parts)`. This means:
+- An absolute path WITHOUT ".." parts would pass through (should be rejected)
+- A relative path WITH ".." would pass through (should be rejected)
+
+The fix should reject:
+1. Absolute paths (path.is_absolute())
+2. Paths containing ".." in their parts
+3. Empty paths (not path
