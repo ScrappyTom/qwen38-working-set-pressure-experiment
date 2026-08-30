@@ -2,23 +2,23 @@
 
 ## Current result
 
-Experiment 016 completed the offline worst-case capacity proof required after
-the Experiment 015 placement result. The exact V1 event frame is not safe as
-the planned X25 reconstruction representation.
+Experiment 017 qualified the exact V2 signal-bearing event frame. It keeps
+readable action targets, acceptance/status, ranges, candidate/file/check
+bindings, and the exact payload field classes resident while moving bulky
+`old/new` and result bodies behind exact handles. Sixteen worst-case events,
+including one newly resident maximum event, fit the X25 envelope with 6,961
+tokens of margin. All six exposed development branches were hidden-correct,
+checked, and submitted; both historical-payload branches used the resident
+signal to select and reopen the exact absent marker.
 
-The proof constructed sixteen real accepted candidate-bound patch events. In
-the decisive case, each exact action plus the full private-reasoning allowance
-fit the 2,500-token completion envelope, but all sixteen action payloads used
-29,565 tokens. Externalizing every result body still left the complete request
-at 35,516 prompt tokens, 13,528 tokens over the X25 total envelope. The exact
-guard denied the call before HTTP.
-
-The placement direction remains valid; the V1 payload layout does not. The
-next earned candidate should retain one structural event plane while moving
-large historical action payloads and result bodies behind one exact event
-handle. It must pass offline capacity and exposed live placement qualification
-before fresh large-world fixtures are built. See
-`experiments/016_event_frame_capacity_stress/RESULTS.md`.
+Experiment 018 is now frozen and qualified offline. It carries V2 unchanged
+into two fresh large-world geometries and compares one fully resident R50 event
+plane against mechanically externalized X25 payloads. The shared live prefix
+remains byte-identical until the tokenizer guard identifies the first authentic
+25k-only boundary. Scripted qualification produced hidden-correct X25 closure
+in all four cells while the fully resident R50 reference reached physical
+capacity. No fresh-bank actor exposure has occurred yet. See
+`experiments/018_large_world_event_frame_v2/SPEC.md`.
 
 ## Prior result
 

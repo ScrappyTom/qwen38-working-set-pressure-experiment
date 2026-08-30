@@ -66,3 +66,12 @@ The four closure/stale-check branches retained progress semantics without
 reopening action payloads. V2 is promoted as the event representation for a
 future fresh large-world comparison; Experiment 017 itself is development-only
 and does not authorize or constitute that successor run.
+
+Experiment 018 is the authorized fresh large-world successor. It freezes one
+common V2 renderer and one event plane: R50 keeps payloads resident; X25 moves
+the oldest bulky payloads out of residence only when the exact 25k guard
+requires it. Both branches inherit byte-identical live behavior before that
+authentic fork. Do not add a parallel chronology, receipt ledger, suppression,
+cache, summary, ranking, or semantic host selection. Every model input,
+separate private-reasoning output, final action, and exact result must be read
+directly before interpreting quality or mechanism.
