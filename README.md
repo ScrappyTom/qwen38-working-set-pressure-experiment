@@ -2,30 +2,39 @@
 
 ## Current result
 
-Experiment 014 is complete, sealed, directly audited, and formally scorable.
-It compared Experiment 013's split progress surface with one monotonically
-sequenced exact active-phase receipt plane.
+Experiment 015 is complete, sealed, and directly audited as a development-only
+placement qualification. It tested the concern that moving active progress
+from the qualified dual `history` plus receipt presentation into one exact
+monotonic event frame could itself change Qwen's behavior.
 
-All eight final candidates passed hidden grading. Unified receipts submitted
-4/4 branches versus 3/4 for split receipts. In the divergent closure pair, Qwen
-saw eleven passing checks under the split surface but kept rerunning them
-because the numbered ledger stopped before the checks. In the unified branch,
-the first passing check became receipt 6 and Qwen submitted immediately.
+Both placements checked and submitted in 4/4 branches, with all eight terminal
+candidates passing hidden grading. Qwen correctly distinguished predecessor
+and current-candidate checks under both placements. One legacy seed explicitly
+paused over zero newly used calls versus five completed receipts; the event
+frame produced no comparable progress-clock confusion.
 
-The stale-check family passed its safety gate in all four branches: every
-submission followed a passing check bound to the repaired current candidate,
-not merely an earlier predecessor check. Unified receipts reduced branch calls
-by 21.7% and prompt tokens by 25.3%, although most of that aggregate advantage
-comes from avoiding the one repeated-check loop.
+The current exact event encoding was not cheaper: it used 10.62% more prompt
+tokens because it retained exact action arguments and structural results while
+the legacy externalized prefix used compact receipts. The earned conclusion is
+therefore narrow: one event plane is comprehensible and removes cross-plane
+duplication, but compactness must be proven separately.
 
-The one-monotonic-receipt rule is promoted into the minimal controller. Exact
-large result bodies remain demand-loaded and candidate/environment bindings
-remain authoritative. No suppression, summary, ranking, relationship graph,
-embedding, or host-selected relevance is earned. See
-`experiments/014_unified_active_phase_receipts/RESULTS.md` and
+A future large-world comparison should use one common renderer: an R50 branch
+with result bodies resident and an X25 branch with old exact bodies external
+behind the same handles. The requests must be byte-identical before pressure.
+This is a resident-versus-externalized event-state comparison, not a pure raw
+append-only context-size comparison. See
+`experiments/015_event_frame_placement_qualification/RESULTS.md` and
 `DIRECT_TRANSCRIPT_AUDIT.md`.
 
 ## Prior result
+
+Experiment 014 established one monotonically sequenced exact active-phase
+receipt plane. All eight candidates passed hidden grading; unified receipts
+submitted 4/4 branches versus 3/4 for split receipts and removed one eleven-check
+closure loop. See `experiments/014_unified_active_phase_receipts/RESULTS.md`.
+
+## Earlier result
 
 Experiment 013 compared the old 25k latest-result reset with an
 exact compact active-phase receipt ledger and on-demand exact result reopening.
@@ -45,7 +54,7 @@ therefore promoted, while this split ledger-plus-history presentation is not.
 See `experiments/013_active_phase_receipts/RESULTS.md` and
 `DIRECT_TRANSCRIPT_AUDIT.md`.
 
-## Earlier result
+## Earlier large-world result
 
 Experiment 012 completed the first 160-file, approximately 2.2 MiB recurrent
 stress study. The result is valid but negative for the controller as frozen.
@@ -64,25 +73,27 @@ unearned. See
 `experiments/012_large_world_recurrent_continuity/RESULTS.md`.
 
 This is the lean successor to the metadata working-set evidence repository.
-The current program tests the original claim directly: whether
-the same Qwen actor, using the earned P0 directory and server-bounded reasoning,
-can continue correctly after exact chronology no longer fits a 25,000-token
-active context.
+The current program tests whether the same Qwen actor, using the earned P0
+directory, exact event state, and server-bounded reasoning, can continue
+correctly after exact result bodies no longer fit a 25,000-token active
+context.
 
 The comparison is:
 
 ```text
-same exact pre-fork trajectory
-              |
-       +------+------+
-       |             |
- C50 append-only   T25 reconstructed
- <=50k            <=25k
+same byte-identical pre-pressure event frame
+                    |
+             +------+------+
+             |             |
+      R50 resident      X25 externalized
+      bodies <=50k      bodies <=25k
 ```
 
 Both branches retain exact external custody and the earned P0 readable
-path/symbol directory. T25 receives no summary and no host-selected relevant
-facts. It must reacquire exact source or prior observations itself.
+path/symbol directory. X25 receives no summary and no host-selected relevant
+facts. It must select any externalized exact result body to reopen. This future
+comparison requires an offline event-frame capacity stress proof before fresh
+fixture construction.
 
 See `experiments/012_large_world_recurrent_continuity/SPEC.md` for the latest study,
 `experiments/006_authentic_bounded_pressure/SPEC.md` for the successful first

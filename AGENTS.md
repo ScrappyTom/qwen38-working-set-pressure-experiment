@@ -6,9 +6,9 @@ diagnostics. Keep it smaller than its evidence donors.
 
 Read in order:
 
-1. the completed Experiment 014 `RESULTS.md`, `DIRECT_TRANSCRIPT_AUDIT.md`,
+1. the completed Experiment 015 `RESULTS.md`, `DIRECT_TRANSCRIPT_AUDIT.md`,
    `APPARATUS_FINDING.md`, and frozen execution artifacts;
-2. its frozen authorization, schedule, and execution package;
+2. the completed Experiment 014 result and frozen execution artifacts;
 3. `docs/ANALYSIS_GOVERNANCE.md`;
 4. prior experiment results and direct transcript audits;
 5. `README.md`.
@@ -27,10 +27,10 @@ Non-negotiable rules:
   embeddings, ranking, or semantic host routing;
 - one invocation yields at most one strict JSON action;
 - one attempt, no retry, repair, rescue, or cross-cell history;
-- C50 and T25 must begin from the same exact first-boundary task, candidate,
-  chronology, and pending work within each family/seed; later recurrent state
-  must preserve exact ancestry and may diverge only through observed actor
-  behavior or mechanical capacity stops;
+- paired resident and externalization conditions must begin from byte-identical
+  event-frame requests within each family/seed; later state must preserve exact
+  ancestry and may diverge only through prospectively frozen body-residency
+  rules, observed actor behavior, or mechanical capacity stops;
 - any feature or patch must be earned by a directly observed need;
 - seal responses before evaluator access;
 - measured work is incomplete until every transcript receives a durable direct
@@ -39,7 +39,11 @@ Non-negotiable rules:
   it directly, never insert it into later history unless prospectively frozen,
   and never treat a stated rationale as proof of causal use.
 
-Experiment 014 is complete. It promotes one monotonic exact active-phase
-receipt sequence while retaining demand-loaded result bodies and exact validity
-bindings. No suppression, cache substitution, summary, ranking, relationship,
-embedding, semantic routing, or automatic successor is authorized.
+Experiment 015 is complete as development-only placement evidence. It shows
+that Qwen can close correctly from one monotonic event frame, but the current
+exact encoding is more prompt-expensive than compact legacy receipts. A future
+R50/X25 comparison must use the same event renderer before pressure and vary
+only exact result-body residency after pressure. First perform an offline
+worst-case event-frame capacity stress proof. No suppression, cache
+substitution, summary, ranking, relationship, embedding, semantic routing, or
+automatic successor is authorized.
