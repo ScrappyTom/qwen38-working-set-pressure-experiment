@@ -35,6 +35,7 @@ TOOL_CONTRACT = {
     "fork_ready": "mechanical boundary gate after required reads and the current stage check",
     "reopen_observation": "continuation-only exact reopen by listed handle",
     "reopen_result": "exact reopen of a result body named by an active-phase receipt handle",
+    "reopen_event": "exact reopen of bulky action payload fields named by a signal-bearing active-phase event",
     "submit": "continuation-only terminal candidate submission",
 }
 

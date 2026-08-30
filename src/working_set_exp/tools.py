@@ -69,6 +69,7 @@ class ToolExecutor:
         probe_body: str | None,
         reopenable: dict[str, bytes] | None = None,
         result_reopenable: dict[str, bytes] | None = None,
+        event_reopenable: dict[str, bytes] | None = None,
         read_mode: str = "actor_selected_count",
         hierarchical_p0: bool = False,
     ):
@@ -81,6 +82,7 @@ class ToolExecutor:
         self.probe_body = probe_body
         self.reopenable = reopenable if reopenable is not None else {}
         self.result_reopenable = result_reopenable if result_reopenable is not None else {}
+        self.event_reopenable = event_reopenable if event_reopenable is not None else {}
         if read_mode not in {"actor_selected_count", "maximal_bounded_page"}:
             raise ValueError("unknown read mode")
         self.read_mode = read_mode
@@ -116,6 +118,8 @@ class ToolExecutor:
                 return self._reopen(action)
             if name == "reopen_result":
                 return self._reopen_result(action)
+            if name == "reopen_event":
+                return self._reopen_event(action)
             if name == "submit":
                 return self._submit(action)
             raise ToolError("unknown action")
@@ -378,6 +382,24 @@ class ToolExecutor:
             "size_bytes": len(body),
         })
 
+    def _reopen_event(self, action: dict[str, Any]) -> dict[str, Any]:
+        if set(action) != {"action", "handle"} or self.state.stage not in {"continuation", "recurrent"}:
+            raise ToolError("reopen_event is unavailable")
+        handle = action["handle"]
+        if handle not in self.event_reopenable:
+            raise ToolError("event handle is unavailable")
+        body = self.event_reopenable[handle]
+        payload = load_json_strict(body)
+        if not isinstance(payload, dict):
+            raise ToolError("event action payload is not an object")
+        return self._bounded({
+            "accepted": True,
+            "handle": handle,
+            "action_payload": payload,
+            "action_payload_sha256": sha256_bytes(body),
+            "size_bytes": len(body),
+        })
+
     def _submit(self, action: dict[str, Any]) -> dict[str, Any]:
         if set(action) != {"action", "expected_candidate_id"} or self.state.stage != "continuation":
             raise ToolError("submit action is unavailable")
@@ -400,6 +422,7 @@ def action_schema(
     read_mode: str = "actor_selected_count",
     hierarchical_p0: bool = False,
     result_reopen: bool = False,
+    event_reopen: bool = False,
 ) -> dict[str, Any]:
     def obj(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
         return {"type": "object", "properties": properties, "required": required, "additionalProperties": False}
@@ -424,6 +447,7 @@ def action_schema(
     fork = obj({"action": const("fork_ready"), "expected_candidate_id": sha}, ["action", "expected_candidate_id"])
     reopen = obj({"action": const("reopen_observation"), "handle": {"type": "string", "pattern": "^OBS-[0-9]{4}$"}}, ["action", "handle"])
     reopen_result = obj({"action": const("reopen_result"), "handle": {"type": "string", "pattern": "^RES-[0-9]{4}$"}}, ["action", "handle"])
+    reopen_event = obj({"action": const("reopen_event"), "handle": {"type": "string", "pattern": "^EVT-[0-9]{4}$"}}, ["action", "handle"])
     submit = obj({"action": const("submit"), "expected_candidate_id": sha}, ["action", "expected_candidate_id"])
     if stage == "setup":
         schema = begin
@@ -438,6 +462,8 @@ def action_schema(
         options = [tree, search, read, patch, check, reopen, submit]
         if result_reopen:
             options.append(reopen_result)
+        if event_reopen:
+            options.append(reopen_event)
         if hierarchical_p0:
             options.insert(0, p0)
         schema = {"oneOf": options}
@@ -445,6 +471,8 @@ def action_schema(
         options = [tree, search, read, patch, check, reopen, fork]
         if result_reopen:
             options.append(reopen_result)
+        if event_reopen:
+            options.append(reopen_event)
         if hierarchical_p0:
             options.insert(0, p0)
         if probe_id is not None:
