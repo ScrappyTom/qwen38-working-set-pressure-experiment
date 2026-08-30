@@ -32,6 +32,10 @@ Non-negotiable rules:
   ancestry and may diverge only through prospectively frozen body-residency
   rules, observed actor behavior, or mechanical capacity stops;
 - any feature or patch must be earned by a directly observed need;
+- model-facing handles are addresses, not information: every externalized item
+  must retain readable mechanically grounded resident signal (type, target,
+  status, current/predecessor bindings, and the exact field classes available
+  to reopen) so the actor can decide whether the payload is relevant;
 - seal responses before evaluator access;
 - measured work is incomplete until every transcript receives a durable direct
   audit and goal-level synthesis.
@@ -50,3 +54,15 @@ fields behind an exact phase-scoped event handle, followed by renewed offline
 capacity and exposed live placement qualification. No suppression, cache
 substitution, summary, ranking, relationship, embedding, semantic routing, or
 automatic large-world successor is authorized.
+
+Experiment 017 qualifies that exact V2 narrowing offline and on six exposed
+development branches. Sixteen legal escaped-payload events now reconstruct
+under X25 with 6,961 tokens of worst-case one-new-event margin. In the live
+qualification, all six branches passed hidden grading, checked, and submitted.
+Both historical-payload branches saw only an accepted patch target, bindings,
+available `old/new` field names, and `EVT-0001`; both selected the handle,
+reopened the absent exact marker, used it in the repair, checked, and submitted.
+The four closure/stale-check branches retained progress semantics without
+reopening action payloads. V2 is promoted as the event representation for a
+future fresh large-world comparison; Experiment 017 itself is development-only
+and does not authorize or constitute that successor run.

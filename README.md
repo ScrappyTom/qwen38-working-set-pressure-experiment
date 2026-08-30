@@ -291,3 +291,22 @@ cumulative prompt tokens by 59.6%, and total prompt-plus-completion tokens by
 reasoning-enabled C50/T25 authentic-boundary study. See
 `experiments/005_bounded_reasoning_source_replication/RESULTS.md` and the direct
 transcript audit.
+
+Experiment 016 later found a fixture-independent capacity defect in the
+otherwise comprehensible unified event plane: sixteen legal accepted patch
+actions could keep enough escaped `old/new` payload resident to exceed X25 even
+after every result body was externalized. Experiment 017 implements the earned
+V2 correction. It retains action type, readable target, acceptance/status,
+candidate/file/check bindings, and available payload field names while moving
+only bulky exact action/result bodies behind exact handles. The sixteen-event
+worst case now fits X25 with 6,961 tokens of margin after one new maximum event.
+
+The exposed six-branch live qualification also passed. All branches were
+hidden-correct, checked, and submitted. In both sacrificial historical-action
+paths, the exact marker was absent from the initial model input; Qwen used the
+resident patch target and `old/new` availability signal to select `EVT-0001`,
+reopened the exact value, applied it to current source, checked, and submitted.
+The closure/stale-check paths generally acted from compact resident progress
+without reopening bulky action payloads. The promoted rule is therefore:
+handles are addresses, not metadata signal. See
+`experiments/017_signal_bearing_event_frame_v2/RESULTS.md` and its direct audit.
