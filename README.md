@@ -2,13 +2,25 @@
 
 ## Active study
 
-Experiment 013 prospectively isolates the progress-state gap found in
-Experiment 012. It compares the old 25k latest-result reset with an exact
-compact active-phase receipt ledger and on-demand exact result reopening. No
-semantic summary, ranking, relationship graph, or read suppression is added.
-See `experiments/013_active_phase_receipts/SPEC.md`.
+Experiment 013 is complete. It compared the old 25k latest-result reset with an
+exact compact active-phase receipt ledger and on-demand exact result reopening.
+No semantic summary, ranking, relationship graph, or read suppression was
+added.
 
-## Current result
+Both conditions produced hidden-correct candidates in all four cells. The
+receipt condition reached a passing public check in 4/4 branches versus 0/4
+for the baseline and submitted 2/4 versus 0/4. It used 14.3% fewer Phase-B
+calls, 53.1% fewer prompt tokens, and 31.2% less endpoint time. Qwen reopened
+only one of 24 externalized result bodies.
+
+The two remaining non-submissions were not grounding failures. Qwen repeatedly
+saw a passing check in recent history but discounted it because the numbered
+receipt ledger remained frozen at the preceding reset. The receipt concept is
+therefore promoted, while this split ledger-plus-history presentation is not.
+See `experiments/013_active_phase_receipts/RESULTS.md` and
+`DIRECT_TRANSCRIPT_AUDIT.md`.
+
+## Prior result
 
 Experiment 012 completed the first 160-file, approximately 2.2 MiB recurrent
 stress study. The result is valid but negative for the controller as frozen.
