@@ -14,7 +14,7 @@ usable progress signal while making bulky exact payloads demand-loadable.
 
 ## Frozen identities
 
-- preparation source commit: `e4543db3aeb836d839ae8a4bb1adff4412723e7b`
+- preparation source commit: `89d0029e6979f9a5121932599e7ad1d80e751868`
 - execution package: `E17PKG-c5f6bd9de767d5098e3932485730d793af1646a412de7ba380d07bf39fac0da7`
 - executable closure: `84cbd3b4904c796347ebd013e06dd60aa5312625f27109c4503d71a6bf79e014`
 - development authorization: `6b552da839da2203419bc6648488d94025e8766c36f3d9a605d0e9512294b636`
