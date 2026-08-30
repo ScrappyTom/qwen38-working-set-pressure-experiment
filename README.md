@@ -2,14 +2,22 @@
 
 ## Current experiment
 
-Experiment 019 carries the frozen [Earned Controller V1](EARNED_CONTROLLER_V1.md)
-into two owner-controlled repairs drawn from the Addressable Information Layer.
-It mechanically corrects Experiment 018's result-of-result payload identity
-without adding caching or semantic routing: each explicit access is a new
-event, but all accesses retain one canonical exact payload source. The fresh
-bank and exact executable package are offline-qualified.
+Experiment 019 attempted to carry [Earned Controller V1](EARNED_CONTROLLER_V1.md)
+into two owner-controlled repairs. The one authorized run stopped during cell
+2 on an exact-custody defect after 13 saved completions, before any R50/X25
+branch or observation case. The partial response tree is sealed and directly
+audited; the paired experiment is unscorable and will not be retried under its
+consumed authorization.
 
 ## Current result
+
+Experiment 019 still produced one useful grounded result: seed 173205 read all
+four required owner-source files, made both exact repairs, passed public and
+post-seal hidden checks, and submitted. It completed at 16,265 prompt tokens,
+so the source fixture never reached the context treatment. Seed 223607 reasoned
+to the correct edits but emitted a strict no-op patch; no-op patches are now
+bounded rejections and identical candidate snapshots are idempotent. See
+`experiments/019_owner_controlled_ecological_pilot/RESULTS.md`.
 
 Experiment 018 is complete. In all four fresh large-world trajectories, the
 fully resident R50 event plane reached the physical 50,176-token boundary

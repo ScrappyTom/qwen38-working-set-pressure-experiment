@@ -49,10 +49,18 @@ an existence proof, not a reliability result.
 Semantic memory, relationship graphs, embeddings, host-selected relevance,
 duplicate-read suppression, and more reasoning remain excluded.
 
-## Next falsifying test
+## Experiment 019 outcome
 
 Experiment 019 uses two repairs from the owner-controlled Addressable
 Information Layer source snapshot: an exact source/reopen contract repair and
 a current candidate-bound verifier-observation repair. It asks whether the
 assembled controller performs useful work outside a generated toy repository
 while retaining correction and closure headroom.
+
+Its one authorized run stopped on a host no-op/candidate-snapshot custody
+defect before any R50/X25 branch. One source seed completed a hidden-correct
+checked repair before pressure; the observation task and canonical live reopen
+path were not reached. V1 remains retained, but Experiment 019 adds no
+comparative or live canonical-identity evidence. Prospective host hardening
+rejects no-op patches and permits byte-identical content-addressed snapshot
+reuse.

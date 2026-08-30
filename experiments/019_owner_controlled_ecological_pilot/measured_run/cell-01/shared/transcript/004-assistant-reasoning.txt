@@ -1,0 +1,29 @@
+Let me analyze the task. I need to repair two regressions in the exact-reopen pipeline:
+
+1. `ArtifactUnit.start_line` and `end_line` are inclusive, so exact materialization must include every declared source line.
+2. `ReopenReceipt.truncated` is true only when the exact text is strictly longer than `max_chars`; equality is complete.
+
+Let me look at the current code:
+
+**In `artifact_units.py`, the `exact_text_for_unit` function:**
+```python
+def exact_text_for_unit(artifact: Artifact, unit: ArtifactUnit) -> str:
+    if unit.inline_text is not None:
+        return unit.inline_text
+    lines = artifact.text.splitlines()
+    return "\n".join(lines[unit.start_line - 1 : max(unit.start_line - 1, unit.end_line - 1)])
+```
+
+The issue here: `end_line` is inclusive, so to get line `end_line`, we need the slice to go up to index `end_line - 1` (0-based), which means the slice should be `[start_line - 1 : end_line]` (since Python slices are exclusive at the end). The current code uses `max(unit.start_line - 1, unit.end_line - 1)` as the upper bound, which would exclude the last line when `end_line > start_line`. For example, if `start_line=1, end_line=5`, the correct slice is `[0:5]` giving lines 1-5. But the current code gives `[0:4]` giving only lines 1-4.
+
+The fix: change `max(unit.start_line - 1, unit.end_line - 1)` to `unit.end_line`.
+
+**In `reopen.py`, the truncation logic:**
+```python
+truncated = len(exact_text) >= max_chars
+materialized = exact_text[:max_chars] if truncated else exact_text
+```
+
+The issue: `truncated` should be true only when the text is *strictly longer* than `max_chars`. The current code uses `>=` which means equality (text length == max_chars) would incorrectly mark it as truncated. The fix is to change `>=` to `>`.
+
+Let me also check `hashing.py` - I haven't read it yet. Let me read it first before making changes. Actually, let me re-read the task: "Inspect exact

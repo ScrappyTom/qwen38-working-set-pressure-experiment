@@ -98,3 +98,14 @@ reopen must still be selected by Qwen, every access receives a new ordered
 event, and the resident readable event/observation signal—not the address
 alone—must support selection. Directly inspect every saved prompt, reasoning
 field, action, and result before any Experiment 019 interpretation.
+
+Experiment 019's authorization is consumed. Its sole run stopped after 13
+saved completions on an accepted no-op patch plus non-idempotent candidate
+snapshot custody. The R50/X25 comparison is unscorable; no treatment branch or
+observation case ran. One source path is a valid hidden-correct checked
+submission but completed before pressure. Preserve the partial evidence and do
+not rerun it as the pristine primary. Prospective host code rejects no-op
+patches, permits only byte-identical content-addressed snapshot reuse, records
+actual completion artifacts on failure, and labels pre-boundary submissions.
+Any future ecological fixture must mechanically prove that necessary correct
+work reaches an authentic boundary before completion without padding.

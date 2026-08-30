@@ -95,6 +95,8 @@ class Candidate:
             raise CandidateError("stale file binding")
         if len(old.encode("utf-8")) > 2_000 or len(new.encode("utf-8")) > 2_000:
             raise CandidateError("patch fragment exceeds bound")
+        if old == new:
+            raise CandidateError("patch must change exact bytes")
         text = data.decode("utf-8")
         if text.count(old) != 1:
             raise CandidateError("old fragment must occur exactly once")
@@ -102,6 +104,8 @@ class Candidate:
         successor_files = self.file_map
         successor_files[path] = successor_text.encode("utf-8")
         successor = Candidate.create(successor_files)
+        if successor.candidate_id == self.candidate_id:
+            raise CandidateError("patch must change candidate identity")
         diff = "".join(
             difflib.unified_diff(
                 text.splitlines(keepends=True),

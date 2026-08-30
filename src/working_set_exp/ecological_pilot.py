@@ -400,6 +400,8 @@ def run_shared_prefix(
         calls += 1
         canonical = _record_pair(pairs, action, result, event_reopenable, result_reopenable)
         log.append("canonical_payload_identity_recorded", {"sequence": len(pairs), "handle": canonical}, [])
+    if state.submitted:
+        disposition = "submitted_before_first_boundary"
     stopped = log.append(
         "ecological_shared_stopped",
         {
@@ -423,6 +425,8 @@ def run_shared_prefix(
                 "disposition": disposition,
                 "calls": calls,
                 "prepared_invocations": prepared,
+                "public_check_passed": state.public_check_passed,
+                "submitted": state.submitted,
                 "candidate_id": state.candidate.candidate_id,
                 "event_count": len(pairs),
                 "last_record_sha256": stopped["record_sha256"],

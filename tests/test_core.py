@@ -8,15 +8,57 @@ from working_set_exp.bank import construct_bank, verify_bank
 from working_set_exp.acquisition_granularity import construct_bank as construct_acquisition_bank
 from working_set_exp.acquisition_granularity import verify_bank as verify_acquisition_bank
 from working_set_exp.candidate import Candidate, CandidateError
+from working_set_exp.custody import ArtifactStore
 from working_set_exp.fixture import load_fixture, load_truth
 from working_set_exp.isolation import run_checker
 from working_set_exp.measured import build_executable_closure, construct_execution_package, verify_execution_package
 from working_set_exp.p0 import build_p0
 from working_set_exp.request import build_request, observation_directory_v2
+from working_set_exp.runner import _save_candidate, _snapshot_prefix
 from working_set_exp.tools import SessionState, ToolError, ToolExecutor, action_schema, strict_action
 
 
 class CoreTests(unittest.TestCase):
+    def test_noop_patch_is_rejected_and_exact_snapshot_reuse_is_idempotent(self):
+        candidate = Candidate.create({"a.py": b"VALUE = 1\n"})
+        with self.assertRaisesRegex(CandidateError, "must change exact bytes"):
+            candidate.patch(
+                path="a.py",
+                old="VALUE = 1",
+                new="VALUE = 1",
+                expected_candidate_id=candidate.candidate_id,
+                expected_file_sha256=candidate.file_sha256("a.py"),
+            )
+
+        executor = ToolExecutor(
+            SessionState(candidate, stage="continuation"),
+            required_full_reads=(),
+            prefork_checker=b"print('ok')\n",
+            public_checker=b"print('ok')\n",
+            final_target="a.py",
+            probe_id=None,
+            probe_body=None,
+        )
+        rejected = executor.execute(
+            {
+                "action": "patch",
+                "path": "a.py",
+                "old": "VALUE = 1",
+                "new": "VALUE = 1",
+                "expected_candidate_id": candidate.candidate_id,
+                "expected_file_sha256": candidate.file_sha256("a.py"),
+            }
+        )
+        self.assertFalse(rejected["accepted"])
+        self.assertIn("must change exact bytes", rejected["detail"])
+
+        with tempfile.TemporaryDirectory(prefix="candidate-snapshot-test-") as raw:
+            store = ArtifactStore(Path(raw))
+            first = _save_candidate(store, candidate, _snapshot_prefix(candidate))
+            second = _save_candidate(store, candidate, _snapshot_prefix(candidate))
+            self.assertEqual(first, second)
+            self.assertEqual((Path(raw) / first[0]["path"]).read_bytes(), b"VALUE = 1\n")
+
     def test_empty_and_one_line_reads_are_exact(self):
         candidate = Candidate.create({"empty.py": b"", "one.py": b"x = 1\n"})
         state = SessionState(candidate)

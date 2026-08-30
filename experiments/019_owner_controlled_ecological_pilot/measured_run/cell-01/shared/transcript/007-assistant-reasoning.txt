@@ -1,0 +1,28 @@
+Let me analyze the current state. I've already made one patch to `artifact_units.py` (fixing the `exact_text_for_unit` function's slice from `max(unit.start_line - 1, unit.end_line - 1)` to `unit.end_line`). 
+
+Now I need to fix the second regression: `ReopenReceipt.truncated` is true only when the exact text is strictly longer than `max_chars`; equality is complete.
+
+Looking at the current code in `reopen.py`:
+```python
+truncated = len(exact_text) >= max_chars
+materialized = exact_text[:max_chars] if truncated else exact_text
+```
+
+The bug is that `>=` should be `>`. When `len(exact_text) == max_chars`, the text is exactly at the limit and should NOT be considered truncated (it's complete). The condition should be `len(exact_text) > max_chars`.
+
+Also, when truncated, `exact_text[:max_chars]` would cut off the last character. If the text is strictly longer than max_chars, then `exact_text[:max_chars]` gives exactly max_chars characters, which is correct truncation behavior.
+
+Wait, let me reconsider. If `len(exact_text) > max_chars`, then `exact_text[:max_chars]` gives the first max_chars characters - that's correct truncation.
+
+If `len(exact_text) == max_chars`, it's NOT truncated, so we use the full text (which is exactly max_chars characters). That's correct.
+
+So the fix is: change `>=` to `>` in the truncation check.
+
+Let me also verify the first fix I already made was correct. The original code was:
+```python
+return "\n".join(lines[unit.start_line - 1 : max(unit.start_line - 1, unit.end_line - 1)])
+```
+
+The issue: `end_line` is inclusive, so to get lines from `start_line` to `end_line` (inclusive), we need indices `start_line - 1` to `end_line` (exclusive end in Python slice). The original used `max(unit.start_line - 1, unit.end_line - 1)` which would be off-by-one (excluding the last line). My fix changed it to `unit.end_line` which is correct for an inclusive end.
+
+Now I need to patch `reopen.py`. The current candidate is `f1cb476bed

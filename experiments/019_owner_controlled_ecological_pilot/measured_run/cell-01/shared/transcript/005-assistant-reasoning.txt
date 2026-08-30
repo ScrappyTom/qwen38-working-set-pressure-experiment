@@ -1,0 +1,30 @@
+Let me analyze the task. I need to repair two regressions in the exact-reopen pipeline:
+
+1. `ArtifactUnit.start_line` and `end_line` are inclusive, so exact materialization must include every declared source line.
+2. `ReopenReceipt.truncated` is true only when the exact text is strictly longer than `max_chars`; equality is complete.
+
+Let me look at the current code:
+
+**In `artifact_units.py`, the `exact_text_for_unit` function:**
+```python
+def exact_text_for_unit(artifact: Artifact, unit: ArtifactUnit) -> str:
+    if unit.inline_text is not None:
+        return unit.inline_text
+    lines = artifact.text.splitlines()
+    return "\n".join(lines[unit.start_line - 1 : max(unit.start_line - 1, unit.end_line - 1)])
+```
+
+The issue here: `end_line` is inclusive, so to get line `end_line`, we need the slice to go up to index `end_line` (0-based), which means `lines[start-1:end]`. But the current code uses `max(unit.start_line - 1, unit.end_line - 1)` as the end of the slice. 
+
+If `start_line=1` and `end_line=5`, we want lines at indices 0,1,2,3,4 (lines 1-5). The slice should be `lines[0:5]`. The current code gives `lines[max(0, 4):max(0, 4)]` = `lines[4:4]` = empty! Wait no, let me re-read.
+
+Actually wait: `lines[unit.start_line - 1 : max(unit.start_line - 1, unit.end_line - 1)]`
+
+If start_line=1, end_line=5:
+- start index: 0
+- end index: max(0, 4) = 4
+- slice: lines[0:4] which gives indices 0,1,2,3 → lines 1-4, missing line 5!
+
+The correct slice for inclusive end_line should be `lines[start_line-1:end_line]` because Python slices are exclusive at the end. So for start=1, end=5 (inclusive), we want indices 0 through 4, which is `lines[0:5]`.
+
+So the fix is: `lines

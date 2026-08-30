@@ -118,7 +118,18 @@ class PrefixOutcome:
 def _save_candidate(store: ArtifactStore, candidate: Candidate, prefix: str) -> list[dict[str, Any]]:
     artifacts: list[dict[str, Any]] = []
     for path, data in candidate.files:
-        artifacts.append(store.put(f"{prefix}/{path}", data))
+        relative = f"{prefix}/{path}"
+        target = store.root / Path(*relative.split("/"))
+        if target.exists():
+            # Candidate snapshots are content-addressed. Returning to a prior
+            # exact candidate is a valid state transition, so an already
+            # custodied identical snapshot is reusable. A byte mismatch at
+            # the same address remains an integrity failure.
+            if not target.is_file() or target.read_bytes() != data:
+                raise FileExistsError(f"candidate snapshot identity collision: {relative}")
+            artifacts.append({"path": relative, "size_bytes": len(data), "sha256": sha256_bytes(data)})
+        else:
+            artifacts.append(store.put(relative, data))
     return artifacts
 
 

@@ -52,3 +52,11 @@ path.
 
 Every saved prompt, private reasoning field, action, and result must be read
 directly before behavior is diagnosed.
+
+## Historical execution status
+
+The authorization was consumed by one infrastructure-stopped run. It ended
+after 13 saved completions, before any R50/X25 branch, and is unscorable as the
+specified comparison. The specification remains the prospective contract; it
+must not be read as a claim that all eight branches executed. See
+`APPARATUS_FINDING.md` and `RESULTS.md`.

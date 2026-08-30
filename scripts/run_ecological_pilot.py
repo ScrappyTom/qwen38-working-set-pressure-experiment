@@ -219,12 +219,19 @@ def main() -> None:
         )
         shutil.copytree(OUTPUT, EVIDENCE)
     except Exception as exc:
+        # A failure can occur after the exact endpoint response was custodied
+        # but before the enclosing cell summary updates aggregate counters.
+        # Count immutable call artifacts so the stop receipt reflects reality.
+        observed_prepared = len(list(OUTPUT.rglob("*-endpoint-request.json")))
+        observed_completed = len(list(OUTPUT.rglob("*-endpoint-response.json")))
         receipt.update(
             {
                 "status": "infrastructure_or_integrity_stopped",
                 "stopped_at_utc": utc_now(),
                 "error_type": type(exc).__name__,
                 "error": str(exc),
+                "prepared_invocations": observed_prepared,
+                "http_completion_calls": observed_completed,
                 "server_shutdown_verified": server.shutdown_verified if "server" in locals() else False,
             }
         )
