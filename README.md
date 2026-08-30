@@ -1,5 +1,14 @@
 # Qwen3.8 Single-Boundary Working-Set Experiment
 
+## Current experiment
+
+Experiment 019 carries the frozen [Earned Controller V1](EARNED_CONTROLLER_V1.md)
+into two owner-controlled repairs drawn from the Addressable Information Layer.
+It mechanically corrects Experiment 018's result-of-result payload identity
+without adding caching or semantic routing: each explicit access is a new
+event, but all accesses retain one canonical exact payload source. The fresh
+bank and exact executable package are offline-qualified.
+
 ## Current result
 
 Experiment 018 is complete. In all four fresh large-world trajectories, the

@@ -87,3 +87,14 @@ memory, ranking, relationships, summaries, suppression, or an automatic
 successor. Any future implementation may mechanically preserve a canonical
 source handle across exact reopen operations, but that change requires its own
 qualification before model exposure.
+
+Earned Controller V1 now freezes the supported architecture and explicitly
+excludes unearned semantic features. Experiment 019 is its owner-controlled
+ecological pilot. The exact bank/package/closure are offline-qualified and the
+owner authorization permits only the eight frozen R50/X25 branches on the two
+fresh cases and seeds, one attempt each, with no retry, repair, rescue, or
+automatic successor. Canonical payload identity is provenance only: every
+reopen must still be selected by Qwen, every access receives a new ordered
+event, and the resident readable event/observation signal—not the address
+alone—must support selection. Directly inspect every saved prompt, reasoning
+field, action, and result before any Experiment 019 interpretation.
