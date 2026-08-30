@@ -332,3 +332,29 @@ The closure/stale-check paths generally acted from compact resident progress
 without reopening bulky action payloads. The promoted rule is therefore:
 handles are addresses, not metadata signal. See
 `experiments/017_signal_bearing_event_frame_v2/RESULTS.md` and its direct audit.
+
+Experiment 018 then demonstrated the first large-world capability crossover:
+all four fully resident R50 paths became physically unable to continue, while
+X25 continued all four and completed both candidate-bound observation tasks.
+The source pair remained mixed because of ambiguous snapshot semantics and
+tight correction headroom. See
+`experiments/018_large_world_event_frame_v2/RESULTS.md`.
+
+Experiment 019 was the first owner-controlled ecological pilot. Its sole run
+stopped after 13 saved completions on a host snapshot-custody defect, before any
+R50/X25 branch or observation case. One source path was hidden-correct but
+completed before pressure, so the primary is unscorable and was not rerun. The
+host now rejects no-op patches and handles byte-identical content-addressed
+snapshots idempotently. See
+`experiments/019_owner_controlled_ecological_pilot/RESULTS.md`.
+
+Experiment 020 is the fresh sibling preparation. Its two real owner-controlled
+audits require exact full inspection of 11 and 10 source files before mutation.
+Actual-tool, exact-tokenizer ideal paths cross 25k after 9 and 11 calls, then
+reach the exact donor successor, pass checks, and submit with 7–9 actions left.
+Minimum admitted total headroom is 1,353 tokens for X25 and 1,917 tokens for
+R50. The bank, initial requests, package, and executable closure are sealed
+offline with zero model/GPU activity. A separate exact live authorization is
+still required. See
+`experiments/020_owner_controlled_ecological_pilot_v2/SPEC.md` and
+`PREPARATION_FINDING.md`.
