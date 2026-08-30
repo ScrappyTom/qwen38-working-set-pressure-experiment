@@ -2,23 +2,28 @@
 
 ## Current result
 
-Experiment 017 qualified the exact V2 signal-bearing event frame. It keeps
-readable action targets, acceptance/status, ranges, candidate/file/check
-bindings, and the exact payload field classes resident while moving bulky
-`old/new` and result bodies behind exact handles. Sixteen worst-case events,
-including one newly resident maximum event, fit the X25 envelope with 6,961
-tokens of margin. All six exposed development branches were hidden-correct,
-checked, and submitted; both historical-payload branches used the resident
-signal to select and reopen the exact absent marker.
+Experiment 018 is complete. In all four fresh large-world trajectories, the
+fully resident R50 event plane reached the physical 50,176-token boundary
+before completing the task. X25 externalized only old exact payload bodies,
+continued every trajectory inside a 25,000-token active envelope, and completed
+both candidate-bound observation tasks with hidden-correct checked submissions.
+It did not complete either evolving-source task.
 
-Experiment 018 is now frozen and qualified offline. It carries V2 unchanged
-into two fresh large-world geometries and compares one fully resident R50 event
-plane against mechanically externalized X25 payloads. The shared live prefix
-remains byte-identical until the tokenizer guard identifies the first authentic
-25k-only boundary. Scripted qualification produced hidden-correct X25 closure
-in all four cells while the fully resident R50 reference reached physical
-capacity. No fresh-bank actor exposure has occurred yet. See
-`experiments/018_large_world_event_frame_v2/SPEC.md`.
+The direct audit establishes the intended mechanism: the current marker was
+absent at the X25 fork; readable observation identity and candidate binding led
+Qwen to exact custody; Qwen reacquired `HARBOR-K9`, used it in both patches,
+checked, and submitted under both seeds. The source failures instead combined
+a replicated dynamic-versus-snapshot interpretation error, extremely tight
+closure headroom, and one duplicate completed-page read despite resident
+completion signal.
+
+The result is a fresh end-to-end existence proof, not a reliability result.
+It also exposes one earned interface cleanup: exact reopen operations should
+retain one canonical payload address rather than creating result-of-result
+handle chains. No semantic summary, relationship graph, ranking, embedding,
+host-selected relevance, or duplicate suppression is earned. See
+`experiments/018_large_world_event_frame_v2/RESULTS.md`,
+`DIRECT_TRANSCRIPT_AUDIT.md`, and `APPARATUS_FINDING.md`.
 
 ## Prior result
 

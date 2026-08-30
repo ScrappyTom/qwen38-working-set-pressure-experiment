@@ -75,3 +75,15 @@ authentic fork. Do not add a parallel chronology, receipt ledger, suppression,
 cache, summary, ranking, or semantic host selection. Every model input,
 separate private-reasoning output, final action, and exact result must be read
 directly before interpreting quality or mechanism.
+
+Experiment 018 is now complete and sealed. R50 physically exhausted all four
+fresh trajectories; X25 continued all four and completed the two observation
+trajectories with hidden-correct checked submissions. Direct review found no
+invalidating host defect. It did find that reopening an exact body can create a
+new result handle for the same payload, which encouraged result-of-result
+reopen chains, and that one actor reread a ledger page despite exact completion
+signal being present. Preserve the evidence as observed. Do not add semantic
+memory, ranking, relationships, summaries, suppression, or an automatic
+successor. Any future implementation may mechanically preserve a canonical
+source handle across exact reopen operations, but that change requires its own
+qualification before model exposure.
