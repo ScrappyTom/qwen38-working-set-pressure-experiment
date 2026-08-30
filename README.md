@@ -1,4 +1,13 @@
-# Qwen3.8 Single-Boundary Working-Set Experiment
+# Qwen3.8 Bounded Working-Set Experiment
+
+## Project pause checkpoint
+
+The project is intentionally paused after the complete Experiment 020
+ecological result. The durable summary of what was built, what has been
+established, current limitations, and the evidence-gated direction on resume is
+[`PROJECT_CHECKPOINT_2026-08-30.md`](PROJECT_CHECKPOINT_2026-08-30.md).
+
+There is no active live-run authorization or automatic successor experiment.
 
 ## Current experiment
 

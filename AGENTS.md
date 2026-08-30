@@ -6,12 +6,16 @@ diagnostics. Keep it smaller than its evidence donors.
 
 Read in order:
 
-1. the completed Experiment 015 `RESULTS.md`, `DIRECT_TRANSCRIPT_AUDIT.md`,
+1. `PROJECT_CHECKPOINT_2026-08-30.md`;
+2. the completed Experiment 020 `RESULTS.md`, `DIRECT_TRANSCRIPT_AUDIT.md`,
+   `HOST_PATH_AUDIT.md`, and `APPARATUS_FINDING.md`;
+3. `EARNED_CONTROLLER_V1.md`;
+4. the completed Experiment 015 `RESULTS.md`, `DIRECT_TRANSCRIPT_AUDIT.md`,
    `APPARATUS_FINDING.md`, and frozen execution artifacts;
-2. the completed Experiment 014 result and frozen execution artifacts;
-3. `docs/ANALYSIS_GOVERNANCE.md`;
-4. prior experiment results and direct transcript audits;
-5. `README.md`.
+5. the completed Experiment 014 result and frozen execution artifacts;
+6. `docs/ANALYSIS_GOVERNANCE.md`;
+7. prior experiment results and direct transcript audits;
+8. `README.md`.
 
 Authority order is direct owner instruction, the active `SPEC.md`, the
 implementation plan, analysis governance, then explanatory documents.
@@ -122,3 +126,10 @@ chose conservative exact reacquisition. Do not add summaries, ranking,
 relationships, suppression, caching, more reasoning, or an automatic
 successor. Any future ecological use must preserve direct transcript and host
 path audit before interpretation.
+
+The project is paused at `PROJECT_CHECKPOINT_2026-08-30.md`. No live run,
+retry, repair, supplement, or successor is currently authorized. Resume from
+the checkpoint and exact Experiment 020 evidence, not from an inferred next
+phase. The next intended direction is broader owner-controlled ecological use
+of the frozen controller; any new representation or policy mechanism must be
+earned by a repeated transcript-supported failure.
