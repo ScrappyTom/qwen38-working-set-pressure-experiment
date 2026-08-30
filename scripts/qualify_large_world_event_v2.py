@@ -137,8 +137,13 @@ def main() -> None:
                 rows.append({**summary, "hidden_passed": grade["passed"]})
     if len(rows) != 8 or not all(row["hidden_passed"] for row in rows if row["condition"] == "X25"):
         raise RuntimeError("scripted qualification rows differ")
-    atomic_write(EXPERIMENT / "OFFLINE_QUALIFICATION.json", canonical_json_bytes({
-        "schema_version": "experiment-018-offline-qualification-v1", "qualified_at_utc": utc_now(),
+    qualification_path = EXPERIMENT / "OFFLINE_QUALIFICATION.json"
+    qualified_at = (
+        load_json_strict(qualification_path.read_bytes())["qualified_at_utc"]
+        if qualification_path.exists() else utc_now()
+    )
+    atomic_write(qualification_path, canonical_json_bytes({
+        "schema_version": "experiment-018-offline-qualification-v1", "qualified_at_utc": qualified_at,
         "bank": bank, "package": package, "closure": closure, "authorization": authorization,
         "scripted_rows": rows, "authentic_prepressure_fork": True,
         "prepressure_condition_bytes_identical": True, "single_event_plane_no_history_duplication": True,
