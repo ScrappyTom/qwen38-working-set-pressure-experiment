@@ -6,7 +6,7 @@ diagnostics. Keep it smaller than its evidence donors.
 
 Read in order:
 
-1. the completed Experiment 013 `SPEC.md`, `RESULTS.md`, and direct audit;
+1. the active Experiment 014 `SPEC.md` and frozen execution artifacts;
 2. its frozen authorization, schedule, and execution package;
 3. `docs/ANALYSIS_GOVERNANCE.md`;
 4. prior experiment results and direct transcript audits;
@@ -38,7 +38,7 @@ Non-negotiable rules:
   it directly, never insert it into later history unless prospectively frozen,
   and never treat a stated rationale as proof of causal use.
 
-Experiment 013 is complete and no automatic successor is authorized. Its
-receipt concept is earned, but the exact v1 split between a frozen numbered
-receipt prefix and unsequenced post-reset history is not promoted as a reliable
-closure interface.
+Experiment 014 is the authorized narrow successor. It tests only whether
+post-reset actions need the same monotonic receipt sequence and whether exact
+candidate bindings prevent stale-check closure. No automatic successor is
+authorized.

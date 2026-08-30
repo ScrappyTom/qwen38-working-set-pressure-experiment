@@ -2,6 +2,15 @@
 
 ## Active study
 
+Experiment 014 is the narrow fresh-bank follow-up. It compares Experiment 013's
+split progress surface with one monotonically sequenced exact receipt plane.
+One case tests check-to-submit closure; the other tests whether a passing check
+bound to candidate V1 is correctly treated as stale after a patch creates V2.
+No other controller feature changes. See
+`experiments/014_unified_active_phase_receipts/SPEC.md`.
+
+## Current result
+
 Experiment 013 is complete. It compared the old 25k latest-result reset with an
 exact compact active-phase receipt ledger and on-demand exact result reopening.
 No semantic summary, ranking, relationship graph, or read suppression was
