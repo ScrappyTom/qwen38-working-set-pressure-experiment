@@ -1,17 +1,33 @@
 # Qwen3.8 Single-Boundary Working-Set Experiment
 
-## Active study
-
-Experiment 014 is the narrow fresh-bank follow-up. It compares Experiment 013's
-split progress surface with one monotonically sequenced exact receipt plane.
-One case tests check-to-submit closure; the other tests whether a passing check
-bound to candidate V1 is correctly treated as stale after a patch creates V2.
-No other controller feature changes. See
-`experiments/014_unified_active_phase_receipts/SPEC.md`.
-
 ## Current result
 
-Experiment 013 is complete. It compared the old 25k latest-result reset with an
+Experiment 014 is complete, sealed, directly audited, and formally scorable.
+It compared Experiment 013's split progress surface with one monotonically
+sequenced exact active-phase receipt plane.
+
+All eight final candidates passed hidden grading. Unified receipts submitted
+4/4 branches versus 3/4 for split receipts. In the divergent closure pair, Qwen
+saw eleven passing checks under the split surface but kept rerunning them
+because the numbered ledger stopped before the checks. In the unified branch,
+the first passing check became receipt 6 and Qwen submitted immediately.
+
+The stale-check family passed its safety gate in all four branches: every
+submission followed a passing check bound to the repaired current candidate,
+not merely an earlier predecessor check. Unified receipts reduced branch calls
+by 21.7% and prompt tokens by 25.3%, although most of that aggregate advantage
+comes from avoiding the one repeated-check loop.
+
+The one-monotonic-receipt rule is promoted into the minimal controller. Exact
+large result bodies remain demand-loaded and candidate/environment bindings
+remain authoritative. No suppression, summary, ranking, relationship graph,
+embedding, or host-selected relevance is earned. See
+`experiments/014_unified_active_phase_receipts/RESULTS.md` and
+`DIRECT_TRANSCRIPT_AUDIT.md`.
+
+## Prior result
+
+Experiment 013 compared the old 25k latest-result reset with an
 exact compact active-phase receipt ledger and on-demand exact result reopening.
 No semantic summary, ranking, relationship graph, or read suppression was
 added.
@@ -29,7 +45,7 @@ therefore promoted, while this split ledger-plus-history presentation is not.
 See `experiments/013_active_phase_receipts/RESULTS.md` and
 `DIRECT_TRANSCRIPT_AUDIT.md`.
 
-## Prior result
+## Earlier result
 
 Experiment 012 completed the first 160-file, approximately 2.2 MiB recurrent
 stress study. The result is valid but negative for the controller as frozen.

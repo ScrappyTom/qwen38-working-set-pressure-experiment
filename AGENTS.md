@@ -6,7 +6,8 @@ diagnostics. Keep it smaller than its evidence donors.
 
 Read in order:
 
-1. the active Experiment 014 `SPEC.md` and frozen execution artifacts;
+1. the completed Experiment 014 `RESULTS.md`, `DIRECT_TRANSCRIPT_AUDIT.md`,
+   `APPARATUS_FINDING.md`, and frozen execution artifacts;
 2. its frozen authorization, schedule, and execution package;
 3. `docs/ANALYSIS_GOVERNANCE.md`;
 4. prior experiment results and direct transcript audits;
@@ -38,7 +39,7 @@ Non-negotiable rules:
   it directly, never insert it into later history unless prospectively frozen,
   and never treat a stated rationale as proof of causal use.
 
-Experiment 014 is the authorized narrow successor. It tests only whether
-post-reset actions need the same monotonic receipt sequence and whether exact
-candidate bindings prevent stale-check closure. No automatic successor is
-authorized.
+Experiment 014 is complete. It promotes one monotonic exact active-phase
+receipt sequence while retaining demand-loaded result bodies and exact validity
+bindings. No suppression, cache substitution, summary, ranking, relationship,
+embedding, semantic routing, or automatic successor is authorized.
