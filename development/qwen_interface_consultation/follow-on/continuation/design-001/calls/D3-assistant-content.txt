@@ -1,0 +1,253 @@
+My preferred presentation is to keep the current canonical state as the source of truth, but add a small **projection** near the top that groups the facts actually needed to choose and validate the next action. It should not change operations, guards, budgets, recovery, or the distinction between retrieval and execution.
+
+In this particular state, my **preference/inference**, not a host-provided recommendation, is that the most decision-relevant next action is likely `patch` on `service.py`, because the current candidate ID, current file hash, and exact source content are already resident. I am not emitting that action here.
+
+---
+
+## 1. Concrete proposed state fragment
+
+This is illustrative. It is a presentation fragment, not a final-action payload and not a new canonical data store.
+
+```json
+{
+  "operator_view": {
+    "kind": "projection",
+    "derived_from": ["state", "response_format", "implementation_facts"],
+    "stage": "continuation",
+    "calls_remaining": 23,
+    "one_action_per_invocation": true,
+    "retrieval_is_not_execution": true,
+    "current_candidate_id": "f698835a3877ac7f0e7b37aac6d472a35e1b481894d52eee51463eb253308377",
+    "target_file": {
+      "path": "service.py",
+      "file_sha256": "5d080563b57287276f589c2b2714ef499269efe7405a288b3c1474f5a92bf271",
+      "size_bytes": 26,
+      "read_window": {
+        "sequence": 1,
+        "event_handle": "EVT-0001",
+        "result_handle": "RES-0001",
+        "requested_start_line": 1,
+        "returned_start_line": 1,
+        "returned_end_line": 2,
+        "next_start_line": null,
+        "eof": true,
+        "content": "def value():\n    return 1\n",
+        "content_bytes": 26,
+        "result_body_sha256": "484a6b285468cd8dbf69ed2f8197a5c9087a322a83d6512a6bf4a4b63808708c",
+        "result_body_size_bytes": 42
+      },
+      "coverage_note": "The window starts at line 1 and reaches EOF. Tree/search/p0_page do not count as source reads."
+    },
+    "patch_guard_values_visible": {
+      "path": "service.py",
+      "expected_candidate_id": "f698835a3877ac7f0e7b37aac6d472a35e1b481894d52eee51463eb253308377",
+      "expected_file_sha256": "5d080563b57287276f589c2b2714ef499269efe7405a288b3c1474f5a92bf271",
+      "old_fragment_available_from": "RES-0001",
+      "new_fragment_present": false,
+      "dry_run_performed": false
+    },
+    "available_actions": [
+      "p0_page",
+      "tree",
+      "search",
+      "read",
+      "patch",
+      "check",
+      "reopen_observation",
+      "reopen_result",
+      "reopen_event",
+      "submit"
+    ],
+    "available_check_ids": ["public"],
+    "reopenable_handles": {
+      "result": ["RES-0001"],
+      "event": ["EVT-0001"],
+      "observation": []
+    }
+  }
+}
+```
+
+### Why this fragment helps
+
+It puts together the facts that determine whether a mutation can be attempted:
+
+- the current candidate ID,
+- the current file hash,
+- the exact source window,
+- whether the source window reaches EOF,
+- the handles needed to recover exact saved payloads,
+- the values needed for patch guards,
+- the current stage and budget,
+- and the distinction between retrieval and new execution.
+
+It does **not** assert that a patch will succeed. It only says that the guard values are visible and that an old fragment is available from the resident result.
+
+---
+
+## 2. Proposed visible tool description
+
+The full argument grammar should remain visible to the operating model. It should not be hidden as “internal audit” merely because a server-side `response_format` also enforces it.
+
+A compact visible action reference should say at least this:
+
+### Common rules
+
+- One action may be submitted per invocation.
+- Extra keys are rejected.
+- Paths are canonical and candidate-relative.
+- For `tree`, `search`, and `p0_page`, `path: "."` means repository root.
+- Reopen operations take a handle.
+- Reopen operations retrieve saved exact payloads.
+- Reopen operations do **not** rerun checks, replay edits, mutate source, extend current-source read coverage, or make historical evidence current.
+- Grammar limits and host byte limits both apply.
+
+### Action meanings
+
+| Action | Required arguments | Binding meaning / accepted form | Effect and distinction |
+|---|---|---|---|
+| `p0_page` | `path`, `offset` | `path` is candidate-relative or root. `offset` is a zero-based row offset. | Returns task-independent structure/outline rows. Does not return exact source. Does not count as source-read coverage. |
+| `tree` | `path`, `offset`, `limit` | `path` is candidate-relative or root. `limit` is 1–16. `offset` is zero-based. | Returns a shallow deterministic directory page. Read-only. No source-read coverage. |
+| `search` | `path`, `query`, `offset`, `limit` | `query` is literal and case-folded; length limited by grammar and host UTF-8 limit. `limit` is 1–16. `offset` is zero-based. | Returns current-source matches. Read-only. Does not establish whole-file read coverage. |
+| `read` | `path`, `start_line` | `start_line` is one-based. | Returns the largest exact current whole-line page that fits the result bound. `next_start_line` continues. A page reaching EOF does not by itself prove that all earlier lines were read. |
+| `patch` | `path`, `old`, `new`, `expected_candidate_id`, `expected_file_sha256` | `old` and `new` are strings within grammar/host limits. `old` must occur exactly once. Unchanged bytes are rejected. Candidate/file hashes guard the existing candidate and target file. | Creates a new candidate and clears current check flags. Does **not** inspect read history or P0 completeness. Does **not** retrieve a saved payload. |
+| `check` | `check_id`, `expected_candidate_id` | `check_id` must be one of the currently available check IDs; here only `public`. Candidate ID binds the check to the expected candidate. | Executes a new named check on that candidate. Does **not** retrieve a saved check result. |
+| `reopen_result` | `handle` | Handle must be an available `RES-` result handle. | Returns the saved exact operation result JSON with original bindings. Creates a new ordered access event. No new operation is executed. |
+| `reopen_event` | `handle` | Handle must be an available `EVT-` event handle. | Returns the saved exact event action payload, including old/new fields where applicable. No re-execution. |
+| `reopen_observation` | `handle` | Handle must be an available `OBS-` observation handle. | Returns a listed saved observation. No re-execution. |
+| `submit` | `expected_candidate_id` | Candidate ID binds the terminal submission to the current candidate. | Continuation-only terminal action. Reports the current check flag but does not enforce a passing check. |
+
+This reference should be visible because the model must choose among actions and fill required fields correctly. A server-side schema can reject invalid actions, but it cannot substitute for the model’s need to understand what the action means and what it will do.
+
+---
+
+## 3. How the proposed fragment maps to existing facts and operations
+
+| Proposed part | Existing fact / operation it represents | Why show it |
+|---|---|---|
+| `stage` | Current `stage: "continuation"` | Determines whether continuation-only actions such as `submit` are relevant. |
+| `calls_remaining` | `resource_state.calls_remaining` | Shows action allowance without confusing it with physical context space. |
+| `one_action_per_invocation` | Implementation rule | Prevents the model from expecting multi-action submissions. |
+| `retrieval_is_not_execution` | Implementation distinction between `reopen_*` and `read`/`patch`/`check`/`submit` | Preserves the critical difference between retrieving saved exact bytes and executing a new operation. |
+| `current_candidate_id` | `state.candidate_id`, P0 candidate ID, and read result candidate binding | Needed for `patch`, `check`, and `submit` guards. |
+| `target_file.path` | Current file path from P0/read result | Needed for `read`, `patch`, and path-bound reasoning. |
+| `target_file.file_sha256` | Read result `file_sha256`; file bytes hash | Needed for patch guards. |
+| `target_file.size_bytes` | P0 entry `total_bytes` for `service.py`; file bytes size, not payload JSON size | Helps distinguish file bytes from result-body JSON size. |
+| `read_window.content` | Resident `result_body.fields.content` from `EVT-0001`/`RES-0001` | Provides the exact current source needed to form an `old` fragment. |
+| `read_window.eof`, `next_start_line`, `returned_end_line` | Read result paging fields | Shows whether the returned page reaches EOF and whether continuation is needed. |
+| `coverage_note` | Derived from `start_line: 1`, returned end line, EOF, and the rule that tree/search/P0 are not source reads | Helps the actor satisfy the instruction to read current source before mutation. |
+| `result_body_sha256`, `result_body_size_bytes` | Resident result-body canonical JSON identity/size | Preserves exact payload custody without conflating it with file bytes. |
+| `patch_guard_values_visible` | Current candidate ID, current file hash, and resident source content | Shows that the values required by the patch guard are currently visible. It does not validate the patch. |
+| `old_fragment_available_from` | Resident result handle `RES-0001` | Shows where the exact old source comes from and how it can be reopened if needed. |
+| `new_fragment_present: false` | No current state field supplies the intended replacement fragment | Makes clear that the model still must choose/supply `new`. |
+| `dry_run_performed: false` | No dry-run behavior is currently implemented | Prevents the view from implying that the patch has been validated. |
+| `available_actions` | Current state `available_actions` | Shows which actions are permitted at this stage. |
+| `available_check_ids` | Current state `available_check_ids` | Restricts `check` to the currently usable check ID. |
+| `reopenable_handles` | Current event/result/observation handles | Preserves exact recovery while keeping the handles visible. |
+
+---
+
+## 4. What to show together
+
+I would show these together in the primary decision view:
+
+- current stage and remaining action budget,
+- one-action-per-invocation rule,
+- current candidate ID,
+- target file path, file hash, and file byte size,
+- exact resident source window,
+- read continuation/EOF information,
+- patch guard values,
+- available actions,
+- available check IDs,
+- reopenable handles,
+- and the retrieval-versus-execution distinction.
+
+This grouping supports the main decision: “Can I construct a valid new operation from the current candidate, or do I need another read/retrieval?”
+
+In this state, the grouped facts show that a `patch` could be constructed from visible data, but they do not say that the patch is semantically correct or accepted.
+
+---
+
+## 5. What to leave available on request
+
+I would keep these available but not force them into the primary view:
+
+- full ordered event list,
+- full event action payloads,
+- full saved result JSON,
+- exact `exact_result_utf8` bytes from `reopen_result`,
+- exact action payload JSON from `reopen_event`,
+- observation entries and observation reopen handles,
+- P0 directory/file-outline pages,
+- `tree` pages,
+- `search` pages,
+- continuation offsets for large pages,
+- externalized payload records,
+- canonical payload hashes and sizes for custody auditing,
+- and detailed event-frame verification counters.
+
+These are important for recovery and audit, but they are not all needed for choosing the next action.
+
+---
+
+## 6. What should remain internal audit detail
+
+I would keep these out of the primary decision view, unless debugging the interface itself:
+
+- `event_frame_verification`,
+- `canonical_payload_reuse_events`,
+- `externalized_payload_through_sequence`,
+- `external_payload_records`,
+- `resident_payload_records`,
+- `host_sufficiency_judgment`,
+- `semantic_ranking`,
+- most sub-schema version counters,
+- and detailed canonical-pair identity hashes/sizes unless exact custody verification is the task.
+
+However, I would not hide the version information needed to understand the state contract. A top-level `schema_version` and `stage` are useful version guards. The more granular verification fields are mostly audit.
+
+Also, the “ideal correction-cycle” sentence should not be displayed as an operational guarantee. It is a design illustration, not a required action order or capacity guarantee.
+
+---
+
+## 7. What would require new information or behavior
+
+Some possible presentation improvements would not be presentation-only:
+
+1. **A trustworthy “file fully read” flag**  
+   The current state allows inference in this case because the read starts at line 1 and reaches EOF. But a general, authoritative flag such as `file_read_complete` would require host-side derived coverage across read events. The current state does not directly provide that as a single field.
+
+2. **Current check status**  
+   The state does not currently expose the current check pass/fail state. Showing “current check: pass/fail” would require new state or retrieval of a saved check result.
+
+3. **Patch dry-run or pre-execution validation**  
+   Showing “old occurs exactly once” or “this patch would be accepted” before executing `patch` would require a new dry-run operation or internal validation result. The current implementation only reveals those facts when the patch is executed or rejected.
+
+4. **Recommended next action**  
+   A host-provided `recommended_action` would be a new semantic judgment. The current state has `semantic_ranking: false` and `host_sufficiency_judgment: false`, so I would not present a recommendation as if it were a host fact.
+
+5. **Selected `old` fragment preview**  
+   The projection can show that an old fragment is available from `RES-0001`, but choosing a particular fragment as the intended `old` argument would be a model/editor selection, not merely presentation.
+
+6. **Physical context remaining**  
+   `calls_remaining` is action allowance. A physical context-space metric would be separate and is not currently supplied in the relevant facts.
+
+---
+
+## 8. Uncertainties and caveats
+
+- **Uncertainty:** How visible the `response_format` grammar is to the operating model.  
+  If the endpoint already makes the full schema visible in the model context, the visible action reference can be more compact. If it is only an enforcement constraint and not displayed as instruction, then the model-facing prompt should explicitly show required keys, accepted forms, and effects.
+
+- **Uncertainty:** Whether `content_bytes: 26` should be host-computed or model-inferred.  
+  The file byte size is supported by the P0 entry `total_bytes: 26` and the displayed source. The `result_body_size_bytes: 42` is a different thing: it describes the canonical JSON of the extracted result fields, not the file bytes. If this field is shown as authoritative, it should be host-derived. If it is only a projection, it should be labeled as derived.
+
+- **Uncertainty:** Whether the `coverage_note` is sufficient as a general rule.  
+  In this exact state, it is strong because the read starts at line 1 and reaches EOF. For arbitrary files, a note like this would need to be carefully derived from all relevant read windows, not from one page’s EOF flag alone.
+
+- **Caveat:** The proposed `operator_view` is a projection.  
+  It should never override the canonical state. If the projection and canonical state disagree, the canonical state and handles must remain authoritative.
+
+- **Caveat:** The current source content shown in the fragment is resident.  
+   If that resident payload later leaves the working context, the view should fall back to showing `RES-0001` and the relevant metadata, and the model should use `reopen_result` to retrieve the exact saved payload.

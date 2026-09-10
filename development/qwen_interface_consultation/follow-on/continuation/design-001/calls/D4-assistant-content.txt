@@ -1,0 +1,520 @@
+I would retain the same interface and operations. The change I prefer is **presentation**, not behavior: make the model-visible prompt contain three tightly coupled things:
+
+1. **A model-visible action contract** mirroring the accepted final-action grammar and stage restrictions.  
+2. **Current candidate/source bindings**, including the exact file/candidate hashes and the current read page.  
+3. **An ordered exact-recovery ledger**, showing what happened, what is resident, what is external, and which handle retrieves what.
+
+I would not add host advice, semantic ranking, or a “next action recommendation.” The model should choose the next action from the visible contract, current bindings, obligations, and exact recovery access.
+
+---
+
+## Preference / Fact / Uncertainty
+
+### Preferences
+
+- Show the full action argument requirements in the prompt, not only in `response_format`.
+- Show current `candidate_id`, current `file_sha256`, current file size, current read page, and coverage facts together.
+- Show the event ledger as ordered occurrence, with handles and residency, rather than as raw nested JSON.
+- Keep “retrieval” and “execution” visually and semantically separate.
+- Keep canonical SHA/size and verification metadata available as audit details unless they are needed for a visible guard.
+
+### Implementation facts relied on
+
+- The accepted final-action grammar is the actual action grammar.
+- Only one action may be emitted per invocation.
+- `patch` guards are candidate/file guards; it does not inspect read history or P0 completeness.
+- `read` returns an exact current whole-line page and exact current file hash; `complete` means that page reaches EOF, not whole-file coverage.
+- `check` executes a stage-bound check on the expected candidate.
+- `submit` binds the current candidate and reports the current check flag but does not enforce a passing check.
+- `reopen_event`, `reopen_result`, and `reopen_observation` return saved payloads and create ordered access events; they do not rerun checks, replay edits, mutate source, or extend current-source read coverage.
+- `available_actions` and `available_check_ids` restrict the broader grammar.
+
+### Uncertainty / not currently resident
+
+- The current `public` check status is not supplied in the state.
+- The exact `old`/`new` patch fields are external and not currently resident.
+- The exact patch `diff` result is external and not currently resident.
+- The semantic identity of the “marker string” is not determined by the state alone.
+
+---
+
+# Concrete proposed tool description
+
+This would be shown in the ordinary rendered prompt, not only as server-side `response_format`.
+
+```text
+ACTION CONTRACT
+Stage: continuation.
+One action per invocation. Extra keys are rejected.
+Paths are canonical and candidate-relative. “.” is the repository root.
+
+Available actions:
+p0_page, tree, search, read, patch, check,
+reopen_observation, reopen_result, reopen_event, submit
+
+Available check IDs:
+public
+
+General operation limits:
+- Operation result JSON bound: 22,000 bytes.
+- Host scheduling and actor instructions are separate from tool rejection rules.
+- Tree, search, and p0_page do not count as complete source reads.
+
+p0_page
+Arguments:
+- action = “p0_page”
+- path: string, 1..160 chars
+- offset: integer, 0..2,000,000
+
+Meaning:
+Task-independent readable directory/file-outline page.
+Returns structure only, never exact source.
+Does not count as a complete source read.
+
+tree
+Arguments:
+- action = “tree”
+- path: string, 1..160 chars
+- offset: integer, 0..128
+- limit: integer, 1..16
+
+Meaning:
+Shallow deterministic candidate-relative directory page.
+Does not count as a complete source read.
+
+search
+Arguments:
+- action = “search”
+- path: string, 1..160 chars
+- query: string, 1..128 chars and <=128 UTF-8 bytes
+- offset: integer, 0..2,000,000
+- limit: integer, 1..16
+
+Meaning:
+Literal case-folded current-source search.
+Returns matches with path, line number, and bounded line text.
+Does not count as a complete source read.
+
+read
+Arguments:
+- action = “read”
+- path: string, 1..160 chars
+- start_line: integer, 1..2,000,000
+
+Mode:
+Maximal bounded whole-line page. No line_count argument.
+
+Meaning:
+Returns the largest exact current whole-line page that fits the frozen result bound.
+Reports the exact current file hash.
+Page content bound: 18,000 bytes.
+complete = true means this page reaches EOF, not that all earlier lines were read.
+Whole-file coverage must account for all source lines.
+
+patch
+Arguments:
+- action = “patch”
+- path: string, 1..160 chars
+- old: string, 0..512 chars
+- new: string, 0..512 chars
+- expected_candidate_id: 64 lowercase hex chars
+- expected_file_sha256: 64 lowercase hex chars
+
+Bounds:
+- old/new: <=512 chars and <=2,000 UTF-8 bytes each.
+- Total action: <=5,000 bytes.
+- Diff: <=6,000 bytes.
+- File: <=24,000 bytes.
+- Source line: <=512 bytes.
+- Candidate: <=8,000,000 bytes across <=256 files.
+
+Guards:
+- expected_candidate_id must match the current candidate.
+- expected_file_sha256 must match the current target file.
+- old must occur exactly once in the current target file.
+- Unchanged bytes are rejected.
+
+Actor obligation, not tool guard:
+Read current source before mutation.
+The patch operation itself does not inspect read history or P0 completeness.
+
+Effect:
+Accepted patch creates a new candidate and clears current check flags.
+
+check
+Arguments:
+- action = “check”
+- check_id: enum value; current available check ID is “public”
+- expected_candidate_id: 64 lowercase hex chars
+
+Meaning:
+Executes the named available check on the expected current candidate.
+This is a new execution, not a retrieval.
+
+reopen_event
+Arguments:
+- action = “reopen_event”
+- handle: “EVT-####”
+
+Meaning:
+Returns saved old/new action fields with original bindings.
+Creates a new ordered access event retaining the same canonical source address.
+Does not mutate source, rerun an operation, validate the current candidate,
+or change current-source read coverage.
+
+reopen_result
+Arguments:
+- action = “reopen_result”
+- handle: “RES-####”
+
+Meaning:
+Returns saved exact operation result JSON with original bindings,
+including original status/version fields and the original exact body.
+Creates a new ordered access event.
+Does not rerun the original operation.
+
+reopen_observation
+Arguments:
+- action = “reopen_observation”
+- handle: “OBS-####”
+
+Meaning:
+Returns a listed saved observation.
+Continuation-only.
+Does not rerun an observation or change current state.
+
+submit
+Arguments:
+- action = “submit”
+- expected_candidate_id: 64 lowercase hex chars
+
+Meaning:
+Continuation-only terminal submission bound to the current candidate.
+Reports the current check flag.
+Does not enforce a passing check.
+
+Retrieval vs execution
+- reopen_* operations retrieve saved payloads.
+- check executes a current check.
+- patch executes a current edit.
+- submit ends the task bound to the current candidate.
+```
+
+---
+
+# Concrete proposed state fragment
+
+This is a proposed model-facing projection of the supplied state, not a new stored schema. Values are from the current state unless marked “derived.”
+
+```json
+{
+  "view": "next-action projection of supplied state",
+  "schema_version": "experiment-020-ecological-event-frame-request-v1",
+  "stage": "continuation",
+  "one_action_per_invocation": true,
+
+  "active_user_step": {
+    "id": "ECOLOGICAL-REPAIR",
+    "host_inference": false,
+    "text": "Restore the marker string that existed before the earliest recorded edit, preserving other code. Read current source completely, run check public, and submit."
+  },
+
+  "available": {
+    "actions": [
+      "p0_page",
+      "tree",
+      "search",
+      "read",
+      "patch",
+      "check",
+      "reopen_observation",
+      "reopen_result",
+      "reopen_event",
+      "submit"
+    ],
+    "check_ids": ["public"]
+  },
+
+  "current": {
+    "candidate_id": "59211fa828fe0ef0c869d525c3ae14eaa0ef3208cf21a788b37cf4837bcdddad",
+    "candidate_identity_note": "complete file inventory and content hashes",
+
+    "file": {
+      "path": "service.py",
+      "total_bytes": 112,
+      "sha256": "fa3ec0aba94c6770f9a919657c3cd1d5b7b857ca0a88809d5491fa19177ef169"
+    },
+
+    "current_read_page": {
+      "sequence": 2,
+      "requested_start_line": 7,
+      "returned_start_line": 7,
+      "returned_end_line": 8,
+      "page_reaches_eof": true,
+      "next_start_line": null,
+      "paging_mode": "maximal_bounded_page",
+      "content": "def ready():\n    return True\n",
+      "result_body_payload_bytes": 45
+    },
+
+    "coverage": {
+      "repository_complete": false,
+      "top_level_root_complete": true,
+      "derived_unread_prefix_for_current_file": "lines 1-6, because the only read page began at line 7 and reached EOF at line 8"
+    }
+  },
+
+  "ordered_ledger": [
+    {
+      "sequence": 1,
+      "action": "patch",
+      "accepted": true,
+      "sequence_meaning": "occurrence, not semantic completion",
+
+      "event_handle": "EVT-0001",
+      "result_handle": "RES-0001",
+
+      "action_payload": {
+        "present": true,
+        "resident": false,
+        "field_names": ["new", "old"],
+        "canonical_payload_bytes": 52,
+        "retrieval": "reopen_event EVT-0001"
+      },
+
+      "result_payload": {
+        "present": true,
+        "resident": false,
+        "field_names": ["diff"],
+        "canonical_payload_bytes": 186,
+        "retrieval": "reopen_result RES-0001"
+      },
+
+      "binding_effect": {
+        "previous_candidate_id": "cac1d67ce2ace099ff5e2858e75adc058a78651f0bffefd122e35c8cb2ef62c9",
+        "new_candidate_id": "59211fa828fe0ef0c869d525c3ae14eaa0ef3208cf21a788b37cf4837bcdddad",
+        "file_sha256": "fa3ec0aba94c6770f9a919657c3cd1d5b7b857ca0a88809d5491fa19177ef169",
+        "path": "service.py"
+      }
+    },
+
+    {
+      "sequence": 2,
+      "action": "read",
+      "accepted": true,
+      "sequence_meaning": "occurrence, not semantic completion",
+
+      "event_handle": "EVT-0002",
+      "result_handle": "RES-0002",
+
+      "result_payload": {
+        "present": true,
+        "resident": true,
+        "field_names": ["content"],
+        "canonical_payload_bytes": 45
+      },
+
+      "binding_effect": {
+        "candidate_id": "59211fa828fe0ef0c869d525c3ae14eaa0ef3208cf21a788b37cf4837bcdddad",
+        "file_sha256": "fa3ec0aba94c6770f9a919657c3cd1d5b7b857ca0a88809d5491fa19177ef169",
+        "path": "service.py"
+      }
+    }
+  ],
+
+  "exact_recovery_access": {
+    "reopen_event": {
+      "EVT-0001": "saved old/new action fields for sequence 1"
+    },
+    "reopen_result": {
+      "RES-0001": "saved patch result/diff for sequence 1",
+      "RES-0002": "saved read result for sequence 2"
+    },
+    "reopen_observation": "no listed observation handles"
+  },
+
+  "limits": {
+    "call_limit": 24,
+    "calls_used": 2,
+    "calls_remaining": 22,
+    "operation_result_json_bound_bytes": 22000,
+    "read_content_bound_bytes": 18000,
+    "patch_fragment_char_limit": 512,
+    "patch_fragment_byte_limit": 2000
+  },
+
+  "unknown_or_not_resident": {
+    "current_check_status": "not supplied; check public is the operation that produces current status",
+    "exact_old_new_fields": "external; retrieve via reopen_event EVT-0001",
+    "exact_diff": "external; retrieve via reopen_result RES-0001",
+    "semantic_marker": "not identified by state alone",
+    "host_sufficiency_judgment": "no host sufficiency judgment supplied"
+  }
+}
+```
+
+---
+
+# Mapping: what each part represents
+
+| Proposed part | Existing fact or operation | Why it matters for choosing the next action |
+|---|---|---|
+| `ACTION CONTRACT` block | The accepted final-action grammar, `available_actions`, `available_check_ids`, stage, and host limits | Makes required keys, accepted forms, and effects visible without relying only on server-side `response_format`. |
+| `active_user_step` | `active_user_authored_step` | Shows the user-authored obligation and that it is not host inference. |
+| `available.actions` | `available_actions` | Tells which actions are usable in this stage. |
+| `available.check_ids` | `available_check_ids` | Restricts `check` to `public` even though the broader grammar may include other check IDs. |
+| `current.candidate_id` | `active_user_authored_step.candidate_id`, current P0 candidate, and latest accepted event binding | Required for `patch`, `check`, and `submit`. |
+| `current.file.sha256` | Read result `file_sha256` and patch result `file_sha256` | Required for `patch.expected_file_sha256` and identifies the current target file. |
+| `current.file.total_bytes` | P0 entry for `service.py` | Helps understand file size and coverage. |
+| `current_read_page` | Event sequence 2 read result and resident `result_body` | Shows the exact current page, line range, EOF status, and current file hash. |
+| `coverage` | P0 completeness flags, read page range, `complete` flag, and event ordering | Shows that `complete` means page EOF, not whole-file coverage, and highlights the unread prefix derived from the supplied read. |
+| `ordered_ledger` | `active_phase_event_frame.events` | Preserves ordered activity and the fact that sequence number is occurrence, not semantic completion. |
+| `event_handle` / `result_handle` | Event and result canonical source handles | Provides exact recovery access without dumping payload bytes. |
+| `action_payload.present/resident` | Patch event `canonical_source` and `residency` | Distinguishes “payload exists” from “payload fields are currently in the prompt.” |
+| `binding_effect` | Patch/read result candidate and file bindings | Shows which candidate/file state resulted from each accepted operation. |
+| `exact_recovery_access` | `canonical_source`, observation directory, and reopen semantics | Makes clear which handles retrieve saved payloads and that retrieval is not execution. |
+| `limits` | `resource_state` and implementation host limits | Makes call allowance and important size bounds visible. |
+| `unknown_or_not_resident` | Absence of current check status, external payload residency, and lack of semantic marker information | Prevents the model from treating missing or external data as known. |
+
+---
+
+# What I would show together
+
+## 1. Action contract + current candidate/file bindings
+
+Show these together because `patch`, `check`, and `submit` all depend on the current candidate, and `patch` also depends on the current file hash.
+
+Together they make visible:
+
+- Current candidate ID.
+- Current file hash.
+- Required patch guards.
+- Available check ID.
+- The fact that `patch` creates a new candidate and clears check flags.
+- The fact that `check` executes on the expected candidate.
+- The fact that `submit` binds the current candidate.
+
+## 2. Read page + coverage + “read before mutation” obligation
+
+Show these together because the active step requires reading current source completely, while the state only proves a bounded page.
+
+Together they make visible:
+
+- The exact page that was read.
+- That the page reached EOF at line 8.
+- That lines 1–6 are not covered by that page.
+- That `repository_complete` is false and root completeness does not imply source completeness.
+- That `patch` does not internally enforce prior reading.
+
+## 3. Ordered ledger + recovery handles + residency
+
+Show these together because exact recovery depends on knowing what is resident, what is external, and which handle retrieves what.
+
+Together they make visible:
+
+- Sequence 1 was an accepted patch.
+- Sequence 2 was an accepted read.
+- `EVT-0001` retrieves saved `old`/`new` action fields.
+- `RES-0001` retrieves saved patch result/diff.
+- `RES-0002` retrieves saved read result.
+- Reopening is a new access event, not a new check or edit.
+
+## 4. Retrieval vs execution block
+
+Show this explicitly because the current operations have easily confused semantics:
+
+- `reopen_event` / `reopen_result` / `reopen_observation`: retrieval.
+- `check`: new execution.
+- `patch`: new mutation.
+- `submit`: terminal submission.
+
+This preserves the distinction between retrieving a saved result and executing a new operation.
+
+---
+
+# What I would leave available on request
+
+I would not put large saved payload bytes inline unless they are already resident.
+
+Leave available on request:
+
+- Exact `old`/`new` field bytes for `EVT-0001`.
+- Exact patch result/diff bytes for `RES-0001`.
+- Full saved `reopen_result` envelope for `RES-0002`, if more detail than the resident content is needed.
+- Additional `p0_page`, `tree`, or `search` structure pages.
+- Observation payloads, if observation handles exist.
+
+Important distinction: I would **not** leave the complete tool argument requirements on request. Those must remain visible in the action contract.
+
+---
+
+# What I would keep as internal audit detail
+
+These can remain internal or collapsed unless needed for a guard:
+
+- Canonical payload SHA-256 values.
+- Exact pair identity SHA/size for event pairs.
+- `event_frame_verification` internals.
+- `one_action_result_identity_per_sequence`.
+- `host_sufficiency_judgment` beyond “no host sufficiency judgment supplied.”
+- `correction_cycle_reserved_by_fixture_design`, because it is a design illustration, not a live guarantee.
+- `reasoning_budget_tokens`, unless it directly constrains the next action.
+- `semantic_ranking` and `semantic_previews` flags, because they only state that semantic previews are absent.
+- P0-internal contract fields that do not affect the current action.
+- Canonical source origin metadata such as `event_action` / `event_result`, unless debugging custody.
+
+I would keep visible:
+
+- Current candidate ID.
+- Current file SHA-256.
+- Event/result handles.
+- Residency status.
+- Call allowance.
+- Stage and available actions/checks.
+- Required action argument forms.
+- Effects of actions.
+
+---
+
+# Suggestions that need new information or behavior
+
+These are not pure presentation changes:
+
+1. **Show current check pass/fail**  
+   Needs the current check status to be stored or produced by executing `check public`. It is not currently in the state.
+
+2. **Show a general “all source read” flag**  
+   Needs an aggregate read-coverage tracker or operation. In this particular state, the unread prefix can be derived from the single read page and EOF, but a general authoritative flag would be new state/behavior.
+
+3. **Show external `old`/`new` contents without `reopen_event`**  
+   Needs the external payload to be included in the prompt or fetched. That changes payload residency or retrieval, so it is not merely a different presentation of the current state.
+
+4. **Add a host recommendation such as “next action should be read”**  
+   Needs host sufficiency reasoning or a new recommendation operation. `host_sufficiency_judgment` is currently not a usable host advice signal here.
+
+5. **Identify the semantic marker from the canonical payload address**  
+   Needs semantic analysis. The canonical payload address is custody metadata, not relevance or sufficiency advice.
+
+6. **Make `patch` enforce prior reading**  
+   Would change tool rejection behavior. Currently, prior reading is an actor instruction, not a patch guard.
+
+7. **Guarantee remaining budget for a correction cycle**  
+   The correction-cycle sentence is a design illustration. Treating it as a live guarantee would require new behavior.
+
+---
+
+# What I would not change
+
+I would preserve:
+
+- Exact recovery through handles.
+- Ordered activity through sequence and event handles.
+- Version guards through schema versions and stage constraints.
+- One action per invocation.
+- Candidate/file version guards.
+- The difference between reopening a saved result and executing a new check or edit.
+- The fact that `submit` reports but does not enforce check passing.
+- The fact that retrieval does not extend current-source read coverage.
+- The fact that `patch` does not inspect read history or P0 completeness.
+
+This is a focused presentation proposal: show the machine action grammar, current bindings, exact recovery handles, and coverage facts together; leave large saved payload bytes retrievable by handle; keep custody hashes and verification metadata as audit unless they are needed as visible guards. I am not selecting or issuing the next embedded action here.

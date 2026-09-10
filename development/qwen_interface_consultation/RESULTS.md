@@ -5,6 +5,14 @@ reviewed. All eight ordinary actions were accepted and independently replayed.
 Retain the core and proceed to bounded model-informed interface design before
 the fresh investigation. No refactor is adopted by this initial consultation.
 
+Subsequent development status, separate from these initial results: the owner
+accepted the observed q4/56,576 memory margin after the preserved Q1 stop.
+Q2/Q3 and all four informed-design calls then completed once, were sealed and
+fully directly audited. The [design decision](follow-on/continuation/design-review/RESULTS.md)
+selects one visible tool reference for the
+[prepared matched comparison](comparison/PREPARATION_REVIEW.md), which has zero
+completions. The initial sixteen responses and findings below remain unchanged.
+
 ## What the ordinary actions establish
 
 The selected Qwen3.8-27B IQ3_XXS actor can use the existing interface on these
@@ -54,8 +62,9 @@ judgments. See [the host-path audit](HOST_PATH_AUDIT.md) for the exact distincti
 Retain the exact stores, ordered events, stable recovery handles, current and
 predecessor bindings, and separation between retrieving historical evidence
 and executing new work. No representation variant has been adopted. Complete
-the [prepared informed-design consultation](FOLLOW_ON_PROPOSAL.md) before
-selecting at most one comparison variant. Its four exact requests currently
+the [prepared informed-design consultation](FOLLOW_ON_PROPOSAL.md), after its
+required prompt and capacity revision, before selecting at most one comparison
+variant. Its four original exact requests currently
 have zero completion calls; Qwen preferences have not yet been collected.
 
 | Design topic to keep | Why it is earned | Evidence needed for adoption |
@@ -65,6 +74,17 @@ have zero completion calls; Qwen preferences have not yet been collected.
 | Scope of payload hashes, byte counts, and recovered objects | Correct field hashes sit beside handles for larger saved-result objects | Correct prediction of actual retrieval contents and reduced ambiguity with full custody preserved |
 | Navigation and page/whole-file status | Root incompleteness and a page's EOF flag require extra interpretation | Clearer decisions about necessary source acquisition without suppressing legitimate reads |
 | Alternative names or grouping suggested by Qwen | The owner explicitly requested model-informed design; preferences remain uncollected | Preserve the original suggestion, map it to actual host semantics, then test the concrete proposal rather than accepting vocabulary preference alone |
+
+Prospective refinement after the September 10 owner-supplied GPT Pro review:
+the signature row measures the benefit and cost of a particular presentation;
+it is not a condition for supplying missing tool requirements. New interfaces
+must expose those requirements in the actual model input. Explicit signatures
+are the preferred first narrow comparison. If retrieved-object scope is selected
+instead, accepted actions alone cannot establish that the misunderstanding was
+fixed; interpretation must be compared with the exact returned object. The
+[refined follow-on](FOLLOW_ON_PROPOSAL.md) also separates generation room from
+GPU-reserve qualification and preserves the unexecuted q8 package. These are
+planning changes; the completed observations and scores above are unchanged.
 
 A variant may change names, grouping, or which internal custody details are
 displayed. It is a model-facing intervention even when storage is unchanged.
@@ -120,6 +140,6 @@ whole-device free GPU memory reaches 316 MiB, below the profile's 350 MiB
 target; finishing this workload does not qualify that reserve.
 
 Exposed examples, one-action invocations, descriptive IDs, and diagnostic
-questioning limit all claims. No new interface has been compared, no Qwen
-design preference has yet been collected, and no fresh continuity task has
-run. See [the apparatus finding](APPARATUS_FINDING.md).
+questioning limit all claims. This initial run compared no new interface and
+elicited no informed design preference; those subsequent preferences are linked
+above. No fresh continuity task has run. See [the apparatus finding](APPARATUS_FINDING.md).

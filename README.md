@@ -7,8 +7,8 @@ The durable summary of what was built, what has been
 established, current limitations, and the evidence-gated direction on resume is
 [`PROJECT_CHECKPOINT_2026-08-30.md`](PROJECT_CHECKPOINT_2026-08-30.md).
 
-The original run authorization is consumed. Current development is bounded by
-the [interface consultation specification](development/qwen_interface_consultation/SPEC.md);
+The original run authorization is consumed. Current development follows the
+[resume proposal](RESUME_PROPOSAL.md) and its bounded interface stages;
 there is no automatic measured successor.
 
 Owner-directed measurement maintenance and the initial 16-response interface
@@ -20,14 +20,19 @@ record eight accepted/replayed ordinary actions, full direct review of all
 thinking and responses, and the host/interface friction that passing actions
 would conceal.
 
-The [resume proposal](RESUME_PROPOSAL.md) retains the owner's IQ3_XXS actor,
-q8/32k primary configuration, no MTP, uncapped xhigh thinking, and the larger
-q4 option. The next concrete step is the
-[prepared Qwen design consultation](development/qwen_interface_consultation/FOLLOW_ON_PROPOSAL.md),
-with zero completion calls so far. Resolve its generation room and runtime
-reserve before exposure. No interface refactor or fresh measured successor
-has been adopted; the proposed investigation still lacks a qualified natural
-pressure opportunity.
+The [informed Qwen design consultation](development/qwen_interface_consultation/follow-on/continuation/design-review/RESULTS.md)
+is now complete and fully audited at q4/56,576, no MTP, uncapped xhigh thinking.
+The owner accepted the small memory margin with monitoring: continuation
+qualification reached 335 MiB free and design reached 339 MiB. The original
+Q1 stop below 350 MiB is preserved; it was not rerun.
+
+Qwen favors visible tool requirements while retaining the core. Its proposed
+state ledgers also contain concrete errors, so only one source-checked tool
+reference is selected for the [prepared sixteen-request comparison](development/qwen_interface_consultation/comparison/PREPARATION_REVIEW.md).
+That package has zero completions and requires its own execution decision.
+The reference adds 1,675 native input tokens; the largest request leaves 36,187
+tokens for uncapped generation. No broad host refactor or fresh investigation
+has run; the investigation still lacks a qualified natural pressure opportunity.
 
 ## Current experiment
 

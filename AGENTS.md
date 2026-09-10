@@ -22,9 +22,41 @@ For the current owner-directed resumption, also read `RESUME_PROPOSAL.md`,
 `development/qwen_interface_consultation/SPEC.md` before continuing work.
 The initial consultation is now complete. Also read its `RESULTS.md`,
 `DIRECT_TRANSCRIPT_AUDIT.md`, `HOST_PATH_AUDIT.md`, and `FOLLOW_ON_PROPOSAL.md`.
-Its 16-response attempt is consumed; the prepared four-request design
-consultation has made zero completion calls. Do not rerun the initial package
+Its 16-response attempt is consumed. Do not rerun the initial package
 or treat its descriptive development results as a matched interface comparison.
+The owner authorized three qualification and four conditional design calls under
+`development/qwen_interface_consultation/follow-on/SPEC.md`. That q4/56,576
+attempt stopped after one correct Q1 response because sampled free GPU memory
+reached 339 MiB, below the frozen 350 MiB minimum. Read
+`development/qwen_interface_consultation/follow-on/qualification-review/RESULTS.md`
+and its four companion audits before continuing.
+The owner subsequently directed continuing q4/56,576 with monitoring, accepting
+the observed 339 MiB margin. The continuation completed under
+`development/qwen_interface_consultation/follow-on/continuation/SPEC.md`.
+The 350 MiB value became advisory for Q2/Q3 and conditional D1–D4;
+do not ask again about that accepted margin or switch to the proposed q4/49,152.
+Preserve the original Q1 stop and audit, do not rerun Q1, and retain all other
+runtime, content, custody and direct-review checks. This is an explicit owner
+amendment, not a claim that the original memory target passed.
+Q2/Q3 and all four design responses are now complete, sealed, independently
+verified and directly reviewed in full. Read the five audits under
+`development/qwen_interface_consultation/follow-on/continuation/design-review/`
+and its `DECISION.json`. That decision retains Qwen's preference for visible
+tool contracts and defers its proposed state projections after finding concrete
+errors in recoverable handles, source-absence claims and returned-object scope.
+The original three-plus-four live scope is consumed; no response may be repeated.
+
+The selected comparison is prepared under
+`development/qwen_interface_consultation/comparison/SPEC.md`: sixteen fresh
+ordinary one-action requests, unchanged state/grammar, and one source-checked
+visible tool reference. Read
+`development/qwen_interface_consultation/comparison/PREPARATION_REVIEW.md` and
+the exact package before an execution decision. It has made zero completion calls and
+remains outside the consumed live authorization. Keep q4/56,576, no MTP and
+uncapped xhigh thinking fixed between conditions, retaining advisory memory
+monitoring. Its prospective generation reserve is 32,768, allowing 23,808 native
+input tokens; three design outputs exceeded the old 20,480 reserve. Neither
+reserve is an output cap or a qualified allowance for a future 25k study.
 
 Authority order is direct owner instruction, the active `SPEC.md`, the
 implementation plan, analysis governance, then explanatory documents.
@@ -161,6 +193,15 @@ prospectively selected and qualified. These instructions supersede the older
 Explicitly review model-facing metadata and tools with the selected actor.
 Save unassisted interpretations before soliciting preferred alternatives;
 qualify any proposed interface change against actual actions and consequences.
+New interfaces must show the actor the complete tool argument requirements,
+accepted forms, binding meanings, and operational effects in the actual rendered
+input. A server-side output grammar does not substitute for those instructions.
+Consult Qwen about their presentation; supplying required information does not
+depend on a preference vote or a demonstrated speedup. Preserve historical
+inputs; an explicitly identified incomplete legacy baseline may be used only
+within a bounded comparison. If a variant targets interpretation of retrieved
+content, assess that interpretation against the exact returned object: an
+accepted retrieval action alone cannot establish that the ambiguity is fixed.
 A directly demonstrated clarity or efficiency benefit can earn a bounded
 interface improvement while exact custody and version protections remain
 intact. New memory or policy mechanisms still require a separately earned
