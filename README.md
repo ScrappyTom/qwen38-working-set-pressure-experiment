@@ -26,13 +26,22 @@ The owner accepted the small memory margin with monitoring: continuation
 qualification reached 335 MiB free and design reached 339 MiB. The original
 Q1 stop below 350 MiB is preserved; it was not rerun.
 
-Qwen favors visible tool requirements while retaining the core. Its proposed
-state ledgers also contain concrete errors, so only one source-checked tool
-reference is selected for the [prepared sixteen-request comparison](development/qwen_interface_consultation/comparison/PREPARATION_REVIEW.md).
-That package has zero completions and requires its own execution decision.
-The reference adds 1,675 native input tokens; the largest request leaves 36,187
-tokens for uncapped generation. No broad host refactor or fresh investigation
-has run; the investigation still lacks a qualified natural pressure opportunity.
+The separately authorized [sixteen-request reference comparison](development/qwen_interface_consultation/comparison/review/RESULTS.md)
+is complete, sealed, replay-verified and directly audited in full. Retain the
+source-checked visible tool reference for subsequent preparation: generation
+fell in seven of eight pairs, 53.2% overall, while input rose 26.4%. Over half
+the output reduction comes from one long legacy response; this does not measure
+whole-task efficiency. All sixteen actions were accepted, including one legacy
+outline access that supplied already visible code structure.
+
+The comparison reached 327 MiB free under the accepted advisory monitoring
+policy, without runtime error or truncation. All sixteen calls are consumed.
+The [decision](development/qwen_interface_consultation/comparison/review/DECISION.json)
+keeps the reference, carries resource/navigation wording forward as the next
+narrow presentation issue, and preserves accurate host-generated grouping as a
+deferred option. Incorrect proposed examples do not disprove that option.
+No broad host refactor or fresh investigation has run; the investigation still
+lacks a qualified natural pressure opportunity and task-specific allowance.
 
 ## Current experiment
 

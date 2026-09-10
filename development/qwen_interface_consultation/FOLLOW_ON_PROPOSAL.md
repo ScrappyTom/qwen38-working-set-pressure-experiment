@@ -8,12 +8,18 @@ remains advisory, preserving the original Q1 stop; q4/49,152 was not selected.
 The original three-plus-four live scope is consumed.
 
 The [design review and decision](follow-on/continuation/design-review/RESULTS.md)
-retains one complete visible tool reference while deferring the proposed state
-ledgers and projections. The [sixteen-request matched package](comparison/PREPARATION_REVIEW.md)
-is prepared with zero completions, 32,768 tokens of prospective generation room,
-and unchanged q4/runtime/thinking settings. Its largest input leaves 36,187
-physical generation tokens. The separate execution decision described below
-still applies; no broader host refactor or fresh investigation has run.
+retained one complete visible tool reference while deferring the proposed state
+views as written. The owner subsequently authorized the
+[sixteen-request comparison](comparison/EXECUTION_SPEC.md), which is now complete,
+sealed, replay-verified and directly reviewed in full. The
+[comparison decision](comparison/review/RESULTS.md) retains the reference for
+subsequent preparation, with uneven effort benefits and explicit added input.
+It preserves resource/navigation wording as an earned next narrow issue and
+accurate host-generated grouping as a deferred option. All sixteen calls are
+consumed. Minimum free memory was 327 MiB under the accepted advisory policy,
+without runtime error or truncation. No broader host refactor or fresh
+investigation has run. The planning sections below are the preserved basis;
+the separate comparison execution decision they required has now been exercised.
 
 ## Preserved planning basis and earlier execution
 

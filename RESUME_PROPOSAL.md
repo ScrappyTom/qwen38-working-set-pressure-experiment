@@ -1,14 +1,19 @@
 **Proposal: resume the project after Experiment 020**
 
-Latest execution outcome: the owner accepted the observed 339 MiB margin and
-the q4/56,576 continuation completed with monitoring under the
-[continuation amendment](development/qwen_interface_consultation/follow-on/continuation/SPEC.md)
-for Q2/Q3 and D1–D4 without rerunning Q1. Read the
-[complete design audit and decision](development/qwen_interface_consultation/follow-on/continuation/design-review/RESULTS.md)
-and [prepared signature comparison](development/qwen_interface_consultation/comparison/PREPARATION_REVIEW.md).
-The original three-plus-four scope is consumed; the sixteen matched comparison
-requests have zero completions. The 350 MiB reference remains advisory and
-q4/49,152 was not selected. Original stop reports remain preserved evidence.
+Latest execution outcome: all sixteen separately authorized matched reference
+requests completed once at q4/56,576, no MTP and uncapped xhigh thinking. Read
+the [complete comparison audit and decision](development/qwen_interface_consultation/comparison/review/RESULTS.md).
+Retain the tested complete tool reference for subsequent preparation. Generation
+fell in seven of eight pairs, 53.2% overall, while input rose 26.4%; one long
+legacy response accounts for over half of that output reduction. These are
+single-action development results, not whole-task savings.
+
+The original qualification/design scope and these sixteen calls are consumed.
+Minimum free memory was 327 MiB with normal completion under the accepted
+advisory policy. The original Q1 stop and later qualification/design reports
+remain preserved; q4/49,152 was not selected. Resource/navigation wording is the
+next earned narrow presentation issue. Accurate host-generated grouping remains
+a deferred option, requiring exact records and interpretation/use evidence.
 
 Repair measurement, consult the selected operating model using the existing interface, then test one fresh investigation whose explanation changes across context pressure. Retain exact custody, readable orientation, ordered progress, canonical recovery references, and candidate-bound actions and observations. Explicitly review model-facing metadata and tool design with Qwen; a bounded refactor may earn adoption through clearer operational decisions or demonstrated efficiency while preserving those guarantees.
 
@@ -16,13 +21,13 @@ The owner has directed proceeding with this plan, starting with offline measurem
 
 Progress is recorded in the [maintenance finding](maintenance/resume_after_020/FINDING.md). The owner-directed initial 16-response consultation is concretely defined in [its development specification](development/qwen_interface_consultation/SPEC.md) and prepared package. Any later design consultation, interface comparison, or substantive experiment requires its own concrete bounded preparation; the instruction to proceed is not an automatic successor policy.
 
-Completed under this plan: the prospective measurement repairs, 42 selected passing tests, independent historical reanalysis, and the sole initial 16-response consultation. The [completed consultation decision](development/qwen_interface_consultation/RESULTS.md) retains the core and identifies concrete interface friction from all exact thinking and final outputs. All eight ordinary actions were accepted and replayed. The [informed-design follow-on](development/qwen_interface_consultation/FOLLOW_ON_PROPOSAL.md) initially stopped after correct Q1 at 339 MiB against its frozen 350 MiB minimum; [the sealed partial audit](development/qwen_interface_consultation/follow-on/qualification-review/RESULTS.md) is preserved. Under the subsequent owner amendment, Q2/Q3 passed and all four design responses completed and received full direct review. Qwen's preference for visible contracts is retained; concrete errors in its proposed state views prevent adopting them wholesale. No consumed response may be repeated. The focused interface suite now contains 25 passing tests; this is not a full-suite claim.
+Completed under this plan: the prospective measurement repairs, 42 selected passing tests, independent historical reanalysis, the sole initial 16-response consultation, bounded design consultation and matched reference comparison. The [completed initial consultation decision](development/qwen_interface_consultation/RESULTS.md) retains the core and identifies concrete interface friction from all exact thinking and final outputs. All eight initial ordinary actions were accepted and replayed. The [informed-design follow-on](development/qwen_interface_consultation/FOLLOW_ON_PROPOSAL.md) initially stopped after correct Q1 at 339 MiB against its frozen 350 MiB minimum; [the sealed partial audit](development/qwen_interface_consultation/follow-on/qualification-review/RESULTS.md) is preserved. Under the subsequent owner amendment, Q2/Q3 passed and all four design responses completed and received full direct review. Qwen's preference for visible contracts is retained; concrete errors in its proposed state views prevent adopting them wholesale. The later comparison supports the complete reference as a bounded presentation choice. No consumed response may be repeated. The frozen comparison execution code passed 33 focused interface tests; this is not a full-suite claim.
 
-Capacity preparation remains material. The initial crowded diagnostics left only 582 and 892 physical tokens at q8/32k and reached 316 MiB free. At the selected q4/56,576, continuation qualification reached 335 MiB and design reached 339 MiB, completing normally under the owner's advisory memory policy. Three design outputs exceeded the earlier 20,480-token planning reserve; the next preparation uses 32,768, with generation still uncapped. All sixteen comparison inputs fit its 23,808-token input ceiling. These are development margins, not a qualified future 25k study allowance. The proposed fresh investigation has a reproducible failure and independently checked behavior, but its natural pressure opportunity is still unqualified.
+Capacity preparation remains material. The initial crowded diagnostics left only 582 and 892 physical tokens at q8/32k and reached 316 MiB free. At the selected q4/56,576, continuation qualification reached 335 MiB, design reached 339 MiB and the matched comparison reached 327 MiB, completing normally under the owner's advisory memory policy. Three design outputs exceeded the earlier 20,480-token planning reserve; comparison preparation used 32,768, with generation still uncapped. All sixteen comparison inputs fit its 23,808-token input ceiling and all responses fit the planning reserve. These are development margins, not a qualified future 25k study allowance. The proposed fresh investigation has a reproducible failure and independently checked behavior, but its natural pressure opportunity is still unqualified.
 
 The September 10 owner-supplied GPT Pro review established that complete tool requirements must be visible to the actor; Qwen should advise on how to present them. Explicit signatures remain the preferred first narrow comparison. A variant addressing retrieved-object scope instead needs evidence about predicted or subsequently interpreted contents, not just accepted actions. That review called for separate generation-room and 350 MiB GPU-reserve qualification at q4/56,576; the owner subsequently amended the numeric memory requirement as recorded above. The existing q8 design package remains unexecuted preparation. The [follow-on proposal](development/qwen_interface_consultation/FOLLOW_ON_PROPOSAL.md) preserves this planning basis and links the subsequent qualification and design evidence, without changing historical results or authorizing an automatic run.
 
-The owner-authorized three qualification and four conditional design responses are now consumed, including the original retained Q1. The [earlier capacity revision](development/qwen_interface_consultation/follow-on/CAPACITY_REVISION.md) proposed q4/49,152 but was never selected or launched. The current sixteen-request comparison is its own prepared stage: an explicitly incomplete legacy control versus the source-checked visible reference, with identical state and output grammar. Its separate execution decision remains required by the follow-on proposal. No design rerun, broad refactor or fresh investigation is implied.
+The owner-authorized three qualification and four conditional design responses are consumed, including the original retained Q1. The [earlier capacity revision](development/qwen_interface_consultation/follow-on/CAPACITY_REVISION.md) proposed q4/49,152 but was never selected or launched. The sixteen-request comparison was separately authorized and is also consumed: an explicitly incomplete legacy control versus the source-checked visible reference, with identical state and output grammar. Its [complete decision](development/qwen_interface_consultation/comparison/review/RESULTS.md) records retained and deferred presentation work. No design rerun, broad refactor or fresh investigation is implied.
 
 **Selected model and capacity options**
 

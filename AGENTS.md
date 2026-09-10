@@ -46,17 +46,47 @@ tool contracts and defers its proposed state projections after finding concrete
 errors in recoverable handles, source-absence claims and returned-object scope.
 The original three-plus-four live scope is consumed; no response may be repeated.
 
-The selected comparison is prepared under
+The selected comparison was prepared under
 `development/qwen_interface_consultation/comparison/SPEC.md`: sixteen fresh
 ordinary one-action requests, unchanged state/grammar, and one source-checked
 visible tool reference. Read
 `development/qwen_interface_consultation/comparison/PREPARATION_REVIEW.md` and
-the exact package before an execution decision. It has made zero completion calls and
-remains outside the consumed live authorization. Keep q4/56,576, no MTP and
+the exact package. Preparation made zero completion calls. The owner separately
+authorized its sixteen requests once the execution safeguards passed,
+under `development/qwen_interface_consultation/comparison/EXECUTION_SPEC.md`.
+Use the separately frozen execution runner and manifest; the original prepared
+requests and prior consumed stages remain unchanged. Keep q4/56,576, no MTP and
 uncapped xhigh thinking fixed between conditions, retaining advisory memory
 monitoring. Its prospective generation reserve is 32,768, allowing 23,808 native
 input tokens; three design outputs exceeded the old 20,480 reserve. Neither
 reserve is an output cap or a qualified allowance for a future 25k study.
+Evaluate all eight matched pairs, allowing different useful next actions. The
+intervention is the full documentation-and-placement package, not argument
+names alone. Keep deferred grouping ideas recorded: inaccurate model-proposed
+examples do not disprove the possibility of exact host-generated state views.
+
+All sixteen comparison requests are now complete, sealed, independently verified
+and directly reviewed in full. Read the five audits and DECISION.json under
+`development/qwen_interface_consultation/comparison/review/`. The authorization
+is consumed; do not rerun, resume or replace any cell. All actions were accepted,
+but C15's outline access made weak task progress and legacy thinking repeatedly
+guessed required forms. The visible reference reduced generation in seven of
+eight pairs; aggregate generation fell 53.2% while input rose 26.4%, with over
+half of the output reduction concentrated in one pair. Do not promote this to
+whole-task efficiency or signatures alone. Retain the tested complete reference
+for subsequent preparation with the selected actor; no shared-host rollout or
+new exposure is implied by that decision.
+
+Carry the directly observed resource/navigation wording issues into the next
+narrow presentation proposal. Resource illustrations must not accidentally
+prescribe the next action, and scoped orientation must not suggest a global
+completion gate. Keep exact host-generated grouping and object-scope clarity as
+deferred options requiring accurate records and interpretation/use evidence.
+Do not suppress useful confirmation or treat rejected model-generated examples
+as disproving grouping. The comparison reached 327 MiB free under the already
+accepted advisory policy, without runtime failure; its observed margins do not
+qualify a future 25k continuity study. That study remains pending natural pressure
+and task-specific allowance qualification.
 
 Authority order is direct owner instruction, the active `SPEC.md`, the
 implementation plan, analysis governance, then explanatory documents.

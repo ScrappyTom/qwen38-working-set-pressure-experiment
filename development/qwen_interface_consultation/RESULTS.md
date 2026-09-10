@@ -9,9 +9,12 @@ Subsequent development status, separate from these initial results: the owner
 accepted the observed q4/56,576 memory margin after the preserved Q1 stop.
 Q2/Q3 and all four informed-design calls then completed once, were sealed and
 fully directly audited. The [design decision](follow-on/continuation/design-review/RESULTS.md)
-selects one visible tool reference for the
-[prepared matched comparison](comparison/PREPARATION_REVIEW.md), which has zero
-completions. The initial sixteen responses and findings below remain unchanged.
+selected one visible tool reference for the matched comparison. Its separately
+authorized sixteen requests are now complete and fully audited in the
+[comparison results](comparison/review/RESULTS.md), which retain that reference
+for subsequent preparation and record remaining host friction. These are separate
+development results; the initial sixteen responses and findings below remain
+unchanged.
 
 ## What the ordinary actions establish
 
