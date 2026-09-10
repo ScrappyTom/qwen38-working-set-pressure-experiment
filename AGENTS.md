@@ -108,6 +108,18 @@ preparation did not qualify inference memory or a future 25k study. Preserve
 full thinking/input/action/result/host review and the retained/deferred choices
 already recorded above before any promotion.
 
+The eight-request execution safeguards are now prepared under
+`development/qwen_interface_consultation/wording/EXECUTION_SPEC.md` and the
+separate frozen `EXECUTION_MANIFEST.json`; read `EXECUTION_READINESS.md` in that
+directory. Fifteen focused execution checks passed using mocked model endpoints;
+zero new model completions ran and the owner execution decision remains pending.
+Use only the new wording runner for W01–W08; it requires the owner direction,
+excludes E01–E04, verifies all native inputs before completion dispatch and seals
+one attempt without restart. After the full audit, make a bounded presentation
+decision and return to multi-turn investigation preparation. Do not automatically
+extend interface micro-tests; require a new consequential finding. Existing
+natural-pressure and task-allowance requirements still apply to that next task.
+
 Non-negotiable rules:
 
 - preserve exact prompts, outputs, actions, results, candidates, observations,

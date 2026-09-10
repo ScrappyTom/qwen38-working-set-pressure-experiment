@@ -1,5 +1,12 @@
 # Bounded follow-on: Qwen-preferred metadata and tools
 
+The [wording execution package](wording/EXECUTION_READINESS.md) is now frozen:
+W01–W08 only, exact prepared inputs and settings, fifteen passing focused execution
+checks, and zero new model completions. The quoted GPT Pro review supports this
+scope; the separate owner execution decision remains pending. After the complete
+audit, make a presentation decision and resume multi-turn investigation preparation.
+Further interface micro-tests require a new consequential finding.
+
 Latest preparation: the [wording candidate](wording/PREPARATION_REVIEW.md) is
 sealed and verified, with zero completion requests. Both conditions retain the
 tested reference; the candidate removes the illustrative correction sequence

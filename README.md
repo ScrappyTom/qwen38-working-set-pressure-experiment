@@ -2,6 +2,12 @@
 
 ## Project status
 
+The [eight-request wording execution package](development/qwen_interface_consultation/wording/EXECUTION_READINESS.md)
+is frozen for the separate owner execution decision. Fifteen focused execution
+checks passed using mocked model endpoints; no new model completions ran. The
+next step after the full comparison audit is a presentation decision and a return
+to multi-turn investigation preparation, rather than an automatic interface study.
+
 The next [resource/navigation wording candidate](development/qwen_interface_consultation/wording/PREPARATION_REVIEW.md)
 is prepared and independently verified, with zero new completion requests.
 It retains the tested complete reference, removes an illustrative action sequence
