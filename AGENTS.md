@@ -77,8 +77,8 @@ whole-task efficiency or signatures alone. Retain the tested complete reference
 for subsequent preparation with the selected actor; no shared-host rollout or
 new exposure is implied by that decision.
 
-Carry the directly observed resource/navigation wording issues into the next
-narrow presentation proposal. Resource illustrations must not accidentally
+The directly observed resource/navigation wording issues motivated the completed
+narrow comparison recorded below. Resource illustrations must not accidentally
 prescribe the next action, and scoped orientation must not suggest a global
 completion gate. Keep exact host-generated grouping and object-scope clarity as
 deferred options requiring accurate records and interpretation/use evidence.
@@ -101,24 +101,40 @@ include the complete tested reference. The candidate removes the correction-cycl
 illustration and replaces one navigation sentence; all other state, task, grammar,
 bindings, executor and budgets remain fixed. Treat these two edits as one
 presentation package, not a signatures-only or behaviorally neutral change.
-The existing separate execution decision is still pending for these eight new
-calls; consumed scopes remain closed. Do not infer live approval from preparation.
+The owner subsequently approved these exact eight calls with "I approve" after
+the separate execution question. W01–W08 are now complete and consumed; E01–E04
+remain unexposed. Preserve the historical preparation's pending-approval text as
+its original status, not a reason to ask again or repeat an exposed call.
 The largest offline input uses 20,410 tokens and leaves 36,166 physical tokens;
 preparation did not qualify inference memory or a future 25k study. Preserve
 full thinking/input/action/result/host review and the retained/deferred choices
 already recorded above before any promotion.
 
-The eight-request execution safeguards are now prepared under
+The eight-request execution safeguards were frozen under
 `development/qwen_interface_consultation/wording/EXECUTION_SPEC.md` and the
 separate frozen `EXECUTION_MANIFEST.json`; read `EXECUTION_READINESS.md` in that
-directory. Fifteen focused execution checks passed using mocked model endpoints;
-zero new model completions ran and the owner execution decision remains pending.
-Use only the new wording runner for W01–W08; it requires the owner direction,
-excludes E01–E04, verifies all native inputs before completion dispatch and seals
-one attempt without restart. After the full audit, make a bounded presentation
-decision and return to multi-turn investigation preparation. Do not automatically
-extend interface micro-tests; require a new consequential finding. Existing
-natural-pressure and task-allowance requirements still apply to that next task.
+directory. Fifteen focused execution checks passed using mocked model endpoints
+before exposure. The sole live attempt is now sealed, independently verified and
+directly reviewed in full. Read all five audits and DECISION.json under
+`development/qwen_interface_consultation/wording/review/`. Eight actions were
+accepted and replayed, with no checks, submissions or offered continuations.
+The controls did not reproduce compulsory checking or executed navigation;
+two showed transient navigation/read uncertainty, and byte-count scope confused
+one response in each condition. Generation/time fell in three of four pairs but
+rose 23.7%/18.2% in aggregate; input rose 84 tokens. Do not claim demonstrated
+wording efficacy, a dependable slowdown or whole-task efficiency from this run.
+
+Carry the complete reference plus the two accurate wording corrections into
+subsequent preparation as an explicit documentation choice grounded in the prior
+ambiguity evidence, not a measured performance promotion. The shared host and
+all frozen historical inputs remain unchanged. Preserve deferred exact grouping
+and object-scope ideas; this repeated friction does not automatically authorize
+another interface micro-test. Return to multi-turn investigation preparation,
+requiring credible natural pressure and task-specific action/generation allowances.
+The 32,768 generation reserve is not compatible unchanged with an overall 25k
+admission formula. No continuation, retry, rescue or new live package is authorized
+by these completed calls. Minimum free memory was 339 MiB under the existing
+advisory policy; the original unmet Q1 target remains historical evidence.
 
 Non-negotiable rules:
 

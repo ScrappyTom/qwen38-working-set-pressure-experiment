@@ -1,22 +1,27 @@
 **Proposal: resume the project after Experiment 020**
 
-The [eight-request execution package](development/qwen_interface_consultation/wording/EXECUTION_READINESS.md)
-is now frozen and ready for the separate owner decision. Fifteen focused execution
-checks passed with mocked model endpoints; no new Qwen completions ran. The
-owner-supplied review supports the unchanged comparison. After its complete audit,
-make a presentation decision and return to multi-turn investigation preparation;
-another interface micro-test would need a new consequential finding.
+Latest outcome: the owner explicitly approved W01–W08 with "I approve". The
+[eight-request wording comparison](development/qwen_interface_consultation/wording/review/RESULTS.md)
+is complete, sealed, independently verified and directly reviewed in full. All
+eight actions were accepted and useful, with no check, submission or subsequent
+model turn. The target compulsory workflow was not reproduced by controls;
+transient navigation/read uncertainty and byte-scope friction remain documented.
+Three candidate responses were shorter/faster, but aggregate generation/time
+rose 23.7%/18.2%, with 84 added input tokens. No dependable performance effect
+or general elimination of ambiguity is established. All eight calls are consumed;
+E01–E04 remain offline regressions.
 
-Latest preparation: the [resource/navigation wording candidate](development/qwen_interface_consultation/wording/PREPARATION_REVIEW.md)
-is sealed and independently verified, with zero new completion requests. It
-retains the complete reference, removes the example correction sequence and
-clarifies scoped P0 paging. Seven focused checks passed. The prospective package
-is eight new requests on I3/I4; four additional I1/I2 inputs are offline regressions
-only. Each candidate input adds 21 tokens. The [exact specification](development/qwen_interface_consultation/wording/SPEC.md)
-preserves the separate execution decision. Behavioral improvement remains untested;
-the previous shared renderer and every consumed run remain preserved.
+Select the complete reference plus removal of the resource illustration and the
+accurate scope explanation for the next preparation. This is a documentation
+choice grounded in the earlier direct ambiguity evidence, not a speedup claim or
+a shared-host rollout. Return to offline multi-turn investigation selection and
+allowance qualification under section 3. Keep exact grouping/object-scope ideas
+deferred and review their consequences during task work; no automatic interface
+micro-test follows. The original shared renderer and every sealed artifact remain
+intact. Existing preparation/execution specifications retain their historical
+statuses; the new approval and consumed scope are in the completed run and audit.
 
-Latest execution outcome: all sixteen separately authorized matched reference
+Preceding reference outcome: all sixteen separately authorized matched reference
 requests completed once at q4/56,576, no MTP and uncapped xhigh thinking. Read
 the [complete comparison audit and decision](development/qwen_interface_consultation/comparison/review/RESULTS.md).
 Retain the tested complete tool reference for subsequent preparation. Generation
@@ -27,8 +32,8 @@ single-action development results, not whole-task savings.
 The original qualification/design scope and these sixteen calls are consumed.
 Minimum free memory was 327 MiB with normal completion under the accepted
 advisory policy. The original Q1 stop and later qualification/design reports
-remain preserved; q4/49,152 was not selected. Resource/navigation wording is the
-next earned narrow presentation issue. Accurate host-generated grouping remains
+remain preserved; q4/49,152 was not selected. Resource/navigation wording has now
+received the bounded comparison described above. Accurate host-generated grouping remains
 a deferred option, requiring exact records and interpretation/use evidence.
 
 Repair measurement, consult the selected operating model using the existing interface, then test one fresh investigation whose explanation changes across context pressure. Retain exact custody, readable orientation, ordered progress, canonical recovery references, and candidate-bound actions and observations. Explicitly review model-facing metadata and tool design with Qwen; a bounded refactor may earn adoption through clearer operational decisions or demonstrated efficiency while preserving those guarantees.

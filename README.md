@@ -2,19 +2,24 @@
 
 ## Project status
 
-The [eight-request wording execution package](development/qwen_interface_consultation/wording/EXECUTION_READINESS.md)
-is frozen for the separate owner execution decision. Fifteen focused execution
-checks passed using mocked model endpoints; no new model completions ran. The
-next step after the full comparison audit is a presentation decision and a return
-to multi-turn investigation preparation, rather than an automatic interface study.
+The owner-approved [eight-request wording comparison](development/qwen_interface_consultation/wording/review/RESULTS.md)
+is complete, sealed, independently replayed and directly reviewed in full.
+All eight actions made useful progress; none was a completed task. Controls did
+not reproduce compulsory checking or executed navigation, so the targeted repair
+has limited sensitivity here. The candidate was shorter/faster in three of four
+pairs, but aggregate output/time rose 23.7%/18.2%; input rose 84 tokens. Minimum
+free memory was 339 MiB under the accepted advisory policy. All eight calls are
+consumed; four additional native input regressions remain unexposed.
 
-The next [resource/navigation wording candidate](development/qwen_interface_consultation/wording/PREPARATION_REVIEW.md)
-is prepared and independently verified, with zero new completion requests.
-It retains the tested complete reference, removes an illustrative action sequence
-and clarifies scoped P0 paging. Seven focused checks passed; each candidate input
-adds 21 tokens. Eight new development requests are proposed under the existing
-separate execution decision; four additional inputs are offline regressions only.
-The previous shared renderer and all consumed evidence remain intact.
+Carry the complete tool reference and two accurate wording corrections into
+subsequent preparation as a documented clarity choice, without claiming a
+measured performance benefit. Preserve deferred object-scope/grouping ideas;
+successful edits still revealed byte-count confusion in both conditions.
+The next work is multi-turn investigation preparation with credible natural
+pressure and task-specific allowances. The shared renderer and all historical
+evidence remain intact; no automatic interface micro-test or live successor is
+authorized. The five audits and [decision](development/qwen_interface_consultation/wording/review/DECISION.json)
+record the evidence and limits.
 
 The project paused after the completed Experiment 020 ecological comparison.
 The durable summary of what was built, what has been
@@ -51,8 +56,8 @@ outline access that supplied already visible code structure.
 The comparison reached 327 MiB free under the accepted advisory monitoring
 policy, without runtime error or truncation. All sixteen calls are consumed.
 The [decision](development/qwen_interface_consultation/comparison/review/DECISION.json)
-keeps the reference, carries resource/navigation wording forward as the next
-narrow presentation issue, and preserves accurate host-generated grouping as a
+keeps the reference, identified the subsequently tested resource/navigation
+wording issue, and preserves accurate host-generated grouping as a
 deferred option. Incorrect proposed examples do not disprove that option.
 No broad host refactor or fresh investigation has run; the investigation still
 lacks a qualified natural pressure opportunity and task-specific allowance.

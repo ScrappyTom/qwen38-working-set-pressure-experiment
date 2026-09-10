@@ -1,20 +1,25 @@
 # Bounded follow-on: Qwen-preferred metadata and tools
 
-The [wording execution package](wording/EXECUTION_READINESS.md) is now frozen:
-W01–W08 only, exact prepared inputs and settings, fifteen passing focused execution
-checks, and zero new model completions. The quoted GPT Pro review supports this
-scope; the separate owner execution decision remains pending. After the complete
-audit, make a presentation decision and resume multi-turn investigation preparation.
-Further interface micro-tests require a new consequential finding.
+The owner-approved [wording comparison](wording/review/RESULTS.md) is complete:
+W01–W08 ran once, with eight accepted useful actions, exact replay and full direct
+review of every input, thinking field, final action, result and host path. No
+check, submission or continuation occurred. The control did not reproduce the
+target compulsory workflow. Three candidate responses were shorter/faster, but
+aggregate generation/time rose 23.7%/18.2%; input rose 84 tokens. This establishes
+no dependable performance benefit or elimination of the historical ambiguity.
+The run reached 339 MiB free with normal completion under the accepted advisory
+policy. All eight calls are consumed; E01–E04 remain offline regressions.
 
-Latest preparation: the [wording candidate](wording/PREPARATION_REVIEW.md) is
-sealed and verified, with zero completion requests. Both conditions retain the
-tested reference; the candidate removes the illustrative correction sequence
-and clarifies root/page scope. It proposes eight new I3/I4 requests, with I1/I2
-native input regressions excluded from exposure. Added input is 21 tokens per
-invocation; seven focused checks passed. The [specification](wording/SPEC.md)
-preserves the separate execution decision. No behavioral improvement or broad
-metadata refactor is claimed by preparation.
+Carry the complete tested reference and two accurate wording corrections into
+subsequent preparation as an explicit documentation decision grounded in earlier
+direct ambiguity evidence. Keep the shared host and historical inputs unchanged.
+Byte-count scope still caused friction in one response per condition; preserve
+accurate grouping/object-scope ideas as deferred options, including the need to
+check actual interpretation/use. This does not trigger another interface micro-test.
+Return to offline multi-turn investigation preparation with credible natural
+pressure and task-specific action/generation allowances. The existing 32,768
+generation reserve cannot be reused unchanged in a 25,000-token admission formula.
+The [five audits and decision](wording/review/DECISION.json) close this live scope.
 
 Current outcome: the owner's monitored q4/56,576 continuation is complete.
 Q2/Q3 and D1–D4 ran once under the [amendment](follow-on/continuation/SPEC.md),
@@ -30,7 +35,7 @@ views as written. The owner subsequently authorized the
 sealed, replay-verified and directly reviewed in full. The
 [comparison decision](comparison/review/RESULTS.md) retains the reference for
 subsequent preparation, with uneven effort benefits and explicit added input.
-It preserves resource/navigation wording as an earned next narrow issue and
+It identified resource/navigation wording for the now completed narrow test and
 accurate host-generated grouping as a deferred option. All sixteen calls are
 consumed. Minimum free memory was 327 MiB under the accepted advisory policy,
 without runtime error or truncation. No broader host refactor or fresh
