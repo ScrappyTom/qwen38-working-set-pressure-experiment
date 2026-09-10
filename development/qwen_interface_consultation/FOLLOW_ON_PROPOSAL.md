@@ -1,5 +1,14 @@
 # Bounded follow-on: Qwen-preferred metadata and tools
 
+Latest preparation: the [wording candidate](wording/PREPARATION_REVIEW.md) is
+sealed and verified, with zero completion requests. Both conditions retain the
+tested reference; the candidate removes the illustrative correction sequence
+and clarifies root/page scope. It proposes eight new I3/I4 requests, with I1/I2
+native input regressions excluded from exposure. Added input is 21 tokens per
+invocation; seven focused checks passed. The [specification](wording/SPEC.md)
+preserves the separate execution decision. No behavioral improvement or broad
+metadata refactor is claimed by preparation.
+
 Current outcome: the owner's monitored q4/56,576 continuation is complete.
 Q2/Q3 and D1–D4 ran once under the [amendment](follow-on/continuation/SPEC.md),
 with all exact thinking/final outputs and host paths directly reviewed after

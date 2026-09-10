@@ -2,6 +2,14 @@
 
 ## Project status
 
+The next [resource/navigation wording candidate](development/qwen_interface_consultation/wording/PREPARATION_REVIEW.md)
+is prepared and independently verified, with zero new completion requests.
+It retains the tested complete reference, removes an illustrative action sequence
+and clarifies scoped P0 paging. Seven focused checks passed; each candidate input
+adds 21 tokens. Eight new development requests are proposed under the existing
+separate execution decision; four additional inputs are offline regressions only.
+The previous shared renderer and all consumed evidence remain intact.
+
 The project paused after the completed Experiment 020 ecological comparison.
 The durable summary of what was built, what has been
 established, current limitations, and the evidence-gated direction on resume is

@@ -91,6 +91,23 @@ and task-specific allowance qualification.
 Authority order is direct owner instruction, the active `SPEC.md`, the
 implementation plan, analysis governance, then explanatory documents.
 
+The owner next directed preparation of the earned resource/navigation wording
+candidate. Read `development/qwen_interface_consultation/wording/SPEC.md` and
+`development/qwen_interface_consultation/wording/PREPARATION_REVIEW.md`.
+Its sealed preparation made zero completion requests:
+W01–W08 propose four matched pairs on I3/I4 with new seeds; E01–E04 are native
+input regressions only and must not enter a completion schedule. Both conditions
+include the complete tested reference. The candidate removes the correction-cycle
+illustration and replaces one navigation sentence; all other state, task, grammar,
+bindings, executor and budgets remain fixed. Treat these two edits as one
+presentation package, not a signatures-only or behaviorally neutral change.
+The existing separate execution decision is still pending for these eight new
+calls; consumed scopes remain closed. Do not infer live approval from preparation.
+The largest offline input uses 20,410 tokens and leaves 36,166 physical tokens;
+preparation did not qualify inference memory or a future 25k study. Preserve
+full thinking/input/action/result/host review and the retained/deferred choices
+already recorded above before any promotion.
+
 Non-negotiable rules:
 
 - preserve exact prompts, outputs, actions, results, candidates, observations,

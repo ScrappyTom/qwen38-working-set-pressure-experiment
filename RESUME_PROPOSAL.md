@@ -1,5 +1,14 @@
 **Proposal: resume the project after Experiment 020**
 
+Latest preparation: the [resource/navigation wording candidate](development/qwen_interface_consultation/wording/PREPARATION_REVIEW.md)
+is sealed and independently verified, with zero new completion requests. It
+retains the complete reference, removes the example correction sequence and
+clarifies scoped P0 paging. Seven focused checks passed. The prospective package
+is eight new requests on I3/I4; four additional I1/I2 inputs are offline regressions
+only. Each candidate input adds 21 tokens. The [exact specification](development/qwen_interface_consultation/wording/SPEC.md)
+preserves the separate execution decision. Behavioral improvement remains untested;
+the previous shared renderer and every consumed run remain preserved.
+
 Latest execution outcome: all sixteen separately authorized matched reference
 requests completed once at q4/56,576, no MTP and uncapped xhigh thinking. Read
 the [complete comparison audit and decision](development/qwen_interface_consultation/comparison/review/RESULTS.md).
