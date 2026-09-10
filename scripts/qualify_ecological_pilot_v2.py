@@ -134,7 +134,7 @@ def _simulate_ideal(fixture, profile, *, condition: str) -> dict[str, Any]:
         if boundary is None and not own["authorized"]:
             if not physical["authorized"]:
                 raise RuntimeError("ideal path reached physical limit before authentic 25k boundary")
-            before = inspection_status(pairs, fixture.required_inspection_paths)
+            before = inspection_status(pairs, fixture.required_inspection_paths, initial_candidate=fixture.initial)
             if before["first_mutation_sequence"] is not None:
                 raise RuntimeError("ideal path mutated before authentic 25k boundary")
             binding = _fork_binding(fixture, seed=0, state=state, pairs=pairs, calls=calls)
@@ -184,7 +184,7 @@ def _simulate_ideal(fixture, profile, *, condition: str) -> dict[str, Any]:
             action = generator.send(result)
         except StopIteration:
             break
-    inspections = inspection_status(pairs, fixture.required_inspection_paths)
+    inspections = inspection_status(pairs, fixture.required_inspection_paths, initial_candidate=fixture.initial)
     known_good = admitted_donor_candidate(BANK)
     if boundary is None:
         raise RuntimeError("ideal path did not reach an authentic 25k boundary")

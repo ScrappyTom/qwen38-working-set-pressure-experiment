@@ -17,6 +17,15 @@ Read in order:
 7. prior experiment results and direct transcript audits;
 8. `README.md`.
 
+For the current owner-directed resumption, also read `RESUME_PROPOSAL.md`,
+`maintenance/resume_after_020/FINDING.md`, and the bounded
+`development/qwen_interface_consultation/SPEC.md` before continuing work.
+The initial consultation is now complete. Also read its `RESULTS.md`,
+`DIRECT_TRANSCRIPT_AUDIT.md`, `HOST_PATH_AUDIT.md`, and `FOLLOW_ON_PROPOSAL.md`.
+Its 16-response attempt is consumed; the prepared four-request design
+consultation has made zero completion calls. Do not rerun the initial package
+or treat its descriptive development results as a matched interface comparison.
+
 Authority order is direct owner instruction, the active `SPEC.md`, the
 implementation plan, analysis governance, then explanatory documents.
 
@@ -25,6 +34,17 @@ Non-negotiable rules:
 - preserve exact prompts, outputs, actions, results, candidates, observations,
   token counts, and branch ancestry;
 - inspect every saved model input and output before diagnosing behavior;
+- directly review transcripts for host defects and interaction friction even
+  when checks pass or the model eventually recovers. Inspect the exact prompt,
+  separate thinking/reasoning, final response/action, tool result, and following
+  host decision together. Look for misleading metadata, misunderstood tool
+  effects, stale/version confusion, avoidable work, and host-imposed limits;
+  do not rely on aggregate diagnostics or final answers alone;
+- ground each such finding in what the model actually received and what
+  happened next. Distinguish model interpretation, host behavior, necessary
+  recovery, and unresolved causality; thinking can reveal friction but is not
+  by itself proof that a stated rationale caused an action. Save these findings
+  in the existing direct transcript and host-path audits before promotion;
 - do not use evaluator truth, known-good patches, or host-selected relevance
   in the model loop;
 - do not add summaries, retention declarations, relationship graphs,
@@ -127,9 +147,32 @@ relationships, suppression, caching, more reasoning, or an automatic
 successor. Any future ecological use must preserve direct transcript and host
 path audit before interpretation.
 
-The project is paused at `PROJECT_CHECKPOINT_2026-08-30.md`. No live run,
-retry, repair, supplement, or successor is currently authorized. Resume from
-the checkpoint and exact Experiment 020 evidence, not from an inferred next
-phase. The next intended direction is broader owner-controlled ecological use
-of the frozen controller; any new representation or policy mechanism must be
-earned by a repeated transcript-supported failure.
+The historical pause is recorded at `PROJECT_CHECKPOINT_2026-08-30.md`. The
+owner has now directed resumption under `RESUME_PROPOSAL.md`, starting with
+prospective measurement maintenance and interface-development preparation.
+Preserve all completed experiment evidence and consumed authorizations. Follow
+the proposal's bounded preparation and live-execution boundaries; do not infer
+an automatic measured successor. The owner-selected actor is Qwen3.8-27B
+UD-IQ3_XXS, initially q8_0 K/V at 32,768 context, MTP disabled, with native
+thinking on, xhigh, uncapped. The approximately 55k q4 option is available if
+prospectively selected and qualified. These instructions supersede the older
+512-token reasoning choice for new development only.
+
+Explicitly review model-facing metadata and tools with the selected actor.
+Save unassisted interpretations before soliciting preferred alternatives;
+qualify any proposed interface change against actual actions and consequences.
+A directly demonstrated clarity or efficiency benefit can earn a bounded
+interface improvement while exact custody and version protections remain
+intact. New memory or policy mechanisms still require a separately earned
+task need and prospective qualification. Record retained and deferred design
+suggestions in the interface decision so this work is not forgotten.
+
+The completed initial consultation supports retaining the core: all eight
+ordinary actions were accepted and replayed. Direct thinking/response review
+also found missing signature information, misleading resource wording, and
+confusion about the scope of payload hashes, byte counts, and retrieved
+objects. These earn the bounded design follow-on, not an adopted refactor.
+Both crowded diagnostics finished close to the physical context limit, and
+sampled free GPU memory reached 316 MiB, below the profile's 350 MiB target.
+Qualify the generation reserve and capacity choice before further exposure;
+do not treat the initial 8,192-token admission margin as a guaranteed bound.

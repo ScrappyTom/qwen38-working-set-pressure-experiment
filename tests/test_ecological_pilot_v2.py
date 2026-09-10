@@ -82,11 +82,13 @@ def test_model_free_ideal_paths_cross_before_mutation_and_reserve_correction() -
         assert row["submitted"] is True
 
 
-def test_live_authority_is_absent_and_future_payload_binds_schedule() -> None:
-    from working_set_exp.ecological_pilot_v2 import expected_authorization
+def test_historical_authorization_binds_the_consumed_schedule() -> None:
+    from working_set_exp.ecological_pilot_v2 import expected_authorization, validate_authorization
     from working_set_exp.jsonutil import sha256_file
 
-    assert not (EXPERIMENT / "MEASURED_AUTHORIZATION.json").exists()
+    # Validate historical custody; an existing receipt is not permission to rerun.
+    assert (EXPERIMENT / "measured_run" / "RESPONSE_SEAL.json").exists()
+    assert validate_authorization(EXPERIMENT)["verified"] is True
     expected = expected_authorization(EXPERIMENT)
     assert expected["schedule_sha256"] == sha256_file(EXPERIMENT / "SCHEDULE.json")
     assert expected["ideal_path_qualification_sha256"] == sha256_file(

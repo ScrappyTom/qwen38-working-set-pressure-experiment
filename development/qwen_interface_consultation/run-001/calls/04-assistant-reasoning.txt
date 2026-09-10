@@ -1,0 +1,146 @@
+I need to analyze the current state of this task.
+
+Task: Repair four regressions in an offline audit package. Before mutation, read every path in the frozen set. I've already read all 11 files (EVT-0001 through EVT-0011). Wait, let's verify:
+
+Frozen set:
+1. src/addressable_information_layer/saved_runs.py — EVT-0001 read ✓
+2. src/addressable_information_layer/importers.py — EVT-0002 read ✓
+3. src/addressable_information_layer/fixture_packs.py — EVT-0003 read ✓
+4. src/addressable_information_layer/records.py — EVT-0004 read ✓
+5. src/addressable_information_layer/content_log.py — EVT-0005 read ✓ (resident payload)
+6. src/addressable_information_layer/artifact_units.py — EVT-0006 read ✓ (resident)
+7. src/addressable_information_layer/hashing.py — EVT-0007 read ✓ (resident)
+8. src/addressable_information_layer/storage.py — EVT-0008 read ✓ (resident)
+9. src/addressable_information_layer/renderer.py — EVT-0009 read ✓ (resident)
+10. src/addressable_information_layer/policy.py — EVT-0010 read ✓ (resident)
+11. src/addressable_information_layer/readiness.py — EVT-0011 read ✓ (resident)
+
+So all 11 reads have been completed. The first 4 (saved_runs, importers, fixture_packs, records) are externalized (canonical sources RES-0001..RES-0004) and are not resident in the frame. To understand the code and find the 4 regressions, I need to see their contents.
+
+Boundary contract (the key specification):
+- A file whose byte size equals max_file_bytes is eligible (i.e., size == max_file_bytes is eligible. It's a boundary, "size >= max_file_bytes" or "> max_file_bytes" should probably be treated as ineligible, and "==" is eligible).
+- max_files=N allows at most the first N eligible files.
+- JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion (1-indexed, inclusive on both ends).
+- An embedded artifact on line MAX_JSONL_LINES is eligible.
+
+So regressions are probably:
+- In importers.py: file eligibility check uses `size > max_file_bytes` or `size < max_file_bytes`, etc. Should be `size <= max_file_bytes`? Wait — "A file whose byte size equals max_file_bytes is eligible." That is, files whose size equals the limit are eligible. So the condition is probably `size <= max_file_bytes` is eligible and `size > max_file_bytes` is ineligible. The regression might be `size < max_file_bytes` (strict less-than, excluding the equality case).
+- max_files: "At most the first N eligible files are allowed" — the regression might be counting non-eligible files toward the cap, or using `>` for the count, or breaking after the first N files scanned rather than N eligible.
+- JSONL: Records 1 through MAX_JSONL_LINES are eligible — the regression might be 0-indexed (records 0..MAX-1), or skipping the first line (the header), or allowing record MAX+1.
+- Embedded artifact on line MAX_JSONL_LINES is eligible — the regression might be excluding artifacts on the final line.
+
+To find these regressions, I need to see the actual source of importers.py, fixture_packs.py, saved_runs.py, records.py. I only have the canonical source handles: RES-0001, RES-0002, RES-0003, RES-0004. I should reopen those results with `reopen_result`.
+
+Wait, but the instructions say "Read the exact current source before mutation, and re-acquire missing governing facts." The 4 externalized reads are canonical source handles. To read their contents, I need reopen_result actions specifying those handles.
+
+Let me think about what the tool contract allows. Actions: p0_page, tree, search, read, patch, check, reopen_observation, reopen_result, reopen_event, submit.
+
+reopen_result: "Reopen exactly the canonical event result payload specified by the resident signal."
+
+So I can issue reopen_result actions with handles RES-0001 through RES-0004. But wait — do I have enough call budget? Resource state: call_limit 24, calls_remaining 13, calls_used 11. correction_cycle_reserved: "The check -> patch -> recheck -> submit sequence fits in the expected ideal path."
+
+Hmm, that suggests the ideal path is: check -> patch -> recheck -> submit. But I also need to read the externalized contents. Reopening might be counted in the call budget too. Let me count: 13 remaining. What I need:
+- Reopen RES-0001 (importers? no—) Wait, correspondence:
+  - RES-0001 ← EVT-0001 = saved_runs.py (sha256 76a8b2d4..., size 10164)
+  - RES-0002 ← EVT-0002 = importers.py (size 2304)
+  - RES-0003 ← EVT-0003 = fixture_packs.py (size 4468)
+  - RES-0004 ← EVT-0004 = records.py (size 12836)
+
+So 4 reopen_result calls, then analysis, then patch (maybe multiple patches for the 4 regressions — each patch is 1 action), then check, then recheck? Wait, "check -> patch -> recheck -> submit" — check on current candidate before mutation? The task says "Run check `public` on the current candidate and submit." Hmm — "Run check `public` on the current candidate and submit." Maybe the meaning is: after repair, run check public and submit. But the phrase "on the current candidate" — the current candidate is the candidate before mutation. Hmm, "Run check `public` on the current candidate and submit." — this is the last part of the task. My interpretation: run check public (which verifies the candidate) and submit.
+
+Actually, the correction_cycle_reserved says "check -> patch -> recheck -> submit fits in the expected ideal path." So the ideal sequence: check (on current candidate), patch, recheck, submit. That's 4 calls. Plus 4 reopens = 8. Total 8 ≤ 13. Good.
+
+But I might need multiple patch calls — 4 regressions. But "patch: one exact candidate/file binding replacement" — one patch action might replace content across multiple files? "One exact candidate/file binding replacement" — I think each patch action targets one file (file binding) with old/new replacement. Hmm, or is the patch a whole-file replacement? The tool contract says "one exact candidate/file binding replacement." So probably each patch call handles one file with old/new replacement. The 4 regressions might be in importers.py and fixture_packs.py (and maybe saved_runs.py, records.py). I don't know until I read them.
+
+Wait — but the 4 regressions might all be in importers.py (file/JSONL import boundary logic) and fixture_packs.py (fixture data generation). Let me think about what content is likely to be.
+
+This is a reconstruction experiment. The fixtures are "E20-SOURCE-IMPORT-BOUNDARIES." The package is an "owner-controlled offline audit package." The task says "Repair 4 regressions." The boundary contract describes exactly 4 behaviors:
+1. Files whose size equals max_file_bytes are eligible (boundary is inclusive).
+2. max_files=N allows at most the first N eligible files.
+3. JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion.
+4. Embedded artifacts on line MAX_JSONL_LINES are eligible.
+
+So the 4 regressions correspond to these 4 boundary conditions. They're probably in importers.py (import logic) and maybe fixture_packs.py (test fixture generation). Actually, since the task says "Do not modify the tests" — fixture_packs.py is probably not a test but library fixture construction code.
+
+Now, the key question: which action to output now? The frame says I must produce exactly one strict bare JSON action object.
+
+Options:
+1. reopen_result for RES-0002 (importers.py) — the smallest, most likely to contain import boundary logic.
+2. But I need all 4 to fully understand.
+
+Given "one action per step," I should issue the reopen for one canonical source now. Which one? Probably start with RES-0002 (importers.py), since the import boundary logic is most likely there. Or RES-0001 (saved_runs.py) in sequence order. The frame order is saved_runs, importers, fixture_packs, records. The regressions might be in any of them, but "import-boundary" suggests importers.py.
+
+Hmm, wait. Let me reconsider. Can I reopen multiple in one action? No — one action object. Each reopen_result is a separate action specifying a handle.
+
+Actually, let me think about what payload format the reopen_result action has. The action contract isn't fully specified in this message, but based on the resident signal contract: "canonical_source: stable exact payload address and provenance." The result_body shows `"canonical_source":{"access":"reopen_result","handle":"RES-0001","origin":"event_result"}`. So the action is probably `{"action":"reopen_result","handle":"RES-0002"}`.
+
+Given the constraints, let me issue a reopen of RES-0001 first (in sequence order). Actually, for efficiency, does order matter? All 4 are needed eventually. Let me start with RES-0001 (saved_runs.py).
+
+Hmm, but wait. Let me consider whether I should use `search` instead to find specific boundary conditions. `search`: "literal case-folded current source search." I could search for `max_file_bytes`, `max_files`, `MAX_JSONL_LINES` to find the relevant code. That might be more efficient than a full reopen. But the task requires "exact complete read of all paths" — I've already issued reads on all paths (complete: true, all lines returned). The read actions have been executed; the contents of 4 are externalized. Reopening is "access, not new payload" — the audit deliverable of complete read is satisfied by the read events.
+
+For finding regressions, I need actual content. The `search` action searches the current source for literals — the results are probably excerpts around matches. That might not give me full context, but I might find the boundary conditions. However, patching also requires exact old text. A reopen gives me the complete file content (the canonical payload of the read result), which is exactly the current source (assuming no mutations since — no patches applied yet, so current source == what was read).
+
+So the plan:
+1. reopen_result RES-0001 (saved_runs.py)
+2. reopen_result RES-0002 (importers.py)
+3. reopen_result RES-0003 (fixture_packs.py)
+4. reopen_result RES-0004 (records.py)
+5. Analyze, identify the 4 regressions.
+6. patch (per-file replacements; one patch action per file if needed; if a single file has multiple regressions, one patch with old/new for the entire file, or multiple patches?) — "One exact candidate/file binding replacement" — my understanding: a patch action contains a file binding and old/new replacement text. If a file has multiple disjoint regressions, multiple patch actions on the same file might be needed (each with its own old/new). That might exceed budget: 4 reopens + 4 patches (worst case 1 per regression) + check + recheck + submit = 4+4+4 = 12 ≤ 13. Tight but OK. But wait, the task says "Run check public on the current candidate and submit" — the ideal path "check -> patch -> recheck -> submit" suggests only one patch call is expected? Or the cycle is just a generic name. "The check -> patch -> recheck -> submit sequence fits in the expected ideal path" — the sequence is check, patch, recheck, submit. If the patch is a single call, that's 1+1+1+1=4. Plus 4 reopens = 8 ≤ 13. With buffer.
+
+Actually, I might not need check before mutation. The task explicitly says "Run check `public` on the current candidate and submit." Hmm, that reads as: run check on the current candidate (the repaired candidate, i.e., "current" at submission time) and submit. Or is it run check before mutation to observe failing behavior? The resource state note "The check -> patch -> recheck -> submit sequence fits in the expected ideal path" strongly suggests: check (pre-mutation), patch, recheck (post-patch), submit. But that's 4 + 4 reopens = 8 ≤ 13. Good.
+
+But hmm, do I need a pre-mutation check? The task's last sentence: "Run check `public` on the current candidate and submit." Given the ideal path note, I'll do this: reopen 4, analyze, patch (as many as needed), check, submit. Actually "recheck" implies check both before and after. Let me budget: 4 reopens + 1 pre-check + patches (up to 4) + 1 post-check + submit = up to 12 ≤ 13. OK, worst case fits exactly. But if patches > 4, no buffer for failure. Let me be careful.
+
+Alternative: use search to locate regressions, reducing need for a full pre-check? A pre-mutation check on the current (broken) candidate will probably fail — that's the point, it confirms the regressions. The task says run check public on the current candidate and submit — probably just one check at the end. The correction cycle note says "check -> patch -> recheck -> submit" as the expected ideal path, implying check is used both before and after. But "fits in the expected ideal path" is just saying it fits in the budget.
+
+Let me decide the order:
+1. First: reopen_result RES-0002 (importers.py)? Or RES-0001?
+
+Actually, wait. Let me reconsider: is there any chance the 4 regressions span saved_runs.py? "saved_runs.py" is probably a replay/serialization of saved runs. Records.py defines dataclasses (I've seen references: BlobRecord, Layer0Event, AddressMap, Artifact, ArtifactState, ArtifactReviewStatus, ArtifactUnit, ContextReceipt, CurrentFocus, EpisodeState, ModelResponse, ReadinessDecision, ReadinessStatus, RejectionRoute, ResponseType, CriterionArtifact, InformationNeedClass, AcceptanceCriterionClass, SummaryNode, etc.). Regressions in records.py could be enum values or schema fields. But the boundary contract is about import eligibility — that logic is most likely in importers.py and fixture_packs.py (fixtures build files/JSONL with exact sizes/lines to test boundaries).
+
+Given I have to pick one action now, let me start with reopen_result for RES-0001? Hmm. Which is most informative first? importers.py (RES-0002) is the prime suspect for eligibility logic. fixture_packs.py (RES-0003) builds the fixture data (files of exact size, JSONL of MAX_JSONL_LINES lines, embedded artifact). The 4 regressions might be in both files.
+
+Let me start with RES-0002 (importers.py). Actually — wait. Let me reconsider. Sequence-order reopening (RES-0001 first) is the cleanest and matches "ordered events are exact progress." But efficiency-wise it doesn't matter; all 4 will be reopened. Let me just go in sequence order: RES-0001.
+
+Hmm, but is there a risk that reopening consumes calls and I need them for patches? Let me recount the ideal path: 4 reopens + 4 patches + 2 checks + 1 submit = 11 ≤ 13. Even with a pre-check that's 12. OK.
+
+But actually, do I really need to reopen all 4? records.py defines records; regressions "in the owner-controlled offline audit package" per the boundary contract are about import boundaries. Records.py is unlikely to be involved. saved_runs.py is also probably not. But "Repair 4 regressions" — the 4 regressions exactly correspond to the 4 boundary conditions. Where do they live? Probably:
+- importers.py: file eligibility (size == max eligible; allow first N eligible; JSONL record range 1..MAX; embedded artifact on line MAX).
+- fixture_packs.py: fixture construction that generates these exact boundaries.
+
+The regressions might be split: e.g., importers.py has 2 wrong comparisons and fixture_packs.py has 2 wrong fixture constructions. To be safe, reopen all 4.
+
+Alternatively, use `search` to find "max_file_bytes" occurrences in the candidate source — that would immediately locate the eligibility logic in importers.py and fixture_packs.py. Search results might give me line numbers and context. But for patching, I need the exact current source text; search excerpts might be sufficient if they include the exact lines with context. Still, reopening gives the authoritative complete content. The instructions say "Read the exact current source before mutation, and re-acquire missing governing facts." The canonical payload IS the exact current source (no mutations yet). Reopen is the prescribed means ("Reopening creates a new access event preserving the same canonical source").
+
+Decision: This step, output reopen_result for RES-0001.
+
+Wait, actually — let me reconsider whether I should first run a `check` action to observe the failing public check, which might enumerate the 4 regressions with useful diagnostics. The public check probably runs tests (but "do not modify the tests" — tests exist somewhere; public check runs them). The failing test output might reveal exactly where the regressions are. That could be very informative and is part of the ideal path ("check -> patch -> recheck -> submit"). But I also need the source for patching.
+
+Given the ideal path note, the order is: reopen 4 (to read source), then patch, then check, then submit. Or check first. Either fits. Let me first reopen to acquire knowledge, then decide.
+
+So this step's action: `{"action":"reopen_result","handle":"RES-0001"}`.
+
+Let me double-check the action format. The available_actions list includes "reopen_result." Other actions have specific fields: read uses path/start_line; patch uses (candidate/file binding, old/new); check uses check ID (probably {"action":"check","check_id":"public"} or "id"?). The tool contract says: "check: stage-bound exact check on expected candidate." The payload is probably {"action":"check","check":"public"} or {"action":"check","check_id":"public"}. I'll figure that out when I get there; the fixture has available_check_ids:["public"].
+
+For reopen_result, the result_body shows `"canonical_source":{"access":"reopen_result","handle":"RES-0001","origin":"event_result"}`. The handle format "RES-0001" is exact. I'll use {"action":"reopen_result","handle":"RES-0001"}.
+
+Also, note: "observation_directory" entries are empty — no dynamic results listed. "externalized_payload_through_sequence":4 — the first 4 read results are externalized (RES-0001..0004), and 5-11 are resident (7 resident_payload_records). So indeed I need to reopen RES-0001..0004 for their contents.
+
+So the final action this step: reopen RES-0001 (saved_runs.py content).
+
+Hmm, one more consideration: should I open importers.py (RES-0002) first as it's most likely to contain the regressions? Doesn't matter; I'll reopen all 4. Sequence order is fine and least surprising.
+
+Actually — wait, let me reconsider the budget more carefully. calls_remaining: 13. Expected ideal path: "check -> patch -> recheck -> submit" = 4 calls reserved by fixture design ("correction_cycle_reserved_by_fixture_design"). So the fixture expects at most: 4 (correction cycle) + reopens + maybe 1 pre-check? 13 - 4 = 9 for reopens + other. 4 reopens leaves 5. If I want a pre-mutation check, that's 5 total, leaving buffer for multiple patches... wait no, the "patch" in the reserved cycle is one patch call. If 4 regressions span 2 files, I might need 2+ patch calls (one per file, each a full replacement? or multiple per file?).
+
+Hmm, "patch: one exact candidate/file binding replacement" — I read this as: a patch action is one replacement operation on one file (with old/new snippet), not a full-file replacement. If a file has 2 regressions, I need 2 patch actions (each its own old/new), unless I include a large old block covering both in one old/new. A patch could potentially have an old spanning both regressions with a new containing both fixes — if the span is large, I have to reproduce the exact text in between. That's possible if I have the full file content. But one patch action = one replacement.
+
+Worst case: 4 regressions in 4 different files → 4 patch calls. 4 reopens + 4 patches + check + recheck + submit = 11 ≤ 13. If a pre-check, that's 12 ≤ 13. Even worst-case tight, fits.
+
+But if a patch fails (e.g., old text doesn't match due to whitespace), I burn budget. The reopens give me exact content, so I'll construct exact old/new.
+
+Another subtlety: after a patch, the file's canonical source changes; subsequent reopens of pre-mutation reads are stale. So I must reopen all needed sources before any patch. Hence: do the 4 reopens first, then patch. Also, after the first patch on a file, if I need a second patch on the same file, the old text for the second patch must be derived from the current (post-first-patch) content — I know that exactly since I know the original + my edit. OK.
+
+So this step: reopen_result RES-0001.
+
+Final answer: a single bare JSON action object.

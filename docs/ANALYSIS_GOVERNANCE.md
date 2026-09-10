@@ -5,8 +5,10 @@ Exact custody is infrastructure for interpretation, not a result.
 After any model-exposed run, preserve five separate products:
 
 1. execution receipt: identities, hashes, counts, replay, and lifecycle;
-2. host-path audit: for every stop/failure, the exact model input/output and the
-   following host decision, including whether another call was actually offered;
+2. host-path audit: host decisions and interface behavior throughout the run,
+   including successful and recovered paths, with the exact input/output and
+   following host decision for every defect, friction finding, or stop/failure;
+   include whether another call was actually offered;
 3. apparatus finding: validity and contamination boundaries;
 4. direct transcript audit: every prompt, raw output, action, result, candidate,
    observation, check, and terminal state;
@@ -45,6 +47,27 @@ the final action separately. Report whether the reasoning identified the
 governing fact, mutation target, exact patch, check, and stopping condition;
 then report whether the external actions actually followed that plan. Do not
 credit reasoning content that never changes or supports observable behavior.
+
+Direct review must actively look for host issues and interaction friction,
+including issues visible in thinking or the model's response that a passing
+final result would conceal. Compare interpretations of metadata, tool effects,
+visibility, completed work, and candidate/check validity with the exact state
+actually supplied. Trace the resulting action, tool result, host decision, and
+later recovery or cost. Inspect relevant source, artifact, and custody records
+before attributing a mismatch to the model or host. A correctly implemented
+interface can still impose avoidable interpretation or interaction costs.
+
+For each finding, state what the model saw, what its thinking and final
+response indicate separately, what the host actually did, the observed
+consequence, and any uncertainty. Distinguish absent-evidence recovery,
+confirmation after mutation, misplaced acquisition, and redundant work.
+Do not count a useful retrieval as waste merely because the model also
+misstated a field. Neither a passing grade nor eventual recovery waives this
+review, and a rationale alone does not establish causal use or a host defect.
+Record findings in the existing audits and carry actionable or deferred
+interface suggestions into the results decision. Generated excerpts, counters,
+and custody checks assist review; running a script cannot certify that a human
+or reviewing agent directly read the transcripts.
 
 When the causal reason for an action remains unclear after exact prompt,
 reasoning, response, and host-path review, specify a fresh diagnostic with

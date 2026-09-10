@@ -1,13 +1,33 @@
 # Qwen3.8 Bounded Working-Set Experiment
 
-## Project pause checkpoint
+## Project status
 
-The project is intentionally paused after the complete Experiment 020
-ecological result. The durable summary of what was built, what has been
+The project paused after the completed Experiment 020 ecological comparison.
+The durable summary of what was built, what has been
 established, current limitations, and the evidence-gated direction on resume is
 [`PROJECT_CHECKPOINT_2026-08-30.md`](PROJECT_CHECKPOINT_2026-08-30.md).
 
-There is no active live-run authorization or automatic successor experiment.
+The original run authorization is consumed. Current development is bounded by
+the [interface consultation specification](development/qwen_interface_consultation/SPEC.md);
+there is no automatic measured successor.
+
+Owner-directed measurement maintenance and the initial 16-response interface
+consultation are complete. The [maintenance finding](maintenance/resume_after_020/FINDING.md)
+records the repairs, 42 selected passing tests, unchanged historical 8/8
+grades and inspection outcomes, and the separately reported boundary finding.
+The [consultation results](development/qwen_interface_consultation/RESULTS.md)
+record eight accepted/replayed ordinary actions, full direct review of all
+thinking and responses, and the host/interface friction that passing actions
+would conceal.
+
+The [resume proposal](RESUME_PROPOSAL.md) retains the owner's IQ3_XXS actor,
+q8/32k primary configuration, no MTP, uncapped xhigh thinking, and the larger
+q4 option. The next concrete step is the
+[prepared Qwen design consultation](development/qwen_interface_consultation/FOLLOW_ON_PROPOSAL.md),
+with zero completion calls so far. Resolve its generation room and runtime
+reserve before exposure. No interface refactor or fresh measured successor
+has been adopted; the proposed investigation still lacks a qualified natural
+pressure opportunity.
 
 ## Current experiment
 
@@ -155,7 +175,8 @@ facts. It must select any externalized exact result body to reopen. This future
 comparison requires an offline event-frame capacity stress proof before fresh
 fixture construction.
 
-See `experiments/012_large_world_recurrent_continuity/SPEC.md` for the latest study,
+See `experiments/020_owner_controlled_ecological_pilot_v2/RESULTS.md` for the latest completed study,
+`experiments/012_large_world_recurrent_continuity/SPEC.md` for the earlier large-world design,
 `experiments/006_authentic_bounded_pressure/SPEC.md` for the successful first
 authentic transition, and `experiments/002_single_boundary_reconstruction/SPEC.md`
 for the original reasoning-off pressure attempt.
@@ -366,13 +387,13 @@ host now rejects no-op patches and handles byte-identical content-addressed
 snapshots idempotently. See
 `experiments/019_owner_controlled_ecological_pilot/RESULTS.md`.
 
-Experiment 020 is the fresh sibling preparation. Its two real owner-controlled
+Experiment 020 was prepared as the fresh sibling. Its two real owner-controlled
 audits require exact full inspection of 11 and 10 source files before mutation.
 Actual-tool, exact-tokenizer ideal paths cross 25k after 9 and 11 calls, then
 reach the exact donor successor, pass checks, and submit with 7–9 actions left.
 Minimum admitted total headroom is 1,353 tokens for X25 and 1,917 tokens for
 R50. The bank, initial requests, package, and executable closure are sealed
-offline with zero model/GPU activity. A separate exact live authorization is
-still required. See
+offline before the separately authorized run, which is now complete and sealed.
+See its `RESULTS.md` for the execution outcome and
 `experiments/020_owner_controlled_ecological_pilot_v2/SPEC.md` and
 `PREPARATION_FINDING.md`.

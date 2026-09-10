@@ -13,6 +13,7 @@ from .hierarchical_p0 import build_p0_root
 from .isolation import run_checker
 from .jsonutil import atomic_write, canonical_json_bytes, load_json_strict, sha256_bytes, sha256_file
 from .large_world import _inventory
+from .measurement import check_opportunities
 from .recurrent_pressure import build_closure, verify_closure
 from .request import TOOL_CONTRACT, observation_directory_v2, render_reasoning_prompt
 from .runner import Actor, _execute_call, _save_candidate, _snapshot_prefix, verify_run
@@ -290,10 +291,22 @@ def _record_pair(
     )
 
 
-def inspection_status(pairs: list[dict[str, Any]], required_paths: tuple[str, ...]) -> dict[str, Any]:
-    """Measure the exact user-authored pre-mutation full-read obligation."""
+def inspection_status(
+    pairs: list[dict[str, Any]], required_paths: tuple[str, ...], *, initial_candidate: Candidate
+) -> dict[str, Any]:
+    """Audit continuous exact-source coverage before the first accepted edit.
+
+    A read's ``complete`` flag only describes that page reaching EOF. Neither
+    that flag nor an empty read beyond EOF establishes whole-file inspection.
+    Bind all credited bytes to the pre-mutation candidate, not just its path.
+    """
     coverage: dict[str, list[tuple[int, int]]] = {}
-    eof_seen: set[str] = set()
+    empty_reads: set[str] = set()
+    invalid_reads: list[int] = []
+    sources = {
+        path: initial_candidate.file_map[path].decode("utf-8").splitlines(keepends=True)
+        for path in required_paths
+    }
     first_mutation_sequence: int | None = None
     for sequence, pair in enumerate(pairs, 1):
         action = pair["response"]
@@ -308,11 +321,29 @@ def inspection_status(pairs: list[dict[str, Any]], required_paths: tuple[str, ..
         end = result.get("returned_end_line")
         if path not in required_paths:
             continue
-        if start is None and end is None and result.get("complete"):
-            coverage[path] = []
-            eof_seen.add(path)
+        if (
+            action.get("path") != path
+            or result.get("candidate_id") != initial_candidate.candidate_id
+            or result.get("file_sha256") != initial_candidate.file_sha256(path)
+            or type(action.get("start_line")) is not int
+            or action["start_line"] < 1
+            or result.get("requested_start_line") != action["start_line"]
+        ):
+            invalid_reads.append(sequence)
             continue
-        if not isinstance(start, int) or not isinstance(end, int):
+        lines = sources[path]
+        if start is None and end is None:
+            if result.get("content") != "" or (lines and action["start_line"] <= len(lines)):
+                invalid_reads.append(sequence)
+            elif not lines and action["start_line"] == 1:
+                empty_reads.add(path)
+            continue
+        if (
+            type(start) is not int or type(end) is not int
+            or start != action["start_line"] or not 1 <= start <= end <= len(lines)
+            or result.get("content") != "".join(lines[start - 1:end])
+        ):
+            invalid_reads.append(sequence)
             continue
         ranges = [*coverage.get(path, []), (start, end)]
         merged: list[tuple[int, int]] = []
@@ -322,12 +353,10 @@ def inspection_status(pairs: list[dict[str, Any]], required_paths: tuple[str, ..
             else:
                 merged[-1] = (merged[-1][0], max(merged[-1][1], last))
         coverage[path] = merged
-        if result.get("complete"):
-            eof_seen.add(path)
     completed = sorted(
         path
         for path in required_paths
-        if path in eof_seen and (coverage.get(path) == [] or coverage.get(path, [(0, 0)])[0][0] == 1)
+        if path in empty_reads or coverage.get(path) == [(1, len(sources[path]))]
     )
     missing = sorted(set(required_paths) - set(completed))
     return {
@@ -336,6 +365,8 @@ def inspection_status(pairs: list[dict[str, Any]], required_paths: tuple[str, ..
         "missing_before_first_mutation": missing,
         "all_completed_before_first_mutation": not missing,
         "first_mutation_sequence": first_mutation_sequence,
+        "source_candidate_id": initial_candidate.candidate_id,
+        "invalid_read_sequences": invalid_reads,
     }
 
 
@@ -457,7 +488,7 @@ def run_shared_prefix(
         log.append("canonical_payload_identity_recorded", {"sequence": len(pairs), "handle": canonical}, [])
     if state.submitted:
         disposition = "submitted_before_first_boundary"
-    inspections = inspection_status(pairs, fixture.required_inspection_paths)
+    inspections = inspection_status(pairs, fixture.required_inspection_paths, initial_candidate=fixture.initial)
     stopped = log.append(
         "ecological_shared_stopped",
         {
@@ -486,6 +517,7 @@ def run_shared_prefix(
                 "candidate_id": state.candidate.candidate_id,
                 "event_count": len(pairs),
                 "inspection_status": inspections,
+                "check_opportunities": check_opportunities(pairs, call_limit=CALL_LIMIT),
                 "last_record_sha256": stopped["record_sha256"],
             }
         ),
@@ -606,7 +638,7 @@ def run_branch(
         log.append("canonical_payload_identity_recorded", {"sequence": len(pairs), "handle": canonical}, [])
     if state.submitted:
         disposition = "submitted"
-    inspections = inspection_status(pairs, fixture.required_inspection_paths)
+    inspections = inspection_status(pairs, fixture.required_inspection_paths, initial_candidate=fixture.initial)
     stopped = log.append(
         "ecological_branch_stopped",
         {
@@ -640,6 +672,7 @@ def run_branch(
         "submitted": state.submitted,
         "event_count": len(pairs),
         "inspection_status": inspections,
+        "check_opportunities": check_opportunities(pairs, call_limit=CALL_LIMIT),
         "externalized_payload_count": externalized,
         "externalization_events": externalization_events,
         "capacity_stops": capacity_stops,
