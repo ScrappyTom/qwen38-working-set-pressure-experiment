@@ -1,6 +1,14 @@
 **Proposal: resume the project after Experiment 020**
 
-Latest outcome: the owner approved the concrete two-run / at-most-40-request
+Latest outcome: the [two-turn conversation with Qwen](development/episode_dialogue/review/RESULTS.md)
+is complete, sealed, verified and directly reviewed. Its interpretation before
+clarification still allows the report's edit to mean the actor's repair. After
+clarification, it proposes an episode annotation. The [prospective input change](development/episode_dialogue/PRESENTATION.md)
+retains that suggestion with source-checked scope and actual changing state.
+Three full examples add 50 tokens each; no task has used the revised input yet.
+The two calls cost 21.31 request minutes. Task-level use is the next obligation.
+
+Preceding outcome: the owner approved the concrete two-run / at-most-40-request
 scope with "Proceed". The [ordinary-loop pilot](development/investigation_loop/review/RESULTS.md)
 is complete: L01/L02 submit the same correct one-line repair after 10/14 calls,
 with first checks passing on the successor. All 24 responses are sealed,
@@ -20,13 +28,19 @@ changed content and is distinct from duplicate navigation. The
 records these successful-path costs without inferring memory loss or assigning
 all deliberation to one cause.
 
-Current next step: select and qualify a fresh investigation offline, outside the
-agent/metadata domain, with a clearly described incident, accessible evidence
-separating plausible explanations and an earned natural boundary if available.
-Retain the current representation initially. Qualify task-specific action,
-native-input and generation allowances before a new concrete execution decision.
-No automatic successor, micro-test, broad refactor or working-account mechanism
-is authorized by this result; object-scope and exact grouping ideas stay recorded.
+The owner's correction was to converse with Qwen before settling the presentation.
+That step has now occurred in the [two-turn development dialogue](development/episode_dialogue/SPEC.md):
+interpretation saved before clarification, then an adaptive reply and concrete
+suggestion. The completed pilot stays intact. Carry the resulting annotation
+into the next task's actual input; documenting our own diagnosis is insufficient.
+
+Then select and qualify a fresh investigation outside the agent/metadata domain,
+with accessible discriminating evidence and an earned natural boundary if
+available. Changing domains does not substitute for explicit incident/work
+framing or establish which change helps. Qualify task-specific allowances and
+judge whether Qwen uses the learned distinction during work. A working account
+remains a provisional option if evidence earns it, not a permanently excluded
+mechanism. No automatic successor or broad refactor follows from the pilot.
 
 Preceding maintenance: the owner-supplied review earned offline return-path repairs
 before larger-source work. Both reported size failures were reproduced against

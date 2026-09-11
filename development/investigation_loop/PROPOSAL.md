@@ -13,14 +13,24 @@ source and diff stay resident, while prior thinking is immediately omitted.
 L02's additional read confirms changed source. Preserve these distinctions and
 the observed 19.5/34.9-minute run costs; no broad refactor or reasoning cap follows.
 
-Next select a fresh investigation outside the agent/metadata domain offline.
-Distinguish its reported incident from the actor's own work without supplying a
-diagnosis or required next action. Establish accessible discriminating evidence,
-useful navigation, behavioral acceptance and task-specific action/input/generation
-allowances. Retain the representation initially; qualify a natural pressure
-opportunity if one exists and report its absence otherwise. Any later live scope
-needs its concrete preparation and existing separate owner decision. The consumed
-pilot does not authorize an automatic successor or interface micro-test.
+The owner corrected the next-step priority: consult Qwen before settling the
+presentation. The [two-turn dialogue is now complete](../episode_dialogue/review/RESULTS.md).
+Its saved first interpretation still allows the wrong episode association; after
+clarification Qwen suggests one annotation beside the report. The
+[source-checked prospective input](../episode_dialogue/PRESENTATION.md) retains
+that idea without hardcoding an event number or verification status. Use the
+annotation in every input of the next prepared task after establishing its
+presession scope, and assess actual use. Changing domains alone does not resolve
+incident/work ambiguity. This dialogue costs 21.31 request minutes and provides
+design evidence, not proof of a task-level benefit.
+
+Then select a fresh investigation outside the agent/metadata domain offline.
+Establish accessible discriminating evidence, useful navigation, behavioral
+acceptance and task-specific action/input/generation allowances. Qualify a natural
+pressure opportunity if one exists and report its absence otherwise. Future live
+task scope needs its concrete preparation and existing separate owner decision.
+The dialogue does not rescue or replace any completed pilot action, and no
+broad refactor or permanent ban on a working account follows from these results.
 
 Historical preparation was completed under [SPEC.md](SPEC.md). Read
 [PREPARATION_REVIEW.md](PREPARATION_REVIEW.md) and [VERIFICATION.json](VERIFICATION.json).

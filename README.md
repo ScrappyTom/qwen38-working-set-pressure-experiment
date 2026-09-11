@@ -2,6 +2,15 @@
 
 ## Project status
 
+The requested [two-turn conversation with Qwen is complete](development/episode_dialogue/review/RESULTS.md).
+Before clarification, Qwen still considered the report's edit possibly its own
+repair; afterward it proposed one annotation separating the episodes. Codex
+source-checked that suggestion and prepared [actual ordinary-action input examples](development/episode_dialogue/PRESENTATION.md),
+adding 50 tokens while preserving existing state and tool requirements. Both
+full responses are sealed and directly reviewed. The conversation cost 21.31
+request minutes; the revised input has not yet been used in a task. The next
+fresh investigation must use the distinction through actual tool feedback.
+
 The owner-approved [two-run ordinary-loop pilot is complete](development/investigation_loop/review/RESULTS.md).
 Both runs make the same correct one-line repair, check the successor and submit:
 **10 and 14 calls**, with all 24 responses sealed, replay-verified and directly
@@ -29,9 +38,9 @@ artifacts and source pins remain unchanged; that maintenance made no model reque
 
 The [next-step proposal](development/investigation_loop/PROPOSAL.md) now prioritizes
 offline selection of a fresh investigation outside the agent/metadata domain,
-with accessible evidence separating plausible explanations and incident framing
-distinct from the actor's own repair history. Keep the existing representation
-initially; no new wording micro-test or broad refactor follows. This completed
+with accessible evidence separating plausible explanations and the episode
+annotation developed with Qwen above. Retain the existing representation plus
+that declared presentation change; no new wording micro-test or broad refactor follows. This completed
 task's source names a stale map, and natural pressure remains unqualified.
 The main 25k proposal explicitly means an input
 working set separate from physical generation capacity. The current 32,768

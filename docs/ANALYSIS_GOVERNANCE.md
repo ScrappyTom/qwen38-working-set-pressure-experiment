@@ -69,6 +69,23 @@ interface suggestions into the results decision. Generated excerpts, counters,
 and custody checks assist review; running a script cannot certify that a human
 or reviewing agent directly read the transcripts.
 
+For consequential misunderstanding, diagnosis must lead into a small separate
+development conversation with the operating model before settling the next
+presentation. Ask how it interprets the actual input and which associations are
+explicit or inferred. Preserve its answer before providing source-checked
+clarification, then respond to that answer and ask what small change would help.
+Check proposed examples against actual records. Neither agreement with the
+reviewer nor a retrospective explanation is proof of the original cause.
+
+Keep this dialogue separate from frozen evaluation: do not rescue, rewrite or
+rerun the completed trajectory. It is informed development work, not independent
+capability evidence. Carry the resulting distinction into actual future task
+inputs and inspect whether it is used across actions and tool feedback. A lesson
+in governance prose alone does not expose it to Qwen. Changing task/domain and
+framing together may be practical development but does not isolate a framing
+effect. Keep working-account options provisional, guided by the distinction
+between omitted rationale, removed evidence and available evidence misused.
+
 Distinguish a transient question resolved correctly within thinking from a
 persistent incorrect interpretation, an incorrect action, or substantial repeated
 work. An accepted action is not evidence that all predicted return contents were

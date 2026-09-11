@@ -4,6 +4,16 @@ This repository exists only to test exact-context reconstruction across one or
 more authentic pressure boundaries and its directly earned evidence-to-action
 diagnostics. Keep it smaller than its evidence donors.
 
+The central development method is collaboration with the operating model.
+When consequential misunderstanding appears, preserve and diagnose the actual
+interaction, then use a small separate conversation with Qwen to examine its
+interpretation before settling the next presentation. Save its answer before
+clarifying facts; respond to what it actually says and source-check its proposals.
+Carry an earned distinction into the actual model input and assess its use during
+task work. A frontier-authored audit or governance note alone does not complete
+this learning loop. Qwen's explanations are design evidence, not privileged
+access to the cause of its earlier behavior.
+
 Read in order:
 
 1. `PROJECT_CHECKPOINT_2026-08-30.md`;
@@ -204,10 +214,21 @@ The pilot qualifies the ordinary loop on one injected development fault, not
 independent discovery or pressure continuity. Peak inputs are 15,644/20,027;
 minimum free GPU memory is 316 MiB under the accepted advisory policy, without
 observed runtime failure or truncation. The 25k input contrast remains unqualified.
-Next select a fresh investigation outside the agent/metadata domain, distinguish
-the reported incident from working history, and qualify accessible discriminating
-evidence and task-specific allowances offline. Keep the existing representation
-initially and preserve exact grouping/object-scope suggestions as deferred.
+The owner subsequently corrected the next-step priority: consult Qwen about the
+new incident/work-history confusion before settling the presentation. The two
+development dialogue turns under `development/episode_dialogue/SPEC.md` are now
+consumed, sealed, verified and directly reviewed in full. Read the five products
+under `development/episode_dialogue/review/`. E1 still considers the report's edit
+possibly EVT-0011; after factual clarification, E2 proposes one report-side
+episode annotation. The prospective implementation and actual input examples are
+in `development/episode_dialogue/PRESENTATION.md`: retain the annotation, remove
+the snapshot-specific event number, and preserve actual event/check state.
+Its 50-token example cost is measured offline; task-level use remains untested.
+The next fresh task must include this declared annotation in each actual input
+after establishing the report's presession scope, and assess its use through
+actions and tool feedback. Changing domains does not substitute for that step.
+Qualify discriminating evidence and task-specific allowances. Keep grouping and
+object-scope suggestions available; this dialogue does not settle a memory design.
 Any new live scope requires its concrete preparation and separate owner decision;
 there is no automatic successor, interface micro-test or memory redesign.
 
@@ -230,7 +251,11 @@ Non-negotiable rules:
 - do not use evaluator truth, known-good patches, or host-selected relevance
   in the model loop;
 - do not add summaries, retention declarations, relationship graphs,
-  embeddings, ranking, or semantic host routing;
+  embeddings, ranking, or semantic host routing to an unchanged frozen baseline;
+  these are current experimental exclusions, not permanent prohibitions. A future
+  working account or other representation may be proposed when the observed
+  distinction between omitted rationale, removed evidence and misused available
+  evidence earns it, with its input/cost/behavioral effects explicitly declared;
 - one invocation yields at most one strict JSON action;
 - one attempt, no retry, repair, rescue, or cross-cell history;
 - paired resident and externalization conditions must begin from byte-identical
