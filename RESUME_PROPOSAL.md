@@ -1,5 +1,15 @@
 **Proposal: resume the project after Experiment 020**
 
+Latest preparation: the [two-run ordinary-loop package](development/investigation_loop/PREPARATION_REVIEW.md)
+is sealed and verified, with zero completion requests. It proposes 20 actions
+per run, 40 maximum total, at q4/56,576 with no MTP and uncapped xhigh. Initial
+inputs are 3,070 tokens; the admitted focused correction path peaks at 23,554.
+A broader path crosses the 23,808 reserve-based input ceiling while actions
+remain and is preserved as a denial example. Fourteen pilot-specific checks
+pass; all 47 native inputs were verified. The exact
+[specification](development/investigation_loop/SPEC.md) is ready for the existing
+separate execution decision. This is not model success or a pressure result.
+
 Current next step: the owner-supplied review earned offline return-path repairs
 before larger-source work. Both reported size failures were reproduced against
 the checkout; nested navigation also exposed an unrelated outline-limit crash.

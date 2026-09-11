@@ -1,5 +1,15 @@
 # Next step: qualify an ordinary complete working loop
 
+Preparation is now complete under [SPEC.md](SPEC.md). Read
+[PREPARATION_REVIEW.md](PREPARATION_REVIEW.md) and [VERIFICATION.json](VERIFICATION.json).
+The owner-directed package proposes two fresh runs with a 20-action allowance
+each (40 completion calls maximum), at the selected q4/56,576, no MTP and
+uncapped xhigh. Both initial inputs and the direct/focused oracle paths fit;
+broader exploration can reach the reserve-based input stop while actions
+remain. Forty-seven inputs were rendered/tokenized, with zero completion calls.
+The separate execution decision remains pending. The text below preserves the
+planning rationale; actual prepared scope is in the spec.
+
 Keep the complete reference and accurate resource/navigation wording. Close the
 isolated wording question with its mixed result. The next model unit should be
 a useful checked contribution over several turns, with every exact return fed

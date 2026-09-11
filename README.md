@@ -2,6 +2,14 @@
 
 ## Project status
 
+The [two-run ordinary-loop pilot is prepared](development/investigation_loop/PREPARATION_REVIEW.md),
+sealed and verified, with **zero completion calls**. It proposes two independent
+runs, 20 actions each (40 maximum), using q4/56,576, no MTP and uncapped xhigh.
+Fourteen focused mocked checks pass. Both initial inputs are 3,070 tokens;
+the focused correction path peaks at 23,554 against the 23,808 input ceiling.
+A broader path exceeds that ceiling despite remaining actions; its later oracle
+states are counterfactual. The separate execution decision is pending.
+
 The latest owner review prompted [offline return-boundary maintenance](maintenance/result_return_boundaries/FINDING.md).
 Both reported size failures reproduced against the checkout: rejected reads
 could falsely credit coverage, and accepted results could exceed their historical
@@ -13,8 +21,8 @@ artifacts and source pins remain unchanged; no model requests ran in this tranch
 
 The [next-step proposal](development/investigation_loop/PROPOSAL.md) prioritizes
 a short complete working loop. Its ten-action oracle path succeeds, but its
-diagnostic already identifies a stale map, and natural pressure/native task
-budgets are not qualified. The main 25k proposal now explicitly means an input
+diagnostic already identifies a stale map. Native development allowances are
+now prepared above; natural pressure is not qualified. The main 25k proposal explicitly means an input
 working set separate from physical generation capacity. The current 32,768
 reserve on 56,576 permits only 23,808 input tokens, so it cannot yet supply that
 contrast. Read [RESUME_PROPOSAL.md](RESUME_PROPOSAL.md) for the preparation boundary.

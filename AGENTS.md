@@ -169,6 +169,20 @@ freeze coherent task allowances before new exposure. The completed wording
 question stays closed. The offline scripted loop is host feasibility only,
 not model success, independent diagnosis, or authorization for new live calls.
 
+The owner next directed preparation of the two-run ordinary-loop pilot. Read
+`development/investigation_loop/SPEC.md`, `PREPARATION_REVIEW.md` and
+`VERIFICATION.json` in that directory. The sealed preparation made zero
+completion calls and proposes L01/L02 with seeds 104729/130363, 20 actions each,
+40 maximum completion requests. The direct and focused correction paths fit;
+the broader path would be denied at its fifteenth input despite six actions
+remaining. Its later oracle states are counterfactual. All history stays
+resident, and private thinking remains outside subsequent inputs. This is
+integration qualification, not independent discovery or a 25k comparison.
+Fourteen pilot-specific mocked checks pass. The execution runner and prepared
+package are ready for the existing separate owner decision; do not treat
+render/tokenization-only preparation as live authorization. Keep the already
+accepted q4 memory policy and preserve all prior evidence and freezes.
+
 Non-negotiable rules:
 
 - preserve exact prompts, outputs, actions, results, candidates, observations,
