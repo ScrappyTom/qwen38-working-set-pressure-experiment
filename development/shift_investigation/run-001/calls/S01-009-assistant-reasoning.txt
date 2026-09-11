@@ -1,0 +1,201 @@
+We need answer final with one JSON action object only. Need solve task. We have repository. Need infer bug: night shift recorded and confirmed, following day's hours report omits its contribution. Report must count only time within requested local day, combine contributions, preserve offset handling, void exclusion, invalid-input rejection.
+
+We have reads all main files. Need inspect importing.py perhaps invalid validation. Also examples. The bug likely in windows DayWindow.contains requires entire shift inside window, but a shift crossing midnight should contribute partial overlap with day. Daily report should count only time within day, not require shift entirely inside. Current daily.py uses window.contains(shift), counts full duration only if entire shift inside window, so overnight shift crossing into next day contributes zero to following day (unless entire shift within day). It should clip intersection of shift interval and day window, count overlap minutes. For a night shift crossing midnight, the portion in the requested local day should be counted. Need modify report_minutes to calculate overlap between shift [start,end) and window [start,end), count seconds/60. Need preserve void exclusion, status, offset handling, invalid input. Maybe model duration_minutes used for full shift, need overlap. Could also have windows contains docstring incorrect. Need patch reporting/daily.py maybe use window.start/end. Also if shift starts and ends exactly boundary? Day runs from midnight inclusive to next midnight exclusive. Only time within day contributes. If shift end == window.start no overlap; if start == window.end no overlap. Overlap = max(0, min(shift.end, window.end) - max(shift.start, window.start)). Need only positive. For confirmed shifts, sum.
+
+Need exact current source before editing. We have read daily.py current candidate? Yes candidate id unchanged b77... and file_sha256 from EVT-0006. But must use exact current source; read happened in this session and candidate unchanged? We haven't edited. Current candidate same. We can patch using expected candidate id and file sha256 from last read. Need old/new exact. But maybe need inspect importing.py to ensure no other bug? We haven't read importing.py. There are call limits 12 remaining. Need maybe read importing.py and examples? But can infer. Task says use exact current source before editing. For patch we need file sha. We have exact content of daily.py. We can patch without reading importing? But to ensure no invalid rejection issue? The bug likely daily. But to be safe maybe read importing.py. However final action only one per turn? It seems each user turn expects one action. We need output one action. We need choose next action. Could be read importing.py. But we need eventually patch, check, submit; only one action per response. We can do sequence across turns. Current turn can be read importing.py. But do we need it? We have enough to patch? Need exact current source before editing: yes for target file daily.py. We have exact content. Need expected_file_sha256. We have file_sha256 10a29... from current read. Candidate id current b77... So can patch immediately. But we must ensure replacement valid and enough. Let's think deeply.
+
+Current daily.py:
+```
+"""Aggregate confirmed staffing time for a daily report."""
+from collections.abc import Iterable
+
+from ..model import Shift
+from ..windows import DayWindow
+
+
+def report_minutes(shifts: Iterable[Shift], window: DayWindow) -> dict[str, float]:
+    totals: dict[str, float] = {}
+    for shift in shifts:
+        if shift.status != "confirmed":
+            continue
+        if not window.contains(shift):
+            continue
+        minutes = shift.duration_minutes
+        totals[shift.employee] = totals.get(shift.employee, 0.0) + minutes
+    return dict(sorted(totals.items()))
+```
+Need patch to overlap. Could modify in place without new imports:
+```
+def report_minutes(shifts: Iterable[Shift], window: DayWindow) -> dict[str, float]:
+    totals: dict[str, float] = {}
+    for shift in shifts:
+        if shift.status != "confirmed":
+            continue
+        overlap = min(shift.end, window.end) - max(shift.start, window.start)
+        if overlap.total_seconds() <= 0:
+            continue
+        minutes = overlap.total_seconds() / 60.0
+        totals[shift.employee] = totals.get(shift.employee, 0.0) + minutes
+    return dict(sorted(totals.items()))
+```
+Need use timedelta? datetime subtraction returns timedelta; total_seconds exists. No import needed.
+
+Potential issue: if shift start/end are timezone-aware? windows are fixed offset, importing likely normalizes to explicit offsets. Subtraction ok. Could have naive? invalid rejected.
+
+Need preserve employees with no contributing time omitted: totals starts empty; only adds if overlap positive. Good.
+
+Need maybe window.contains should be fixed? Not necessary but maybe public check tests DayWindow.contains? The task says preserve offset handling etc. The contains method currently says entire interval inside; maybe public check may test DayWindow.contains? It is an exported internal method maybe not. But if we leave contains unchanged, maybe not used. But if checker imports windows.DayWindow and expects contains? The task is daily reporting. Could there be a public check that tests `contains` behavior? The bug is using contains for partial overlap. If we change daily to not use contains, okay. But maybe contains itself is a buggy function? It returns whether entire shift inside window; not a bug if that's documented. But if expected semantics is "whether shift contributes" maybe no. Could also fix contains to overlap? But contains name implies contains, not overlap. Better leave.
+
+Need consider "A report must count only time worked within the requested local day" includes fractional minutes. The overlap total_seconds / 60 handles fractional.
+
+Need think about invalid input rejection. We don't touch importing. Need ensure our change doesn't break validation.
+
+Could there be another bug: `windows.day_window` uses `date.fromisoformat(day)`, okay; fixed_offset regex allows +00:00 to +23:59 and -00:00? It allows -00:00 (sign - zero). Timezone with -0 zero? Python timezone(timedelta(0)) okay, sign negative? It returns timezone(-timedelta(0)) = timezone(timedelta(0))? Actually -timedelta(0) is timedelta(0). Fine.
+
+But problem: "A night shift was recorded and confirmed, but the following day's hours report omits its contribution." If shift crosses midnight, e.g. 22:00 to 06:00 next day. Requested day following day (local date) window from next midnight to next next midnight. Shift end 06:00 on requested day; start previous day. Overlap 6 hours. Current code: window.contains requires start >= window.start and end <= window.end. start is before window.start, false => omit. Our overlap fixes.
+
+Need maybe shift spanning multiple days? Could count per day if window inside shift. overlap counts one day portion. If shift longer than day, counts at most day duration. That's correct: only time within day contributes.
+
+Need output patch action. Need exact old string unique. Could use whole function or smaller. old must occur exactly once. We can patch function body. Need old and new <=512 chars. Let's design minimal old:
+```
+        if not window.contains(shift):
+            continue
+        minutes = shift.duration_minutes
+```
+This occurs once. Replace with:
+```
+        overlap = min(shift.end, window.end) - max(shift.start, window.start)
+        if overlap.total_seconds() <= 0:
+            continue
+        minutes = overlap.total_seconds() / 60.0
+```
+Need exact indentation. In JSON string, newlines. old length small. This should be unique. Need expected candidate id and file sha. Candidate id from current. file sha from read daily.py. But after no edits, current. Need maybe candidate_id in current frame is b77... Yes.
+
+Need ensure effective diff fits. yes.
+
+Potential issue: `overlap.total_seconds()` returns float; if exactly 0, skip. What about negative? skip. Good.
+
+Potential issue: `min`/`max` on aware datetimes with different tz offsets ok. If shift start/end have different offsets? Subtracting aware datetimes works based on absolute time. min/max works via comparison. Good.
+
+Could there be a requirement to count only time worked within day, but if shift is entirely within day, old counts full duration. New overlap equals full duration. If shift starts before window and ends after window (covers whole day), counts window length (24h). That's "only time within day".
+
+Need maybe use `window.start` and `window.end` attribute names. Yes.
+
+Need consider type hints? No.
+
+Need if shift.status != confirmed skip. Good.
+
+Need if employee empty? import rejects. Good.
+
+Now, before patch, should we need to inspect exact current source? We have. But maybe file sha from event is not enough? The read result has file_sha256. Use it.
+
+Need final content strict bare JSON action object. No prose. The action keys exactly: action, path, old, new, expected_candidate_id, expected_file_sha256. All required. old/new strings can include newlines. Need ensure JSON valid. Use double quotes, escape newlines as \n. Let's prepare:
+old:
+"        if not window.contains(shift):\n            continue\n        minutes = shift.duration_minutes\n"
+Check exact lines:
+line: `        if not window.contains(shift):`
+line: `            continue`
+line: `        minutes = shift.duration_minutes`
+There is a following line `        totals[shift.employee] = totals.get(shift.employee, 0.0) + minutes`. We can include trailing newline after old line? If old ends with newline, it matches exactly once? It will replace three lines including newline after third, leaving next line. New should end with newline. Fine. But if old includes trailing newline, unique. Could also not include trailing newline, replace just text, leaving newline. But easier include. Need old exactly as in file. It appears:
+```
+        if not window.contains(shift):
+            continue
+        minutes = shift.duration_minutes
+```
+Yes.
+
+new:
+"        overlap = min(shift.end, window.end) - max(shift.start, window.start)\n        if overlap.total_seconds() <= 0:\n            continue\n        minutes = overlap.total_seconds() / 60.0\n"
+Check indentation: 8 spaces before overlap; 8 before if; 12 before continue; 8 before minutes. Good.
+
+Need maybe use total_seconds once to avoid two calls? Not necessary. But if overlap negative, total_seconds negative; if 0.5 minutes, fractional.
+
+Could there be a problem that `timedelta.total_seconds()` returns 0.0 for sub-micro? Fine.
+
+Need run check public after patch, then submit. But one action now patch.
+
+Double-check patch contract: expected_candidate_id and expected_file_sha256 must equal current PRE-EDIT candidate ID and target file fingerprint. candidate_id b77... file sha 10a29a... yes.
+
+Need path: src/shiftledger/reporting/daily.py.
+
+Potential hidden: The current p0 root has examples. There may be public check that uses examples. No need.
+
+Let's consider if the actual bug could be in `DayWindow.contains` and public check expects `contains` to mean "has any overlap"? The docstring says entire shift interval inside. The daily report bug is using contains. If we change report, okay. But maybe check tests `DayWindow.contains` for shifts crossing window expecting True? The task: "A report must count only time worked within the requested local day". It doesn't specify contains. The public check likely tests `daily_minutes` only. It may import daily? The README says public API daily_minutes. So report fix enough.
+
+But if checker tests `report_minutes` directly with a shift that partially overlaps, our fix counts. If it tests `window.contains`? Unknown.
+
+Could there be a bug in `daily_minutes` default offset? It uses read_shifts, day_window. fine.
+
+Need maybe import read_shifts not read. no.
+
+Let's think about "invalid-input rejection". If we change report_minutes to use min/max, no validation changes. But if invalid shifts somehow get in? read_shifts should reject. Need maybe inspect importing.py to ensure there isn't a bug where invalid rows are not rejected? The task says preserve invalid-input rejection; not necessarily repair. But maybe the reported problem includes invalid input? No, night shift omitted. But public check exercises decoding and report behavior. We need ensure public passes. Could be another planted bug in importing? Let's inspect from known p0 size 1249, symbol_count 2. We didn't read. It may parse CSV and validate. Could contain subtle bug: rejects timestamps without UTC offsets; rejects reversed intervals; etc. It might be correct. But to be safe, with 12 calls, we could read importing.py before patch. But final action only one. If we patch now and there is another bug, public fails, we can fix later. But call limit maybe 12, enough. However if patch now and public fails, we can read/fix. But if patch introduces no issue. Is there risk patching without reading importing? no.
+
+But we need "Use exact current source before editing". We have target. Could proceed.
+
+Need ensure after patch, check public. But we can't do multiple. So final now patch.
+
+Let's verify JSON size under 5000. yes.
+
+One subtlety: The old string includes `window.contains(shift)`. If `contains` method still used elsewhere? no. If linter? no.
+
+Potential issue: Python version? `dict[str, float]` okay. We don't add imports.
+
+Potential issue: The overlap calculation using `min(shift.end, window.end) - max(shift.start, window.start)` creates a timedelta. If shift and window are aware but with different fold? no.
+
+Potential issue: If shift.end <= window.start or window.end <= shift.start, overlap negative or zero. We skip. Good.
+
+Potential issue: Day window inclusive start to next midnight exclusive. If shift starts exactly at window.end (next midnight) and continues, overlap zero; not counted. If shift ends exactly at window.start, zero; not counted. Good.
+
+Potential issue: Fractional minutes: total_seconds/60. Good.
+
+Potential issue: Combining employee contributions: totals.
+
+Potential issue: sorted dict: returns dict(sorted(totals.items())). We preserve.
+
+Should we perhaps modify `DayWindow.contains` to return overlap positive? But then docstring wrong and semantics changed. No.
+
+Could we modify daily to use a helper in windows? Not needed.
+
+Let's craft final JSON exactly:
+{
+  "action": "patch",
+  "path": "src/shiftledger/reporting/daily.py",
+  "old": "        if not window.contains(shift):\n            continue\n        minutes = shift.duration_minutes\n",
+  "new": "        overlap = min(shift.end, window.end) - max(shift.start, window.start)\n        if overlap.total_seconds() <= 0:\n            continue\n        minutes = overlap.total_seconds() / 60.0\n",
+  "expected_candidate_id": "b77c87956a3936ab169f80f5df55b4a2731b6015968fdebcb1e2a1095469c6ea",
+  "expected_file_sha256": "10a29a0b918482b736d5012dc6e333b9bdbd2b9f5ae32ff7977de2b83b47b450"
+}
+
+Need no trailing prose. final content. Ensure keys all required, no extra. action exactly patch. old min 0 max 512. new max 512. Good.
+
+Let's consider if old string occurs exactly once. It includes lines; yes. If there are similar lines? no.
+
+One more thought: In current source, after `minutes = shift.duration_minutes` there is newline then `        totals...`. Our old includes newline after minutes, so replacement new includes newline after minutes. Good.
+
+Check exact file content from read:
+```
+"""Aggregate confirmed staffing time for a daily report."""
+from collections.abc import Iterable
+
+from ..model import Shift
+from ..windows import DayWindow
+
+
+def report_minutes(shifts: Iterable[Shift], window: DayWindow) -> dict[str, float]:
+    totals: dict[str, float] = {}
+    for shift in shifts:
+        if shift.status != "confirmed":
+            continue
+        if not window.contains(shift):
+            continue
+        minutes = shift.duration_minutes
+        totals[shift.employee] = totals.get(shift.employee, 0.0) + minutes
+    return dict(sorted(totals.items()))
+```
+Yes.
+
+Could there be a hidden requirement: "A day runs from midnight inclusive to the next midnight exclusive. Only time within that day contributes". If a shift starts before day and ends after day, the entire day should count. Our overlap. Good.
+
+Need maybe if shift is void but overlaps, skip. yes.
+
+Let's final.

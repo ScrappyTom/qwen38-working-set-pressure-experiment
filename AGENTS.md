@@ -236,11 +236,24 @@ seed 161803, at most 20 completion requests/actions. Its 30 prepared inputs all
 carry the episode annotation and preserve actual current state. Direct and
 partial-repair/correction paths take 13/16 actions, peaking at 12,981/16,087
 native tokens under the existing q4/56,576, G=32,768, no-MTP/uncapped-xhigh preset.
-Ten focused mocked integration checks pass. Preparation made zero completions;
-the concrete live package awaits its separate execution decision. Do not send
-oracle actions or checker conclusions in the initial input. The 5,019-byte task
-does not establish pressure continuity or a framing-only effect. Its purpose is
-to observe actual use of the learned distinction through ordinary tool feedback.
+Ten focused mocked integration checks passed and preparation made zero completions.
+The owner then answered the concrete single-run / at-most-20-action execution
+question with "Proceed". S01 is complete and consumed: 11 actions, one correct
+overlap repair, all 24 public cases passing on the first check, and submission of
+that candidate. Read the five audits and DECISION.json under
+`development/shift_investigation/review/`. All complete responses were directly
+read and replayed; all ten nonterminal results reached the next actual input.
+The consulted annotation is present in every input. The prior incident/repair
+oscillation is absent here, but Qwen never explicitly cites the annotation and
+the task changed, so causal benefit is not established. The patch response still
+uses 4,000 output tokens, including repeated deliberation, without extra actions.
+Retain the presentation; this run earns no new host patch. Minimum GPU free
+memory is 335 MiB under the accepted policy; peak native input is 10,543. No
+failed check, rejection or pressure boundary occurred. The nine unused actions
+authorize no successor. Preserve pending-decision wording in frozen preparation
+as historical status. Next preparation should make evidence-driven changes of
+explanation observable; keep separate Qwen dialogue as the response to a future
+consequential misunderstanding before settling new presentation.
 Any new live scope requires its concrete preparation and separate owner decision;
 there is no automatic successor, interface micro-test or memory redesign.
 

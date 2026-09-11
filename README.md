@@ -2,14 +2,18 @@
 
 ## Project status
 
-The [fresh Shift Ledger investigation is prepared](development/shift_investigation/PREPARATION_REVIEW.md)
-for one unassisted run with at most 20 actions. Its actual inputs include Qwen's
-episode annotation. Ten focused integration checks pass; both a direct route and
-a partial-repair/correction route fit the native input ceiling. Thirty inputs
-were rendered/tokenized with zero completions. This is a small ordinary task
-outside the metadata domain, with public evidence separating decoding/window
-construction from reporting behavior. Live execution awaits the existing separate
-owner decision; task-level use of the annotation remains untested.
+The [owner-approved Shift Ledger investigation is complete](development/shift_investigation/review/RESULTS.md):
+**11 actions, one correct repair, all 24 public cases passing on the first check,
+and checked submission**. Every actual input includes the annotation developed
+with Qwen. Complete response review finds no recurrence of the old incident/work
+confusion, but the actor never explicitly cites the annotation and the task also
+changed; causal benefit is unproven. All ten nonterminal results reached the next
+model input, and all actions replay exactly. The run cost 10.10 request minutes,
+with 8,781 generated tokens; the patch response accounts for 45.6% of generation.
+Minimum free GPU memory was 335 MiB under the accepted advisory policy. Peak input
+was 10,543, with no pressure boundary or failed-repair recovery. The single attempt
+is consumed; retain the presentation and prepare an investigation where new evidence
+can change the explanation. No further isolated wording study or host patch is earned.
 
 The requested [two-turn conversation with Qwen is complete](development/episode_dialogue/review/RESULTS.md).
 Before clarification, Qwen still considered the report's edit possibly its own
@@ -17,8 +21,9 @@ repair; afterward it proposed one annotation separating the episodes. Codex
 source-checked that suggestion and prepared [actual ordinary-action input examples](development/episode_dialogue/PRESENTATION.md),
 adding 50 tokens while preserving existing state and tool requirements. Both
 full responses are sealed and directly reviewed. The conversation cost 21.31
-request minutes; the revised input has not yet been used in a task. The next
-fresh investigation must use the distinction through actual tool feedback.
+request minutes. The revised input has now been used through actual task feedback
+in Shift Ledger above; that completes this development loop without proving a
+framing-only effect.
 
 The owner-approved [two-run ordinary-loop pilot is complete](development/investigation_loop/review/RESULTS.md).
 Both runs make the same correct one-line repair, check the successor and submit:
@@ -45,12 +50,12 @@ exposed and fixed a directory-count/outline-limit crash. **58 selected checks
 pass**, and all eight saved wording actions still replay exactly. Historical
 artifacts and source pins remain unchanged; that maintenance made no model requests.
 
-The [next-step proposal](development/investigation_loop/PROPOSAL.md) now prioritizes
-offline selection of a fresh investigation outside the agent/metadata domain,
-with accessible evidence separating plausible explanations and the episode
-annotation developed with Qwen above. Retain the existing representation plus
-that declared presentation change; no new wording micro-test or broad refactor follows. This completed
-task's source names a stale map, and natural pressure remains unqualified.
+The [next-step proposal](development/investigation_loop/PROPOSAL.md) led to the
+fresh task outside the metadata domain completed above. Retain the existing
+representation and consulted annotation. The next unresolved question is whether
+new evidence changes the investigation: both the earlier stale-map pilot and
+Shift Ledger were repaired from source before their first checks. No new wording
+micro-test or broad refactor follows; natural pressure remains unqualified.
 The main 25k proposal explicitly means an input
 working set separate from physical generation capacity. The current 32,768
 reserve on 56,576 permits only 23,808 input tokens, so it cannot yet supply that
@@ -114,8 +119,9 @@ The [decision](development/qwen_interface_consultation/comparison/review/DECISIO
 keeps the reference, identified the subsequently tested resource/navigation
 wording issue, and preserves accurate host-generated grouping as a
 deferred option. Incorrect proposed examples do not disprove that option.
-No broad host refactor or fresh investigation has run; the investigation still
-lacks a qualified natural pressure opportunity and task-specific allowance.
+No broad host refactor or primary pressure investigation has run. The ordinary
+investigations above do not supply a qualified natural pressure opportunity or
+allowance for that distinct comparison.
 
 ## Current experiment
 

@@ -1,20 +1,26 @@
 **Proposal: resume the project after Experiment 020**
 
-Prepared next step: [one fresh Shift Ledger investigation](development/shift_investigation/PREPARATION_REVIEW.md),
-S01 seed 161803, at most 20 actions, with the consulted episode annotation in
-every actual input. Ten focused checks pass; both the direct and correction
-routes fit the native allowance. Preparation made zero completions. The task
-has useful nested navigation and public evidence distinguishing decoded instants,
-day windows and reported totals. It is ready for its separate execution decision;
-the resulting task behavior has not yet been observed.
+Latest outcome: the owner authorized the concrete S01 / at-most-20-action scope
+with "Proceed". The [Shift Ledger investigation](development/shift_investigation/review/RESULTS.md)
+is complete: 11 actions, a correct overlap repair, all 24 public cases passing
+on the first check, and submission of that same candidate. All complete responses
+were directly read and replayed; all ten nonterminal results reached the next
+actual input. The consulted annotation was present throughout. No old incident/
+repair oscillation recurs, but explicit annotation use and causal benefit are
+not established. This different authored task cost 10.10 request minutes, with
+peak input 10,543 and minimum GPU free memory 335 MiB under the accepted policy.
+There was no failed repair, rejected action or pressure boundary. Retain the
+presentation; prepare an investigation that can change explanation through
+accessible evidence. The consumed attempt has no automatic successor.
 
-Latest outcome: the [two-turn conversation with Qwen](development/episode_dialogue/review/RESULTS.md)
+Preceding outcome: the [two-turn conversation with Qwen](development/episode_dialogue/review/RESULTS.md)
 is complete, sealed, verified and directly reviewed. Its interpretation before
 clarification still allows the report's edit to mean the actor's repair. After
-clarification, it proposes an episode annotation. The [prospective input change](development/episode_dialogue/PRESENTATION.md)
+clarification, it proposes an episode annotation. The [input change](development/episode_dialogue/PRESENTATION.md)
 retains that suggestion with source-checked scope and actual changing state.
-Three full examples add 50 tokens each; no task has used the revised input yet.
-The two calls cost 21.31 request minutes. Task-level use is the next obligation.
+Three full examples added 50 tokens each; Shift Ledger above now carries the
+change through live task feedback. The two dialogue calls cost 21.31 request
+minutes. Their historical reports retain the then-unexposed preparation status.
 
 Preceding outcome: the owner approved the concrete two-run / at-most-40-request
 scope with "Proceed". The [ordinary-loop pilot](development/investigation_loop/review/RESULTS.md)
@@ -39,14 +45,15 @@ all deliberation to one cause.
 The owner's correction was to converse with Qwen before settling the presentation.
 That step has now occurred in the [two-turn development dialogue](development/episode_dialogue/SPEC.md):
 interpretation saved before clarification, then an adaptive reply and concrete
-suggestion. The completed pilot stays intact. Carry the resulting annotation
-into the next task's actual input; documenting our own diagnosis is insufficient.
+suggestion. The completed pilot stays intact. The resulting annotation now
+appears in every actual Shift Ledger input; its task-level interpretation is
+reviewed above. Documenting our own diagnosis alone would not complete this loop.
 
-Then select and qualify a fresh investigation outside the agent/metadata domain,
-with accessible discriminating evidence and an earned natural boundary if
-available. Changing domains does not substitute for explicit incident/work
-framing or establish which change helps. Qualify task-specific allowances and
-judge whether Qwen uses the learned distinction during work. A working account
+Next qualify an investigation whose accessible evidence can change the explanation
+rather than only confirming a repair already chosen from source. Seek an earned
+natural boundary if available. Changing domains does not establish which
+presentation change helps. Qualify task-specific allowances and judge the
+learned distinction through actual work, including any failed check. A working account
 remains a provisional option if evidence earns it, not a permanently excluded
 mechanism. No automatic successor or broad refactor follows from the pilot.
 
