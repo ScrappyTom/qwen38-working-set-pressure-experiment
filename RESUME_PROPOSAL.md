@@ -1,5 +1,14 @@
 **Proposal: resume the project after Experiment 020**
 
+Current next step: the owner-supplied review earned offline return-path repairs
+before larger-source work. Both reported size failures were reproduced against
+the checkout; nested navigation also exposed an unrelated outline-limit crash.
+Read the [prospective maintenance finding](maintenance/result_return_boundaries/FINDING.md)
+and [ordinary loop proposal](development/investigation_loop/PROPOSAL.md).
+The next model unit should be a completed contribution through several turns.
+Its development qualification may finish without pressure; it is separate from
+the main continuity comparison. No new model requests were made in this tranche.
+
 Latest outcome: the owner explicitly approved W01–W08 with "I approve". The
 [eight-request wording comparison](development/qwen_interface_consultation/wording/review/RESULTS.md)
 is complete, sealed, independently verified and directly reviewed in full. All
@@ -59,7 +68,7 @@ The owner-authorized three qualification and four conditional design responses a
 | K and V cache | q8_0 | q4_0 |
 | MTP | Disabled | Disabled |
 | Difficult-work reasoning | Native thinking on, xhigh, uncapped | Same |
-| Externalization target | 25,000-token admission target, defined below | Same target unless a separately frozen question changes it |
+| Proposed externalization target | 25,000 native input tokens, separate from generation capacity, defined below | Same target if the qualified physical margin permits a contrast |
 
 Use the pinned `llama-cpp-b10434-cuda-13-3` runtime, revision `7e4c0a96880dae4fc4268ad441f8a6446bd5460a`, and model SHA-256 `c0b7c3038681ed2e3040456c1dd45f9858b6c2290bed172c70388a94874f3eee`. The profile source is [model-profiles](https://github.com/ScrappyTom/model-profiles/tree/b5ee42b47553c6882862665ca5a58dc0a921d8d0), specifically its IQ3_XXS profile, guide, and hardware overlay. Local executable/model paths remain in that repository's ignored `.local/handoffs/qwen38-iq3-q4-mtp.md`; do not copy machine-specific launch paths into committed experiment documents.
 
@@ -71,11 +80,42 @@ The larger q4 configuration is an available preparation choice, not an automatic
 
 The old X25 guard admitted an exact rendered prompt plus fixed runtime/output allowances under 25,000 tokens. Its 512-token reasoning treatment is being replaced at the owner's direction. Reusing those constants would misstate the new allowance.
 
-Proposed successor accounting: let P be the exact rendered input, A the verified runtime/template adjustment, G a prospective generation reserve covering reasoning and the final action, and C the selected physical context. Admit the resident branch while `P + A + G <= C`. Reconstruct the externalized branch by moving the oldest exact payload bodies out of residence until `P + A + G <= 25,000`. Use the same G in paired conditions. Determine G from saved exact outputs and the bounded development qualification below, freeze it before measurement, and report its value. If no usable reserve fits the primary configuration, decide on the larger q4 option during preparation.
+Proposed successor accounting explicitly changes the old total-envelope meaning:
+let P be the exact native input count, including the rendered template and any
+verified runtime tokens; W be the input working-set target of 25,000; G be a
+prospective generation reserve covering thinking and the final action; and C be
+physical context capacity. Do not add a template adjustment twice when native
+tokenization already includes it. Every invocation must satisfy `P + G <= C`.
+The externalized condition additionally requires `P <= W`, moving the oldest
+exact payload bodies out of residence only as needed. Its effective input
+ceiling is `min(W, C - G)`. Use the same G and physical configuration in both
+conditions, freeze them before exposure, and name this an input-working-set
+study rather than an unchanged replication of the historical X25 envelope.
 
-Keep generation uncapped and context shifting disabled. G is an admission reserve, not a generation limit or a guarantee that every future response will fit. Consequently, 25k is a reconstruction/admission target here, not the old guarantee of a hard maximum on actual input plus output. Preserve the exact response and classify physical context exhaustion separately from an incorrect action. Report actual input, reasoning, final output, and remaining physical space independently. This budget definition must be explicit in the successor specification; do not present it as an unchanged replication of X25.
+The current development reserve of 32,768 with C=56,576 leaves only 23,808 for P,
+below W. It can support preparation of a small ordinary loop but cannot supply a
+resident-versus-25k contrast. Do not reduce G merely to obtain that contrast:
+qualify the actual task and a justified reserve first, or explicitly propose a
+different working-set target. The primary q8/32,768 remains the owner's preferred
+capacity choice when the workload and reserve fit; q4/56,576 is available when
+prospectively selected for the whole run. No runtime switch or silent thinking
+cap is permitted. Eight short one-action outputs do not bound difficult work.
+
+Keep generation uncapped and context shifting disabled. G is an admission
+reserve, not a generation cap or a guarantee. Preserve complete or interrupted
+responses and classify physical exhaustion separately from incorrect actions.
+Report actual input, thinking, final output, and physical margin independently.
+The accepted advisory GPU-memory policy remains unchanged.
 
 Proposed first-study history policy: continue storing private reasoning separately and omit it from subsequent decision frames. This keeps the controller's tested history policy while using the newly selected uncapped reasoning within each call. The model profile's preservation default does not settle what the client supplies in later history. Carrying reasoning forward would be an additional representation choice and should be chosen before the freeze, rather than inherited accidentally. No model-written memory or working-account action is added initially.
+
+Attribution must distinguish evidence removed at a pressure boundary, rationale
+that existed only in private thinking and was never carried into the next input,
+and relevant available evidence that the actor did not use correctly. Inspect
+the exact immediately preceding and following inputs and every copy in source,
+results, action arguments and work products. An explanation omitted on the next
+turn cannot later be described as lost through externalization. Reconstruction
+from retained or recovered evidence can still be successful continuity.
 
 **1. Make the earned measurement repairs offline**
 
@@ -125,6 +165,25 @@ Exit: a concise, directly audited interface decision recording the original inte
 
 **3. Prepare one fresh investigation**
 
+First qualify an ordinary multi-turn loop under the retained complete tool
+reference and accurate wording, with the prospective return contract made
+visible. The [offline candidate](development/investigation_loop/PROPOSAL.md)
+now has a ten-action scripted path through actual navigation, reading, historical
+access, guarded editing, successor checking and submission. This is host
+feasibility evidence; no Qwen continuation or native-input budget is qualified.
+Its authentic failure message explicitly names a stale map. Keep that clue and
+use the task for integration qualification, without claiming independent
+root-cause discovery or manufacturing harder evidence by concealing it.
+
+Freeze a bounded development package only after exact inputs, return delivery,
+task-specific action allowance, generation room and lifecycle safeguards are
+ready. Then obtain the existing separate execution decision. Useful navigation
+must be possible and available to the actor; an oracle choosing it offline does
+not demonstrate model navigation. Review every returned result together with
+the next actual input and action. Do not add another wording comparison.
+
+The following remains the separate primary continuity-study proposal:
+
 Proposed task: diagnose a failure after editing an artifact and reopening one of its sections in an owner-controlled exact-content pipeline. A valid current operation unexpectedly fails content validation. The actor must reproduce it, repair the cause, preserve rejection of genuinely stale references, pass the public check, and submit.
 
 This is a proposed task geometry, not a claim that a new production defect has been found. During offline preparation, pin and inspect a suitable owner-controlled source snapshot and construct a fresh fixture in the mutation-to-address-map refresh path. Do not reuse the exposed Experiment 019 inclusive-line/truncation faults, its summary-graph task, or Experiment 020's boundary/verifier faults.
@@ -133,7 +192,17 @@ For task construction and evaluation only, two plausible explanations are incorr
 
 Use ordinary source discovery, reads, patching, and the existing public-check surface for exact reproduction output. Hidden checks independently cover the corrected current operation, continued rejection of old mismatched references, unchanged-content behavior, and another update. Any additional diagnostic operation would need its own demonstrated necessity; this proposal does not add one.
 
-Admit the task only after offline inspection establishes a credible natural pressure opportunity and an executable correction-and-closure path under the actual file, line, patch, event, and resource bounds. Do not enlarge it with inert padding or compelled unrelated reads. If this candidate is too small, choose a different real investigation before freezing. If the actor nevertheless finishes before pressure or never needs to revise an explanation, record successful task work with continuity unexercised; do not manufacture a later boundary or require the actor to make an initial mistake.
+Admit a task to the primary pressure comparison only after offline inspection
+establishes a credible natural pressure opportunity, discriminating evidence
+available through the actual tools, and an executable correction-and-closure
+path under the actual file, line, patch, event and resource bounds. This
+requirement does not block the preceding small integration qualification.
+Do not enlarge either task with inert padding or compelled unrelated reads.
+The current stale-map candidate has not earned independent investigation or
+pressure claims. Choose a different real task if necessary before freezing the
+primary study. If an actor finishes before pressure or never revises an
+explanation, report useful work with continuity unexercised; do not manufacture
+a boundary or require an initial mistake.
 
 Proposed primary schedule: one fresh task, two fixed seeds, paired resident/externalized conditions—four terminal branches—with each pair sharing one byte-identical live prefix until authentic pressure. Use the selected q8/32k configuration for all branches unless preparation prospectively chooses the larger q4 option for the entire comparison. The action budget and generation reserve come from qualification and are frozen before exposure; do not reuse the old 24-call limit without checking the actual task. No automatic retries, rescue, or successor.
 

@@ -2,6 +2,23 @@
 
 ## Project status
 
+The latest owner review prompted [offline return-boundary maintenance](maintenance/result_return_boundaries/FINDING.md).
+Both reported size failures reproduced against the checkout: rejected reads
+could falsely credit coverage, and accepted results could exceed their historical
+access wrapper. Prospective repairs validate exact returns before committing
+state and select recoverable whole-line read pages. Offline loop preparation also
+exposed and fixed a directory-count/outline-limit crash. **58 selected checks
+pass**, and all eight saved wording actions still replay exactly. Historical
+artifacts and source pins remain unchanged; no model requests ran in this tranche.
+
+The [next-step proposal](development/investigation_loop/PROPOSAL.md) prioritizes
+a short complete working loop. Its ten-action oracle path succeeds, but its
+diagnostic already identifies a stale map, and natural pressure/native task
+budgets are not qualified. The main 25k proposal now explicitly means an input
+working set separate from physical generation capacity. The current 32,768
+reserve on 56,576 permits only 23,808 input tokens, so it cannot yet supply that
+contrast. Read [RESUME_PROPOSAL.md](RESUME_PROPOSAL.md) for the preparation boundary.
+
 The owner-approved [eight-request wording comparison](development/qwen_interface_consultation/wording/review/RESULTS.md)
 is complete, sealed, independently replayed and directly reviewed in full.
 All eight actions made useful progress; none was a completed task. Controls did
@@ -15,9 +32,10 @@ Carry the complete tool reference and two accurate wording corrections into
 subsequent preparation as a documented clarity choice, without claiming a
 measured performance benefit. Preserve deferred object-scope/grouping ideas;
 successful edits still revealed byte-count confusion in both conditions.
-The next work is multi-turn investigation preparation with credible natural
-pressure and task-specific allowances. The shared renderer and all historical
-evidence remain intact; no automatic interface micro-test or live successor is
+The next work is ordinary multi-turn qualification with task-specific allowances,
+followed separately by a credible natural-pressure study. The shared renderer and
+all historical evidence remain intact; the prospective host repairs above are
+explicitly separate. No automatic interface micro-test or live successor is
 authorized. The five audits and [decision](development/qwen_interface_consultation/wording/review/DECISION.json)
 record the evidence and limits.
 

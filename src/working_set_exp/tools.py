@@ -7,6 +7,7 @@ from .candidate import Candidate, CandidateError, canonical_path
 from .isolation import run_checker
 from .hierarchical_p0 import p0_page
 from .jsonutil import canonical_json_bytes, load_json_strict, sha256_bytes
+from .p0 import P0Error
 
 
 MAX_ACTION_BYTES = 5_000
@@ -87,10 +88,34 @@ class ToolExecutor:
             raise ValueError("unknown read mode")
         self.read_mode = read_mode
         self.hierarchical_p0 = hierarchical_p0
+        # Imported evidence must also be reachable before it can be advertised.
+        for saved in (self.reopenable, self.result_reopenable):
+            for handle, body in saved.items():
+                self._bounded(self._saved_result(handle, body), recoverable=False)
+        for handle, body in self.event_reopenable.items():
+            self._bounded(self._saved_event(handle, body), recoverable=False)
 
-    def _bounded(self, result: dict[str, Any]) -> dict[str, Any]:
-        if len(canonical_json_bytes(result)) > MAX_RESULT_BYTES:
+    @staticmethod
+    def _saved_result(handle: str, body: bytes) -> dict[str, Any]:
+        return {"accepted": True, "handle": handle, "exact_result_utf8": body.decode("utf-8"),
+                "exact_result_sha256": sha256_bytes(body), "size_bytes": len(body)}
+
+    @staticmethod
+    def _saved_event(handle: str, body: bytes) -> dict[str, Any]:
+        payload = load_json_strict(body)
+        if not isinstance(payload, dict):
+            raise ToolError("event action payload is not an object")
+        return {"accepted": True, "handle": handle, "action_payload": payload,
+                "action_payload_sha256": sha256_bytes(body), "size_bytes": len(body)}
+
+    def _bounded(self, result: dict[str, Any], *, recoverable: bool = True) -> dict[str, Any]:
+        raw = canonical_json_bytes(result)
+        if len(raw) > MAX_RESULT_BYTES:
             raise ToolError("tool result exceeds complete result bound")
+        # RES/OBS handles have eight characters in the model-visible grammar.
+        # Retrieval keeps its canonical source; it is not wrapped again in storage.
+        if recoverable and len(canonical_json_bytes(self._saved_result("RES-0000", raw))) > MAX_RESULT_BYTES:
+            raise ToolError("tool result exceeds exact-recovery bound")
         return result
 
     def execute(self, action: dict[str, Any]) -> dict[str, Any]:
@@ -123,7 +148,7 @@ class ToolExecutor:
             if name == "submit":
                 return self._submit(action)
             raise ToolError("unknown action")
-        except (CandidateError, ToolError, KeyError, TypeError, ValueError) as exc:
+        except (CandidateError, P0Error, ToolError, KeyError, TypeError, ValueError) as exc:
             return self._bounded({"accepted": False, "error_code": "tool_rejected", "detail": str(exc)})
 
     def _p0_page(self, action: dict[str, Any]) -> dict[str, Any]:
@@ -218,17 +243,47 @@ class ToolExecutor:
             selected = []
         else:
             selected = lines[start - 1:start - 1 + count]
-        while selected and len("".join(selected).encode("utf-8")) > MAX_READ_CONTENT_BYTES:
-            selected.pop()
-        if lines and start <= len(lines) and not selected:
-            raise ToolError("one source line cannot fit the read result")
-        content = "".join(selected)
-        returned_end = start + len(selected) - 1 if selected else None
-        next_line = returned_end + 1 if returned_end is not None and returned_end < len(lines) else None
-        complete = next_line is None
+        def admitted_result(size: int) -> dict[str, Any] | None:
+            content = "".join(selected[:size])
+            if len(content.encode("utf-8")) > MAX_READ_CONTENT_BYTES:
+                return None
+            end = start + size - 1 if size else None
+            next_line = end + 1 if end is not None and end < len(lines) else None
+            result = {
+                "accepted": True, "path": path, "requested_start_line": start,
+                "returned_start_line": start if size else None, "returned_end_line": end,
+                "next_start_line": next_line, "complete": next_line is None, "content": content,
+                "candidate_id": self.state.candidate.candidate_id, "file_sha256": sha256_bytes(data),
+            }
+            if self.read_mode == "actor_selected_count":
+                result["requested_line_count"] = count
+            else:
+                result["paging_mode"] = self.read_mode
+            try:
+                return self._bounded(result)
+            except ToolError:
+                return None
+
+        # Try EOF first: its null continuation can be smaller than the previous
+        # page's numeric continuation. All remaining nonempty prefixes are monotone.
+        result = admitted_result(len(selected))
+        if result is None:
+            low, high = 1, len(selected) - 1
+            while low <= high:
+                middle = (low + high) // 2
+                trial = admitted_result(middle)
+                if trial is None:
+                    high = middle - 1
+                else:
+                    result, low = trial, middle + 1
+        if result is None:
+            raise ToolError("source page cannot fit the complete result and exact-recovery bounds")
+        returned_end = result["returned_end_line"]
+        # Construct a complete, exactly recoverable result before crediting a read.
+        # Delivery in a later model input is a separate fact.
         if not lines and start == 1:
             self.state.complete_reads.add(path)
-        elif selected and returned_end is not None:
+        elif returned_end is not None:
             ranges = [*self.state.read_coverage.get(path, []), (start, returned_end)]
             merged: list[tuple[int, int]] = []
             for first, last in sorted(ranges):
@@ -239,23 +294,7 @@ class ToolExecutor:
             self.state.read_coverage[path] = merged
             if merged[0][0] == 1 and merged[0][1] >= len(lines):
                 self.state.complete_reads.add(path)
-        result = {
-                "accepted": True,
-                "path": path,
-                "requested_start_line": start,
-                "returned_start_line": start if selected else None,
-                "returned_end_line": returned_end,
-                "next_start_line": next_line,
-                "complete": complete,
-                "content": content,
-                "candidate_id": self.state.candidate.candidate_id,
-                "file_sha256": sha256_bytes(data),
-        }
-        if self.read_mode == "actor_selected_count":
-            result["requested_line_count"] = count
-        else:
-            result["paging_mode"] = self.read_mode
-        return self._bounded(result)
+        return result
 
     def _patch(self, action: dict[str, Any]) -> dict[str, Any]:
         required = {"action", "path", "old", "new", "expected_candidate_id", "expected_file_sha256"}
@@ -271,14 +310,7 @@ class ToolExecutor:
             expected_file_sha256=action["expected_file_sha256"],
         )
         previous = self.state.candidate.candidate_id
-        self.state.candidate = successor
-        # A successful mutation invalidates any check result bound to the
-        # predecessor. Historical experiments always checked after their last
-        # patch, so this strengthens version integrity without changing their
-        # model-visible trajectories.
-        self.state.prefork_check_passed = False
-        self.state.public_check_passed = False
-        return self._bounded(
+        result = self._bounded(
             {
                 "accepted": True,
                 "path": action["path"],
@@ -288,6 +320,10 @@ class ToolExecutor:
                 "diff": diff,
             }
         )
+        self.state.candidate = successor
+        self.state.prefork_check_passed = False
+        self.state.public_check_passed = False
+        return result
 
     def _check(self, action: dict[str, Any]) -> dict[str, Any]:
         if set(action) != {"action", "check_id", "expected_candidate_id"}:
@@ -297,13 +333,11 @@ class ToolExecutor:
         check_id = action["check_id"]
         if check_id == "prefork" and self.state.stage == "prefix":
             result = run_checker(self.state.candidate, self.prefork_checker)
-            self.state.prefork_check_passed = result["passed"]
         elif check_id == "public" and self.state.stage in {"continuation", "recurrent"}:
             result = run_checker(self.state.candidate, self.public_checker)
-            self.state.public_check_passed = result["passed"]
         else:
             raise ToolError("check ID is unavailable in the current stage")
-        return self._bounded(
+        result = self._bounded(
             {
                 "accepted": True,
                 "check_id": check_id,
@@ -311,14 +345,18 @@ class ToolExecutor:
                 **result,
             }
         )
+        if check_id == "prefork":
+            self.state.prefork_check_passed = result["passed"]
+        else:
+            self.state.public_check_passed = result["passed"]
+        return result
 
     def _probe(self, action: dict[str, Any]) -> dict[str, Any]:
         if set(action) != {"action", "probe_id"} or self.state.stage not in {"prefix", "recurrent"}:
             raise ToolError("probe action is unavailable")
         if self.probe_id is None or action["probe_id"] != self.probe_id or self.probe_body is None:
             raise ToolError("probe ID is unavailable")
-        self.state.probe_done = True
-        return self._bounded(
+        result = self._bounded(
             {
                 "accepted": True,
                 "probe_id": self.probe_id,
@@ -326,6 +364,8 @@ class ToolExecutor:
                 "observation": self.probe_body,
             }
         )
+        self.state.probe_done = True
+        return result
 
     def _fork_ready(self, action: dict[str, Any]) -> dict[str, Any]:
         if set(action) != {"action", "expected_candidate_id"} or self.state.stage not in {"prefix", "recurrent"}:
@@ -340,8 +380,7 @@ class ToolExecutor:
             raise ToolError("current boundary check has not passed")
         if self.probe_id is not None and not self.state.probe_done:
             raise ToolError("required compatibility probe has not run")
-        self.state.fork_ready = True
-        return self._bounded(
+        result = self._bounded(
             {
                 "accepted": True,
                 "fork_ready": True,
@@ -349,6 +388,8 @@ class ToolExecutor:
                 "pending_stage": "continuation",
             }
         )
+        self.state.fork_ready = True
+        return result
 
     def _reopen(self, action: dict[str, Any]) -> dict[str, Any]:
         if set(action) != {"action", "handle"} or self.state.stage not in {"continuation", "recurrent"}:
@@ -357,15 +398,7 @@ class ToolExecutor:
         if handle not in self.reopenable:
             raise ToolError("observation handle is unavailable")
         body = self.reopenable[handle]
-        return self._bounded(
-            {
-                "accepted": True,
-                "handle": handle,
-                "exact_result_utf8": body.decode("utf-8"),
-                "exact_result_sha256": sha256_bytes(body),
-                "size_bytes": len(body),
-            }
-        )
+        return self._bounded(self._saved_result(handle, body), recoverable=False)
 
     def _reopen_result(self, action: dict[str, Any]) -> dict[str, Any]:
         if set(action) != {"action", "handle"} or self.state.stage not in {"continuation", "recurrent"}:
@@ -374,13 +407,7 @@ class ToolExecutor:
         if handle not in self.result_reopenable:
             raise ToolError("result handle is unavailable")
         body = self.result_reopenable[handle]
-        return self._bounded({
-            "accepted": True,
-            "handle": handle,
-            "exact_result_utf8": body.decode("utf-8"),
-            "exact_result_sha256": sha256_bytes(body),
-            "size_bytes": len(body),
-        })
+        return self._bounded(self._saved_result(handle, body), recoverable=False)
 
     def _reopen_event(self, action: dict[str, Any]) -> dict[str, Any]:
         if set(action) != {"action", "handle"} or self.state.stage not in {"continuation", "recurrent"}:
@@ -389,30 +416,22 @@ class ToolExecutor:
         if handle not in self.event_reopenable:
             raise ToolError("event handle is unavailable")
         body = self.event_reopenable[handle]
-        payload = load_json_strict(body)
-        if not isinstance(payload, dict):
-            raise ToolError("event action payload is not an object")
-        return self._bounded({
-            "accepted": True,
-            "handle": handle,
-            "action_payload": payload,
-            "action_payload_sha256": sha256_bytes(body),
-            "size_bytes": len(body),
-        })
+        return self._bounded(self._saved_event(handle, body), recoverable=False)
 
     def _submit(self, action: dict[str, Any]) -> dict[str, Any]:
         if set(action) != {"action", "expected_candidate_id"} or self.state.stage != "continuation":
             raise ToolError("submit action is unavailable")
         if action["expected_candidate_id"] != self.state.candidate.candidate_id:
             raise ToolError("stale submission binding")
-        self.state.submitted = True
-        return self._bounded(
+        result = self._bounded(
             {
                 "accepted": True,
                 "submitted_candidate_id": self.state.candidate.candidate_id,
                 "public_check_passed_for_candidate": self.state.public_check_passed,
             }
         )
+        self.state.submitted = True
+        return result
 
 
 def action_schema(

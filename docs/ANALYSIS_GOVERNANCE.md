@@ -69,6 +69,34 @@ interface suggestions into the results decision. Generated excerpts, counters,
 and custody checks assist review; running a script cannot certify that a human
 or reviewing agent directly read the transcripts.
 
+Distinguish a transient question resolved correctly within thinking from a
+persistent incorrect interpretation, an incorrect action, or substantial repeated
+work. An accepted action is not evidence that all predicted return contents were
+understood; inspect the result and its use on the following turn.
+
+For continuity claims, compare exact inputs immediately before and after the
+claimed boundary. Separate evidence that left the prompt, rationale expressed
+only in private thinking and never retained in subsequent inputs, and relevant
+available evidence not used correctly. Inspect all copies in source, task,
+results, arguments and work products. Do not attribute an immediately omitted
+rationale to later externalization. Correct reconstruction can count as useful
+continuity without verbatim reasoning preservation.
+
+For read and recovery claims, separate successful complete-result construction,
+durable storage, inclusion in the next actual model input, and observed use.
+Path-keyed acquisition history may survive edits; it is not a claim of current
+version inspection. Compare exact source/file identities before crediting current
+applicability, retaining valid evidence for unchanged files. Verify the complete
+create/store/externalize/retrieve path under real serialized bounds, including
+rejections. Offline oracle paths establish tool feasibility, not actor success.
+
+Report the input working-set target, exact native input, physical context and
+generation reserve separately. If the physical admission ceiling is already
+below the proposed working-set target, the proposed pressure contrast is absent.
+Do not silently change budget meanings, cap reasoning, or treat an observed short
+response as a bound. Small complete-loop qualification may succeed without
+pressure; it must not be promoted to pressure-continuity evidence.
+
 When the causal reason for an action remains unclear after exact prompt,
 reasoning, response, and host-path review, specify a fresh diagnostic with
 reasoning enabled. Do not rerun an exposed measured cell merely to obtain an

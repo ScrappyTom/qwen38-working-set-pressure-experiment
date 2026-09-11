@@ -42,26 +42,30 @@ def build_p0_root(candidate: Candidate) -> dict[str, Any]:
     return value
 
 
-def _symbols(path: str, data: bytes) -> list[dict[str, Any]]:
+def _symbol_nodes(path: str, data: bytes) -> list[ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef]:
     if not path.endswith(".py"):
         return []
     try:
         module = ast.parse(data.decode("utf-8"), filename=path)
     except (SyntaxError, UnicodeDecodeError) as exc:
         raise P0Error(f"Python file is not parseable: {path}") from exc
+    return [node for node in module.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))]
+
+
+def _symbols(path: str, data: bytes) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for node in module.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            signature = _signature(node)
-            if len(signature.encode("utf-8")) > 240:
-                raise P0Error("signature exceeds bound")
-            rows.append({
-                "kind": "class" if isinstance(node, ast.ClassDef) else "function",
-                "name": node.name,
-                "signature": signature,
-                "start_line": node.lineno,
-                "end_line": getattr(node, "end_lineno", node.lineno),
-            })
+    for node in _symbol_nodes(path, data):
+        signature = _signature(node)
+        if len(signature.encode("utf-8")) > 240:
+            raise P0Error("signature exceeds bound")
+        rows.append({
+            "kind": "class" if isinstance(node, ast.ClassDef) else "function",
+            "name": node.name,
+            "signature": signature,
+            "start_line": node.lineno,
+            "end_line": getattr(node, "end_lineno", node.lineno),
+        })
     return rows
 
 
@@ -87,7 +91,8 @@ def p0_page(candidate: Candidate, *, path: str, offset: int) -> dict[str, Any]:
                         "path": child,
                         "kind": "file",
                         "size_bytes": len(child_data),
-                        "symbol_count": len(_symbols(child, child_data)),
+                        # Counting directory members does not render signatures.
+                        "symbol_count": len(_symbol_nodes(child, child_data)),
                     })
                 else:
                     prefix = child + "/"

@@ -130,11 +130,44 @@ ambiguity evidence, not a measured performance promotion. The shared host and
 all frozen historical inputs remain unchanged. Preserve deferred exact grouping
 and object-scope ideas; this repeated friction does not automatically authorize
 another interface micro-test. Return to multi-turn investigation preparation,
-requiring credible natural pressure and task-specific action/generation allowances.
+with task-specific action/generation allowances. A short integration qualification
+may complete without pressure; credible natural pressure is required for the
+separate primary continuity comparison, not for qualifying the working loop.
 The 32,768 generation reserve is not compatible unchanged with an overall 25k
 admission formula. No continuation, retry, rescue or new live package is authorized
 by these completed calls. Minimum free memory was 339 MiB under the existing
 advisory policy; the original unmet Q1 target remains historical evidence.
+
+The subsequent owner-supplied review earned offline return-boundary maintenance.
+Read `maintenance/result_return_boundaries/FINDING.md` and
+`development/investigation_loop/PROPOSAL.md` before further preparation.
+Validate complete serialized returns and their exact historical-access wrappers
+before committing acquisition or mutation state. A constructed tool result is
+not proof of delivery: inspect the following actual model input. Qualify the
+create/store/externalize/retrieve path with escaping and rejection cases.
+Preserve stored originals and canonical recovery identity; never silently
+truncate historical evidence to satisfy a wrapper limit. Imported evidence must
+be reachable before its handle is advertised. These are prospective host changes;
+reproduce historical execution from its pinned source and never reseal a consumed
+package against edited code. Future inputs must show the changed return contract.
+
+Path-keyed read bookkeeping after an edit denotes historical acquisition, not
+complete inspection of the successor. Establish current applicability from the
+exact acquired source and file identity; unchanged files can remain applicable
+across a candidate change. Do not clear all history or use old coverage to claim
+new content was inspected. Before diagnosing continuity failure, distinguish
+evidence removed at a boundary, rationale confined to thinking and omitted from
+the very next input, and available evidence not used correctly. Inspect every
+copy and the exact before/after inputs. A transient question resolved correctly
+within deliberation is not automatically an operational interface failure.
+
+The revised proposal defines a prospective 25k input working set separately from
+physical input-plus-generation capacity. With the current 32,768 reserve and
+56,576 context, the input ceiling is 23,808, so no 25k treatment contrast is yet
+qualified. Preserve uncapped xhigh, no MTP, and the accepted advisory GPU margin;
+freeze coherent task allowances before new exposure. The completed wording
+question stays closed. The offline scripted loop is host feasibility only,
+not model success, independent diagnosis, or authorization for new live calls.
 
 Non-negotiable rules:
 
