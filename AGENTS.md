@@ -22,6 +22,15 @@ needs a plausible link to the observed need, an assessable expected benefit and
 consideration of added cost. Retaining the current input is a complete outcome;
 neither long thinking alone nor an available suggestion obliges a change or run.
 
+The latest owner "Proceed" follows the recommendation to prepare and run one
+fresh bounded investigation. `development/correction_investigation/SPEC.md` and
+`PREPARATION_REVIEW.md` now make that scope concrete: R01, seed 32452843, at most
+24 actions, with qualified 17/20-action paths and unchanged model/interface/
+thinking settings. The owner instruction covers the single qualified run;
+it is not authority drawn from unused prior calls. Preserve the frozen package
+and source, then execute and complete the existing direct audits. No retry,
+extra run or corrective dialogue inside the frozen trajectory is authorized.
+
 Read in order:
 
 1. `PROJECT_CHECKPOINT_2026-08-30.md`;

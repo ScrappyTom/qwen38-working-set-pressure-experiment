@@ -1,5 +1,13 @@
 **Proposal: resume the project after Experiment 020**
 
+Current work: the owner's latest "Proceed" directs preparation and execution
+of one fresh bounded investigation. The [receipt-corrections package](development/correction_investigation/PREPARATION_REVIEW.md)
+qualifies a 24-action R01 run with unchanged Qwen settings and interface. Exact
+decoding/selection observations distinguish them from incorrect group totals;
+the actor receives no diagnosis or mandatory reading list. Both scripted routes
+fit native admission, including a failed repair and correction. Execution and
+complete direct review remain to be performed under this instruction.
+
 Latest outcome: the owner's question about clarity versus indecision led to a
 [two-turn Qwen consultation](development/decision_dialogue/review/RESULTS.md),
 authorized by the latest "Proceed" with a conditional matched task comparison.

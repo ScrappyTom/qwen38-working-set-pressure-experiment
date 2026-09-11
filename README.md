@@ -2,6 +2,13 @@
 
 ## Project status
 
+The [receipt-corrections investigation is prepared](development/correction_investigation/PREPARATION_REVIEW.md)
+under the owner's direction to prepare and run one bounded task. R01 has a fixed
+24-action allowance; 17/20-action direct/correction routes fit the unchanged
+model and interface, with peak native input 22,432. Eleven focused tests pass;
+38 inputs and 37 scripted actions verify without model completions. Execution
+and direct review of the actual investigation are the next steps in this scope.
+
 The [deliberation consultation is complete](development/decision_dialogue/review/RESULTS.md).
 Qwen and direct source review distinguish genuine investigation unknowns from
 repeated reconsideration of available facts. Qwen recommends retaining the input;
