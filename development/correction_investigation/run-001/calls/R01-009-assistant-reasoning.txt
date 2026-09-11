@@ -1,0 +1,41 @@
+We need answer with strict JSON action object. Need analyze task. We need inspect remaining files: ingest/csv_rows, ingest/fields, records, __init__, state, reporting etc. We have reads of api, registry, totals, entries. Need bug: stock report incorrect quantities. Let's understand semantics.
+
+We have receipts imported. Registry.accept chooses current revision per ticket. If revision lower returns None; equal conflict/duplicate returns None. Higher replaces. Totals.apply(change) with destination bucket(change.after). contributions(change): if before active: -before.units; if after active: +after.units. But destination uses after's depot/item. If before and after have different depot/item (correction moves item?), subtract before.units from after bucket, not before bucket. That could create incorrect quantities: if before active and after active with different depot/item, subtract from destination (after bucket) not original depot/item, causing wrong old bucket remains and new bucket reduced. If before void and after active same? If before depot/item differs? A correction can change depot/item? Task says stock report shows incorrect quantities for depot and item. Preserve receipt validation, latest-revision selection, duplicate handling, void receipts and independent receipt contributions.
+
+Need inspect records.py for Receipt/Change; csv_rows for fields; maybe status void etc. Need exact source before editing. We need identify bug precisely and minimal repair.
+
+Potential bug in Totals.apply: it aggregates using destination bucket of after. contributions returns (receipt, units), but apply ignores receipt's bucket for contributions, applies to destination. It should subtract from before's bucket and add to after's bucket. If before is not None and active, use bucket(change.before) for -units; after active, bucket(change.after) for +units. That preserves independent receipt contributions? "independent receipt contributions" maybe each ticket independent? The current code only applies contribution to after bucket, so corrections changing depot/item cause wrong. Also if before units and after units are in different buckets, the delta should be in both. If before not active, only after. If after not active, only before negative in before bucket.
+
+But perhaps there is another bug in entries.contributions? It signs by status active. It includes before -units, after +units. If before revision was void and after active, correct. If before active and after void, should subtract before. If status not active (void) no contribution.
+
+Need see fields/status values. Maybe statuses include "active", "void"? Could be "void" exactly. Need read records.py, csv_rows.py, fields.py, __init__s, state directory maybe state/__init__? We have only state/registry read; state directory had 2 files (maybe __init__.py and registry.py). Need state/__init__.py? Not essential maybe. Ingest fields likely parse fields; validation.
+
+Need check remaining call budget 16, enough.
+
+Let's plan actions:
+1 read records.py
+2 read ingest/csv_rows.py
+3 read ingest/fields.py
+4 maybe read state/__init__.py (tiny) and __init__.py maybe not needed.
+5 patch entries.py or totals.py.
+6 check public
+7 submit.
+
+Need determine which file to edit. Could be entries.py contributions returning list of (receipt, units); totals applies destination. Repair can be in Totals.apply to use bucket(receipt) for each entry. Or in contributions to include destination maybe. More natural: Totals.apply:
+```
+    def apply(self, change: Change) -> None:
+        for receipt, units in contributions(change):
+            destination = bucket(receipt)
+            self._units[destination] = self._units.get(destination, 0) + units
+            if self._units[destination] == 0:
+                del self._units[destination]
+```
+Remove destination variable or use inside loop. This applies each contribution to its receipt's depot/item, so correction from A to B subtracts from A and adds to B. It preserves independent receipt contributions because each contribution independently in bucket.
+
+Need consider duplicate handling: duplicate equal receipt returns None; not apply. Void receipts: if status not active contribution none. Receipt validation: csv parse likely.
+
+But is there any hidden issue in totals: `rows()` sorts self._units.items() where key tuple; fine. It removes zero entries. If applying two contributions to same bucket? Could be if before and after same depot/item: if before active and after active same units? change: if same ticket revision but different units? Could be correction units; contributions: -before.units then +after.units. The sequential apply: first add -old, if zero delete; then add +new. If old/new and net zero for same bucket, after second if zero delete. Works. If before and after same bucket, could optimize but fine. If before bucket = after bucket and before.units == after.units? Could be no unit change but other fields changed; then first zero delete, second zero? Actually if before active and after active with same units, apply -u -> delete, then +u -> create u; final same. Good. If after same as before but change before None? no.
+
+Could there be bug in Registry.latest sorted tickets returns receipts sorted by ticket; not report.
+
+Need verify csv rows. Let's read. Use one action per turn? The final content must exactly one action object. We can do read one at a time. We need perhaps no prose. The system says final answer one strict JSON action object. Since current turn after user provided state, we must output one action. Let's read records.py now. Path known from p0: src/dispatchledger/records.py. Use read start_line 1.

@@ -2,12 +2,19 @@
 
 ## Project status
 
-The [receipt-corrections investigation is prepared](development/correction_investigation/PREPARATION_REVIEW.md)
-under the owner's direction to prepare and run one bounded task. R01 has a fixed
-24-action allowance; 17/20-action direct/correction routes fit the unchanged
-model and interface, with peak native input 22,432. Eleven focused tests pass;
-38 inputs and 37 scripted actions verify without model completions. Execution
-and direct review of the actual investigation are the next steps in this scope.
+The [receipt-corrections investigation is complete](development/correction_investigation/review/RESULTS.md):
+**14 actions, one correct repair, all 38 public cases passing on the first check,
+and checked submission**. Every complete response and actual input/result was
+directly reviewed after sealing and exact replay. Four distinct directory pages
+and seven distinct source reads make useful progress; the post-edit reads acquire
+previously unseen validation code. Repeated deliberation remains costly: the run
+uses 13,348 output tokens and 15.31 request minutes. Session-attribution uncertainty
+recurs without wrong version use or a claimed new post-repair failure. Retain the
+current interface; no specific clarification or host patch is earned. The repair
+precedes its first check, so failed-diagnostic reversal and failed-repair recovery
+remain unexercised. Peak input is 13,588, with no pressure boundary; minimum GPU
+free memory is 321 MiB under the accepted advisory policy. The single 24-action
+scope is consumed; its ten unused actions authorize no successor.
 
 The [deliberation consultation is complete](development/decision_dialogue/review/RESULTS.md).
 Qwen and direct source review distinguish genuine investigation unknowns from

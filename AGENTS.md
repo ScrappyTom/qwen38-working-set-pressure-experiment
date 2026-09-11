@@ -22,14 +22,21 @@ needs a plausible link to the observed need, an assessable expected benefit and
 consideration of added cost. Retaining the current input is a complete outcome;
 neither long thinking alone nor an available suggestion obliges a change or run.
 
-The latest owner "Proceed" follows the recommendation to prepare and run one
-fresh bounded investigation. `development/correction_investigation/SPEC.md` and
-`PREPARATION_REVIEW.md` now make that scope concrete: R01, seed 32452843, at most
-24 actions, with qualified 17/20-action paths and unchanged model/interface/
-thinking settings. The owner instruction covers the single qualified run;
-it is not authority drawn from unused prior calls. Preserve the frozen package
-and source, then execute and complete the existing direct audits. No retry,
-extra run or corrective dialogue inside the frozen trajectory is authorized.
+The latest owner-directed single investigation is complete. R01, seed 32452843,
+used 14 of its frozen 24 actions under unchanged model/interface/thinking settings:
+one correct repair, 38 passing public cases at its first check, and checked
+submission. Read the five audits and DECISION.json under
+`development/correction_investigation/review/`. All complete responses and actual
+input changes/results were directly read after sealing and exact replay; all
+13 nonterminal results reached the next sent input. Navigation and source reads
+use distinct paths; post-edit reads obtain previously unseen validation source.
+Repeated deliberation and session-attribution uncertainty remain visible, without
+wrong version use or a claim of a new post-repair incident. No specific
+clarification or host patch is earned. Preserve the source-led outcome: no failed
+check, failed-repair recovery, diagnostic-driven reversal or pressure boundary.
+Peak input is 13,588; minimum GPU free memory is 321 MiB under the accepted advisory
+policy. Preserve the frozen preparation's prospective text and all consumed
+evidence. Ten unused actions authorize no retry, successor or automatic dialogue.
 
 Read in order:
 

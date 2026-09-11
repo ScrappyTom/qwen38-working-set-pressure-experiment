@@ -1,0 +1,73 @@
+We need answer with strict JSON action. We need continue task. Let's understand state.
+
+We have candidate current: 3dce94985b28ebdae35c0bbf6be4d7db639503dc8319a32ffbe8727431e602b1 after patch to totals.py. Need investigate reporting issue. We already read api, registry, totals, entries, records, csv_rows. Need likely read fields.py, __init__ files, README, examples maybe tests? Need exact current source before editing. We already patched based on prior read (accepted). Need verify current totals.py? After patch, read coverage of changed file? We don't have current source after edit, only patch result diff. We need exact current source before editing again. But we need decide if any more edits. The issue: stock report sometimes shows incorrect quantities for depot and item. Preserve receipt validation, latest-revision selection, duplicate handling, void receipts and independent receipt contributions.
+
+Let's reason about code.
+
+Records: Receipt frozen dataclass fields ticket, revision int, depot str, item str, units int, status str. Change before None after.
+
+Registry.accept:
+- before = self._receipts.get(receipt.ticket)
+- if before is not None:
+    if receipt.revision < before.revision: return None
+    if receipt.revision == before.revision:
+        if receipt != before: raise ValueError("conflicting current revision")
+        return None
+- self._receipts[receipt.ticket]=receipt
+- return Change(before, receipt)
+
+Latest sorted by ticket.
+
+Totals:
+init self._units dict[tuple[str,str], int] = {}.
+apply(change): for receipt, units in contributions(change): destination = bucket(receipt); self._units[destination] = self._units.get(destination, 0) + units; if zero del.
+rows sorted.
+
+Entries:
+bucket(receipt) returns receipt.depot, receipt.item.
+contributions(change): entries=[]; if change.before is not None and change.before.status == "active": entries.append((change.before, -change.before.units)); if change.after.status == "active": entries.append((change.after, change.after.units)); return entries.
+
+So report only includes active receipts. It subtracts previous active and adds new active, keyed by depot/item.
+
+CSV ingest: HEADER six columns; row width; Receipt(identifier(row[0]), number(row[1],1), label(row[2]), label(row[3]), number(row[4],0), status(row[5])). Need read fields to know validation. Could be number(row[1],1) means minimum? Need read.
+
+What bug? The previous code bug was Totals.apply using destination = bucket(change.after) outside loop, causing contributions from before (if ticket changed depot/item) to be subtracted from after's bucket, not before's bucket. We fixed that. But task says after receipt corrections imported, stock report sometimes incorrect. Preserve independent receipt contributions. This likely was the bug: if a correction changes depot/item, subtracting old contribution from wrong bucket. We fixed.
+
+Need run check public on final candidate and submit. But must be confident no other issues. Let's analyze edge cases.
+
+Report quantities for depot and item independent receipts: Totals._units keyed by (depot,item), contributions independent by receipt. If two tickets have same depot/item, units sum. Void receipts? status maybe "active"/"void"? contributions only active. If new status void, after not active, before active subtract. If before void and after active, add. Good.
+
+Duplicate handling: registry same revision: if equal return None; conflicting raise. If duplicate identical no change. Good.
+
+Latest revision selection: older revisions ignored. If older then newer, change before=old after=new, totals apply. If newer then older ignored. If same ticket with revision increasing, subtract old active if old active and add new if active. If depot/item changes, after fix correct.
+
+Could there be issue in CSV: number(row[1],1), number(row[4],0). Maybe number(value, default? or base?). Need read fields. Also examples may reveal expected. README might document. Need maybe public check runs tests. We can just run check now? Need exact current source before editing? We've already edited using exact source. To run check public, expected candidate id current. It is allowed. But we should maybe inspect current totals.py after edit to verify. We can read file; read doesn't require edit but exact current source. We have call limit 13. It might be prudent read totals.py current to confirm patch applied. Then check. But check can run without read? Task says use exact current source before editing. We already did for edit. But to be safe and for debugging, read current totals.py. Also maybe fields.py not read. The problem could involve fields. Need investigate. Let's read fields.py and maybe current totals. We have 13 calls. Could read fields.py (1), read totals.py current (1), check (1), submit (1) = 4. OK.
+
+But need consider if public check may fail and then we need fix. If fail, need source. We can run check after reading. If fail, inspect stderr. Could require more. Let's reason potential hidden test failure.
+
+Let's examine all current files. We have:
+README (not read), examples (one file 119 bytes maybe csv). src tree had 11 files: __init__, api, records, ingest (3), reporting (3), state (? 2 files maybe __init__ and registry). We haven't read __init__ files, state/__init__, ingest/__init__, reporting/__init__, fields.py. Could have relevant imports or re-exports. Need maybe read fields. Also state directory p0 had file_count 2 total_bytes 836, likely __init__.py (??) and registry.py (607? registry size 334? Wait p0 root src total_bytes 4647; after patch total 4646? Root current says src total_bytes 4646. In p0 src/dispatchledger state total_bytes 836. registry size 334? Wait p0 page at seq2: src/dispatchledger entries: __init__.py 52, api.py 604, ingest dir 1530, records.py 334, reporting dir 1291, state dir 836. Hmm records.py size 334? But read records content maybe 334? yes. state dir 836 likely __init__.py? and registry.py 604? Actually registry read size maybe 577? Let's compute: registry content 577? The file_sha256. The p0 state total 836, registry file maybe 52? Let's p0_page state if needed. But likely __init__.py small.
+
+The reported bug might be exactly totals destination. But let's not assume too quickly; maybe another bug in entries.contributions sign? It subtracts before active and adds after active. If a receipt's revision changes but depot/item unchanged, works. If before active and after active with different depot/item, old code subtracted from after bucket (wrong). New code correct. The task mentions "independent receipt contributions" likely points to contributions should be independent, not both to after's bucket.
+
+Could there be a bug in latest_receipts: it returns registry.latest() after all reads, but doesn't filter? That's fine. summarize_csv uses registry.accept and totals.apply for each change. Good.
+
+Potential bug: Totals._units deletion if zero. Suppose two contributions in same change to same destination (e.g. before and after same depot/item, one subtract then add). Code loops sequentially: if before active subtract, units may become 0 and delete; then after add increments. OK. But if before and after both active and same bucket, net change units_after - units_before. The sequential delete/readd fine. However, what if before and after are same receipt object? change before and after maybe equal? Registry only creates Change if new revision higher; could be equal except revision? Not equal. If before active and after active same bucket, entries: (-before.units, +after.units). If before.units=5 after.units=5: subtract -> maybe zero delete, add -> 5. OK.
+
+Potential bug: If a ticket changes depot/item and status, contributions list could have two entries with same destination? It applies sequentially. OK.
+
+Potential issue: dictionary sorted keys (depot,item) with units int. rows returns dicts. Good.
+
+Potential issue: Registry duplicate handling: if same ticket same revision but different depot/item? Raises ValueError. Good? "Preserve duplicate handling" likely keep.
+
+Potential issue: older revision after newer: ignored, no totals change. Good.
+
+Potential issue: Receipt status values. entries only active. If status "active" exactly? fields.status probably validates one of "active", "void", maybe "pending"? Need read.
+
+Potential issue: CSV parsing header: next(rows, None) != HEADER; csv.reader default returns list strings. Good. newline="" in StringIO? csv.reader docs? StringIO(text, newline="") may keep newlines? It's okay.
+
+Potential issue: number(row[1],1) maybe parse int and if invalid default? Need know. Could be `number(value, digit)`? Let's read fields.
+
+Let's read fields.py. Use read path src/dispatchledger/ingest/fields.py start_line 1. Then maybe current totals. But final response one action. Need choose action. Could read fields first. Since need investigate. We'll output read fields. But perhaps can combine? Only one action. We can do read fields. Then next turns.
+
+Need be strict JSON. Let's produce read fields.

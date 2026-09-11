@@ -1,14 +1,20 @@
 **Proposal: resume the project after Experiment 020**
 
-Current work: the owner's latest "Proceed" directs preparation and execution
-of one fresh bounded investigation. The [receipt-corrections package](development/correction_investigation/PREPARATION_REVIEW.md)
-qualifies a 24-action R01 run with unchanged Qwen settings and interface. Exact
-decoding/selection observations distinguish them from incorrect group totals;
-the actor receives no diagnosis or mandatory reading list. Both scripted routes
-fit native admission, including a failed repair and correction. Execution and
-complete direct review remain to be performed under this instruction.
+Latest outcome: the owner-directed [receipt-corrections investigation](development/correction_investigation/review/RESULTS.md)
+is complete: 14 actions, one correct repair, 38 passing public cases on the first
+check, and checked submission. All fourteen complete responses were directly
+read and replayed, with every nonterminal result delivered to the next actual
+input. Four directory pages and seven reads use distinct paths. Repeated thinking
+coexists with useful new validation-source acquisition; session-attribution
+uncertainty recurs without incorrect current-version use or a new-incident claim.
+Retain the interface and current reasoning settings; no specific clarification
+or host patch is earned. This source-led repair precedes its first check, leaving
+failed-diagnostic reversal and failed-repair recovery unexercised. Request time
+is 15.31 minutes, peak input 13,588, and minimum GPU free memory 321 MiB under the
+accepted advisory policy. No pressure boundary occurs. The single 24-action
+scope is consumed; ten unused actions do not activate a successor or dialogue.
 
-Latest outcome: the owner's question about clarity versus indecision led to a
+Preceding outcome: the owner's question about clarity versus indecision led to a
 [two-turn Qwen consultation](development/decision_dialogue/review/RESULTS.md),
 authorized by the latest "Proceed" with a conditional matched task comparison.
 Both full responses are sealed, verified and directly reviewed. Qwen correctly
