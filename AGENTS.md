@@ -257,6 +257,24 @@ consequential misunderstanding before settling new presentation.
 Any new live scope requires its concrete preparation and separate owner decision;
 there is no automatic successor, interface micro-test or memory redesign.
 
+The owner's subsequent question about clarity versus indecision authorized the
+two-turn consultation and conditional task comparison in
+`development/decision_dialogue/SPEC.md`. Both dialogue calls are now complete,
+sealed, verified and directly reviewed; read its five review products and
+`DECISION.json`. Qwen separates clear editing requirements from investigation
+judgment and recommends retaining the input. Its optional file-scope wording
+addresses no demonstrated mandatory-reading misunderstanding here, so no variant
+was selected and the conditional comparison was not activated. Preserve the
+original S01 evidence and the dialogue's 18.38-minute cost. Repeated reconsideration
+can coexist with useful caution; the explanation does not establish causal shares.
+Both thinking fields invent a verbosity setting, including after explicit
+clarification of its absence. Preserve this unsupported attribution without
+diagnosing a general trait. The D2 preflight validator failure sent no completion;
+its separately pinned continuation adapter leaves consumed D1 source unchanged.
+The current representation and thinking settings remain. A specific ambiguity or
+recurring interface cost can still earn a future comparison; Qwen's preference
+alone is neither an adoption criterion nor proof that presentation has no effect.
+
 Non-negotiable rules:
 
 - preserve exact prompts, outputs, actions, results, candidates, observations,

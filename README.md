@@ -2,6 +2,19 @@
 
 ## Project status
 
+The [deliberation consultation is complete](development/decision_dialogue/review/RESULTS.md).
+Qwen and direct source review distinguish genuine investigation unknowns from
+repeated reconsideration of available facts. Qwen recommends retaining the input;
+its optional file-scoped wording does not address a demonstrated misunderstanding
+here. No clarification was selected, so the conditional four-run comparison was
+not activated. Both full conversational responses are sealed, verified and
+directly reviewed; their separate cost was 18.38 request minutes. The audit also
+records an invented verbosity instruction that recurs despite clarification,
+without claiming that it caused the long responses. Retain the current interface
+and per-turn thinking measurements; this is not proof that presentation has no
+effect or that all deliberation is unavoidable. The source/runner repair concerns
+only the unexposed dialogue continuation, with the original task evidence intact.
+
 The [owner-approved Shift Ledger investigation is complete](development/shift_investigation/review/RESULTS.md):
 **11 actions, one correct repair, all 24 public cases passing on the first check,
 and checked submission**. Every actual input includes the annotation developed

@@ -1,6 +1,24 @@
 **Proposal: resume the project after Experiment 020**
 
-Latest outcome: the owner authorized the concrete S01 / at-most-20-action scope
+Latest outcome: the owner's question about clarity versus indecision led to a
+[two-turn Qwen consultation](development/decision_dialogue/review/RESULTS.md),
+authorized by the latest "Proceed" with a conditional matched task comparison.
+Both full responses are sealed, verified and directly reviewed. Qwen correctly
+distinguishes already-established editing requirements from judgment about unread
+code and unseen tests. It recommends retaining the input and supplies file-scoped
+wording only as a nonessential alternative. Direct review finds no specific
+misunderstood prerequisite that earns that variant, so the comparison condition
+was not met and no fresh task runs were launched. The original 4,000-token patch
+response and all task evidence remain intact. Repeated reconsideration coexists
+with useful caution; neither Qwen's causal assurances nor a generic indecision
+diagnosis follows. Both consultation thinking fields invent a verbosity setting,
+including after its absence is clarified; record that unsupported attribution
+without assigning its cause or cost. The discussion cost 18.38 request minutes.
+Keep the current presentation and measurements. A later specific ambiguity or
+recurring interface cost can still earn a full-task comparison without requiring
+an invalid action; no new memory or automatic successor is implied.
+
+Preceding outcome: the owner authorized the concrete S01 / at-most-20-action scope
 with "Proceed". The [Shift Ledger investigation](development/shift_investigation/review/RESULTS.md)
 is complete: 11 actions, a correct overlap repair, all 24 public cases passing
 on the first check, and submission of that same candidate. All complete responses
