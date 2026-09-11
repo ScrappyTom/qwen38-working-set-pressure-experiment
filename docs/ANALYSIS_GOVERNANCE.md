@@ -73,13 +73,20 @@ For consequential misunderstanding, diagnosis must lead into a small separate
 development conversation with the operating model before settling the next
 presentation. Ask how it interprets the actual input and which associations are
 explicit or inferred. Preserve its answer before providing source-checked
-clarification, then respond to that answer and ask what small change would help.
-Check proposed examples against actual records. Neither agreement with the
-reviewer nor a retrospective explanation is proof of the original cause.
+clarification, then respond to that answer and assess whether an unresolved
+problem is established. Ask neutral questions before soliciting alternatives;
+do not assume that clarification or another change is needed. Both the operating
+model and Codex can respond to an improvement request by inventing a plausible
+edit. Establish the observed need independently of the remedy, identify how a
+proposal might address it, and weigh the expected benefit against added cost.
+Retaining the current input is a complete outcome. Neither long thinking alone
+nor an available suggestion obliges implementation or a comparison. Check
+proposed examples against actual records. Neither agreement with the reviewer
+nor a retrospective explanation is proof of the original cause.
 
 Keep this dialogue separate from frozen evaluation: do not rescue, rewrite or
 rerun the completed trajectory. It is informed development work, not independent
-capability evidence. Carry the resulting distinction into actual future task
+capability evidence. Carry any earned distinction into actual future task
 inputs and inspect whether it is used across actions and tool feedback. A lesson
 in governance prose alone does not expose it to Qwen. Changing task/domain and
 framing together may be practical development but does not isolate a framing

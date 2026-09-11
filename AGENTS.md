@@ -14,6 +14,14 @@ task work. A frontier-authored audit or governance note alone does not complete
 this learning loop. Qwen's explanations are design evidence, not privileged
 access to the cause of its earlier behavior.
 
+Guard against pressure to recommend a change in both Qwen and Codex. Establish
+the observed need independently of a proposed remedy; asking for improvements
+can elicit plausible edits without establishing that anything needs changing.
+Use neutral interpretation questions before soliciting alternatives. A proposal
+needs a plausible link to the observed need, an assessable expected benefit and
+consideration of added cost. Retaining the current input is a complete outcome;
+neither long thinking alone nor an available suggestion obliges a change or run.
+
 Read in order:
 
 1. `PROJECT_CHECKPOINT_2026-08-30.md`;
