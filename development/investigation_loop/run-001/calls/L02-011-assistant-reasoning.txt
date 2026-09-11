@@ -1,0 +1,83 @@
+We need answer with JSON action only. Need analyze task. Need identify bug. We have 10 calls remaining? calls_remaining 10, calls_used 10. Need likely patch one or few then check public submit. Need exact current candidate ID and file sha for patch. Current candidate id from events 0f67505a... We have read exact source for artifact_units.py from RES-0010; file_sha256 66a219db... But current source? No edits yet, current candidate same. Need bug: accepted edit to Python artifact followed by failed reopen of edited function. In patching.apply_patch_preview: after applying, it returns new_artifact, new_map=address_map (the old map!). It doesn't build address map for new artifact. Thus reopen of edited function? If caller updates artifacts[old_id]=new_artifact? new artifact id same? import_artifact: artifact_id = stable_id("artifact", {"kind": kind, "path": path_or_name}) so same kind/path => same artifact_id. version_hash new. new_map old address_map (built from old artifact). But apply returns new_map = address_map old; if address_maps[artifact_id] replaced with new_map, it's old. materialize_reopen resolves unit using old map: old address map's units have old content_hash and old start/end lines maybe line ranges changed after edit? If patch replaced lines, new text line count may change. Reopen uses artifact (new) and old unit: exact_text_for_unit if inline_text? For Python functions, no inline_text; uses artifact.text new splitlines and old start/end lines. Observed hash likely mismatch because line range shifted or content changed. Expected behavior: after edit, reopen of edited function should materialize updated function, not fail due to stale map. Need build new address map for new artifact after apply. Also maybe update artifacts dict? The function returns new_artifact and new_map, but caller must replace. But bug in apply: new_map = address_map instead of build_address_map(new_artifact). Since import_artifact logs new blob. Need repair behavior while preserving unrelated source, unchanged-content behavior, later updates, and rejection of genuinely stale references.
+
+Need inspect exact current source before editing. We have read patching.py and artifact_units.py. Candidate unchanged since read? Events 1-10 all accepted, no patches. Current candidate same as read. We can patch with exact file_sha from read? The read result file_sha256=5044568f9e90a176db507e370d6ecadc7c867ecce57994e615942f1dc066448a for patching.py. Need patch one exact replacement. We need make minimal: in apply_patch_preview, set new_map = build_address_map(new_artifact) instead of address_map. Since import_artifact and build_address_map already imported (yes imports include build_address_map). That seems fix.
+
+But let's think: apply_patch_preview constructs new_text by replacing lines from unit.start_line to unit.end_line. If unit is function in old map. It checks before_hash == preview.before_hash. It creates new_artifact. It does not reunitize, so new map old. The bug is exactly old map returned. Reopen of edited function fails because old address map's unit content_hash no longer matches new artifact. Build new map solves. However, if line ranges shift, new map contains new function address function:foo with new content hash. If request ref old exact_ref? The task: "An accepted edit to a Python artifact is followed by a failed reopen of the edited function." It might be that the test calls materialize_reopen with the same exact_ref of edited function? If using same exact_ref (old content hash embedded), new map's exact_ref will change due content_hash; resolve_address returns None -> BLOCKED request did not resolve. But maybe they use address (function:foo) or unit address, not exact_ref. The expected behavior likely edit creates new exact_ref; a "later update" maybe? The instruction: preserve rejection of genuinely stale references. If reference is exact old content hash, after edit it is genuinely stale and should be rejected. But "failed reopen of the edited function" might mean using the edited function's address? Need infer from code semantics.
+
+Let's inspect all context: reopen.materialize_reopen: resolves requested_ref_or_address via resolve_address; if none blocked "request did not resolve to a visible exact handle or address". If unit found, artifact found, exact_text_for_unit, observed_hash != unit.content_hash -> blocked "exact unit hash mismatch; artifact map is stale". If apply returned old map and artifacts updated to new, old map units still address function:foo, old content_hash. Resolve old address works; hash mismatch -> failed reopen. If we build new map, and reopen with old exact_ref, it won't resolve; if reopen with address, works. Which is correct? The task says "failed reopen of the edited function" after accepted edit. If the edit changed the function, old exact_ref is genuinely stale (content hash changed) and should be rejected? But maybe the "edited function" refers to the same address, not exact content ref. Need examine how callers use receipts: apply_patch_preview returns ApplyReceipt with address=preview.address, not exact_ref? It returns address=preview.address. The receipt includes address, not exact_ref. If a host uses receipt.address to reopen, then after old map old address resolves but hash mismatch; with new map, address resolves and content hash matches. So fix is new_map.
+
+Need preserve unchanged-content behavior, later updates, rejection of genuinely stale references. If same content edit (before hash matches, proposed text same as before), new artifact version_hash maybe same? import_artifact stable artifact id same; version_hash blob.sha256 of text; if text same, version_hash same. build_address_map new map same map_id? It includes artifact_id, version_hash, addresses. If content unchanged, new map same as old (units same). Return new map okay.
+
+Need consider patch preview apply if unit is "file" address? It replaces entire file? fine. New map built. Need also consider artifacts dict: new_artifact.artifact_id same as old because stable by kind/path. So caller can replace artifacts[artifact_id]=new_artifact. new_map artifact_id same. Good.
+
+Could there be another bug: apply uses `unit.start_line - 1` and `lines[unit.end_line:]`; for function def unit, start line includes def line; end line last line. Good. It preserves trailing newline.
+
+But maybe bug: `new_map = address_map` is intended? It returns old map to avoid rebuilding? The task: ecological repair. Need patch that line.
+
+Need maybe check if `build_address_map` import exists. It does: from .artifact_units import build_address_map, exact_text_for_unit, import_artifact, resolve_address. Good.
+
+Need exact old string unique. In patching.py:
+```
+    new_artifact = import_artifact(log, kind=artifact.kind, path_or_name=artifact.path_or_name, text=new_text)
+    new_map = address_map
+```
+Need replace with:
+```
+    new_artifact = import_artifact(log, kind=artifact.kind, path_or_name=artifact.path_or_name, text=new_text)
+    new_map = build_address_map(new_artifact)
+```
+This old occurs exactly once? Search: `new_map = address_map` appears once in file. But old can be just that line with indentation; must occur exactly once. Need ensure old and new differ, each <512. Could patch just `    new_map = address_map` to `    new_map = build_address_map(new_artifact)`. Is `    new_map = address_map` exactly once? In content: line `    new_map = address_map` yes only once. Good. But patch requires old occurs exactly once; yes.
+
+Need expected_candidate_id current: 0f67505a0ad439530ae16095fac49db730b34ca253794657e06273420c2ba872. expected_file_sha256: for patching.py from read RES-0008: 5044568f9e90a176db507e370d6ecadc7c867ecce57994e615942f1dc066448a. Need ensure current file unchanged; no patches. yes.
+
+After patch, candidate ID changes. Then need check public with new candidate ID returned. But we only can one action per response. Need after patch observe result, then check, then submit. We have 10 calls remaining enough. But final answer only one JSON action. We need produce patch now. Ensure JSON object exactly. Need maybe use `old` string with newline? Could use minimal line. But if line `    new_map = address_map` is unique. Need check if whitespace exact: four spaces. In source content: 
+```
+    new_artifact = import_artifact(log, kind=artifact.kind, path_or_name=artifact.path_or_name, text=new_text)
+    new_map = address_map
+```
+Yes.
+
+Potential issue: patch new uses build_address_map which requires import; already imported. Good.
+
+Need think if there is a deeper bug in `exact_text_for_unit`? It returns inline_text if not None else line slice. For function unit no inline. Good.
+
+Potential bug: `_make_unit` for Python: content hash computed from `text` which is inline_text or line slice. For function unit, start=end from ast. But if function decorated or async? ast.FunctionDef/AsyncFunctionDef/ClassDef. start lineno maybe first line after decorators? In Python, `lineno` is function definition line, not decorators. content excludes decorators. If patch edits decorator, unit not update? Not relevant.
+
+Potential bug: `apply_patch_preview` uses `unit.start_line` and `unit.end_line` from old map, but if preview is for exact window ref maybe resolves to a different unit? It uses target_ref. Good.
+
+Potential bug: In `create_patch_preview`, target_ref = focus.active_address or first exact_window_refs. If active_address is stale after edit? Not.
+
+Potential bug: `resolve_address` iterates all maps, returns any unit whose address_or_ref in set. If same address appears across multiple artifacts? It returns first dict iteration (insertion order), could be wrong if address collision. Not likely.
+
+Task specifically: "An accepted edit to a Python artifact is followed by a failed reopen of the edited function. Investigate and repair this behavior while preserving unrelated source, unchanged-content behavior, later updates, and rejection of genuinely stale references." That sounds exactly apply returns stale address map. Need perhaps also update artifact map in `apply_patch_preview`? The function returns new_map, caller uses. But what about `artifacts` dict? It returns new_artifact, caller must update. But if caller expects `apply_patch_preview` to mutate `artifacts` in place? Signature receives dict but returns new artifact/map. Existing pattern: no mutation; returns new. The host probably replaces. Not bug.
+
+Could there be a check public test that asserts `apply_patch_preview` returns a map that materializes edited function using `receipt.address`. Our fix passes.
+
+Need consider if building new map changes `map_id` and units. The new artifact has same artifact_id, new version_hash. `build_address_map` creates map_id stable by artifact_id, version_hash, addresses. If content changed, new map. If unchanged, map_id same? artifact_id same, version_hash same, addresses same; units content hashes same. Yes.
+
+Need maybe ensure `new_map` is AddressMap type. build returns.
+
+Need maybe patch old line with `new_map = address_map` but if old occurs in comment? No.
+
+Let's ensure JSON strict. final content one object:
+{"action":"patch","path":"src/addressable_information_layer/patching.py","old":"    new_map = address_map","new":"    new_map = build_address_map(new_artifact)","expected_candidate_id":"0f67505a0ad439530ae16095fac49db730b34ca253794657e06273420c2ba872","expected_file_sha256":"5044568f9e90a176db507e370d6ecadc7c867ecce57994e615942f1dc066448a"}
+
+Need check key order? All required. No extra. Good.
+
+But let's not rush: Could `build_address_map(new_artifact)` fail because new_artifact text maybe not ending newline? It's okay. But `import_artifact` logs new blob. `build_address_map` may be expensive but okay.
+
+Potential hidden issue: If apply patch preview's `preview.address` was an address like `function:foo`. After editing, `new_map` units include `function:foo`. However, `build_address_map` for python uses AST. If the proposed_text changes indentation or syntax, parse may fail. Then `_unitize_python` returns root only (file) due SyntaxError, not function units. If edit introduces syntax error, reopen of edited function would fail as not resolve. But maybe expected? "accepted edit" likely valid. If edit invalid, should it apply? The current code does not validate syntax; import_artifact accepts any text. If test edits valid.
+
+Potential hidden issue: `apply_patch_preview` uses `unit` from old address map; if unit is `file` and proposed text changes entire file; new map built. Good.
+
+Potential hidden issue: The old address map may contain unit with `inline_text` for JSON etc. For Python no. If apply to function, fine.
+
+Need maybe think of "later updates" phrase: If multiple edits, each apply should rebuild map from latest artifact, not stale. Yes.
+
+Need maybe check public after patch. We'll need subsequent responses. For now patch.
+
+Double-check byte limits: old 22? new 48, okay.
+
+One nuance: The patch operation clears check flags. Not relevant.
+
+Now final.

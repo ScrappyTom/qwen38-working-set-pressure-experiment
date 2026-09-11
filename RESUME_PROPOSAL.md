@@ -1,25 +1,43 @@
 **Proposal: resume the project after Experiment 020**
 
-Latest preparation: the [two-run ordinary-loop package](development/investigation_loop/PREPARATION_REVIEW.md)
-is sealed and verified, with zero completion requests. It proposes 20 actions
-per run, 40 maximum total, at q4/56,576 with no MTP and uncapped xhigh. Initial
-inputs are 3,070 tokens; the admitted focused correction path peaks at 23,554.
-A broader path crosses the 23,808 reserve-based input ceiling while actions
-remain and is preserved as a denial example. Fourteen pilot-specific checks
-pass; all 47 native inputs were verified. The exact
-[specification](development/investigation_loop/SPEC.md) is ready for the existing
-separate execution decision. This is not model success or a pressure result.
+Latest outcome: the owner approved the concrete two-run / at-most-40-request
+scope with "Proceed". The [ordinary-loop pilot](development/investigation_loop/review/RESULTS.md)
+is complete: L01/L02 submit the same correct one-line repair after 10/14 calls,
+with first checks passing on the successor. All 24 responses are sealed,
+replay-verified and directly reviewed, including full thinking. All 22
+nonterminal results enter the next actual input; no rejection, retry, failed
+check or capacity denial occurs. Both runs use q4/56,576, no MTP and uncapped
+xhigh; minimum free GPU memory is 316 MiB under the accepted advisory policy.
+Actual input peaks are 15,644/20,027 and no pressure boundary occurs. The frozen
+preparation's pending-decision text remains historical; this scope is consumed.
 
-Current next step: the owner-supplied review earned offline return-path repairs
+The loop composes on this injected fault, but takes about 19.5/34.9 minutes.
+Both runs repeat a directory page whose answer is visible. Post-edit thinking
+repeatedly confuses its own repair with the original reported incident, despite
+the exact source and diff remaining resident. L02's extra source read confirms
+changed content and is distinct from duplicate navigation. The
+[full audit](development/investigation_loop/review/DIRECT_TRANSCRIPT_AUDIT.md)
+records these successful-path costs without inferring memory loss or assigning
+all deliberation to one cause.
+
+Current next step: select and qualify a fresh investigation offline, outside the
+agent/metadata domain, with a clearly described incident, accessible evidence
+separating plausible explanations and an earned natural boundary if available.
+Retain the current representation initially. Qualify task-specific action,
+native-input and generation allowances before a new concrete execution decision.
+No automatic successor, micro-test, broad refactor or working-account mechanism
+is authorized by this result; object-scope and exact grouping ideas stay recorded.
+
+Preceding maintenance: the owner-supplied review earned offline return-path repairs
 before larger-source work. Both reported size failures were reproduced against
 the checkout; nested navigation also exposed an unrelated outline-limit crash.
 Read the [prospective maintenance finding](maintenance/result_return_boundaries/FINDING.md)
 and [ordinary loop proposal](development/investigation_loop/PROPOSAL.md).
-The next model unit should be a completed contribution through several turns.
-Its development qualification may finish without pressure; it is separate from
-the main continuity comparison. No new model requests were made in this tranche.
+That tranche made no model requests and prepared the complete-loop work now
+reported above. Its development qualification is separate from the main
+continuity comparison.
 
-Latest outcome: the owner explicitly approved W01–W08 with "I approve". The
+Preceding wording outcome: the owner explicitly approved W01–W08 with "I approve". The
 [eight-request wording comparison](development/qwen_interface_consultation/wording/review/RESULTS.md)
 is complete, sealed, independently verified and directly reviewed in full. All
 eight actions were accepted and useful, with no check, submission or subsequent

@@ -178,10 +178,38 @@ the broader path would be denied at its fifteenth input despite six actions
 remaining. Its later oracle states are counterfactual. All history stays
 resident, and private thinking remains outside subsequent inputs. This is
 integration qualification, not independent discovery or a 25k comparison.
-Fourteen pilot-specific mocked checks pass. The execution runner and prepared
-package are ready for the existing separate owner decision; do not treat
-render/tokenization-only preparation as live authorization. Keep the already
-accepted q4 memory policy and preserve all prior evidence and freezes.
+Fourteen pilot-specific mocked checks passed before exposure. The owner then
+answered the concrete two-run / at-most-40-request execution question with
+"Proceed". L01/L02 are now complete and consumed: 10 and 14 calls, the same
+correct one-line repair, first checks passing on the successor, and two checked
+submissions. Read the five audits and DECISION.json under
+`development/investigation_loop/review/`. All 24 responses were sealed,
+replay-verified and directly reviewed, including full thinking; every one of the
+22 nonterminal results entered the next actual model input. No retry, rejection,
+capacity denial, externalization or historical retrieval occurred. The unused
+allowance does not authorize another run. Preserve pending-decision text in the
+frozen specification/preparation as historical status; do not ask again about
+these completed calls or the accepted advisory memory policy.
+
+Both runs repeat a directory page whose child path remains visible. After repair,
+thinking repeatedly confuses the actor's own accepted patch with the original
+incident described by the task, then reconstructs the distinction. Keep this
+successful-path framing friction in view: actual sources, patch and bindings
+remain resident, while prior thinking is immediately omitted. L02's additional
+read confirms changed source; do not equate it with an unchanged duplicate or
+absent-source recovery. Both actors use the actual check and decline rechecking
+before submission. No broad refactor, reread suppression or reasoning cap follows.
+
+The pilot qualifies the ordinary loop on one injected development fault, not
+independent discovery or pressure continuity. Peak inputs are 15,644/20,027;
+minimum free GPU memory is 316 MiB under the accepted advisory policy, without
+observed runtime failure or truncation. The 25k input contrast remains unqualified.
+Next select a fresh investigation outside the agent/metadata domain, distinguish
+the reported incident from working history, and qualify accessible discriminating
+evidence and task-specific allowances offline. Keep the existing representation
+initially and preserve exact grouping/object-scope suggestions as deferred.
+Any new live scope requires its concrete preparation and separate owner decision;
+there is no automatic successor, interface micro-test or memory redesign.
 
 Non-negotiable rules:
 

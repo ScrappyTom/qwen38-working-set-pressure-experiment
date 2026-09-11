@@ -1,14 +1,38 @@
-# Next step: qualify an ordinary complete working loop
+# Ordinary working loop and the next investigation
 
-Preparation is now complete under [SPEC.md](SPEC.md). Read
+The owner-approved two-run pilot is now complete. Read the five audits and
+[decision](review/DECISION.json) beginning with [RESULTS.md](review/RESULTS.md).
+Both runs submit the same correct one-line repair after 10/14 calls, with first
+checks passing, every nonterminal result delivered, and complete direct review
+of all 24 responses. No externalization or pressure boundary occurs. This is
+integration evidence on one injected task, not independent discovery.
+
+Both runs repeat a visible directory page; after mutation, thinking repeatedly
+confuses the actor's repair with the incident described by the task. The exact
+source and diff stay resident, while prior thinking is immediately omitted.
+L02's additional read confirms changed source. Preserve these distinctions and
+the observed 19.5/34.9-minute run costs; no broad refactor or reasoning cap follows.
+
+Next select a fresh investigation outside the agent/metadata domain offline.
+Distinguish its reported incident from the actor's own work without supplying a
+diagnosis or required next action. Establish accessible discriminating evidence,
+useful navigation, behavioral acceptance and task-specific action/input/generation
+allowances. Retain the representation initially; qualify a natural pressure
+opportunity if one exists and report its absence otherwise. Any later live scope
+needs its concrete preparation and existing separate owner decision. The consumed
+pilot does not authorize an automatic successor or interface micro-test.
+
+Historical preparation was completed under [SPEC.md](SPEC.md). Read
 [PREPARATION_REVIEW.md](PREPARATION_REVIEW.md) and [VERIFICATION.json](VERIFICATION.json).
 The owner-directed package proposes two fresh runs with a 20-action allowance
 each (40 completion calls maximum), at the selected q4/56,576, no MTP and
 uncapped xhigh. Both initial inputs and the direct/focused oracle paths fit;
 broader exploration can reach the reserve-based input stop while actions
 remain. Forty-seven inputs were rendered/tokenized, with zero completion calls.
-The separate execution decision remains pending. The text below preserves the
-planning rationale; actual prepared scope is in the spec.
+The owner subsequently answered its concrete execution question with "Proceed";
+24 of the maximum 40 calls were used and both runs ended by submission.
+The text below preserves the original planning rationale; actual
+prepared scope is in the unchanged spec and the outcome is in the linked audits.
 
 Keep the complete reference and accurate resource/navigation wording. Close the
 isolated wording question with its mixed result. The next model unit should be
@@ -43,7 +67,7 @@ The script knows the repair and chooses the actions. Its success proves tool and
 check feasibility only. The initial attempt exposed the now-fixed navigation
 crash recorded in the [maintenance finding](../../maintenance/result_return_boundaries/FINDING.md).
 
-## Concrete next preparation
+## Original preparation sequence (completed through direct review)
 
 1. Build a small development package from these pinned task/check/source bytes
    and the repaired host. Retain the existing event representation, canonical

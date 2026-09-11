@@ -2,13 +2,21 @@
 
 ## Project status
 
-The [two-run ordinary-loop pilot is prepared](development/investigation_loop/PREPARATION_REVIEW.md),
-sealed and verified, with **zero completion calls**. It proposes two independent
-runs, 20 actions each (40 maximum), using q4/56,576, no MTP and uncapped xhigh.
-Fourteen focused mocked checks pass. Both initial inputs are 3,070 tokens;
-the focused correction path peaks at 23,554 against the 23,808 input ceiling.
-A broader path exceeds that ceiling despite remaining actions; its later oracle
-states are counterfactual. The separate execution decision is pending.
+The owner-approved [two-run ordinary-loop pilot is complete](development/investigation_loop/review/RESULTS.md).
+Both runs make the same correct one-line repair, check the successor and submit:
+**10 and 14 calls**, with all 24 responses sealed, replay-verified and directly
+reviewed including full thinking. All 22 nonterminal results enter the next
+actual input. There are no rejected actions, failed checks or capacity stops.
+The q4/56,576, no-MTP, uncapped-xhigh configuration reaches 316 MiB free under
+the accepted advisory policy, without observed runtime failure or truncation.
+
+The complete loop works on this injected development fault, but costs about
+19.5 and 34.9 minutes. Both runs repeat a visible directory page; post-edit
+thinking repeatedly confuses the repair with the incident described by the task.
+Source and results remain resident, so this is framing/reconstruction friction,
+not loss at pressure. Peak inputs are 15,644/20,027; no context boundary occurs.
+Read the [direct transcript audit](development/investigation_loop/review/DIRECT_TRANSCRIPT_AUDIT.md)
+and [decision](development/investigation_loop/review/DECISION.json).
 
 The latest owner review prompted [offline return-boundary maintenance](maintenance/result_return_boundaries/FINDING.md).
 Both reported size failures reproduced against the checkout: rejected reads
@@ -17,12 +25,15 @@ access wrapper. Prospective repairs validate exact returns before committing
 state and select recoverable whole-line read pages. Offline loop preparation also
 exposed and fixed a directory-count/outline-limit crash. **58 selected checks
 pass**, and all eight saved wording actions still replay exactly. Historical
-artifacts and source pins remain unchanged; no model requests ran in this tranche.
+artifacts and source pins remain unchanged; that maintenance made no model requests.
 
-The [next-step proposal](development/investigation_loop/PROPOSAL.md) prioritizes
-a short complete working loop. Its ten-action oracle path succeeds, but its
-diagnostic already identifies a stale map. Native development allowances are
-now prepared above; natural pressure is not qualified. The main 25k proposal explicitly means an input
+The [next-step proposal](development/investigation_loop/PROPOSAL.md) now prioritizes
+offline selection of a fresh investigation outside the agent/metadata domain,
+with accessible evidence separating plausible explanations and incident framing
+distinct from the actor's own repair history. Keep the existing representation
+initially; no new wording micro-test or broad refactor follows. This completed
+task's source names a stale map, and natural pressure remains unqualified.
+The main 25k proposal explicitly means an input
 working set separate from physical generation capacity. The current 32,768
 reserve on 56,576 permits only 23,808 input tokens, so it cannot yet supply that
 contrast. Read [RESUME_PROPOSAL.md](RESUME_PROPOSAL.md) for the preparation boundary.
@@ -40,8 +51,8 @@ Carry the complete tool reference and two accurate wording corrections into
 subsequent preparation as a documented clarity choice, without claiming a
 measured performance benefit. Preserve deferred object-scope/grouping ideas;
 successful edits still revealed byte-count confusion in both conditions.
-The next work is ordinary multi-turn qualification with task-specific allowances,
-followed separately by a credible natural-pressure study. The shared renderer and
+The ordinary multi-turn qualification is now complete as recorded above;
+a credible fresh natural-pressure study still needs preparation. The shared renderer and
 all historical evidence remain intact; the prospective host repairs above are
 explicitly separate. No automatic interface micro-test or live successor is
 authorized. The five audits and [decision](development/qwen_interface_consultation/wording/review/DECISION.json)

@@ -1,0 +1,283 @@
+The task is: "An accepted edit to a Python artifact is followed by a failed reopen of the edited function. Investigate and repair this behavior while preserving unrelated source, unchanged-content behavior, later updates, and rejection of genuinely stale references. Use exact current source before editing, run check public on the final candidate, and submit."
+
+So the scenario: in this codebase, there is a pipeline where an "edit" (apply_patch_preview) is applied to a Python artifact (in-memory), and then a "reopen" (materialize_reopen) is called against the edited function. The reopen fails. The prior action (sequence 11) already made a patch: it changed `new_map = address_map` to `new_map = build_address_map(new_artifact)` in patching.py. That was presumably the first step of the repair. But wait — the task says "An accepted edit to a Python artifact is followed by a failed reopen of the edited function." Let me think about what the failure is and whether the previous patch fully fixes it.
+
+Let me reconstruct the flow:
+
+1. `create_patch_preview` builds a PatchPreview for a target unit in an artifact. It uses `resolve_address(address_maps, target_ref)` to find the unit, computes `before_text = exact_text_for_unit(artifact, unit)`, and sets `preview.before_hash = sha256_text(before_text)`. It sets `preview.before_text`, `proposed_text=response.draft`, etc.
+
+2. `apply_patch_preview(preview, log=..., artifacts=..., address_maps=...)` applies the patch in memory. It:
+   - looks up `artifact = artifacts.get(preview.artifact_id)`
+   - `address_map = address_maps.get(preview.artifact_id)`
+   - `unit = resolve_address({preview.artifact_id: address_map}, preview.address)`
+   - `before_text = exact_text_for_unit(artifact, unit)`; `before_hash = sha256_text(before_text)`; checks `before_hash != preview.before_hash` → blocked.
+   - `lines = artifact.text.splitlines()`; `replacement = preview.proposed_text.splitlines()`; `new_lines = lines[: unit.start_line - 1] + replacement + lines[unit.end_line:]`; `new_text = "\n".join(new_lines) + trailing_newline`.
+   - `new_artifact = import_artifact(log, kind=artifact.kind, path_or_name=artifact.path_or_name, text=new_text)` → this creates a NEW artifact. Crucially, `import_artifact` computes `artifact_id = stable_id("artifact", {"kind": kind, "path": path_or_name})`. Since kind and path_or_name are the same as the old artifact, the NEW artifact has the SAME artifact_id as the old one! So `new_artifact.artifact_id == artifact.artifact_id`. And `new_artifact.version_hash = blob.sha256` (new hash of new text), and `new_artifact.text = new_text`.
+   - The old patch had `new_map = address_map` (the OLD address map). The patched version is `new_map = build_address_map(new_artifact)` (a NEW address map built from the new text).
+   - Returns `(receipt, new_artifact, new_map)`.
+
+3. Now, the caller presumably updates `artifacts[preview.artifact_id] = new_artifact` and `address_maps[preview.artifact_id] = new_map` (or similar). Then calls `materialize_reopen` on the edited function.
+
+Wait — but here's the key issue. The task says: "An accepted edit to a Python artifact is followed by a failed reopen of the edited function." So after the edit, the reopen of the edited function fails. We need to find why and fix it.
+
+Let me think about the reopen logic in `materialize_reopen`:
+
+```python
+def materialize_reopen(requested_ref_or_address, *, artifacts, address_maps, max_chars=4000) -> ReopenReceipt:
+    unit = resolve_address(address_maps, requested_ref_or_address)
+    if unit is None:
+        return ... BLOCKED "request did not resolve to a visible exact handle or address"
+    artifact = artifacts.get(unit.artifact_id)
+    if artifact is None:
+        return ... BLOCKED "resolved unit artifact is missing"
+    exact_text = exact_text_for_unit(artifact, unit)
+    observed_hash = sha256_text(exact_text)
+    if observed_hash != unit.content_hash:
+        return ... BLOCKED "exact unit hash mismatch; artifact map is stale"
+    ...
+```
+
+So `materialize_reopen` recomputes `exact_text_for_unit(artifact, unit)` and compares to `unit.content_hash`. For a Python artifact, units are built by `_unitize_python`, which for each function/class does `unit = _make_unit(artifact, address, kind, node.name, start, end, "file")`. In `_make_unit`, `text = inline_text if inline_text is not None else ("\n".join(lines[start_line-1:end_line]) if lines else artifact.text)`. For function units, `inline_text` is None, so `text = "\n".join(lines[start-1:end])`. `content_hash = sha256_text(text)`.
+
+So the unit's `content_hash` is the hash of the exact text of the function at the time the address map was built.
+
+Now, the reopen recomputes `exact_text_for_unit(artifact, unit)`, which for a function unit (no inline_text) is `"\n".join(artifact.text.splitlines()[unit.start_line-1:unit.end_line])`. For this to match `unit.content_hash`, the artifact's text at those line ranges must equal the text that was used when the address map was built.
+
+Here's the crux: When we apply a patch, the address map was built from the OLD artifact (before edit). After the edit, we have a NEW artifact with potentially different line numbers (if the replacement changed line count). So if we keep using the OLD address map but the NEW artifact, then `unit.start_line`/`unit.end_line` point to the wrong lines, OR the text at those lines differs → hash mismatch → reopen blocked.
+
+The previous patch changed `new_map = address_map` to `new_map = build_address_map(new_artifact)`. This rebuilds the address map from the new text, so the units' start/end lines and content_hash are recomputed to match the new text. This is the correct fix: after editing, we need a fresh address map consistent with the new artifact.
+
+But wait — there's a subtlety. After the edit, the caller updates `address_maps[preview.artifact_id] = new_map`. The new map's units are built from `new_artifact`. Then reopen: `unit = resolve_address(address_maps, requested_ref_or_address)`. The requested ref is the edited function's address. In the new map, the function unit has the same address (e.g., "function:foo"), same unit_id? Let's check: `unit_id = stable_id("unit", payload)` where payload includes artifact_id, version_hash, address, start, end, hash. Since version_hash changed and start/end may have changed and hash changed, the unit_id will be DIFFERENT from before. And `exact_ref = f"exact:{artifact.artifact_id}:{address}:{content_hash[:12]}"` — content_hash changed so exact_ref changed too.
+
+So if the caller uses the OLD `exact_ref` or OLD `unit_id` to request reopen, it would NOT resolve in the new map → `unit is None` → BLOCKED "request did not resolve". Hmm. But the task says "a failed reopen of the edited function" — the scenario is likely: after edit, we request reopen of the edited function. If we request by address (e.g., "function:foo"), it resolves fine in the new map, and since the new map was built from the new text, the hash matches → MATERIALIZED. Good.
+
+But actually, let me reconsider. The whole point of this "ecological repair" task: there is a described bug scenario. The prior step already applied one fix (rebuilding the address map). But maybe there's MORE to fix. Let me re-read the task:
+
+"Investigate and repair this behavior while preserving unrelated source, unchanged-content behavior, later updates, and rejection of genuinely stale references."
+
+So the requirements:
+- repair the failed reopen of the edited function.
+- preserve unrelated source (don't touch other files unnecessarily).
+- unchanged-content behavior (if the edit doesn't change content? or if content is unchanged, behavior should be unchanged).
+- later updates (subsequent edits should still work).
+- rejection of genuinely stale references (if someone requests a stale reference that truly doesn't match, it should still be rejected).
+
+Hmm, the previous patch (rebuild address map) seems like the main fix. But let me reconsider whether that alone is sufficient and correct, or whether there's a deeper issue.
+
+Wait, actually — let me reconsider the whole scenario more carefully. Let me reconsider whether the previous patch is even the right fix, or whether it might be WRONG / incomplete, and I need to make additional repairs.
+
+Actually, the event frame shows that sequence 11 (patch) and sequence 12 (read to confirm) are already done. So the current candidate is `23b5c17999963faf7453c68a6b537ae6c447555f77eb0a835bfa659ad47e89aa`. The current source of patching.py has `new_map = build_address_map(new_artifact)`.
+
+Now I need to decide: is the repair complete? Let me think about the reopen flow again, considering how the caller wires things up.
+
+Actually, I don't have the caller code. Let me think about what "the edited function" reopen means. The scenario: 
+
+- There's a Python artifact (say a file with a function `foo`).
+- An edit is applied (accepted) that modifies `foo`.
+- A reopen of `foo` is attempted and fails.
+
+The reason it fails: after applying the edit, if the address map is not rebuilt, then:
+- The unit for `foo` in the old map has start/end lines and content_hash from the OLD text.
+- The new artifact has different text.
+- Reopen computes `exact_text_for_unit(new_artifact, unit)` = `"\n".join(new_text_lines[unit.start_line-1:unit.end_line])`. If the edit changed `foo`'s content or shifted lines, this won't match `unit.content_hash` → hash mismatch → BLOCKED "exact unit hash mismatch; artifact map is stale".
+
+So the fix is to rebuild the address map so that the map is consistent with the new artifact. The previous patch does exactly this. 
+
+But wait — there's a catch. If we rebuild the address map from the new artifact, then the reopen of `foo` will:
+- `unit = resolve_address(address_maps, "function:foo")` → resolves to the new map's `foo` unit.
+- `artifact = artifacts.get(unit.artifact_id)` → the new artifact.
+- `exact_text = exact_text_for_unit(artifact, unit)` → new text of `foo`.
+- `observed_hash = sha256_text(exact_text)` → should equal `unit.content_hash` (since the map was built from the new text).
+- → MATERIALIZED. 
+
+So the reopen succeeds. That's the repair.
+
+Now, is there anything else? Let me consider "later updates". If a second edit is applied after the first, it should still work. With the fix, after the first edit, `address_maps[preview.artifact_id] = new_map` (consistent) and `artifacts[preview.artifact_id] = new_artifact`. A second edit would use `create_patch_preview` with the updated artifacts/address_maps, resolve the unit, compute before_hash from current text, apply, rebuild map again. Should work.
+
+But wait — there's a subtle issue with `import_artifact`. It computes `artifact_id = stable_id("artifact", {"kind": kind, "path": path_or_name})`. So both old and new artifacts share the same `artifact_id` (same kind and path). That's fine for dict lookup `artifacts[artifact_id]` — the new artifact replaces the old under the same key. Good. And `address_maps[artifact_id]` — the new map replaces the old. Good. So as long as the caller does `artifacts[new_artifact.artifact_id] = new_artifact` and `address_maps[new_map.artifact_id] = new_map` (note `new_map.artifact_id` equals the same id), everything is consistent.
+
+Hmm, but actually, does the caller even exist in this repo, or is this purely in-memory library? The task says "An accepted edit to a Python artifact is followed by a failed reopen of the edited function." This is describing the library's behavior as used in some harness. The harness presumably:
+1. imports an artifact, builds address map.
+2. creates a patch preview for a function.
+3. applies the patch preview → gets (receipt, new_artifact, new_map). Updates artifacts and address_maps.
+4. calls materialize_reopen on the edited function.
+
+With the old code (`new_map = address_map`), step 4 fails (hash mismatch). With the fixed code (`new_map = build_address_map(new_artifact)`), step 4 succeeds.
+
+So the previous patch IS the core repair. 
+
+Now, is there a possibility that the previous patch is actually WRONG and I need to reconsider? Let me double check: the task says "Use exact current source before editing". I already have the current source of patching.py from sequence 12 (after the patch). Let me verify the current state is what I think.
+
+Actually, I should re-read the current source to be safe, because the instruction says "Use exact current source before editing". But I may not need to edit at all — the repair might already be complete from the previous step. But wait, the event frame shows the patch was already applied (sequence 11). The task is to "Investigate and repair this behavior". The previous step did part of the repair. 
+
+But hold on — is the repair actually complete? Let me reconsider whether `build_address_map` on the new artifact correctly preserves the edited function such that reopen by the SAME reference works.
+
+Let me reconsider the reference used for reopen. The task says "a failed reopen of the edited function". The reopen request is `requested_ref_or_address`. In the harness, after editing, what reference would it use? Probably the address of the function, e.g., "function:foo", or maybe the exact_ref, or the unit_id. 
+
+If it uses the address "function:foo": both old and new maps have a unit with address "function:foo" (since the function name didn't change, just its body). So resolve works in both. With old map + new artifact → hash mismatch (FAIL). With new map (rebuilt) → hash matches (PASS).
+
+If it uses the old exact_ref "exact:{artifact_id}:function:foo:{oldhash[:12]}": in the new map, the exact_ref is "exact:{artifact_id}:function:foo:{newhash[:12]}". Since newhash != oldhash, the old exact_ref does NOT match any unit in the new map → resolve returns None → BLOCKED "request did not resolve". So if the harness uses the old exact_ref, the fix wouldn't help — it would still fail, but with a DIFFERENT reason (did not resolve vs hash mismatch). Hmm.
+
+But that would be a "genuinely stale reference" — and the task says to preserve "rejection of genuinely stale references". So a genuinely stale reference should be rejected. But the "edited function" reopen that should succeed is presumably by address (the stable address), not by the old exact_ref (which is inherently stale after an edit).
+
+Actually, let me reconsider. The address `function:foo` is stable across edits (as long as the function name stays). The exact_ref includes a content hash, so it's inherently a "stale reference" after any content change. So the harness would reopen by the address "function:foo" (the stable identifier of the function). That's the "edited function". So the fix by rebuilding the map makes reopen-by-address work.
+
+OK here's the thing though. I'm now fairly convinced the previous patch (rebuild address map) is the correct and complete repair for the described symptom. But let me double-check there isn't ANOTHER bug that the task intends, and that the previous patch might be a red herring or even incorrect.
+
+Wait, actually, let me reconsider. Let me re-examine: maybe the previous patch is NOT the right fix and I need to think harder. Let me reconsider the requirement "unchanged-content behavior". This suggests: if a reopen is requested for a unit whose content is UNCHANGED, it should behave as before (i.e., succeed). And "rejection of genuinely stale references" — if content actually changed and someone references the old content hash, reject it.
+
+Hmm, let me reconsider the possibility that the intended fix is different. Let me reconsider `materialize_reopen` and think about what could cause a "failed reopen of the edited function" even if the map were rebuilt.
+
+Actually, wait. Let me reconsider the ACTUAL bug. Let me re-read apply_patch_preview very carefully:
+
+```python
+lines = artifact.text.splitlines()
+replacement = preview.proposed_text.splitlines()
+new_lines = lines[: unit.start_line - 1] + replacement + lines[unit.end_line :]
+trailing_newline = "\n" if artifact.text.endswith("\n") else ""
+new_text = "\n".join(new_lines) + trailing_newline
+new_artifact = import_artifact(log, kind=artifact.kind, path_or_name=artifact.path_or_name, text=new_text)
+new_map = build_address_map(new_artifact)   # after fix
+```
+
+This looks correct. It replaces the lines of the function unit (from start_line to end_line inclusive) with the proposed text.
+
+Then `build_address_map(new_artifact)` builds a fresh map from new_text. So the function `foo` gets new start/end lines and new content_hash.
+
+Now reopen `function:foo`:
+- resolves to new map unit for foo.
+- artifact = new artifact.
+- exact_text = new text of foo (from new artifact lines).
+- observed_hash vs unit.content_hash: both computed from new_text. Match.
+- → MATERIALIZED.
+
+Great, so the reopen succeeds. The fix works for reopen-by-address.
+
+So I believe the previous patch is the repair. Now, my job: the task says "Use exact current source before editing, run check public on the final candidate, and submit." 
+
+So the remaining actions: 
+1. Possibly confirm the current source (I have it from sequence 12, but that was a read after the patch; the instruction wants exact current source before editing — but if I don't need to edit, maybe I just verify).
+2. Run `check public` on the final candidate.
+3. `submit`.
+
+But wait — should I make any additional edit? Let me reconsider whether the repair is truly complete or if there's a second bug.
+
+Let me reconsider "later updates". Consider a second edit. After the first edit, `artifacts[foo_id] = new_artifact1`, `address_maps[foo_id] = new_map1`. A second `create_patch_preview`:
+- `unit = resolve_address(address_maps, target_ref)` → resolves against new_map1 (rebuilt from new_artifact1). Good.
+- computes before_hash from new_artifact1's text. Good.
+- apply: `artifact = artifacts.get(...)` → new_artifact1. `address_map = address_maps.get(...)` → new_map1. `unit = resolve_address({artifact_id: new_map1}, preview.address)`. Good.
+- builds new_text, new_artifact2, new_map2. Good.
+
+So later updates work.
+
+Now, is there any issue where `build_address_map` might fail or produce inconsistent results for Python? Let me check `_unitize_python` and `build_address_map`. `build_address_map` checks `artifact.kind in {"python","code","source"} or artifact.path_or_name.endswith(".py")` → `_unitize_python`. Good.
+
+Now let me reconsider whether the previous patch might have been the WRONG fix and there's a subtle issue: maybe the intended design is that the address map should NOT be rebuilt, and instead the reopen should be tolerant. But no — the reopen is a hash-verification mechanism. If the map is stale relative to the artifact, it SHOULD reject (that's the "genuinely stale references" behavior). The bug is that after an accepted edit, the map was NOT updated to match the new artifact, so a legitimate reopen of the edited function was rejected. The correct fix is to update the map to be consistent with the new artifact (rebuild it). That's exactly what the previous patch does. And it preserves the "genuinely stale references" rejection because if someone else's map is actually stale (content changed but map not rebuilt), the hash check still catches it.
+
+So I'm confident: the previous patch is the correct repair. 
+
+Now, the question is: is there anything MORE I should do? The task explicitly says "Use exact current source before editing". Since the previous step already edited, and I'm continuing, I should verify the exact current source before doing anything else (in case I need to make another edit). But I think the repair is done. Let me reconsider if I should make any edit at all.
+
+Actually, wait. Let me reconsider. Let me reconsider whether the previous patch is complete by considering if there are OTHER places that need the same treatment. For example, are there other places where after an edit the address map or artifacts are not updated consistently?
+
+Let me reconsider the scope. The task is specifically about "an accepted edit ... is followed by a failed reopen of the edited function". The edit is `apply_patch_preview`. The reopen is `materialize_reopen`. The fix in `apply_patch_preview` (rebuild the map) addresses this. 
+
+But let me reconsider: is `apply_patch_preview` the only place that creates a new artifact after an edit? Let me check other files. There's `renderer.py` which also uses `exact_text_for_unit`. Let me not over-engineer. The task is focused.
+
+Actually, let me reconsider whether I should verify by reading the current source and maybe checking the reopen and artifact_units to be fully sure the fix works end-to-end. I already have:
+- reopen.py (full, from sequence 6).
+- patching.py (full after patch, sequences 8 and 12).
+- artifact_units.py (full, sequence 10).
+
+Let me trace once more the reopen to be 100% sure the fix makes it pass, and that there's no OTHER lurking issue.
+
+`materialize_reopen("function:foo", artifacts=artifacts, address_maps=address_maps)`:
+- `unit = resolve_address(address_maps, "function:foo")`. In the new map, there's a unit with address "function:foo". Returns it. ✓.
+- `artifact = artifacts.get(unit.artifact_id)`. unit.artifact_id is the artifact id (same as old, since stable_id based on kind+path). artifacts has new_artifact under that id. ✓.
+- `exact_text = exact_text_for_unit(artifact, unit)`. For a function unit, inline_text is None, so `lines = artifact.text.splitlines(); return "\n".join(lines[unit.start_line-1:unit.end_line])`. artifact is new_artifact, unit is from new map (start/end from new text). So exact_text = the new foo text. ✓.
+- `observed_hash = sha256_text(exact_text)`. 
+- `unit.content_hash` was computed in `_make_unit` as `sha256_text(text)` where `text = "\n".join(lines[start-1:end])` with lines from new_artifact. So observed_hash == unit.content_hash. ✓.
+- → MATERIALIZED with materialized_text = exact_text (truncated if > max_chars). 
+
+So the reopen succeeds. The repair is complete.
+
+Therefore, I don't think I need to make any further edit. The remaining steps:
+1. The instruction "Use exact current source before editing" — I've effectively already read the current source (sequence 12 read patching.py after the patch). But to be safe and to satisfy "exact current source", maybe I don't need another read since I have it. Actually, the repair was done in the previous step; I'm now at the continuation. Let me consider whether I should just run check and submit.
+
+But wait, I need to be careful. Let me reconsider: is it possible that the previous patch was applied but the repair is INCOMPLETE because there's a SECOND aspect to the bug that I haven't addressed? The event frame shows only ONE patch was made. The task might expect the agent (me) to make the actual repair, and the previous patch might have been a PARTIAL or even a DIFFERENT (possibly wrong) step. But the event frame is "exact progress" — sequence 11 was a patch that I (the actor in a prior step) made. So I already made a repair attempt. Now I'm continuing.
+
+Hmm, but actually, in this "continuation" stage, the previous events are "ordered events are exact progress". So the patch at sequence 11 was ALREADY done by me (the same actor) in a prior step. So the repair is done. Now I just need to verify and finalize.
+
+But let me reconsider: maybe I should double-check by actually reading the current source of patching.py to confirm it's the fixed version, per "Use exact current source before editing". Since I won't be editing, this is less critical, but it's good hygiene. However, I have a calls_remaining of 8. I should be economical.
+
+Actually, let me reconsider whether I need to make ANOTHER edit. Let me reconsider the possibility that the repair requires fixing `materialize_reopen` too, or `resolve_address`, or something in how the reference is handled.
+
+Wait, actually, here's a thought. Let me reconsider the phrase "a failed reopen of the edited function". The reopen "failed" — meaning it returned BLOCKED. After the fix (rebuild map), the reopen by ADDRESS succeeds. But what if the harness reopens by the OLD `exact_ref` (which contains the old content hash)? Then even after the fix, it would fail because the new map has a different exact_ref. But that would be a "genuinely stale reference" which SHOULD be rejected. But the task says the reopen of the "edited function" should succeed. So the harness must be reopening by the stable address, not the content-bearing exact_ref.
+
+Actually, let me reconsider. In these kinds of library tasks, the "reference" that identifies a function is usually the address (e.g., "function:foo"). The exact_ref is a stronger, content-addressed handle. The "edited function" is identified by its address. So reopen by address is the natural interpretation. The fix handles it.
+
+Alternatively — and this is important — maybe the harness keeps the `exact_ref` from BEFORE the edit and tries to reopen with it after the edit. In that case, the exact_ref is stale (content changed), and the correct behavior is to REJECT it (it's a genuinely stale reference). But then the "failed reopen" is EXPECTED behavior and there's nothing to fix? No, that doesn't match "repair this behavior". The task says the failed reopen is a BUG to repair. So the reopen SHOULD succeed. So the reference must be the stable address. The fix makes it succeed.
+
+OK so I'm confident. Let me also reconsider: maybe the intended repair is NOT to rebuild the map, but the rebuild could have a side effect that breaks something. Let me reconsider "preserving ... unchanged-content behavior". "Unchanged-content behavior" — if a reopen is for content that is unchanged, it should still work. Rebuilding the map doesn't change that. For unchanged functions (not edited), their units are rebuilt with the same start/end (if line numbers didn't shift) and same content_hash (content unchanged). If the edit added/removed lines BEFORE the unchanged function, its start/end shift, and the rebuilt map correctly reflects the new line numbers, so reopen still works. If we had NOT rebuilt (old code), then an unchanged function AFTER the edited one would have wrong start/end in the old map → reopen would FAIL even though content is unchanged. So the rebuild fixes that too. This matches "preserving ... unchanged-content behavior" — after the fix, unchanged functions still reopen correctly even if line numbers shifted.
+
+Wait, but "unchanged-content behavior" might mean: the behavior for unchanged content should be the same as before the edit. With rebuild, yes.
+
+And "later updates" — subsequent edits work.
+
+So the rebuild is clearly the right, complete fix. 
+
+Alright. Given all this, I believe NO further edit is needed. The repair is complete. Now I should:
+1. Optionally verify exact current source (I have it from sequence 12).
+2. Run `check public` on the current candidate `23b5c17999963faf7453c68a6b537ae6c447555f77eb0a835bfa659ad47e89aa`.
+3. Submit.
+
+But hold on. Let me reconsider whether I should verify the source once more. The instruction "Use exact current source before editing" is a directive for BEFORE editing. Since I'm not editing, I can skip. But it's good to make sure the current state is as expected. I already have the read from sequence 12 which confirms `new_map = build_address_map(new_artifact)`. So the current source is confirmed.
+
+Actually, wait. Let me reconsider if maybe I'm wrong and the previous patch is NOT the complete repair, and the task actually wants me to do MORE. Let me reconsider by re-reading the exact task text:
+
+"An accepted edit to a Python artifact is followed by a failed reopen of the edited function. Investigate and repair this behavior while preserving unrelated source, unchanged-content behavior, later updates, and rejection of genuinely stale references. Use exact current source before editing, run check public on the final candidate, and submit."
+
+"preserving unrelated source" — don't touch unrelated files. The patch only touched patching.py. ✓.
+"unchanged-content behavior" — after edit, unchanged content reopens correctly. ✓ (rebuild handles line shifts).
+"later updates" — subsequent edits work. ✓.
+"rejection of genuinely stale references" — if a map is genuinely stale (content changed, map not rebuilt), the hash check in materialize_reopen still rejects. ✓ (we didn't touch that check).
+
+So the single-line fix in patching.py addresses all of these. I'm confident.
+
+Now, is the fix really complete in that it addresses "an accepted edit ... is followed by a failed reopen"? The "accepted edit" is `apply_patch_preview` returning APPLIED. Then reopen. With the fix, reopen succeeds. ✓.
+
+So I'll proceed to run `check public` and then submit. But the task says "run check public on the final candidate" — the final candidate is the current one (no more edits planned). Let me run the check.
+
+Actually, wait. Let me reconsider whether I should make the edit MYSELF now, in case the previous patch wasn't actually the right one or wasn't "my" intended repair. But no — the event frame clearly shows the patch was applied and accepted (sequence 11, accepted:true, candidate advanced to 23b5c...). So the repair IS in place. I shouldn't re-do it.
+
+But actually, let me reconsider the possibility that the previous patch, while making the map rebuild, might have introduced a bug or that the "correct" fix requires ALSO updating something else. Let me reconsider the `resolve_address` call in apply_patch_preview: `unit = resolve_address({preview.artifact_id: address_map}, preview.address)`. This uses `address_map` (the OLD map, since we look up before building the new one). That's fine — we need the OLD map to find the unit to patch. Then we build the NEW map from the new artifact. Good.
+
+Actually, wait, there's a subtle issue. In apply_patch_preview, `address_map = address_maps.get(preview.artifact_id)`. This is the CURRENT map (old, pre-edit). `unit = resolve_address({preview.artifact_id: address_map}, preview.address)`. Good, uses old map to locate the unit to replace. Then `before_text = exact_text_for_unit(artifact, unit)` from old artifact. `before_hash` checked against `preview.before_hash`. Good. Then builds new artifact and new map. Returns `(receipt, new_artifact, new_map)`. The caller updates `artifacts[preview.artifact_id] = new_artifact` and `address_maps[preview.artifact_id] = new_map`. 
+
+This is all consistent. The repair is complete.
+
+Let me now also double check: after the fix, is there any scenario where reopen of the edited function would STILL fail incorrectly? Only if the harness reopens by old exact_ref/unit_id (content-addressed), which is genuinely stale and SHOULD be rejected. So no.
+
+Alright, I'm confident. Let me now decide the exact next action.
+
+Given the task flow, the next logical action is to run `check public` on the current candidate. But first, "Use exact current source before editing" — I'm not editing, so I can proceed. However, to be safe and thorough (and to honor the directive to work from exact current source), I could do one read to confirm. But I already have the exact current source from sequence 12. Reading again would be redundant and waste a call. I have 8 calls remaining. Let me be economical but correct.
+
+Actually, let me reconsider. The check requires `expected_candidate_id` to match the current candidate. The current candidate is `23b5c17999963faf7453c68a6b537ae6c447555f77eb0a835bfa659ad47e89aa` (from current_p0.candidate_id and the last read's candidate_id). So `check public` with `expected_candidate_id = 23b5c17999963faf7453c68a6b537ae6c447555f77eb0a835bfa659ad47e89aa`.
+
+Let me do the check first, then submit based on the result.
+
+Wait, but should I verify the current source once more before finalizing, to be safe? The directive says "Use exact current source before editing". Since I'm not editing, it's not strictly required. But it's prudent to confirm the state is what I think before submitting. I already have the read from sequence 12. I'll trust it.
+
+Hmm, but actually, let me reconsider whether there might be a need to ALSO handle the case where the caller does NOT update address_maps (i.e., if the harness only updates artifacts but not address_maps). In that case, the reopen would use the OLD map with the NEW artifact → hash mismatch → fail. But that's a harness issue, not a library issue. The library's `apply_patch_preview` returns `new_map` precisely so the caller can update `address_maps`. The bug was that the OLD code returned `new_map = address_map` (the OLD map), so even if the caller did `address_maps[...]=new_map`, it would get the OLD (stale) map. The fix returns the freshly-built map. So the caller updating address_maps now gets the correct fresh map. This is exactly the repair. ✓.
+
+So the repair is complete and correct.
+
+Let me now run the check.
+
+Actually, let me reconsider once more whether I should make an edit to also handle reopen-by-stale-reference gracefully, but no — the task explicitly says to PRESERVE "rejection of genuinely stale references". So I should NOT make stale references succeed. The current behavior (hash mismatch → reject) is correct and should be preserved. Good, no change there.
+
+Alright. Let me run `check public`.
+
+Let me reconsider the candidate id. The current candidate after the patch is `23b5c17999963faf7453c68a6b537ae6c447555f77eb0a835bfa659ad47e89aa`. Confirmed by current_p0.candidate_id and the read at sequence 12.
+
+Let me issue the check.
