@@ -179,16 +179,23 @@ def counterfactual_checks(fixtures):
 def recovery_probe(value):
     # Explicitly forced offline removal qualifies plumbing, never natural pressure.
     reference = pilot.tool_reference(pilot.grammar_for(value))
-    clone = copy.deepcopy(value)
-    clone.state.submitted = False
-    clone.executor.state = clone.state
+    pairs = value.pairs
+    if value.state.submitted:
+        require(pairs and pairs[-1]["response"]["action"] == "submit", "terminal state lacks its terminal action")
+        pairs = pairs[:-1]
+    # Reconstruct the actual pre-submit state; never clear a terminal flag while
+    # retaining a history that already records submission.
+    clone = new_state("pre-submit-recovery", value.fixture)
+    for pair in pairs:
+        require(clone.execute(pair["response"]) == pair["result"], "pre-submit replay differs")
+    require(not clone.state.submitted, "recovery cannot continue a submitted history")
     external = request_for(clone, reference, externalized=len(clone.pairs))
     frame = load_json_strict(external["messages"][1]["content"].encode())["active_phase_event_frame"]
     require(all(e["result_body"]["residency"] in {"none", "external"} for e in frame["events"]), "payload removal failed")
     before = copy.deepcopy(clone.state)
     recovered = []
-    for action, saved in (("reopen_observation", dict(value.fixture.observation_bodies)),
-                          ("reopen_result", value.result_payloads), ("reopen_event", value.event_payloads)):
+    for action, saved in (("reopen_observation", dict(clone.fixture.observation_bodies)),
+                          ("reopen_result", clone.result_payloads), ("reopen_event", clone.event_payloads)):
         for handle, raw in saved.items():
             result = clone.executor.execute(dict(action=action, handle=handle))
             require(result.get("accepted") is True, "historical access rejected")

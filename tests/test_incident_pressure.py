@@ -47,6 +47,12 @@ class IncidentPressureTests(unittest.TestCase):
         self.assertTrue(all(r["returned_bytes"] <= 22_000 for r in recovered))
         state = load_json_strict(external["messages"][1]["content"].encode())
         self.assertEqual(state["candidate_id"], value.state.candidate.candidate_id)
+        events = state["active_phase_event_frame"]["events"]
+        self.assertEqual(len(events), len(value.pairs)-1)
+        self.assertFalse(any(e["action"]["action"] == "submit" for e in events))
+        self.assertEqual(events[-1]["action"]["action"], "check")
+        self.assertTrue(events[-1]["result"]["passed"])
+        self.assertEqual(events[-1]["result"]["checked_candidate_id"], state["candidate_id"])
 
     def test_access_feedback_preserves_canonical_source_without_new_original(self):
         value = new_state("access", self.fixtures[0])

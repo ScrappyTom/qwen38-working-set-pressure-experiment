@@ -22,6 +22,16 @@ needs a plausible link to the observed need, an assessable expected benefit and
 consideration of added cost. Retaining the current input is a complete outcome;
 neither long thinking alone nor an available suggestion obliges a change or run.
 
+The next-study offline preparation is under `development/incident_pressure/`.
+Read its SPEC.md and PREPARATION_REVIEW.md. It proposes a 16,000-token input
+working set versus a 23,808-token resident ceiling under unchanged q4/56,576 and
+G=32,768; this is not the historical 25k total envelope. The authored candidate
+passes incident-dependence checks but fails pressure eligibility: short justified
+routes finish below the proposed boundary. Zero model completions were sent.
+Preserve that rejection; no extra ordinary-loop run is activated. The original
+forced recovery probe's terminal-history mistake is preserved and separately
+corrected. No shared host or model-facing interface change was made.
+
 The latest owner-directed single investigation is complete. R01, seed 32452843,
 used 14 of its frozen 24 actions under unchanged model/interface/thinking settings:
 one correct repair, 38 passing public cases at its first check, and checked

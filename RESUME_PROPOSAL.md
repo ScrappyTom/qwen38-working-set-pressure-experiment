@@ -1,5 +1,16 @@
 **Proposal: resume the project after Experiment 020**
 
+Current preparation: [incident dependence and pressure qualification](development/incident_pressure/PREPARATION_REVIEW.md)
+retains the interface and proposes a 16,000-token input working set against a
+resident ceiling of 23,808, with q4/56,576 and G=32,768 unchanged. The arithmetic
+is coherent; the authored candidate is rejected for the primary pressure study.
+Its identical-source worlds require different incident-dependent repairs, but
+short valid routes peak at only 7,521–8,188 native input tokens. No model
+completions were sent and no execution schedule was activated. A suitable task
+and larger-workload inference/fork qualification remain necessary. Read the
+separate correction of the offline recovery helper alongside its preserved
+original evidence.
+
 Latest outcome: the owner-directed [receipt-corrections investigation](development/correction_investigation/review/RESULTS.md)
 is complete: 14 actions, one correct repair, 38 passing public cases on the first
 check, and checked submission. All fourteen complete responses were directly
@@ -150,20 +161,25 @@ The owner-authorized three qualification and four conditional design responses a
 
 **Selected model and capacity options**
 
-| Setting | Primary | Larger capacity option, if needed |
+| Setting | Owner's initially preferred preset | Selected for current preparation |
 |---|---|---|
 | Model weights | Qwen3.8-27B Unsloth Dynamic 3.0 UD-IQ3_XXS | Same exact artifact |
 | Physical context | 32,768 tokens | Recorded tested allocation: 56,576 tokens, the approximately 55k option |
 | K and V cache | q8_0 | q4_0 |
 | MTP | Disabled | Disabled |
 | Difficult-work reasoning | Native thinking on, xhigh, uncapped | Same |
-| Proposed externalization target | 25,000 native input tokens, separate from generation capacity, defined below | Same target if the qualified physical margin permits a contrast |
+| Proposed externalization target | Not selected with the current generation reserve | 16,000 native input tokens versus a 23,808-token resident admission ceiling |
 
 Use the pinned `llama-cpp-b10434-cuda-13-3` runtime, revision `7e4c0a96880dae4fc4268ad441f8a6446bd5460a`, and model SHA-256 `c0b7c3038681ed2e3040456c1dd45f9858b6c2290bed172c70388a94874f3eee`. The profile source is [model-profiles](https://github.com/ScrappyTom/model-profiles/tree/b5ee42b47553c6882862665ca5a58dc0a921d8d0), specifically its IQ3_XXS profile, guide, and hardware overlay. Local executable/model paths remain in that repository's ignored `.local/handoffs/qwen38-iq3-q4-mtp.md`; do not copy machine-specific launch paths into committed experiment documents.
 
 The primary full-offload preset is `32k-q8-full-gpu-350mib`, with automatic fitting disabled. Match the selected profile's embedded template, sampling, offload, and single-slot settings; remove speculative flags. Verify the effective client request as well as the launch command so the old harness does not silently restore its 512-token thinking budget or another generation cap. Low/medium effort and MTP are not part of this proposal.
 
-The larger q4 configuration is an available preparation choice, not an automatic rescue. Its reported 55,779-token input result was simple retention with a tiny answer; hard reasoning near that occupancy is unvalidated. Select and qualify a capacity configuration before freezing a comparison. Both branches of any pair use the same KV type, physical context, reasoning policy, and runtime. Never compare q8 resident against q4 externalized and interpret the difference as externalization alone, or switch presets inside a measured trajectory.
+The larger q4 configuration has been selected for the completed development runs
+and the current preparation. Its reported 55,779-token input result was simple
+retention with a tiny answer; hard reasoning near that occupancy is unvalidated.
+Both branches of any pair use the same KV type, physical context, reasoning policy,
+and runtime. Never compare q8 resident against q4 externalized and interpret the
+difference as externalization alone, or switch presets inside a measured trajectory.
 
 **Resolve token accounting and history explicitly**
 
@@ -171,7 +187,7 @@ The old X25 guard admitted an exact rendered prompt plus fixed runtime/output al
 
 Proposed successor accounting explicitly changes the old total-envelope meaning:
 let P be the exact native input count, including the rendered template and any
-verified runtime tokens; W be the input working-set target of 25,000; G be a
+verified runtime tokens; W be the proposed input working-set target of 16,000; G be a
 prospective generation reserve covering thinking and the final action; and C be
 physical context capacity. Do not add a template adjustment twice when native
 tokenization already includes it. Every invocation must satisfy `P + G <= C`.
@@ -181,14 +197,14 @@ ceiling is `min(W, C - G)`. Use the same G and physical configuration in both
 conditions, freeze them before exposure, and name this an input-working-set
 study rather than an unchanged replication of the historical X25 envelope.
 
-The current development reserve of 32,768 with C=56,576 leaves only 23,808 for P,
-below W. It can support preparation of a small ordinary loop but cannot supply a
-resident-versus-25k contrast. Do not reduce G merely to obtain that contrast:
-qualify the actual task and a justified reserve first, or explicitly propose a
-different working-set target. The primary q8/32,768 remains the owner's preferred
-capacity choice when the workload and reserve fit; q4/56,576 is available when
-prospectively selected for the whole run. No runtime switch or silent thinking
-cap is permitted. Eight short one-action outputs do not bound difficult work.
+The current development reserve of 32,768 with C=56,576 leaves 23,808 for P,
+above the newly proposed W=16,000. This explicitly replaces the earlier proposed
+25k input target, which exceeded the admission ceiling by 1,192. It preserves G
+and the owner's reasoning policy. It does not establish task eligibility or
+generation capacity for a larger workload; the first incident-dependent candidate
+failed the natural-pressure gate offline. The q8/32,768 preset remains available
+when a separately qualified workload and reserve fit. No runtime switch or silent
+thinking cap is permitted. Short development outputs do not bound difficult work.
 
 Keep generation uncapped and context shifting disabled. G is an admission
 reserve, not a generation cap or a guarantee. Preserve complete or interrupted
@@ -271,7 +287,11 @@ must be possible and available to the actor; an oracle choosing it offline does
 not demonstrate model navigation. Review every returned result together with
 the next actual input and action. Do not add another wording comparison.
 
-The following remains the separate primary continuity-study proposal:
+The following preserves the original stale-map task rationale. That candidate
+has since completed as development under `development/investigation_loop/`;
+it did not exercise pressure and is not a pending fresh primary task. The
+current incident-dependent candidate is also rejected for pressure, as recorded
+in `development/incident_pressure/PREPARATION_REVIEW.md`.
 
 Proposed task: diagnose a failure after editing an artifact and reopening one of its sections in an owner-controlled exact-content pipeline. A valid current operation unexpectedly fails content validation. The actor must reproduce it, repair the cause, preserve rejection of genuinely stale references, pass the public check, and submit.
 
@@ -293,9 +313,20 @@ primary study. If an actor finishes before pressure or never revises an
 explanation, report useful work with continuity unexercised; do not manufacture
 a boundary or require an initial mistake.
 
-Proposed primary schedule: one fresh task, two fixed seeds, paired resident/externalized conditions—four terminal branches—with each pair sharing one byte-identical live prefix until authentic pressure. Use the selected q8/32k configuration for all branches unless preparation prospectively chooses the larger q4 option for the entire comparison. The action budget and generation reserve come from qualification and are frozen before exposure; do not reuse the old 24-call limit without checking the actual task. No automatic retries, rescue, or successor.
+Current proposed primary schedule: one eligible fresh task, two fixed seeds,
+paired resident/externalized conditions—four terminal branches—with each pair
+sharing one byte-identical live prefix until authentic pressure. Keep q4/56,576,
+G=32,768 and the same interface in all branches. The prospective 16,000/23,808
+input limits, seeds and 32-action allowance are specified in the incident-pressure
+preparation, but no task or execution schedule is qualified. Freeze a concrete
+qualified package before exposure. No automatic retries, rescue or successor.
 
-The key question is whether the actor retains or correctly reconstructs the reason to investigate update propagation after evidence rules out extraction. It need not preserve verbatim reasoning or first commit to the wrong explanation. Before the run, state the observable implications of the evidence. Repeating a ruled-out diagnostic is only avoidable repetition when its relevant premises have not changed.
+The current key question is whether the actor uses acquired incident evidence
+to distinguish plausible execution paths and retains or reconstructs why a later
+investigative action follows after relevant evidence leaves the prompt. It need
+not preserve verbatim reasoning or first commit to the wrong explanation. Before
+the run, state the observable implications of the evidence. Repeating a ruled-out
+diagnostic is only avoidable repetition when its relevant premises have not changed.
 
 Measure task/hidden-check outcome, first-check outcome, actual correction opportunity, evidence selection, necessary reacquisition, avoidable repeated work, peak occupancy, and cumulative input/reasoning/final tokens and time separately. Audit every available copy of a fact in the task, source, observations, later results, and saved work before claiming memory use or information loss. Correct repair alone does not establish the claimed continuity mechanism; verbal explanation alone does not either.
 

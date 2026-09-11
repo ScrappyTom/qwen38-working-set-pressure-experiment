@@ -76,6 +76,23 @@ inputs from continuation/capacity qualification. This does not affect the six
 normal routes or the pressure rejection. Preserve preparation-001 as recorded;
 correct this preparation helper prospectively rather than changing a host rule.
 
+That correction is now recorded in `recovery-correction/`. The helper reconstructs
+the actual 13-action state immediately before submission by replaying its exact
+actions/results. It preserves the current passing check. The strengthened
+regression rejects any submitted event in that recovery input. All six focused
+tests pass after the correction. Both worlds return 14 exact stored bodies/action
+payloads without changing candidate, acquisition or check state; the largest
+wrapper is 1,922 bytes. These corrected inputs were built and inspected offline,
+without repeating native rendering or inference. They qualify the stated small
+return paths, not large-workload capacity or natural recovery.
+
+Commit `b89d79aa4e03b2f303375fb4e4b871199153fe53` preserves the exact original
+preparation source, including the imperfect helper and original tests. The
+correction has separate source hashes and custody. The six original routes and
+their measured sizes remain unchanged. Whitespace checking of the first commit
+flagged CRLF bytes in the exact GPU telemetry; those bytes were retained. Checking
+with CR-at-EOL recognized passes without modifying sealed evidence.
+
 ## Decision
 
 Retain the interface. Keep 16,000 versus 23,808 as a proposed, explicitly different

@@ -2,6 +2,13 @@
 
 ## Project status
 
+The [next-study offline preparation](development/incident_pressure/PREPARATION_REVIEW.md)
+proposes a 16,000-token input working set versus a 23,808-token resident ceiling,
+retaining q4/56,576 and uncapped xhigh. Its candidate needs incident evidence to
+choose the correct repair, but short valid paths remain below the proposed
+pressure boundary. It is rejected for the primary study; **zero model completion
+calls** were sent. No new interface change or ordinary-loop run is activated.
+
 The [receipt-corrections investigation is complete](development/correction_investigation/review/RESULTS.md):
 **14 actions, one correct repair, all 38 public cases passing on the first check,
 and checked submission**. Every complete response and actual input/result was
