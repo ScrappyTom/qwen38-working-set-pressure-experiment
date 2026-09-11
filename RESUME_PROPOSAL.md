@@ -1,14 +1,23 @@
 **Proposal: resume the project after Experiment 020**
 
+The [compiler execution package is ready](development/compiler_incident/EXECUTION_READINESS.md)
+for the separate owner decision: two cells, at most 128 completion attempts, and
+32 actions per trajectory including the common prefix. Twenty-two distinct focused
+tests passed. A sealed rehearsal of the final frozen engine used 34 mocked replies
+and real tools to reach four checked submissions; independent replay verified all
+inputs and actions. Zero Qwen requests were sent and no runtime was launched. Keep
+the current interface and q4/56,576 / uncapped xhigh configuration; do not infer
+model success or live approval from this engineering qualification.
+
 Current preparation: the [captured compiler incident](development/compiler_incident/PREPARATION_REVIEW.md)
 qualifies a report-and-repair task for the proposed 16,000-token input working set
 against a 23,808-token resident ceiling, with q4/56,576 and G=32,768 unchanged.
 Six short actual-tool routes peak at 18,934–21,582. An authentic offline fork and
 exact-recovery continuation finish in 12 actions; the largest admitted smaller
 input is 15,817. The full repair and incident report pass all 26 contract cases,
-and 19 selected preparation tests pass. Zero model completions were sent. Next
-bind the execution safeguards to this package for the separate owner decision;
-larger-workload model inference remains unqualified.
+and 19 selected preparation tests pass. Zero model completions were sent. The bound
+execution safeguards are now ready above; larger-workload model inference remains
+unqualified.
 
 This task makes the historical comparison incident-dependent, while the optimizer
 repair itself can be source-led. A partial report is an additional retained copy;
