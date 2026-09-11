@@ -1,5 +1,12 @@
 # Ordinary working loop and the next investigation
 
+The next [fresh Shift Ledger task is now prepared](../shift_investigation/PREPARATION_REVIEW.md):
+one run, at most 20 actions, using the episode annotation throughout. Its direct
+and correction paths fit the selected native input allowance; ten focused
+integration checks pass. Thirty inputs were prepared without model completions.
+The concrete package is ready for its separate execution decision. Actual use
+of the annotation and investigation outcomes remain to be observed.
+
 The owner-approved two-run pilot is now complete. Read the five audits and
 [decision](review/DECISION.json) beginning with [RESULTS.md](review/RESULTS.md).
 Both runs submit the same correct one-line repair after 10/14 calls, with first

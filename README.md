@@ -2,6 +2,15 @@
 
 ## Project status
 
+The [fresh Shift Ledger investigation is prepared](development/shift_investigation/PREPARATION_REVIEW.md)
+for one unassisted run with at most 20 actions. Its actual inputs include Qwen's
+episode annotation. Ten focused integration checks pass; both a direct route and
+a partial-repair/correction route fit the native input ceiling. Thirty inputs
+were rendered/tokenized with zero completions. This is a small ordinary task
+outside the metadata domain, with public evidence separating decoding/window
+construction from reporting behavior. Live execution awaits the existing separate
+owner decision; task-level use of the annotation remains untested.
+
 The requested [two-turn conversation with Qwen is complete](development/episode_dialogue/review/RESULTS.md).
 Before clarification, Qwen still considered the report's edit possibly its own
 repair; afterward it proposed one annotation separating the episodes. Codex

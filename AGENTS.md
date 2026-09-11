@@ -229,6 +229,18 @@ after establishing the report's presession scope, and assess its use through
 actions and tool feedback. Changing domains does not substitute for that step.
 Qualify discriminating evidence and task-specific allowances. Keep grouping and
 object-scope suggestions available; this dialogue does not settle a memory design.
+The owner then directed the next preparation with "Proceed". Read
+`development/shift_investigation/SPEC.md`, `PREPARATION_REVIEW.md` and
+`VERIFICATION.json`. The new authored Shift Ledger task proposes one S01 run,
+seed 161803, at most 20 completion requests/actions. Its 30 prepared inputs all
+carry the episode annotation and preserve actual current state. Direct and
+partial-repair/correction paths take 13/16 actions, peaking at 12,981/16,087
+native tokens under the existing q4/56,576, G=32,768, no-MTP/uncapped-xhigh preset.
+Ten focused mocked integration checks pass. Preparation made zero completions;
+the concrete live package awaits its separate execution decision. Do not send
+oracle actions or checker conclusions in the initial input. The 5,019-byte task
+does not establish pressure continuity or a framing-only effect. Its purpose is
+to observe actual use of the learned distinction through ordinary tool feedback.
 Any new live scope requires its concrete preparation and separate owner decision;
 there is no automatic successor, interface micro-test or memory redesign.
 

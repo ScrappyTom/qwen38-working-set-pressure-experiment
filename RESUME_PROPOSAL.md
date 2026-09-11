@@ -1,5 +1,13 @@
 **Proposal: resume the project after Experiment 020**
 
+Prepared next step: [one fresh Shift Ledger investigation](development/shift_investigation/PREPARATION_REVIEW.md),
+S01 seed 161803, at most 20 actions, with the consulted episode annotation in
+every actual input. Ten focused checks pass; both the direct and correction
+routes fit the native allowance. Preparation made zero completions. The task
+has useful nested navigation and public evidence distinguishing decoded instants,
+day windows and reported totals. It is ready for its separate execution decision;
+the resulting task behavior has not yet been observed.
+
 Latest outcome: the [two-turn conversation with Qwen](development/episode_dialogue/review/RESULTS.md)
 is complete, sealed, verified and directly reviewed. Its interpretation before
 clarification still allows the report's edit to mean the actor's repair. After
