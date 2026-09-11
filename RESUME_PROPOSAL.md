@@ -1,15 +1,22 @@
 **Proposal: resume the project after Experiment 020**
 
-Current preparation: [incident dependence and pressure qualification](development/incident_pressure/PREPARATION_REVIEW.md)
-retains the interface and proposes a 16,000-token input working set against a
-resident ceiling of 23,808, with q4/56,576 and G=32,768 unchanged. The arithmetic
-is coherent; the authored candidate is rejected for the primary pressure study.
-Its identical-source worlds require different incident-dependent repairs, but
-short valid routes peak at only 7,521–8,188 native input tokens. No model
-completions were sent and no execution schedule was activated. A suitable task
-and larger-workload inference/fork qualification remain necessary. Read the
-separate correction of the offline recovery helper alongside its preserved
-original evidence.
+Current preparation: the [captured compiler incident](development/compiler_incident/PREPARATION_REVIEW.md)
+qualifies a report-and-repair task for the proposed 16,000-token input working set
+against a 23,808-token resident ceiling, with q4/56,576 and G=32,768 unchanged.
+Six short actual-tool routes peak at 18,934–21,582. An authentic offline fork and
+exact-recovery continuation finish in 12 actions; the largest admitted smaller
+input is 15,817. The full repair and incident report pass all 26 contract cases,
+and 19 selected preparation tests pass. Zero model completions were sent. Next
+bind the execution safeguards to this package for the separate owner decision;
+larger-workload model inference remains unqualified.
+
+This task makes the historical comparison incident-dependent, while the optimizer
+repair itself can be source-led. A partial report is an additional retained copy;
+do not attribute its findings solely to external storage or omitted thinking.
+Preserve the finite-route limitation and any future pre-boundary submission.
+The [preceding Posting candidate](development/incident_pressure/PREPARATION_REVIEW.md)
+remains rejected: its incident-dependent repairs finish below the proposed limit.
+Its corrected offline recovery probe and original mistake remain preserved.
 
 Latest outcome: the owner-directed [receipt-corrections investigation](development/correction_investigation/review/RESULTS.md)
 is complete: 14 actions, one correct repair, 38 passing public cases on the first

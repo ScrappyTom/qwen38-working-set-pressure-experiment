@@ -22,15 +22,26 @@ needs a plausible link to the observed need, an assessable expected benefit and
 consideration of added cost. Retaining the current input is a complete outcome;
 neither long thinking alone nor an available suggestion obliges a change or run.
 
-The next-study offline preparation is under `development/incident_pressure/`.
-Read its SPEC.md and PREPARATION_REVIEW.md. It proposes a 16,000-token input
-working set versus a 23,808-token resident ceiling under unchanged q4/56,576 and
-G=32,768; this is not the historical 25k total envelope. The authored candidate
-passes incident-dependence checks but fails pressure eligibility: short justified
-routes finish below the proposed boundary. Zero model completions were sent.
-Preserve that rejection; no extra ordinary-loop run is activated. The original
-forced recovery probe's terminal-history mistake is preserved and separately
-corrected. No shared host or model-facing interface change was made.
+The current task-selection preparation is under `development/compiler_incident/`.
+Read SPEC.md, PREPARATION_REVIEW.md and VERIFICATION.json. Six short actual-tool
+routes cross the proposed 16,000-token input working set and fit the 23,808-token
+resident ceiling under unchanged q4/56,576 and G=32,768. An externalized route
+recovers exact evidence and reaches checked submission in 12 scripted actions.
+Zero model completions were sent; this is offline report-and-repair qualification.
+The historical comparison requires captured evidence; the optimizer repair alone
+can be source-led. The partial report is an actual retained evidence copy, not a
+new working-account operation. Do not promote these results to model discovery,
+hypothesis reversal or pressure continuity. Preserve the finite-route limitation
+and never manufacture a fork if an actor completes first. The next step is the
+separately bound execution runner and owner execution decision, not another
+wording study. No shared host or model-facing interface change was made.
+
+Preserve the rejected Posting candidate under `development/incident_pressure/`:
+it needs incident evidence to select a repair but short routes finish below the
+proposed boundary. Its original forced-recovery terminal-history mistake remains
+separately corrected. Neither that rejection nor the compiler preparation
+activates an extra ordinary-loop run. The 16k input working set is not the old
+25k total envelope; 25k remains incompatible with the present reserve.
 
 The latest owner-directed single investigation is complete. R01, seed 32452843,
 used 14 of its frozen 24 actions under unchanged model/interface/thinking settings:

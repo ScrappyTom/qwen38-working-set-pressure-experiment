@@ -2,12 +2,22 @@
 
 ## Project status
 
-The [next-study offline preparation](development/incident_pressure/PREPARATION_REVIEW.md)
-proposes a 16,000-token input working set versus a 23,808-token resident ceiling,
-retaining q4/56,576 and uncapped xhigh. Its candidate needs incident evidence to
-choose the correct repair, but short valid paths remain below the proposed
-pressure boundary. It is rejected for the primary study; **zero model completion
-calls** were sent. No new interface change or ordinary-loop run is activated.
+The [compiler incident task is qualified offline](development/compiler_incident/PREPARATION_REVIEW.md).
+Six short scripted paths cross the proposed **16,000-token input working set**
+while fitting the **23,808-token resident ceiling**; their peaks are 18,934–21,582.
+An externalized path retrieves the missing original capture and reaches checked
+submission in 12 actions, with a largest admitted continuation input of 15,817.
+The full repair and incident report pass 26 behavioral contract cases; 19 selected
+preparation tests pass. **Zero model completion calls** were sent. Retain q4/56,576,
+uncapped xhigh and the current interface; next prepare the bound execution runner
+for a separate execution decision.
+
+The historical report requires incident evidence; the repair itself can be found
+from source. Partial reports can retain findings across pressure. This is a useful
+report-and-repair task, not demonstrated model discovery or hypothesis reversal.
+The [previous Posting candidate](development/incident_pressure/PREPARATION_REVIEW.md)
+remains rejected because its short valid routes stayed below the pressure boundary.
+No extra ordinary-loop run or interface study is activated.
 
 The [receipt-corrections investigation is complete](development/correction_investigation/review/RESULTS.md):
 **14 actions, one correct repair, all 38 public cases passing on the first check,
