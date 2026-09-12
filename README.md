@@ -2,6 +2,17 @@
 
 ## Project status
 
+The [delivery qualification](development/compiler_incident/delivery-qualification/FINDING.md)
+reproduces four recorded input sizes and shows that keeping only the newest result
+already requires 16,950/16,214 tokens at the sampled omissions. One report entry's
+assisted working group requires about 20–21k. The retained history needs attention;
+pinning bodies alone cannot make these states fit 16k. Six focused checks pass.
+The owner-directed [two-turn Qwen consultation](development/delivery_dialogue/SPEC.md)
+is prepared with the exact historical input and no preferred replacement. Its
+first input is 12,968 tokens, with 43,608 physical tokens remaining. Four dialogue
+checks pass. The completed comparison remains preserved below; no new host policy
+or contribution/restart trial has been adopted.
+
 The [owner-approved compiler comparison is closed](development/compiler_incident/review/RESULTS.md):
 **66 model responses, 65 executed actions, one checked submission**, with every
 complete response directly reviewed and every executed action replay-verified.

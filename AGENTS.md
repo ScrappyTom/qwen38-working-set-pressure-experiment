@@ -22,6 +22,19 @@ needs a plausible link to the observed need, an assessable expected benefit and
 consideration of added cost. Retaining the current input is a complete outcome;
 neither long thinking alone nor an available suggestion obliges a change or run.
 
+The latest owner-directed follow-up has qualified delivery offline under
+`development/compiler_incident/delivery-qualification/`. Retaining only the
+newest result costs 16,950/16,214 tokens at the sampled omissions; a protected
+group alone cannot fit those states at 16k. Read its FINDING.md and immutable
+measurements. Six actual-tool/identity checks pass. The owner's latest “Proceed”
+also directs the separate bounded consultation under `development/delivery_dialogue/`:
+at most two responses, unchanged actor/settings, unassisted interpretation before
+adaptive source-checked clarification. Its first input is prepared at 12,968 tokens,
+leaving 43,608 physical tokens; actual server rendering must match before dispatch.
+Four dialogue checks pass after correcting a test-double aliasing mistake recorded
+in TESTING.md. This is new owner-directed development, not reuse of any consumed
+run's allowance. No contribution/restart study or retention policy is yet adopted.
+
 The owner-approved compiler comparison under `development/compiler_incident/`
 is closed without retry. Read its `review/RESULTS.md`, companion transcript, host
 and apparatus audits, `review/EXECUTION_RECEIPT.md`, `review/DECISION.json`

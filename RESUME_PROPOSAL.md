@@ -1,5 +1,15 @@
 **Proposal: resume the project after Experiment 020**
 
+Current follow-up: [offline delivery qualification](development/compiler_incident/delivery-qualification/FINDING.md)
+shows that newest-result retention alone exceeds 16k at both sampled omissions.
+The event frame/verification account for 9,143–12,901 marginal tokens in the four
+states. These are capacity measurements and cost ablations, not a selected compact
+view. The owner's latest “Proceed” directs the bounded [Qwen consultation](development/delivery_dialogue/SPEC.md):
+two responses at most, actual historical input first, factual adaptive follow-up
+after complete review. D1 is prepared at 12,968 input tokens; ten focused checks
+pass across qualification and dialogue. A saved-contribution/restart experiment
+follows only after a concrete presentation decision; none is launched here.
+
 Latest outcome: the [approved compiler comparison](development/compiler_incident/review/RESULTS.md)
 is closed without retry after 66 responses and 65 executed actions. All complete
 responses and actual input changes/results were directly reviewed, and all
