@@ -1,33 +1,43 @@
 **Proposal: resume the project after Experiment 020**
 
-The [compiler execution package is ready](development/compiler_incident/EXECUTION_READINESS.md)
-for the separate owner decision: two cells, at most 128 completion attempts, and
-32 actions per trajectory including the common prefix. Twenty-two distinct focused
-tests passed. A sealed rehearsal of the final frozen engine used 34 mocked replies
-and real tools to reach four checked submissions; independent replay verified all
-inputs and actions. Zero Qwen requests were sent and no runtime was launched. Keep
-the current interface and q4/56,576 / uncapped xhigh configuration; do not infer
-model success or live approval from this engineering qualification.
+Latest outcome: the [approved compiler comparison](development/compiler_incident/review/RESULTS.md)
+is closed without retry after 66 responses and 65 executed actions. All complete
+responses and actual input changes/results were directly reviewed, and all
+executed actions replay exactly. C01's resident branch reaches checked submission
+in 14 total actions with all 26 public cases passing. Both 16k branches stop at
+input-capacity denial with actions remaining. C02's first resident continuation
+exhausts physical context: 18,539 input plus 38,037 generated tokens, with an empty
+final response and no action. That unexpected failure ends the frozen attempt.
 
-Current preparation: the [captured compiler incident](development/compiler_incident/PREPARATION_REVIEW.md)
-qualifies a report-and-repair task for the proposed 16,000-token input working set
-against a 23,808-token resident ceiling, with q4/56,576 and G=32,768 unchanged.
-Six short actual-tool routes peak at 18,934–21,582. An authentic offline fork and
-exact-recovery continuation finish in 12 actions; the largest admitted smaller
-input is 15,817. The full repair and incident report pass all 26 contract cases,
-and 19 selected preparation tests pass. Zero model completions were sent. The bound
-execution safeguards are now ready above; larger-workload model inference remains
-unqualified.
+The [earned follow-up proposal](development/compiler_incident/review/NEXT_STEPS.md)
+first qualifies admission and delivery offline. Eight accepted results were absent
+from the next sent input; accumulated required history eventually exceeded 16k
+even after every body was externalized. Exact custody alone did not make those
+retrievals usable. Then prepare a small, neutral conversation with Qwen about the
+actual transition before settling a presentation change. Retaining the interface
+is a valid outcome. No host patch, memory feature or reasoning change is adopted,
+and the consumed scope authorizes no new completion requests.
 
-This task makes the historical comparison incident-dependent, while the optimizer
-repair itself can be source-led. A partial report is an additional retained copy;
-do not attribute its findings solely to external storage or omitted thinking.
-Preserve the finite-route limitation and any future pre-boundary submission.
+The prolonged resident response is a separate finding: useful early analysis
+gave way to repeated reconsideration and a false library claim with acquired
+evidence still visible. It does not isolate a cause or justify silently capping
+thinking. Keep workload-specific generation qualification explicit: q4/56,576,
+no MTP and uncapped xhigh stayed fixed, but the 32,768 reserve was not a bound.
+The tested 16k input working set versus 23,808 resident ceiling is not the earlier
+25k total envelope. Preserve both unsuccessful branches and unequal completion;
+these two cells do not establish a general condition-performance estimate.
+
+The [compiler preparation](development/compiler_incident/PREPARATION_REVIEW.md)
+remains historical offline evidence. Its scripted recovery and mocked execution
+successes are apparatus qualification, not additional Qwen performance. The task
+makes the historical comparison incident-dependent, while the optimizer repair
+itself can be source-led. A partial report is an additional retained copy; do not
+attribute its findings solely to external storage or omitted thinking.
 The [preceding Posting candidate](development/incident_pressure/PREPARATION_REVIEW.md)
 remains rejected: its incident-dependent repairs finish below the proposed limit.
 Its corrected offline recovery probe and original mistake remain preserved.
 
-Latest outcome: the owner-directed [receipt-corrections investigation](development/correction_investigation/review/RESULTS.md)
+Preceding outcome: the owner-directed [receipt-corrections investigation](development/correction_investigation/review/RESULTS.md)
 is complete: 14 actions, one correct repair, 38 passing public cases on the first
 check, and checked submission. All fourteen complete responses were directly
 read and replayed, with every nonterminal result delivered to the next actual

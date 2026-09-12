@@ -1,0 +1,129 @@
+We need answer with strict JSON action only. We need continue task. Need infer state and choose next action. Need likely inspect remaining unknowns. We have event frame through seq 17. We need complete repair. We have 15 calls remaining. Need understand task: Two captured optimized builds of a calculation module changed behavior: one raised unexpected arithmetic error (math domain error?), another returned complex result where original returned real. Need investigate recorded trees and compiler source. Repair optimizer while preserving supported compilation contract, complete reports/incident.json with observed comparison for each build. Report which functions changed and first changed expression in each build; distinguish captured behavior from verification of repair. Check current candidate and submit.
+
+We need reconstruct current repo. Candidate ID 28441... current unchanged? No patch yet in events. Current files:
+- README.md 2192 bytes read complete; content not resident except OBS? Need maybe reopen RES-0011? Actually event 11 read README, but result body external? Need content to know contract.
+- compiler dir: __init__.py, api.py, selection.py, unary.py.
+- reports/incident.json content {"builds": []}\n (complete)
+We read api.py, unary.py, selection.py. Need __init__.py unread. Need OBS-0001 input module, OBS-0002 BUILD-A, OBS-0003 BUILD-B. We reopened OBS-0002 in seq13 and got full content. OBS-0001 and OBS-0003 not full content in event frame (external canonical, not resident except not? event 6/8 result body external, not resident? seq6/8 result_body external, not resident fields null; need reopen to view exact? We have OBS-0002 content from event 13 fields resident. Need OBS-0001 and OBS-0003. Also need README content, api.py content (not resident? event 4 external, no content resident; event? no later). We need know compiler source. We have unary source; likely bug: UnarySimplifier removes unary +/-? It transforms UAdd/USub to operand, changing -x? Wait ast.UAdd/USub for unary + or -. It returns operand for both, which is wrong: -x should not become x, +x maybe can be removed. But observed arithmetic error and complex? Need see. The compiler maybe transforms AST? The optimizer's unary simplifier collapses unary plus/minus incorrectly? It removes UAdd and USub, so -sqrt(log(u)) becomes sqrt(log(u)) maybe sign flip? In BUILD-A math domain error? Let's inspect BUILD-A content.
+
+OBS-0002 BUILD-A module (from seq13) includes _normal_dist_inv_cdf and weibullvariate? It has imports: from math import fabs, sqrt, log; from math import log as _log. Function _normal_dist_inv_cdf and weibullvariate. compile_request.functions=["_normal_dist_inv_cdf"]. observed_call: kind raised, message math domain error, type ValueError. record_kind emitted module. So BUILD-A emitted module when compiling _normal_dist_inv_cdf raised math domain error during observed call? Actually observed_call in record is captured behavior of build? It says observed_call raised ValueError math domain error. The AST dump in BUILD-A shows _normal_dist_inv_cdf implementation? Let's parse: 
+def _normal_dist_inv_cdf(p, mu, sigma):
+    q = p - 0.5
+    if fabs(q) <= 0.425:
+        r = 0.180625 - q*q
+        num = huge poly * q
+        den = huge poly
+        x = num/den
+        return mu + x*sigma
+    r = p if q <= 0 else 1 - p
+    r = sqrt(log(r))   # <-- suspicious: original likely r = sqrt(-log(r))? Or log? Weibullvariate uses -log(u). 
+    if r <= 5.0:
+        r -= 1.6
+        num = poly * r
+        den = poly
+    else:
+        r -= 5.0
+        num = poly * r
+        den = poly
+    x = num/den
+    if q < 0.0:
+        x = x
+    return mu + x*sigma
+
+The normal quantile (Acklam?) algorithm: q = p - 0.5; if abs(q) <= pcentral: ... else:
+ r = -log(q) if q < 0? Wait standard inverse normal: 
+if q < 0.5: r = q; else: r = 1.0 - q? Let's recall. For inverse CDF of normal (Moro?). In scipy? Acklam inverse normal:
+```
+if abs(q) <= 0.425:
+    q = q - 0.5
+    r = 0.180625 - q*q
+    x = q * (poly) / (poly)
+else:
+    if q < 0.5:
+        r = q
+    else:
+        r = 1.0 - q
+    r = -log(r)
+    if r <= 5.0:
+        r = sqrt(r) - 1.6
+        x = poly(r) / poly(r)
+    else:
+        r = sqrt(r) - 5.0
+        x = poly(r) / poly(r)
+    if q < 0.5: x = -x
+return x
+```
+Actually original: r = -log(r). But BUILD-A AST has `r = sqrt(log(r))`, no negative, and then if r <=5.0: r = r - 1.6, num/den. Wait original likely `r = -log(r)` then if r <= 5: `r = sqrt(r) - 1.6`? But here `r = sqrt(log(r))`? Maybe optimizer transformed unary operations incorrectly: `-log(r)` (USub log(r)) and `sqrt(r) - 1.6`? The observed BUILD-A has `sqrt(log(r))`, not `sqrt(-log(r))`. How can optimizer produce sqrt(log(r))? Let's think: original source might be:
+```
+r = -log(r)
+if r <= 5.0:
+    r = sqrt(r) - 1.6
+```
+Unary simplifier removes UAdd/USub, so `-log(r)` becomes `log(r)`. Then `sqrt(r) - 1.6` is BinOp Sub not unary, unaffected. But AST dump shows `r = sqrt(log(r))` not `r = log(r)`. Could original be `r = sqrt(-log(r))`? Then UnarySimplifier would turn `-log(r)` into `log(r)`, making `sqrt(log(r))`. Yes.
+
+Also later if r <=5: r = r - 1.6 (BinOp Sub unaffected). If else r = r -5.0. Then x = num/den; if q <0: x = x (identity from unary? Original might `x = -x`? In standard inverse normal, if q<0.5: x = -x. But AST shows If q<0.0: x = x (not -x). Original perhaps `if q < 0.0: x = -x`? Since q = p-0.5; if q<0, x negative? The captured BUILD-A has `if q < 0.0: x = x`, which is no-op. That's because UnarySimplifier removed USub from `-x` turning it into x. But standard algorithm uses `if q < 0.5: x = -x`? Let's see variable q after central branch: q = p-0.5. Else r = p if q <=0 else 1-p. For p<0.5, q<0, r=p, x positive? Need negative x for left tail, so if q < 0: x = -x. So yes original likely `if q < 0.0: x = -x`. Optimizer no-op x=x. This may not cause math domain error but wrong sign? The math domain error arises from `log(r)` where r can be 0? For p very small, r = p (small positive) log negative, sqrt negative -> math domain error. If original `-log(r)` positive. So BUILD-A raised math domain error.
+
+BUILD-B returned complex result where original real. We need see OBS-0003 content. Likely contains different function? We need inspect. The optimizer may also transform `1j`? Complex result where original real: maybe `(-1)**(1/3)`? Or `(-1)**(1.0/3.0)`? Or `log(-1)`? Need inspect.
+
+Need inspect compiler source. We have unary.py bug. But task says two captured optimized builds changed behavior. Maybe compiler has multiple passes? api.py, selection.py, __init__.py, maybe another optimizer in __init__.py? We only saw unary.py (UnarySimplifier). There might be more source in api.py and __init__.py. We need read them. We have api.py file_sha and not content resident. Need read. We need maybe __init__.py too. Need OBS-0001 input module and OBS-0003 BUILD-B. Need complete reports/incident.json.
+
+Need know what "supported compilation contract" means. README likely describes. Need read README exact.
+
+Need plan with 15 calls remaining. We can use reopen_result for resident? The event frame has canonical sources for many results. But reopen_result only for event-result payload handles RES-... Are those handles available? It says available saved observation handles only OBS? For reopen_result requires available saved result handle. The event frame result_body canonical_source handle RES-0003 etc. Are they available? It likely can reopen those. But the tool reference says "Use exact current IDs for version guards and actually available saved handles for retrieval." Observation directory lists only OBS-0001/2/3. It doesn't list RES handles. But active phase event frame shows canonical_source handle RES-...; may be available? The tool contract: "reopen_result — exactly reopen the canonical event-result payload named by resident signal". So yes use RES handles. But maybe only "actually available saved handles" not enumerated? In event frame resident signals include handles. We can use them. However each final action one. We need conserve. We have 15 calls. Need maybe read api.py, __init__.py, README, reopen OBS-0001, OBS-0003. That's 5. Then patch unary.py (1), patch incident.json (maybe many? need exact JSON; can replace whole file in one patch if old small), check (1), submit (1). Total 9-10. Fine.
+
+But need exact content of files to patch. Need current file_sha for patch. We have current file_sha for unary.py 95544cb4..., candidate id 28441... from events. Need no edits yet. We can patch after read current exact. Already read unary exact content resident (seq17) with file_sha. Good. Need patch api? Maybe bug in unary only? Need see other compiler files. The optimizer likely `optimize(module)` in api or __init__ uses UnarySimplifier. There might be a second optimizer for "complex result" maybe `simplify_expressions`? Let's examine.
+
+The event root p0: compiler total_bytes 1458 across 4 files. We have:
+- api.py 722 bytes
+- selection.py 489 bytes
+- unary.py 286 bytes
+- __init__.py total = 1458 - (722+489+286) = -49? Wait total_bytes directory maybe sum? 722+489+286=1497 >1458. Hmm maybe directory total_bytes 1458? Not consistent? Maybe compiler dir total_bytes 1458, but files sum 1497; maybe README 2192? Let's recalc p0 entries: README total_bytes 2192, compiler total_bytes 1458, reports total_bytes 15. But file api read result body size 722 includes wrapper? actual file maybe 647? selection content size 489 wrapper includes JSON? unary 286 wrapper. Directory total_bytes 1458 could sum actual file bytes? 1458 maybe __init__ 244? If api 647 + selection 424 + unary 242 + __init__ 145 = 1458. So okay.
+
+Need read api.py, __init__.py, README. Could use reopen_result for previous reads to avoid new read? But if no edits, current same. Reopen_result returns full original result JSON, exact content. Use RES-0004 for api.py, RES-0003 for README, maybe RES-0016 selection, RES-0017 unary. But read new would also work and update coverage? We already have coverage. Patch requires exact current source read; we have exact current source for unary resident. For files we don't need patch maybe not required? For patch unary, we have exact source and file_sha. But to be safe, we may need exact old string. We have unary content exact: 
+```
+import ast
+
+
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, (ast.UAdd, ast.USub)):
+            return ast.copy_location(node.operand, node)
+        return node
+```
+This is 9 lines? It says returned_end_line 9. There is trailing newline. Need patch. Need know correct repair. The supported compilation contract? Need preserve AST? For UAdd, `+operand` can be safely simplified to operand? In Python, unary + on numeric coerces to __pos__, generally equivalent but for custom objects may have side effects? In a pure calculation module? For UAdd, `+x` is generally equivalent for numeric, but for safety? The bug is removing USub. Should only simplify UAdd? The optimizer likely intended to remove redundant unary plus `+x`, not unary minus. The current code removes both. Correct: if isinstance(node.op, ast.UAdd): return operand. For USub leave node. But what about `ast.copy_location(node.operand, node)`? It returns operand with location? For UAdd removal, returning node.operand (without copy_location?) The current uses copy_location to preserve location. For UAdd, can return ast.copy_location(node.operand, node). For USub, return node. But need consider `node = self.generic_visit(node)` first: generic_visit transforms children. For UAdd, after generic_visit, node.op remains UAdd. Return transformed operand with location of original? `ast.copy_location(node.operand, node)` modifies operand's location to node's location and returns operand. Good. For UAdd, `+x` to x may change behavior if `+` has custom effect; but supported compilation contract maybe AST transformation must preserve semantics? The supported contract may be to optimize only provably equivalent transformations? Unary plus not always safe in Python due to custom objects, but in calculation module perhaps supported? The original compiler might be for numeric expressions. Need read README to know.
+
+But there may be a second bug: "another returned a complex result where original returned a real number." Could be caused by same unary simplifier? Example original `(-1) ** (1/3)`? No unary. Complex where original real maybe `(-1) ** (1.0/3.0)` returns complex in Python, but original maybe `(-1.0) ** (1.0/3.0)`? Not optimizer. Maybe optimizer transformed `1j`? Or changed `-1 ** 0.5`? Complex due to negative base fractional power? Let's investigate.
+
+The captured builds: BUILD-A _normal_dist_inv_cdf raised math domain error due to `-log(r)` -> `log(r)`. BUILD-B likely compiled another function (maybe `weibullvariate`? or `complex_original`?) and returned complex where original real. It may be due to unary simplifier transforming `-1` into `1`? Complex? For example original function:
+```
+def cbrt(x):
+    return (-1 if x < 0 else 1) * abs(x) ** (1/3)
+```
+Optimizer removes unary minus? No.
+
+Maybe the optimizer has another transform not in unary? Let's inspect compiler api and __init__. The bug for complex could be in api or __init__, e.g. constant folding `1 / -2`? Or `**`? Need read.
+
+Also need "which functions changed and the first changed expression in each build". We need compare input module to emitted module? "recorded trees" are AST dumps in OBS. We need report in incident.json fields likely expected schema? Need know from OBS/README? incident.json currently {"builds": []}. Need fill builds list with objects maybe build, changed_functions, first_changed_expression, observed, verified? Need infer expected schema from task or README/OBS. Need inspect input and emitted module records for fields. BUILD-A record has fields: ast_dump, build, called_function, compile_request, observed_call, record_kind. OBS-0003 probably similar. Input module OBS-0001 maybe record_kind "input calculation module" with ast_dump? Need know. The incident.json likely expects a specific JSON schema described in README. Need read README.
+
+Need think of exact output. Could be:
+```
+{
+  "builds": [
+    {
+      "build": "BUILD-A",
+      "observed_call": {...},
+      "changed_functions": ["_normal_dist_inv_cdf"],
+      "first_changed_expression": "r = sqrt(-log(r)) -> r = sqrt(log(r))"
+    }, ...
+  ],
+  "verification": {...}
+}
+```
+But task: "complete reports/incident.json with the observed comparison for each build. Report which functions changed and the first changed expression in each build; distinguish captured behavior from verification of your repair." That suggests incident.json should include for each build observed comparison (original vs optimized behavior), changed functions, first changed expression, and a verification section distinguishing captured behavior vs repair verification. Maybe schema not strict? But checker likely public check validates JSON content? We need know expected. The check probably tests candidate after repair and incident.json. It may look for specific keys? Need infer from fixture. Could be a controlled experiment with public check. We need pass. Need read README maybe contains incident report format. Let's get exact README and other files.
+
+Which action next? We can reopen OBS-0001 or read README. Which is most critical? Need all. We have 15. Let's start with README to know contract and report format. Use read or reopen_result RES-0011 (README). Since no edits, reopen_result returns saved content and is access not new; but read would be current and give file_sha? We don't need patch README. Reopen_result may return full original result JSON with content. It likely fits. Which is safer? The event result RES-0011 is canonical and exact. Use reopen_result handle "RES-0011". It returns exact original result JSON. The content field likely present. We need parse. But final action one. Let's choose reopen_result RES-0011. But are RES handles available? The tool contract says yes. If not, error. Could instead read README current; definitely allowed. But read returns largest page; README 2192 bytes fits. It consumes call. It gives exact current content. We don't need file_sha for patch. Read is safer than unknown RES availability? The event frame has canonical source handle; likely available. But "actually available saved handles" includes event result? It says visible tool reference: reopen_result requires an available saved result handle. Not directory enumerated. The active frame includes canonical_source handle. I'd trust. But to minimize risk, use read README. It is a normal tool. We have call budget. We need exact content. Let's read README.
+
+However, the task says P0 root complete, p0_page orientation. We can read. Need final JSON only.
+
+Let's decide action: read README.md start_line 1. But we already have read event; new read creates event. That's okay. It will give content. Let's do that.

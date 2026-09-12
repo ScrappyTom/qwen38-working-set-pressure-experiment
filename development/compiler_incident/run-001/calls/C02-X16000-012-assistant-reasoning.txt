@@ -1,0 +1,130 @@
+We need answer with strict JSON action only. We need continue task. Need inspect current state. We have events through 11. Need complete incident.json and repair optimizer, check, submit. We know some reads content: README, api, unary, incident. Need inspect OBS-0001 input calculation module, OBS-0002 BUILD-A emitted module, OBS-0003 BUILD-B emitted module. In prior event, we reopened OBS-0001, OBS-0002, OBS-0003? Actually sequence 6-8 reopened observations, and result for OBS-0003 is resident with exact_result_utf8 visible in event 8. Wait event sequence: 6 reopen OBS-0001, 7 reopen OBS-0002, 8 reopen OBS-0003 (resident full exact_result_utf8 included). It shows OBS-0003 is BUILD-B emitted module? Observation directory says OBS-0003 BUILD-B emitted module. But event 8 fields exact_result_utf8 includes JSON with build: "BUILD-B", called_function weibullvariate, observed_call returned complex. It includes ast_dump module with functions _normal_dist_inv_cdf and weibullvariate. It says record_kind emitted module. This is likely full emitted module for BUILD-B. We need compare with input module OBS-0001 and BUILD-A OBS-0002. Need know exact content of OBS-0001 and OBS-0002. We have not seen contents except reopens occurred but result bodies external not resident in event frame? The result metadata says accepted, size, sha, but exact body external. Need reopen them? We can reopen OBS-0001/0002 to get exact content. But we already have sequence events of reopen; observation directory rows are identities not exact bodies; use reopen_observation before relying on historical dynamic result. We need exact current source before mutation? Need repair compiler/unary.py. We have current unary.py content (EVT-0009 resident). Need patch. Also reports/incident.json current content. Need patch. Need exact file sha for incident.json: from read EVT-0010: file_sha256 22efad348a13802b9bc50b72ff44cdb2234b2c9faacc9f4b33ddaea77ea68509, content {"builds": []}\n. Candidate id stable 28441... We can patch if we know old exactly. We have exact content from read (resident). We can construct incident JSON. Need determine changed functions and first_change per build. We need compare original input module with each emitted build. Need exact expressions. We have OBS-0003 exact for BUILD-B. Need OBS-0001 original input and OBS-0002 BUILD-A emitted. We must reopen them to inspect. Then can compute differences. Need call budget 21 remaining, each action counts? We need efficient. We can do one action per turn? likely yes final one JSON action. Need choose next action. Could reopen OBS-0001. We need exact content. Do that.
+
+But need think overall. Let's parse known OBS-0003. It is JSON string:
+{
+ "ast_dump": "Module(body=[ImportFrom... FunctionDef _normal_dist_inv_cdf ... FunctionDef weibullvariate ...])",
+ "build": "BUILD-B",
+ "called_function": "weibullvariate",
+ "compile_request": {"functions": ["_normal_dist_inv_cdf","weibullvariate"]},
+ "observed_call": {"kind":"returned","type":"complex","value_repr":"(1.0195853396696437e-16+1.6651092223153954j)"},
+ "record_kind":"emitted module"
+}
+Wait observation directory: OBS-0003 target BUILD-B emitted module. compile_request functions both? It includes complete module.
+
+Need know original input calculation module. Likely includes math imports and functions. In OBS-0003, emitted module has _normal_dist_inv_cdf and weibullvariate. Need compare with original. We need identify first expression whose node kind changed traversing functions in source order and fields in normal Python AST order. The optimizer likely UnarySimplifier removes unary plus/minus? But current UnarySimplifier code in compiler/unary.py: visits UnaryOp, if isinstance(node.op, (ast.UAdd, ast.USub)): return operand, copying location. That is wrong for USub: -x cannot become x. It removes unary sign for both plus and minus, changing -5 to 5, -log(u) etc. But task says must at least eliminate unary plus on exact built-in integer and float literals, preserve values everywhere else including negative zero and user-defined unary operators. Current code simplifies any UAdd/USub on any operand, not only plus literals. That explains complex result? Weibull: original maybe `return alpha * (-log(u)) ** (1.0 / beta)`? If optimizer changes `-log(u)` to `log(u)`? For u near 1, log(u) negative, then fractional power yields complex. Original `-log(u)` positive real. For beta maybe? In OBS-0003 emitted Weibull return: `alpha * (_log(u)) ** (1.0 / beta)`? Let's inspect AST in OBS-0003: Return value: `BinOp(left=Name('alpha'), op=Mult, right=BinOp(left=Call(func=Name('_log'), args=[Name('u')]), op=Pow, right=BinOp(Constant(1.0), op=Div, right=Name('beta'))))`. No unary minus. Original likely `alpha * (-_log(u)) ** (1.0 / beta)` or maybe `(-log(u))`. So first change maybe in `_normal_dist_inv_cdf` or `weibullvariate` depending source order. Source order in module: _normal_dist_inv_cdf first, then weibullvariate. Need find first expression whose node kind changed traversing functions in source order. In BUILD-B, selected functions both? It may have changes in _normal_dist_inv_cdf due to unary signs? Need compare.
+
+OBS-0003 emitted `_normal_dist_inv_cdf` has q = p - 0.5. If test fabs(q) <= 0.425: r = 0.180625 - q * q. Wait original maybe `r = 0.180625 - q * q` no unary? But polynomial coefficients all positive? The emitted has num/den with terms. It also has `r = p if q <= 0.0 else 1.0 - p`, then `r = sqrt(log(r))`. Wait original might have `-log(r)`? Let's inspect. In standard Acklam normal inverse CDF: 
+q = p - 0.5
+if fabs(q) <= 0.425:
+ r = q*q
+ num = ((((((2509.0809287301227*r+33430.57558358813)*r+67265.7709270087)*r+45921.95393154987)*r+13731.69376550946)*r+1971.5909503065513)*r+133.14166789178438)*r+3.3871328727963665)
+ den = (((((((5226.495278852854*r+28729.085735721943)*r+39307.89580009271)*r+21213.794301586597)*r+5394.196021424751)*r+687.1870074920579)*r+42.31333070160091)*r+1.0
+ x = num/den
+ return mu + x*sigma
+else:
+ r = -log(-log(p)) # actually if q < 0, r = -log(-log(p)); if q >0, r = -log(-log(1-p))? Let's recall.
+Common code:
+if q <= 0: r = -log(-log(p)) else r = -log(-log(1-p))
+if r <= 5:
+ ... coefficients
+ x = ...; if q < 0: x = -x
+ return mu + sigma*x
+Actually from Boost? Let's infer from emitted. It has:
+r = p if q <= 0 else 1.0 - p
+r = sqrt(log(r))   # Wait sqrt(log(r))? If r in (0,1), log(r) negative, sqrt of negative yields complex! That's the unexpected arithmetic error? Maybe original had `r = -log(-log(p if q<=0 else 1-p))`? Or `r = sqrt(-log(-log(r)))`? Let's inspect standard algorithm.
+From scipy? Normal inverse CDF rational approximation:
+if (q <= 0.425):
+    r = q*q
+    ...
+else:
+    r = -log(-log(p))
+    if r <= 5:
+       r = r - 1.6
+       num = ... ; den=...; x = num/den
+    else:
+       r = r - 5.0
+       num=...; den=...; x=num/den
+    if q < 0: x = -x
+In this algorithm, r = -log(-log(p)) where p is q? Wait variable r originally tail: r = -log(-log(p)) if p is q? But p in [0,1]. If p=0.001, -log(-log(p)) ~? Since log(0.001) negative, -log(log(0.001)) positive. But then if r <= 5, r = r - 1.6. Coefficients.
+But emitted has `r = p if q <=0 else 1-p`; `r = sqrt(log(r))`. That seems not standard. Maybe source uses `r = -log(-log(r))` and optimizer erroneously transformed nested unary signs to `sqrt(log(r))`? How? Let's see: if original was `r = -log(-log(r))`. With USub removal? `-log(-log(r))` -> `log(-log(r))`? Then `-log(r)` inside? If USub removed: `log(log(r))`. Not sqrt. Where sqrt comes from? Maybe original was `r = (-log(-log(r))) ** 0.5`. The optimizer removed unary minus? `(-log(-log(r))) ** 0.5` maybe with parentheses? If it removes USub around log and around log, becomes `(log(log(r))) ** 0.5` = sqrt(log(log(r)))? Not sqrt(log(r)).
+Need inspect original OBS-0001. Could be something else.
+
+Another possibility: The optimizer has other passes besides UnarySimplifier? Current compiler has api.py and unary.py and maybe? tree root compiler has 4 entries. Need inspect compiler directory: likely __init__.py, api.py, unary.py, maybe something. We only p0_page compiler total entries 4, no names in metadata. Need know files. Could search or p0_page compiler. We did p0_page compiler but result_body external (RES-0002) not resident. Need reopen? p0_page result includes entries but not exact bodies? It may be small, but result_body external. We can reopen_result RES-0002 to see entries? It may be resident? canonical_source external. But maybe use tree/p0_page again. However resource budget 21; okay.
+
+Need read current source of compiler/api.py content? We have metadata only; result_body external (RES-0004). Need reopen_result RES-0004 or read api.py current. We know candidate unchanged since reads, file sha a213... But exact source not resident. Need before mutation read exact current source. We already read unary and incident content resident. Need api? We may not need patch api, but to preserve contract maybe inspect. Public check likely tests optimizer. Need repair unary only. But need know api to understand selection. Could read api.py. But maybe not necessary? Yet to ensure fix correct. Current unary.py is bug. Could patch to correct. Need know if there are other files? Maybe compiler has only __init__, api, unary, ? Let's inspect with p0_page or tree. But we have p0_page compiler from event 2 total_entries 4. It might list entries if reopen_result RES-0002. Need maybe not.
+
+Main missing: exact incident report. Need OBS-0001 and OBS-0002 exact. Need first compute. Let's plan actions:
+1. reopen_observation OBS-0001 (input module). This returns full original module record likely JSON with ast_dump, maybe original call? Need compare.
+2. reopen_observation OBS-0002 (BUILD-A emitted). Then maybe OBS-0003 already known but may need exact? We have resident exact for OBS-0003 from event 8. We can rely? It is in active event frame resident, yes exact_result_utf8 included. But to be safe, not necessary.
+3. Analyze differences, write incident.json, patch unary, check, submit.
+
+Need know format for incident.json. README structure:
+{"builds": [
+  {"capture": "<emitted-tree handle>",
+   "changed_functions": ["<function name>", "..."],
+   "first_change": {"function": "<name>",
+                    "before": "<original expression>",
+                    "after": "<emitted expression>"}}
+]}
+Include every captured emitted build. For each build, compare with captured original tree. List all top-level functions whose AST changed, in source order. Locate first expression whose node kind changed, traversing functions in source order and their fields in normal Python AST order. Express original and emitted forms as ordinary Python expressions.
+Need capture handle for each build: OBS-0002 and OBS-0003? The observation directory handles: OBS-0001 input module, OBS-0002 BUILD-A emitted, OBS-0003 BUILD-B emitted. Include every captured emitted build: BUILD-A capture OBS-0002, BUILD-B capture OBS-0003.
+Need changed_functions: top-level functions whose AST changed between original and emitted. If build's selected scope may not include all? Emitted tree complete module including functions outside selected scope. But nonselected functions should retain structure (contract). However historical builds may have changed only selected functions due optimizer? Need compare full AST.
+Need first_change function and before/after. It says first expression whose node kind changed, traversing functions in source order and their fields in normal Python AST order. Need identify in original module. For each build separately.
+Expressions as ordinary Python expressions, equivalent parentheses/spacing accepted. Need exact? Should be accepted by check maybe string compare? likely semantic? We need produce plausible.
+
+Need parse AST dumps. We'll need maybe use Python mentally. Could reconstruct from dumps. Need original module and BUILD-A. Let's fetch.
+
+But before that, think about correct UnarySimplifier.
+Task: "The small optimizer may simplify unary signs applied to numeric literals. It must at least eliminate unary plus on exact built-in integer and float literals in selected functions. It must preserve Python's values, types, exceptions and operator dispatch everywhere else, including negative zero and user-defined unary operators. Constant folding is optional for other cases when equivalent."
+So supported contract: can simplify unary plus on exact built-in integer/float literals. It may also simplify negative numeric literals? "unary signs applied to numeric literals" maybe can simplify `+ 3` to `3`, `-3` to -3? It must at least eliminate unary plus on exact built-in integer and float literals. It must preserve everywhere else. Negative zero: `-0.0` must remain -0.0? Python literal `-0.0` as UnaryOp(USub, Constant(0.0)). If simplify to Constant(-0.0)? Is -0.0 equal? Python constant -0.0 is a float with negative zero, but AST constant maybe -0.0; but if you remove unary to 0.0, value loses sign? `0.0` and `-0.0` compare equal but repr differs, IEEE sign may matter. So must preserve negative zero. User-defined unary operators: e.g. class with `__neg__`, need not simplify. So safe simplification: only UAdd on numeric literal (int/float?) to literal? "unary plus on exact built-in integer and float literals". Also maybe USub on numeric literal can be folded to negative literal, except -0.0? It says at least eliminate unary plus; may simplify unary signs applied to numeric literals. Could leave all except UAdd numeric. That's safest. It must preserve values/types/exceptions/dispatch everywhere else. So patch UnarySimplifier to only transform `UAdd` on Constant of int/float (not bool? bool is subclass int but built-in integer? "exact built-in integer and float literals" means type is int or float, not bool? AST Constant for True is int? Actually bool literal parsed as Constant(value=True), type bool. Built-in integer maybe int; bool is subclass but not exact. Should exclude bool. For float, type float. Exclude complex? numeric literals maybe int and float only. Also not transform USub except maybe if we can fold negative literal safely except -0.0. But "at least eliminate unary plus" so we can simply only UAdd. Does public check require eliminate unary plus on exact built-in integer and float literals. It might test that `+1` and `+1.0` simplified. It may also test `-1`? It says may simplify unary signs applied to numeric literals, but at least plus. Public check probably validates contract not exact. To be safe, don't simplify USub at all, preserving negative zero and user-defined. But if original had `-5` and expected? No, check probably only ensures no behavior changes; may not require folding minus. But "small optimizer may simplify unary signs applied to numeric literals" maybe public check expects some optimization? The README says "must at least eliminate unary plus on exact built-in integer and float literals". So only plus required. We can implement UAdd numeric literal only. Need preserve locations? Use ast.copy_location(node.operand, node). For UAdd on literal, returning operand changes node kind from UnaryOp to Constant. That's acceptable. For UAdd on non-literal, return node (after generic_visit). But generic_visit should traverse children. Current code first generic_visit then check. If we only simplify some, need still traverse. Implement:
+import ast
+
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, ast.UAdd):
+            operand = node.operand
+            if isinstance(operand, ast.Constant) and isinstance(operand.value, (int, float)) and not isinstance(operand.value, bool):
+                return ast.copy_location(operand, node)
+        return node
+This preserves USub entirely. But is it okay for `+ -x`? It traverses inner? generic_visit visits operand; if inner UnaryOp? It returns maybe if UAdd. For UAdd(UAdd(x)), outer UAdd on UnaryOp not literal, returns node with inner maybe unchanged. Good.
+Need consider constants like `+None`? no. `+True`? Exclude bool. But if `True` is int? exact built-in integer? bool not exact int. Exclude. What about float('nan'), inf? type float; `+nan` returns nan, same; `+inf` same; okay. `+-0.0`? UAdd on -0.0: `+(-0.0)` equals -0.0? In Python `+(-0.0)` is -0.0? Unary plus on float returns same object? It should preserve sign. Returning constant -0.0 okay. For `+0.0` okay. For `+ -0.0`, operand is UnaryOp, not simplified. Good.
+But maybe need simplify USub on numeric literal to negative constant except -0.0? It's optional. If public check expects "unary signs applied to numeric literals" maybe might check that `-1` gets simplified? It says may, not must. It must at least eliminate unary plus. The historical incident is caused by over-simplifying USub, not failure to simplify. Public check likely tests no behavior change and plus optimization. So only UAdd safe.
+
+Need maybe `ast.Num`? Python 3.12 uses Constant. Good.
+
+Need current unary.py exact:
+import ast
+
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, (ast.UAdd, ast.USub)):
+            return ast.copy_location(node.operand, node)
+        return node
+Need patch old to new. old must occur exactly once, length <=512 chars? Our old whole class maybe >512? Let's count: file 286 bytes, old fragment maybe 191? Under 512. new maybe longer but <=512. We can patch whole class.
+Old:
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, (ast.UAdd, ast.USub)):
+            return ast.copy_location(node.operand, node)
+        return node
+New:
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, ast.UAdd):
+            operand = node.operand
+            if isinstance(operand, ast.Constant) and isinstance(operand.value, (int, float)) and not isinstance(operand.value, bool):
+                return ast.copy_location(operand, node)
+        return node
+Need old exactly once. Good. But patch old and new each max 512 chars? New ~300. Good. Need expected_candidate_id current 28441..., expected_file_sha256 unary 95544cb49ffb5b5e11f09991917e0028918e679fd7f9d164f63ea36b012d2e80. This is current pre-edit file fingerprint from read. Candidate unchanged. Good.
+
+Need incident.json. Let's fetch original and BUILD-A. Use reopen_observation OBS-0001. Then OBS-0002. But final answer one action. Which next? Could reopen OBS-0001. Need also maybe current source of compiler/api? Not before mutation? We have exact current source for unary. Patch doesn't require api. But to preserve contract maybe inspect api. Could read api now? But one action. Need choose. We already have current source of unary from read. That's enough for patch. But need know if other compiler files relevant? The bug likely unary. The public check may import compiler.api. If we only patch unary, okay. But need maybe api.py has bug? Let's infer. The task says two builds changed behavior; investigate compiler source. The current compiler/unary.py is obviously overzealous. Maybe api.py selection bug? Need inspect api.py to ensure no other bug. We have read api.py but not content. Could reopen_result RES-0004 to see content (event result body external? It may be small 722 bytes; result_body external, but reopen_result can retrieve full original saved result JSON, including content). That might be cheaper than read? Both one action. We can do later.
+
+Need maybe there are 4 entries in compiler: __init__.py, api.py, unary.py, maybe pass? The p0_page compiler result external; could reopen_result RES-0002 to see entries. But not critical.
+
+Observation reopens are required before relying on dynamic results. We have OBS-0003 exact in active frame; but maybe to cite capture? We need OBS-0001/2. Next action should reopen OBS-0001. Then next OBS-0002. Then maybe patch incident, patch unary, check, submit. We have 21 calls; enough.
+
+Let's do reopen_observation handle OBS-0001.

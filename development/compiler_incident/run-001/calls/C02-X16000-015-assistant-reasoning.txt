@@ -1,0 +1,158 @@
+We need answer with strict JSON action object only. Need continue task. Need infer current state and choose next action. We have active event frame up to seq 14. Candidate id 2844... Resources calls remaining 18. Need repair optimizer and complete incident.json, check, submit.
+
+We need understand context. We have tree root, compiler p0 etc. Need investigate recorded trees and compiler source. Observations OBS-0001 input calc module, OBS-0002 BUILD-A emitted module, OBS-0003 BUILD-B emitted module. We already reopened OBS-0001/2/3 twice? Events: seq6 OBS-0001, seq7 OBS-0002, seq8 OBS-0003, seq12 OBS-0001, seq13 OBS-0002. OBS-0003 result body external not shown in seq8? It has result_body canonical source OBS-0003, sha etc, not resident in frame except result metadata. Need exact bodies. We know OBS-0002 exact from event 13: ast dump for BUILD-A? Let's parse.
+
+Task: Two captured optimized builds of a calculation module changed behavior: one raised unexpected arithmetic error and another returned a complex result where original returned real. Investigate recorded trees and compiler source. Repair optimizer preserving supported compilation contract, complete reports/incident.json with observed comparison for each build. Report which functions changed and first changed expression in each build; distinguish captured behavior from verification. Check current candidate and submit.
+
+We need likely need read compiler source and emitted modules. Already read README, api.py, unary.py, reports/incident.json, tree compiler. Need read selection.py maybe __init__.py, and exact OBS bodies. Need know incident.json current content. Event 10 read reports/incident.json returned content? It has result_body external RES-0010 size 32, not shown resident except fields content external. Need reopen_result RES-0010 to see content. Also read README content external RES-0011/RES-0003. Need read compiler/api.py RES-0004. Need read compiler/unary.py RES-0009. But perhaps we can reopen to see exact. We need formulate repair. Need use remaining calls efficiently (18). Need possibly many reopens. Could search/read current sources. Since candidate unchanged? candidate_id same throughout, no patches yet. Need current file sha for patch. We have file shas from read events: README 7e4f..., api a213..., unary 9554..., reports/incident.json 22efad... But need selection.py sha. Also __init__ maybe.
+
+Need understand bug. Likely optimizer has constant folding/unary transforms? compiler/api.py, selection.py, unary.py. The input calc module has functions _normal_dist_inv_cdf and weibullvariate. Build A and B are optimized modules. OBS-0002 exact shows an AST dump for BUILD-A? Let's inspect.
+
+Event 13 fields exact_result_utf8: a JSON string containing:
+{
+ "ast_dump": "Module(body=[ImportFrom math fabs sqrt log; ImportFrom math log as _log; FunctionDef _normal_dist_inv_cdf ...; FunctionDef weibullvariate ...])",
+ "build":"BUILD-A",
+ "called_function":"_normal_dist_inv_cdf",
+ "compile_request":{"functions":["_normal_dist_inv_cdf"]},
+ "observed_call":{"kind":"raised","message":"math domain error","type":"ValueError"},
+ "record_kind":"emitted module"
+}
+So BUILD-A captured call to _normal_dist_inv_cdf raised ValueError math domain error. Need compare with original input module (OBS-0001) maybe same functions? Need know OBS-0001 and OBS-0003 exact. We have OBS-0001 not shown exact in resident? Events 6/12 result bodies external. We can reopen_observation OBS-0001 (again) to see. OBS-0003 for BUILD-B. Need likely see changed expressions. We need identify optimizer bug from AST. Let's reconstruct BUILD-A AST from given exact.
+
+BUILD-A _normal_dist_inv_cdf code AST:
+Import math fabs sqrt log; import log as _log.
+def _normal_dist_inv_cdf(p, mu, sigma):
+    q = p - 0.5
+    if fabs(q) <= 0.425:
+        r = 0.180625 - q*q
+        num = ((((((((((((2509.0809287301227*r + 33430.57558358813)*r + 67265.7709270087)*r + 45921.95393154987)*r + 13731.69376550946)*r + 1971.5909503065513)*r + 133.14166789178438)*r + 3.3871328727963665)*q
+        den = (((((((((5226.495278852854*r + 28729.085735721943)*r + 39307.89580009271)*r + 21213.794301586597)*r + 5394.196021424751)*r + 687.1870074920579)*r + 42.31333070160091)*r + 1.0
+        x = num / den
+        return mu + x*sigma
+    r = p if q <= 0.0 else 1.0 - p
+    r = sqrt(log(r))
+    if r <= 5.0:
+        r = r - 1.6
+        num = ... r + ... (low coeffs)
+        den = ...
+    else:
+        r = r - 5.0
+        num = ...
+        den = ...
+    x = num / den
+    if q < 0.0:
+        x = x  # no-op
+    return mu + x*sigma
+
+This is standard Acklam inverse normal CDF. Potential bug: In tail (else) branch, r = sqrt(log(r)) then if r <= 5.0: r = r - 1.6; else r = r - 5.0. Wait standard algorithm:
+if q <= 0.425 central:
+ r = q*q
+ poly...
+else:
+ r = q - 0.5
+ if r <= 0:
+   r = sqrt(-2*log(q))? Let's recall.
+Acklam:
+if (abs(q - 0.5) <= 0.425) ... central
+else {
+  r = q - 0.5;
+  if (r <= 0.0) {
+    r = sqrt(-2.0*log(q));
+    // rational for tail
+  } else {
+    r = sqrt(-2.0*log(1.0-q));
+  }
+  if (r <= 5.0) { r = r - 1.6; ... } else { r = r - 5.0; ... }
+}
+The AST in BUILD-A: r = p if q <= 0.0 else 1.0 - p. It uses p instead of q? Actually q = p - 0.5. If q <= 0, r = p, else r = 1 - p. Then r = sqrt(log(r)). That's wrong: should be sqrt(log(p))? Let's see: For q <= 0 (p <= 0.5), tail value r = sqrt(-2 log(p))? Standard uses r = sqrt(-2 log(q))? But here using log(r) without negative/2? Hmm maybe original code uses custom variable names? Let's get original input module OBS-0001. Need compare.
+
+Build B probably returned complex result, likely due to log of negative? Maybe complex from math? In Python math.log negative raises ValueError, not complex. If using cmath? But complex result maybe from pow negative fractional. Weibull function: u = 1 - self.random(); return alpha * (-log(u)) ** (1/beta). If u=0, log(0) ValueError; if u negative? random in [0,1). But maybe optimizer constant folded -log(u)?? Complex result maybe from (-log(u))**(1/beta) when log(u) is positive? Wait if u in (0,1), log(u) negative, -log(u) positive. If optimizer rewrites log to _log? In BUILD-A AST weibullvariate returns alpha * (-log(u)) ** (1/beta). In BUILD-B maybe changed to log(u) ** (1/beta) or (-u)?? Complex if negative base raised fractional. Need see OBS-0003.
+
+Compiler source likely has optimizer passes. We need repair bug. Let's inspect current source. We need use calls. Could read compiler/api.py, selection.py, unary.py, __init__, README, incident.json. We have some from events but need exact to patch. Use read current source. Since no patches, previous read shas current. But to patch need old string exact. We can use read to get source. We have not read selection.py. Need likely bug in unary.py or api.py or selection.py. Let's see tree: compiler has __init__, api, selection, unary. Need read all. Also reports/incident.json content. We can read current sources. Need conserve calls. 18 calls. Need enough.
+
+Potential next action: read compiler/api.py? But we need exact old to patch. Could search for suspicious patterns. Need understand optimizer. Let's plan.
+
+Available actions:
+- reopen_observation OBS-0001, OBS-0003 to see exact captured modules (2 calls). We have OBS-0002 already exact in frame; but could reopen if needed not.
+- read compiler/api.py (1), compiler/unary.py (1), compiler/selection.py (1), compiler/__init__.py (1), reports/incident.json (1), README maybe not (1). Total 8. Need patch maybe multiple, check, submit. We have 18, okay.
+
+But we can combine? Each action one JSON. Need final one action per turn? The user request says return one strict bare JSON action object in final content. So each assistant turn one action. We can use many turns? In this environment likely each user turn includes state; after each action host returns next state. We only produce one now. Need choose next action.
+
+We need decide next most useful. We already have OBS-0002 exact. Need OBS-0003 exact for BUILD-B, OBS-0001 original. But perhaps compiler source first. The current frame says host_sufficiency false, but no explicit next request. We should continue. Which action likely best? We need see incident.json current to know required schema. We read it but external body not shown. Need exact to patch. Could reopen_result RES-0010 (1) or read reports/incident.json (1). Reopen_result maybe gives original saved read content. Current unchanged, same. Which is better? read gives current and sha (already known). But we know sha from event. To patch need old exact. Reopen_result RES-0010 returns full saved result including content. Use one call. But we can also read current source; same. Need maybe no difference. But to patch, we need file sha; we have from event 10: 22efad348a... and candidate same. If unchanged, can use. Need exact content. Use reopen_result RES-0010.
+
+But perhaps need understand build B first. Which is more critical? The AST dump of BUILD-A already reveals maybe no bug? Need original input to compare. Need build B to know complex. Let's reopen OBS-0003. It will show exact JSON with ast_dump, build B, observed call? It likely shows record_kind emitted module. That will show changed expression. Then compare with input. Let's do reopen_observation OBS-0003 now? We have already reopened OBS-0003 once at seq8 but result body external not shown in current frame? The active frame only includes result metadata, not exact body because externalized. The current state may not have exact content in visible frame except observation directory. We need access. Reopen_observation again returns exact body (new access event). Could do.
+
+But maybe OBS-0001 (input module) more important to know original behavior and first changed expression. However BUILD-A exact already shows observed_call raised. Input module likely has same source but maybe original uses different imports? Need identify first changed expression: compare input module AST with emitted build A/B. We need exact input module AST. So reopen OBS-0001 too.
+
+Could use search/read source to infer original? OBS-0001 is input calculation module target. It likely is an emitted record with ast_dump and maybe observed calls? Need see.
+
+Given task says "Two captured optimized builds ... one raised ... another returned complex ... Investigate the recorded trees and the compiler source. Repair optimizer ... complete incident.json with observed comparison for each build. Report which functions changed and first changed expression in each build". The observations are recorded trees. We need compare original module vs builds. We need exact input module AST and build B AST. So next likely reopen OBS-0001. Since OBS-0002 exact available. OBS-0003 not. Need both. Which first? Could reopen OBS-0001 because original baseline. Then OBS-0003. Let's pick OBS-0001? But event frame has exact OBS-0002 resident, so maybe we should get OBS-0003 for BUILD-B because complex result bug. Yet original needed for first changed expression. Both.
+
+Maybe can use p0_page or read on "input calculation module"? No path in repo? Root only README, compiler, reports. The observed modules are not repository files? They are observations. Need reopen.
+
+Let's think about call budget. 18. If we do 2 reopens for OBS, 5 reads, 1 patch, 1 check, 1 submit = 10. Fine.
+
+Need know exact patch. We need source. Let's gather all.
+
+But one action now. Which yields maximum? Perhaps read compiler/api.py? Because bug likely in compiler source; observations give symptoms but source tells fix. However to identify first changed expression, need ASTs. But we can derive from AST dumps. The exact OBS-0002 shows Build A. It has `r = p if q <= 0.0 else 1.0 - p; r = sqrt(log(r))`. This is likely optimized from original:
+`r = p if q < 0.0 else 1.0 - p; r = sqrt(-2.0 * log(r))`? Wait standard inverse CDF uses `r = sqrt(-2.0*log(r))` where r is q? Let's search memory.
+
+The code in AST is a rational approximation from Cephes? Function `ndtri` from Cephes? It uses:
+```
+if (fabs(q - .5) <= .425) {
+  r = q*q - .25;
+  ...
+} else {
+  r = q - .5;
+  if (r <= 0.) r = sqrt(-2.*log(q));
+  else r = sqrt(-2.*log(1.-q));
+  if (r <= 5.) {
+    r = r - 1.6;
+    ...
+  } else {
+    r = r - 5.;
+    ...
+  }
+  if (q < .5) x = -x;
+}
+```
+But AST uses `q = p - 0.5`, then tail: `r = p if q <= 0.0 else 1.0 - p`, `r = sqrt(log(r))`, no -2, and final `if q < 0.0: x = x` no sign? That seems wrong. Maybe original uses a different variable: The function name `_normal_dist_inv_cdf` maybe from `random.gauss` inverse? It might be `inv_cdf` for normal distribution. Original could be:
+```
+def _normal_dist_inv_cdf(p, mu, sigma):
+    if abs(p - 0.5) <= 0.425:
+       ...
+    else:
+       r = p if p < 0.5 else 1 - p
+       r = sqrt(log(r))
+       if r <= 5:
+          ...
+       else:
+          ...
+       if p < 0.5: x = -x
+    return mu + x*sigma
+```
+But math domain error if log(r) with r >1? For p > 1? No. Complex result? Hmm.
+
+Actually if `r = p if q <= 0 else 1-p`, for p in (0,1), r in (0,1), log(r) negative, sqrt negative -> math domain error (ValueError) in Python math.sqrt? But observed_call message "math domain error" type ValueError. That likely from `sqrt(log(r))` when log(r) negative. So Build A raised math domain error for tail p. The original perhaps used `sqrt(-log(r))` or `sqrt(-2*log(r))`. The optimizer may have dropped unary minus or constant factor due to bad folding.
+
+Let's inspect compiler/unary.py likely handles unary operators. Could bug in constant folding for `UnaryOp(USub)`? The module has unary.py and selection.py. Maybe optimizer has `select` for conditional expressions and unary constant folding. Bug: It folds `-log(r)` incorrectly? Or treats `-x**2`? Need source.
+
+Let's read compiler source. Could start with compiler/api.py because likely orchestrates optimization. We have read event but exact content external. Need exact. Let's use read compiler/api.py. It will give current exact and sha. Then next selection/unary. But maybe more efficient to use p0_page to get signatures? We need exact for patch. Read is fine.
+
+Maybe next action should read compiler/api.py. But we also need observations. Which order? The task says choose own acquisition/action order. I can produce one action. Need likely read compiler/api.py now to start source. But if we don't know incident.json schema, patch later. Source first.
+
+Let's consider if there is a hidden requirement: "Check current candidate and submit." Only public check available. Need after repair, run check public, then submit. The check likely validates incident.json and maybe code? Need know. Could be a custom checker. It may require exact incident.json format. Need inspect check? We can't run check until repair. But maybe checker output after patch tells. We can inspect README for requirements. We read README but exact not visible. Need reopen_result RES-0011 or read README. It likely describes incident.json schema. Important. So next maybe read README.md. But we have read event; exact external. Need reopen_result RES-0011 or read. That will tell required report fields. Could be critical. Let's reopen_result RES-0011? It returns saved read result content. But read README current is same and gives sha. We need no patch README. Use read README.md? It will consume call and return exact. Maybe easier. But we know from event size 2192. It might contain full instructions/schema. Let's read README.md now? But we already have event read, but exact body not visible in current frame. The host may expect us to use reopen_result to access saved. But read is allowed. Which is better? read current gives exact and current sha if needed (not patching). Use read README.md.
+
+However active frame includes `resident_signal_contract` and `reconstruction_notice`: "Read the exact current source before mutation". We need exact current for patches. README not mutation. But need schema.
+
+Maybe best next: read reports/incident.json to see current placeholder and schema. It is small. It might have keys to fill. README may explain. Which more directly needed? incident.json. Use read reports/incident.json.
+
+But we need also know observed comparison for each build. We need exact observations. Could do incident.json first to know fields. Let's choose read reports/incident.json. It has 15 bytes total? p0 reports total_bytes 15? Wait p0 root says reports directory total_bytes 15, file count 1. But read reports/incident.json returned end_line 1, result body size 32. Directory total_bytes maybe not content? It says total_bytes 15? Hmm p0 entries: reports directory total_bytes 15, file_count 1. But read result content external size 32? Maybe total_bytes is something else? Actually file may be 15 bytes? But result body size 32 includes content field. file_sha256. If content is maybe `{"builds": []}`? 15 bytes? Could be. Need exact.
+
+If we read incident.json, result content likely small. Good.
+
+Alternative use `reopen_result` RES-0010. It returns saved exact read result. Same. Which one is allowed and perhaps cheaper? Both one call. `read` records new acquisition; `reopen_result` records access. No difference. Use read to satisfy exact current before mutation? We don't have file content in current visible state, but event result has file_sha. But to patch we need old string exact; can use saved from reopen. Read current is straightforward.
+
+Let's produce action: read path reports/incident.json start_line 1. Strict JSON.
+
+But need ensure final only JSON. Yes.

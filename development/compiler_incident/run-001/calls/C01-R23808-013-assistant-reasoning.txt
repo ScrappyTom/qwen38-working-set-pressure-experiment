@@ -1,0 +1,68 @@
+We must output one strict JSON action object. Need continue task. We have event frame through 12. Current candidate 51da... after repaired unary and incident report filled. Need verify report correctness? Need run public check then submit if passes. We have calls remaining 20. Need exact current source before mutation? We already patched; no more patch maybe. Need check current candidate. Public check validates optimizer contract and report. Should run check first. It may pass or fail. Then submit. Need ensure report has all captured emitted builds: OBS-0002 and OBS-0003. We did. Need compare with captured original tree (OBS-0001) and list all top-level functions whose AST changed in source order. Let's verify report carefully against observations. There is a possible issue: first changed expression in each build. Need traverse functions in source order and fields in normal Python AST order. We need identify first expression whose node kind changed between original and emitted. For BUILD-A, requested functions ["_normal_dist_inv_cdf"]. Emitted module differs from original at _normal_dist_inv_cdf: originally in second sqrt line: args=[UnaryOp(op=USub(), operand=Call(log, r))] changed to args=[Call(log, r)] (unary removed). Also later in If q<0: originally Assign x = UnaryOp(USub, x) changed to Assign x = Name(x). Which is first in AST traversal? Need determine normal Python AST order. Need traverse functions in source order and their fields in normal Python AST order. We need compare original tree vs emitted. The first expression whose node kind changed traversing fields in normal Python AST order. The original _normal_dist_inv_cdf body statements in source order. Need identify first node kind changed in AST order. The sqrt UnaryOp occurs before the final if x negation? Let's inspect original body:
+- q = p - 0.5
+- If test fabs(q) <=0.425 body ... orelse []
+- r = IfExp(q <=0, p, 1.0-p)
+- r = sqrt(-log(r))   <-- originally UnaryOp around log. Emitted BUILD-A: sqrt(log(r)). Node kind at argument position changed from UnaryOp to Call? More specifically original node at r = Call(sqrt, args=[UnaryOp(USub, Call(log,r))]) vs emitted args=[Call(log,r)]. The node kind of the argument changed from UnaryOp to Call.
+- If test r <=5 body: ... orelse ...
+- x = num/den
+- If q<0 body: x = -x originally UnaryOp, emitted x = x Name. This is later in source/AST order than sqrt statement, if body order by statements. So first changed is indeed sqrt argument -log(r) -> log(r).
+For BUILD-B, requested functions both. Emitted differs in both: _normal same first change sqrt -log(r)->log(r); weibullvariate: originally return alpha * (-_log(u)) ** (1.0/beta) (UnaryOp USub around _log) changed to alpha * _log(u) ** (1.0/beta) (removed unary). But first in source order is _normal_dist_inv_cdf before weibullvariate, so first_change same. changed_functions should list all top-level functions whose AST changed, source order: _normal_dist_inv_cdf, weibullvariate. Yes.
+
+But need check the repair: The original bug: UnarySimplifier removes both UAdd and USub? It returned operand for both plus and minus, i.e. it eliminated unary minus, changing -log(r) to log(r), causing math domain error? Actually original code: if isinstance(node.op, (ast.UAdd, ast.USub)): return operand. That removes both plus and minus, which is wrong for USub. README says must at least eliminate unary plus on exact built-in int/float literals, preserve values/types/exceptions/operator dispatch elsewhere, including negative zero and user-defined unary operators. The repair we applied: only eliminate unary plus on exact int/float literals. But is that sufficient? Need think about contract. It says may simplify unary signs applied to numeric literals. Must at least eliminate unary plus on exact built-in integer and float literals in selected functions. It must preserve Python's values, types, exceptions and operator dispatch everywhere else, including negative zero and user-defined unary operators. Constant folding optional for other cases when equivalent.
+
+Original bug removed any unary plus/minus around any operand, not just literals and not just plus. Repair: removes unary plus when operand is Constant and value int or float. But does it preserve negative zero? If source has `+x` where x is float negative zero? It won't eliminate plus unless operand constant. For `+(-0.0)`? operand is constant float -0.0, plus eliminated, preserving value -0.0 and type. For `-0.0` literal, it will not eliminate USub; preserves negative zero. For user-defined unary operators, e.g. `~x`? It only checks UAdd, not others. But for UAdd on non-constants, preserve node. Good.
+
+However need consider that `ast.Constant` includes bool? type(value) in (int, float) excludes bool? bool is subclass int but type(True) is bool, not int, so excluded. Good "exact built-in integer and float literals" probably excludes bool. But Python parses `True` as Constant True; type is bool. Good.
+
+But does it handle `+ 1` and `+ 1.0`? Yes. What about `+ (1)`? parsed as Constant int. Good. What about numeric literal with `+` on a string? no.
+
+Potential issue: The optimizer processes only selected top-level functions. The transform visits node via NodeTransformer; our visit_UnaryOp does generic_visit then condition. It will transform nested functions? Only top-level selected function node visited. It doesn't recurse into nested function definitions? NodeTransformer generic_visit will visit children, including nested functions? If selected top-level function contains nested function, it would transform UnaryOps in nested function too. Is that allowed? The API says processes exactly selected top-level functions. Does it mean only those function bodies, including nested functions? Usually selected functions are top-level, but transformation of a FunctionDef includes its entire body, including nested functions? The contract: "With a sequence of function names it processes exactly those functions. Unknown names are rejected. Nonselected functions and module-level statements must retain their structure." If a selected function contains nested functions, are they part of selected function? Maybe yes? But "top-level functions" in README says processes all top-level functions. It may not care about nested. Original code also transformed whole selected FunctionDef recursively. We preserve that behavior.
+
+But a critical bug: NodeTransformer's visit_UnaryOp returns node. It uses `node = self.generic_visit(node)`, then if condition returns `ast.copy_location(node.operand, node)`. If condition false returns node. This is okay. But for UAdd on int/float literal, returns operand, eliminating plus. However Python AST has UnaryOp with operand possibly Constant. If we return operand directly, we lose the parent UnaryOp node, but that's intended. What about `+` on float `+1.0` returns Constant(1.0). Fine. What about `+` on int `+1` returns Constant(1). Fine.
+
+But must preserve operator dispatch everywhere else. For `+` on non-constant, we leave as is. For `-` on anything, leave as is. For `~` leave. Good.
+
+Potential issue: It eliminates unary plus on exact int/float literals even if the literal is negative? E.g. `+ -1` parsed as UnaryOp(UAdd, UnaryOp(USub, Constant(1))). generic_visit first visits inner UnaryOp. inner USub not eliminated. outer UAdd operand is UnaryOp not Constant, so not eliminated. Good. `+(-0.0)` operand Constant -0.0, plus eliminated, result -0.0. Good.
+
+Potential issue with bool? Excluded.
+
+Potential issue with `float` subclass? type(value) in (int,float) excludes subclasses. Good.
+
+Potential issue: It only eliminates top-level unary plus on numeric literals. README says "at least eliminate unary plus on exact built-in integer and float literals". Could be required to also eliminate unary plus applied to numeric literal via parenthesized expression? AST same. Fine.
+
+But public check might have hidden tests expecting more? Need infer from README and task. It says small optimizer may simplify unary signs applied to numeric literals. Must at least eliminate unary plus on exact built-in integer and float literals in selected functions. It must preserve Python's values, types, exceptions and operator dispatch everywhere else, including negative zero and user-defined unary operators. Constant folding is optional for other cases when equivalent.
+
+This suggests the correct repair may be to simplify unary plus on numeric literals (int/float) and perhaps constant fold unary minus on numeric literals? "Constant folding is optional for other cases when equivalent." It says may simplify unary signs applied to numeric literals. At least eliminate unary plus. It might also be acceptable to fold `-1` to `-1`? But not required. However the historical incident involved `-log(r)` not literal. The bug was removing USub around a Call, not literal. Our repair preserves USub, so the captured behavior would not happen. But the incident report describes captured emitted builds from historical buggy optimizer, not repaired.
+
+Need ensure report format exact. README structure:
+    {"builds": [
+      {"capture": "<emitted-tree handle>",
+       "changed_functions": ["<function name>", "..."],
+       "first_change": {"function": "<name>",
+                        "before": "<original expression>",
+                        "after": "<emitted expression>"}}
+    ]}
+Include every captured emitted build. Compare with captured original tree. List all top-level functions whose AST changed, in source order. Locate first expression whose node kind changed, traversing functions in source order and their fields in normal Python AST order. Express its original and emitted forms as ordinary Python expressions (equivalent parentheses/spacing accepted).
+
+Our JSON is compact but valid. Need maybe spaces? Public check probably parses JSON and validates values, not formatting. But report might require exact handle? We used "OBS-0002" and "OBS-0003". Good.
+
+But need verify "changed_functions" for BUILD-A: only _normal_dist_inv_cdf changed? Compare OBS-0002 emitted vs OBS-0001 original. Original has two functions. BUILD-A requested only _normal. Weibullvariate unchanged? In OBS-0002, weibullvariate return has `UnaryOp(op=USub(), operand=Call(func=Name(id='_log'...)))`? Let's check OBS-0002 dump: It shows Return(value=BinOp(left=Name('alpha'), op=Mult(), right=BinOp(left=UnaryOp(op=USub(), operand=Call(func=Name(id='_log', ...))), op=Pow(), ...))) . Yes unchanged. _normal changed at sqrt and final if. changed_functions only _normal. Good.
+
+BUILD-B requested both. Emitted OBS-0003: _normal changed same, weibullvariate changed: return `BinOp(left=Call(_log...), op=Pow()...)` (unary removed). Good.
+
+First_change before/after expressions: We used "-log(r)" and "log(r)". Need "ordinary Python expressions". Could be `-log(r)` vs `log(r)`. For first node kind changed, original node is UnaryOp(USub, Call log r), emitted node is Call log r. As ordinary Python expressions: `-log(r)` and `log(r)`. Good. But note the changed expression might be inside `sqrt(-log(r))`; the node kind changed at the argument, before `-log(r)`, after `log(r)`. Equivalent accepted.
+
+Potential issue: The first changed expression in BUILD-A might be `r = sqrt(-log(r))` vs `r = sqrt(log(r))`? The README says "first expression whose node kind changed". Node kind changed from UnaryOp to Call at `-log(r)`. They might expect the expression text of the node whose kind changed, not whole assignment. "before": original expression, "after": emitted expression. It says "Locate the first expression whose node kind changed". In AST, nodes are expressions/statements. The node kind changed at the argument. So -log(r) is right. But let's deeply analyze AST traversal to be certain.
+
+Original module body: ImportFrom, ImportFrom, FunctionDef _normal, FunctionDef weibull. Traversing functions in source order and their fields in normal Python AST order. For _normal, fields: name, args, body, decorator_list, type_params. Body statements in order. For each statement, find first node kind changed. Compare original vs emitted recursively. The first statement where any node kind differs is the `Assign r = sqrt(-log(r))`? Let's list statements:
+1 Assign q = p - 0.5 unchanged.
+2 If test... body/orelse unchanged.
+3 Assign r = IfExp... unchanged.
+4 Assign r = Call(sqrt, [UnaryOp(USub, Call(log,r))]) vs emitted Call(sqrt, [Call(log,r)]). Here at node kind of args[0] changed. So first changed node is UnaryOp vs Call. Its original expression `-log(r)` after `log(r)`.
+Thus correct.
+
+Need consider "normal Python AST order" for fields maybe uses `ast.iter_fields`? For FunctionDef fields in definition order? Python AST fields order is as class definition: FunctionDef: name, args, body, decorator_list, returns, type_comment, type_params? But original dump doesn't include returns/type_comment. "normal Python AST order" likely source order. Body before decorator? But irrelevant.
+
+Need maybe include first_change function for each build even if no changed functions? Both have changes. Good.
+
+Now need check current candidate. Public check may validate report by comparing to observations? It may know historical builds? It probably runs hidden tests plus report validator. Need run check now. Use exact current candidate id 51da... The check action requires expected_candidate_id. It will return passed. Need then submit if passed. If fail, need analyze and fix. We have budget. Let's run check. Ensure final content only one JSON action. Use public. No prose.

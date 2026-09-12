@@ -22,26 +22,42 @@ needs a plausible link to the observed need, an assessable expected benefit and
 consideration of added cost. Retaining the current input is a complete outcome;
 neither long thinking alone nor an available suggestion obliges a change or run.
 
-The current task-selection preparation is under `development/compiler_incident/`.
-Read SPEC.md, PREPARATION_REVIEW.md and VERIFICATION.json, followed by the new
-EXECUTION_SPEC.md, EXECUTION_MANIFEST.json and EXECUTION_READINESS.md. The frozen
-runner is ready for the separate owner execution decision: two cells, at most
-128 completion attempts, 32 actions per trajectory including shared work. Twenty-two
-distinct focused checks passed; the final-engine rehearsal used 34 mocked answers
-with real tools and reached four checked submissions. All 50 prepared inputs and
-34 actions were independently replay-verified. No model launch or completion occurred;
-do not treat the rehearsal as Qwen behavior or as execution approval. Six short actual-tool
-routes cross the proposed 16,000-token input working set and fit the 23,808-token
-resident ceiling under unchanged q4/56,576 and G=32,768. An externalized route
-recovers exact evidence and reaches checked submission in 12 scripted actions.
-Zero model completions were sent; this is offline report-and-repair qualification.
-The historical comparison requires captured evidence; the optimizer repair alone
-can be source-led. The partial report is an actual retained evidence copy, not a
-new working-account operation. Do not promote these results to model discovery,
-hypothesis reversal or pressure continuity. Preserve the finite-route limitation
-and never manufacture a fork if an actor completes first. The next step is the
-separate owner execution decision, not another wording study. No shared host or
-model-facing interface change was made.
+The owner-approved compiler comparison under `development/compiler_incident/`
+is closed without retry. Read its `review/RESULTS.md`, companion transcript, host
+and apparatus audits, `review/EXECUTION_RECEIPT.md`, `review/DECISION.json`
+and `review/NEXT_STEPS.md`. All 66 complete thinking/final responses, actual input
+changes and tool results were directly reviewed; all 65 executed actions replay
+exactly. C01's resident branch reaches checked submission in 14 total actions,
+with all 26 public cases passing. Both 16k branches stop at input-capacity denial
+with actions remaining; C01's last edit was rejected, and C02 only acquired
+evidence. C02's first resident continuation exhausts the 56,576 physical context
+with 38,037 generated tokens and an empty final response; no action executes.
+That unexpected failure stops the attempt. No remaining allowance authorizes a
+retry or successor. Preserve the frozen preparation and execution artifacts.
+
+Eight accepted results were absent from the next sent input: exact storage and
+successful retrieval did not establish delivery to the next decision. Required
+history eventually exceeded 16k even with every payload body external. The long
+resident response separately repeated and later contradicted useful analysis
+while all previously acquired bodies remained visible. Do not attribute both
+outcomes to memory loss or infer a general condition advantage from these two
+unequally completed cells. Private thinking was omitted immediately in both arms.
+
+Next, qualify admission and delivery offline using these exact transitions, then
+prepare a small neutral Qwen dialogue before settling any presentation change.
+The concrete follow-up is in `review/NEXT_STEPS.md`; it authorizes no model calls.
+No host patch, memory mechanism, presentation variant or reasoning change has
+been adopted. q4/56,576, no MTP and uncapped xhigh stayed fixed; sampled GPU free
+memory reached 246 MiB under the accepted advisory policy, without observed CUDA
+failure. The 32,768 generation reserve is a planning allowance, not an output cap
+or guarantee of completion.
+
+The earlier offline preparation remains separately identified: six scripted
+routes crossed 16k within the 23,808 resident ceiling, and the final rehearsal's
+34 mocked answers reached four checked submissions. Those are apparatus checks,
+not additional Qwen outcomes. The report requires captured incident evidence;
+the optimizer repair alone can be source-led. A partial report is an actual
+additional evidence copy, not a new working-account operation.
 
 Preserve the rejected Posting candidate under `development/incident_pressure/`:
 it needs incident evidence to select a repair but short routes finish below the
@@ -50,7 +66,7 @@ separately corrected. Neither that rejection nor the compiler preparation
 activates an extra ordinary-loop run. The 16k input working set is not the old
 25k total envelope; 25k remains incompatible with the present reserve.
 
-The latest owner-directed single investigation is complete. R01, seed 32452843,
+The preceding owner-directed single investigation is complete. R01, seed 32452843,
 used 14 of its frozen 24 actions under unchanged model/interface/thinking settings:
 one correct repair, 38 passing public cases at its first check, and checked
 submission. Read the five audits and DECISION.json under

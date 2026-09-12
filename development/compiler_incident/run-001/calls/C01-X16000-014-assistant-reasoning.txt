@@ -1,0 +1,225 @@
+We need answer with one JSON action only. Need analyze task. We have prior events. Need likely continue. Need inspect remaining observations? Let's understand problem fully.
+
+We are in continuation of compiler incident. Need repair optimizer and complete reports/incident.json for each build. We have current candidate ID: 28441db41e7ca5385feb03c96574fed32acfc4d67e7e608c93572fe06ed8033d.
+
+Current p0 root: README.md, compiler dir, reports dir. compiler entries: __init__.py, api.py, selection.py, unary.py. reports/incident.json currently {"builds": []}\n (15 bytes total? root says reports total 15 bytes, file maybe 15). Need complete report.
+
+Task:
+- Two captured optimized builds of calculation module changed behavior: one raised unexpected arithmetic error and another returned a complex result where original returned a real number.
+- Investigate recorded trees and compiler source.
+- Repair optimizer preserving supported compilation contract.
+- Complete reports/incident.json with observed comparison for each build. Report which functions changed and first changed expression in each build; distinguish captured behavior from verification of repair.
+- Check current candidate and submit.
+- Choose acquisition/action order.
+
+Known:
+- README: optimizer should at least eliminate unary plus on exact built-in integer and float literals in selected functions. Must preserve Python's values, types, exceptions and operator dispatch everywhere else, including negative zero and user-defined unary operators. Constant folding optional for other cases when equivalent.
+- Current UnarySimplifier:
+```
+import ast
+
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, (ast.UAdd, ast.USub)):
+            return ast.copy_location(node.operand, node)
+        return node
+```
+This removes any unary plus/minus, not only unary plus on numeric literals. It transforms -x to x and +x to x? Actually if USub, returns operand, removing negation. That is wrong. Also it removes unary minus on literals: e.g. -1 becomes 1, changing sign? Wait returns node.operand for USub, so -1 becomes 1 (loses unary minus), not negative. For unary plus, +1 becomes 1. But the required is only eliminate unary plus on exact built-in integer and float literals. For negative zero? Need preserve -0.0? "including negative zero and user-defined unary operators." Need not remove minus generally. Should only simplify `+ <integer/float literal>`? The bug: unary minus on non-literals removed leading to behavior changes.
+
+But observed builds: one raised arithmetic error, another returned complex where original real. Need compare captures.
+
+Observation directory:
+- OBS-0001 target: input calculation module (original? source tree). Size 9228, sequence 1.
+- OBS-0002 target: BUILD-A emitted module. Size 9168, sequence 2. We reopened OBS-0002 at sequence 13, and have exact content. It includes:
+  - record_kind: "emitted module"
+  - build: "BUILD-A"
+  - compile_request: {"functions":["_normal_dist_inv_cdf"]}
+  - called_function: "_normal_dist_inv_cdf"
+  - observed_call: {"kind":"raised","message":"math domain error","type":"ValueError"}
+  - ast_dump: emitted module.
+- OBS-0003 target: BUILD-B emitted module, size 9180. Not yet reopened in current? We have OBS-0003 in events but only metadata; no body. Need reopen OBS-0003 to compare. Need probably OBS-0001 original tree. We have OBS-0001 metadata, not body. Need reopen OBS-0001 (input module) and OBS-0003. Calls remaining 19; enough.
+
+Need determine report structure:
+```
+{"builds": [
+  {"capture": "<emitted-tree handle>",
+   "changed_functions": ["<function name>", "..."],
+   "first_change": {"function": "<name>",
+                    "before": "<original expression>",
+                    "after": "<emitted expression>"}}
+]}
+```
+Include every captured emitted build. That means OBS-0002 (BUILD-A) and OBS-0003 (BUILD-B) maybe. The capture field should be emitted-tree handle: "OBS-0002" and "OBS-0003". changed_functions: all top-level functions whose AST changed, source order. first_change: first expression whose node kind changed, traversing functions in source order and fields in normal AST order. Express original and emitted forms as ordinary Python expressions.
+
+We need know original module (OBS-0001) and emitted BUILD-A/B. Need identify changed top-level functions and first changed expression node kind.
+
+From OBS-0002 emitted module: It has top-level:
+- ImportFrom math fabs sqrt log
+- ImportFrom math log as _log
+- FunctionDef name='_normal_dist_inv_cdf'
+- FunctionDef name='weibullvariate'
+
+The input module likely same functions but maybe original forms with unary ops? Need inspect.
+
+The bug likely changed a unary minus in `_normal_dist_inv_cdf`? Let's parse BUILD-A emitted.
+
+BUILD-A selected functions = ["_normal_dist_inv_cdf"] only. But report asks all top-level functions whose AST changed (compared original) in emitted module? It says for each build, compare with captured original tree, list all top-level functions whose AST changed, source order. Even if selection only one, maybe other functions unchanged. But emitted module describes complete module including functions outside selected scope. Nonselected functions must retain structure. But historical builds may have used buggy compiler? In BUILD-A only `_normal_dist_inv_cdf` selected, so only that should be changed, unless bug affected all? But compiler applies only selected functions. So changed_functions likely `['_normal_dist_inv_cdf']`. But need check if any other top-level function changed due to transformation? The emitted BUILD-A `weibullvariate` body contains UnaryOp(op=USub(), operand=Call(_log(u)))? Wait emitted has:
+```
+Return BinOp left=alpha, op=Mult, right=BinOp(left=UnaryOp(op=USub(), operand=Call(func=_log(args=[u]))), op=Pow, right=BinOp(1.0 / beta))
+```
+There is a unary minus preserved? The current buggy transform would remove USub, so `weibullvariate` if selected would be changed. But BUILD-A selected only `_normal_dist_inv_cdf`, so `weibullvariate` not selected; remains as original (with USub). Good.
+
+In BUILD-A emitted `_normal_dist_inv_cdf`: Need see unary ops? It has lots of constants. Search for UnaryOp? I don't see UnaryOp in dump for `_normal_dist_inv_cdf`; it has no unary ops visible. Wait maybe original had `-0.5`? Let's see. It begins:
+```
+Assign q = BinOp(left=Name p, op=Sub(), right=Constant 0.5)
+```
+Maybe original was `q = p - 0.5` or `q = p + -0.5`? Hmm.
+
+The bug in UnarySimplifier: if USub, returns operand. If original code had `-0.5` as `UnaryOp(USub, Constant 0.5)`, transform returns Constant 0.5, changing from -0.5 to +0.5. But in BUILD-A emitted, I don't see UnaryOp; I see BinOp p Sub Constant 0.5. Could original have been `q = p + (-0.5)`? AST would BinOp(p, Add, UnaryOp(USub, Constant 0.5)). Buggy transform would replace operand of Add with Constant 0.5, yielding `p + 0.5`, not `p - 0.5`. But emitted has `p - 0.5`. Hmm maybe original was `q = p - 0.5`, no unary. Or original had `q = p - 0.5` and no change? Then what changed? Need compare to original.
+
+Maybe original had `q = p - 0.5` and some unary plus on constants? Current transform also removes UAdd on any operand. Required eliminate unary plus on exact int/float literals. Buggy code also removes UAdd on non-literals and USub. If original has `+0.5`? In Python AST, literal positive `0.5` is just Constant, no unary. `-0.5` is UnaryOp(USub, Constant 0.5). `+0.5` could be UnaryOp(UAdd, Constant 0.5). The optimizer should eliminate unary plus on numeric literals, so `+0.5` -> `0.5`. Buggy does that. But also `-0.5` -> `0.5`, wrong. If original had `+0.5` somewhere, emitted would show `0.5` and original would have `+0.5`; node kind changed from UnaryOp to Constant. That may be first change. But behavior? Removing unary plus shouldn't change values. The incident behavior changes due to unary minus removal somewhere causing e.g. negative input to sqrt/log leading to domain error or complex. Need find where unary minus was removed.
+
+The task mentions one build raised unexpected arithmetic error and another returned a complex result where original returned a real number. The calculation module probably includes `_normal_dist_inv_cdf` and `weibullvariate`. Bug: `UnarySimplifier` strips negations, turning negative values positive. For `_normal_dist_inv_cdf`, maybe there is a branch `q < 0` and `x = -x` if q < 0? In emitted BUILD-A, we see:
+```
+If(test=Compare(left=Name q, ops=[Lt()], comparators=[Constant 0.0]), body=[Assign x = x], orelse=[])
+```
+This is suspicious: originally likely `if q < 0: x = -x` (negate x). The buggy transform removed the unary minus: `x = -x` became `x = x`, no sign flip. That would change behavior: for q < 0, the CDF inverse should return negative value? Let's examine. `_normal_dist_inv_cdf(p, mu, sigma)`: p maybe CDF probability, mu, sigma. q = p - 0.5. If |q| <= 0.425, compute rational approx, x=num/den. Then return mu + x*sigma. Else r = sqrt(log(...)). Then if r <= 5: r -= 1.6; num/den approx; else r -= 5; approx. Then `if q < 0: x = -x`? Actually standard Acklam inverse normal: if q < 0.5 (or q<0? let's see) maybe `if p < 0.5: x = -x`? The variable q = p - 0.5. The rational approximations are for central region? Usually:
+```
+p -= 0.5
+if abs(p) <= 0.425:
+   r = p*p
+   x = p*(...) / (r*...)
+else:
+   r = log(-min(p, 1.0-p))
+   ...
+   if r <= 5:
+      r -= 1.6; x = ...
+   else:
+      r -= 5.0; x = ...
+   if p < 0.5: x = -x
+return mu + x*sigma
+```
+Here if q < 0 (p<0.5), x = -x. In emitted BUILD-A: `If q < 0.0: body=[Assign x=x]` indeed minus removed. That is the bug! This changes behavior for p<0.5: x not negated, return wrong sign, maybe complex? But observed_call for BUILD-A: called_function `_normal_dist_inv_cdf`, observed raised ValueError "math domain error". How could x=x cause math domain error? Maybe elsewhere? Let's inspect BUILD-A more: There is `r = sqrt(log(...))`. The expression `r = IfExp(q <= 0.0, p, 1.0 - p)` then `r = sqrt(log(r))`. If p? Domain error if r negative/zero. If q <= 0 (p <= 0.5), r = p; else r = 1-p. If p in (0,1) positive. No domain. But maybe original had `q = -p + 0.5`? No.
+
+Maybe the build's called function with some argument caused domain error due to missing negation in polynomial? Let's find other unary minus occurrences in `_normal_dist_inv_cdf` original. In emitted there are no UnaryOp in `_normal_dist_inv_cdf` at all. If original had any unary ops, all would be removed. The emitted rational approximations all have only positive coefficients? Let's inspect: In first branch (|q| <=0.425): num = (((((((((((((2509.08... * r + 33430.57...)* r + 67265.77)* r + ... + 3.387...)* q) . All coefficients positive. den = (((... + 1.0). All positive. This is standard polynomial with positive coefficients for central approximation. No unary minus.
+
+Else: r = sqrt(log(IfExp(q <= 0.0, p, 1.0 - p))). If p=?? positive.
+If r <= 5:
+  r -= 1.6
+  num = 0.000774... * r + 0.0227... + ... all positive.
+  den = 1.050...e-09 * r + ... + 1.0 all positive.
+orelse:
+  r -= 5.0
+  num = 2.010...e-07 * r + ... + 6.6579...
+  den = 2.044...e-15 * r + ... + 1.0
+x = num/den
+If q < 0.0: x = x (should be -x)
+return mu + x*sigma.
+
+If q<0, original x negative? The rational approximations likely produce positive x for tails? Let's reason: q = p - 0.5. If p < 0.5 (q<0), r = sqrt(log(p)). p in (0,0.5), log(p) negative, sqrt of negative -> complex in Python? Wait `math.sqrt(log(p))` with log negative? `math.log(p)` for p in (0,1) is negative. `math.sqrt(negative)` raises ValueError domain error. That can't be original behavior? Wait standard formula uses `log(-min(p, 1-p))`: since p<0.5, -p negative -> log negative of positive? Actually `math.log(-min(p,1-p))` argument positive. But emitted uses `sqrt(log(r))` where r is p or 1-p, not `-r`. Where is the unary minus? Original likely `r = sqrt(log(-p))` for q<=0 or `log(-(1-p))`. But emitted BUILD-A has `r = sqrt(log(IfExp(q <= 0.0, p, 1.0 - p)))` missing negation! That would make log of p (0 to 0.5) negative, sqrt domain error. Yes! The observed BUILD-A raised ValueError math domain error exactly due to `sqrt(log(p))` negative. The missing unary minus before `p` (or `1-p`) inside log caused domain error. The current buggy transform removed `USub` from `-(...)`, leaving positive p, causing log negative and sqrt domain error. This is likely first change? Need identify first changed expression in normal AST order. It might be the `r` assignment in else block: original `r = sqrt(log(-p))`? Wait there are two branches? Let's parse emitted: `r = IfExp(test=Compare(q <= 0.0), body=p, orelse=1.0 - p)` then `r = sqrt(log(r))`. Original maybe `r = IfExp(q <= 0.0, -p, -(1.0 - p))`? Or `r = -IfExp(...)`? Let's inspect standard code:
+```
+if q <= 0.5:
+    r = -q
+else:
+    r = q - 1.0
+r = math.sqrt(-math.log(r)) # or math.sqrt(log(-r))?
+```
+Alternative from Cephes? Let's not rely.
+
+Need compare original OBS-0001. We haven't seen. Need reopen OBS-0001. It will show original module ast_dump, likely similar but with unary minus nodes. Need identify first changed expression. We can do that by diffing ASTs. We have BUILD-A exact. Need original exact. Need OBS-0003. Need likely use reasoning to parse and maybe produce report manually. Could also use `search` in current source? Observations are not in current source; only reopen. We can't run code. Need manually inspect.
+
+Need repair `compiler/unary.py` as well. We have current exact source from EVT-0011:
+```
+import ast
+
+
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, (ast.UAdd, ast.USub)):
+            return ast.copy_location(node.operand, node)
+        return node
+```
+Need replace with correct. What is exact required? "It must at least eliminate unary plus on exact built-in integer and float literals in selected functions. It must preserve Python's values, types, exceptions and operator dispatch everywhere else, including negative zero and user-defined unary operators. Constant folding is optional for other cases when equivalent."
+So implement visit_UnaryOp:
+- First generic_visit to transform operand (so nested unary plus literals maybe?).
+- If op is ast.UAdd and operand is ast.Constant with value int/float? Need exact built-in integer and float literals. In Python AST, numeric literals are `ast.Constant` with value int or float (not bool? bool is subclass int but not exact built-in integer? "exact built-in integer and float literals" likely `type(value) is int` or `type(value) is float`; exclude bool. Complex? No. Could be `ast.Num` in old? Python 3.12 uses Constant. Should only simplify UAdd on numeric literal. What about `- 0.0`? Must preserve negative zero. If operand is float 0.0 with USub, not simplify. UAdd on 0.0? `+0.0` yields 0.0 positive zero; okay? For float, `+(-0.0)` is `-0.0`? Actually unary plus preserves negative zero. If UAdd on Constant(-0.0), should it simplify to -0.0? It preserves value and type, okay. But "including negative zero" means don't turn -0.0 into 0.0. We don't simplify USub. For UAdd, value unchanged, including sign. If operand is Constant with int/float, returning operand is fine. But if operand is a negative float literal -0.0? Constant value -0.0 (float). UAdd(-0.0) returns -0.0. Good.
+- What about integer literal with plus: `+1` -> `1`. `+0` -> `0`; no negative zero for int.
+- Need preserve operator dispatch for user-defined unary operators: classes with `__pos__`/`__neg__` on expressions. Only if operand is a literal Constant int/float and op UAdd. For UAdd on e.g. `+x` not simplify. For USub never simplify. What about `+ 1` where literal is bool? Bool is int subclass but built-in bool not integer literal? Python bool literal `True` is Constant(value=True), type bool. Should not simplify `+True`? It has bool type and `__pos__`? bool has no custom? `+True` returns 1 int, type changes. "exact built-in integer and float literals" likely excludes bool. So check `type(node.operand.value) in (int, float)` and not bool. Use `type(value) is int or type(value) is float`.
+- Need maybe handle `ast.Constant` only, not `ast.Str` etc. Numeric literals int/float. Also complex? Not required; preserve.
+- Need preserve locations? `ast.copy_location` maybe. If returning operand, location may be missing? API later `ast.fix_missing_locations(result)`, but if returning existing operand with location, okay. For safety `ast.copy_location(operand, node)`? The original code used copy_location. Could use.
+- Need ensure input tree not modified in place. NodeTransformer returns new? Returning existing node may share? But api does deepcopy original, so okay. But `ast.copy_location` mutates node; node from deepcopy, okay.
+
+Possible implementation:
+```
+import ast
+
+
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if (
+            isinstance(node.op, ast.UAdd)
+            and isinstance(node.operand, ast.Constant)
+            and type(node.operand.value) in (int, float)
+        ):
+            return ast.copy_location(node.operand, node)
+        return node
+```
+But if `node.operand` is a UnaryOp transformed by generic_visit, e.g. `+ +1`? Let's see: visit_UnaryOp outer: generic_visit on node visits operand (inner UnaryOp). Inner returns Constant 1. Outer operand becomes Constant 1, then UAdd on Constant -> returns Constant. Good.
+What about `+ (1 + 2)`? operand not constant, no change. Good.
+What about `+ 1j` complex? type complex, no.
+What about `+ True`? type bool, no.
+What about UAdd on float `+ -0.0`? operand is Constant(-0.0), type float, returns -0.0. Good.
+Need maybe use `numbers.Integral`? No exact built-in.
+
+Could also simplify only if `isinstance(node.operand, ast.Constant)` and `isinstance(node.operand.value, (int, float)) and not isinstance(node.operand.value, bool)`. But exact type is better.
+
+Need patch current source. We have file sha from last read: `95544cb49ffb5b5e11f09991917e0028918e679fd7f9d164f63ea36b012d2e80` for unary.py, candidate id 28441... But after potential patches? Not yet. We can patch unary.py now? Need exact current source. We have from events read exact content (RES-0011) and file_sha. The current candidate hasn't changed from start? Events include no patch. candidate_id same. So can patch. But before patch, maybe need gather report? Patch can be later. Need call limit 19. Need reopen OBS-0001 and OBS-0003. Also patch unary, patch report, maybe check, submit. Need enough calls. We already used 13, remaining 19. Plan: reopen OBS-0001 (1), reopen OBS-0003 (1), patch unary (1), patch report (1), check (1), submit (1) total 6 -> 25. Fine. Could also search? not needed.
+
+Need construct incident.json accurately. Need know original AST. Let's reopen OBS-0001 first. The result will be large 9228 bytes; within 22k. We need parse manually. Use `reopen_observation` handle OBS-0001. We already know from events OBS-0001 exact result sha but not body. Need action only. Which action next? Could reopen OBS-0001.
+
+But perhaps we can infer enough? Need first changed expression. Better get original.
+
+Let's consider what original module likely is. It might have functions:
+- `_normal_dist_inv_cdf(p, mu, sigma)`: maybe from some library. The emitted BUILD-A is after buggy optimizer, with selected function `_normal_dist_inv_cdf`. The original module OBS-0001 likely has same overall structure, but in `_normal_dist_inv_cdf` the unary minus nodes are present. The first change in AST order likely occurs at the first unary minus inside selected function. Need find in original and emitted.
+
+From emitted BUILD-A, first top-level function is `_normal_dist_inv_cdf`. Its body statements in order:
+1. Assign q = p - 0.5
+2. If |q| <= 0.425: body...
+   - Assign r = 0.180625 - q*q? Wait emitted: `r = Constant 0.180625 - BinOp(q Mult q)`. That's `r = 0.180625 - q * q`. Standard central: `r = p*p; x = p*(...)/(...)`, where r = q*q. But here `r = 0.180625 - q*q`? Let's inspect: `Assign r = BinOp(left=Constant 0.180625, op=Sub(), right=BinOp(left=Name q, op=Mult(), right=Name q))`. That is `0.180625 - q*q`. Hmm standard for rational approximation of inverse CDF? Maybe yes: `r = p*p; x = p*(a0 + ...)/(...)`? Not sure.
+   - num polynomial uses r and q.
+   - den polynomial.
+   - x = num/den
+   - Return mu + x*sigma
+3. Assign r = IfExp(q <= 0.0, p, 1.0 - p)
+4. Assign r = sqrt(log(r))
+5. If r <= 5.0:
+   - r = r - 1.6
+   - num...
+   - den...
+   orelse:
+   - r = r - 5.0
+   - num...
+   - den...
+6. Assign x = num/den
+7. If q < 0.0:
+   - x = x (should be -x)
+8. Return mu + x*sigma
+
+Potential original changes:
+- Statement 3/4: maybe original `r = sqrt(log(-p))` if q <= 0 else `sqrt(log(-(1-p)))`. In emitted missing unary minus before IfExp or inside branches. Need identify node kind changed: original `UnaryOp(USub, IfExp(...))`? If the minus is outside ifexp: `-IfExp(...)` becomes `IfExp(...)`; node kind changes at that whole expression (UnaryOp to IfExp). If inside branches: `-p` -> `p`, node kind changes from UnaryOp to Name at first branch body. Which is earlier? AST order: IfExp node fields test, body, orelse. If original was `sqrt(log(-IfExp(q <= 0.0, p, 1.0 - p)))`, first changed node is the UnaryOp wrapping IfExp, before IfExp? Traversal of fields in normal Python AST order: for FunctionCall log arg is UnaryOp; its child is IfExp. In emitted the same position is IfExp. The first expression whose node kind changed is likely that arg. If original was `IfExp(q<=0.0, -p, -(1-p))`, first change would be body `-p` -> `p`, because IfExp node kind unchanged (IfExp), but child body changed. Which is earlier? Need know original.
+
+- Statement 7: `x = -x` -> `x = x`. Node kind changes from UnaryOp to Name in If body. This is later than statement 3/4, so first change likely log argument if present.
+
+- Also maybe `q = p - 0.5` original could be `q = p + -0.5`? But emitted uses Sub. If original had `p + (-0.5)`? No.
+- Maybe original had `r = 0.180625 - q*q`? The literal `0.180625` maybe originally `+0.180625`? If so first change could be unary plus on literal? But behavior unchanged. The task asks first expression whose node kind changed, not first behavior change. If original has unary plus on numeric literals, those are legitimate changes. The first such in AST order might be earlier than missing minus. Need inspect original. The optimizer must eliminate unary plus on numeric literals. If original source had explicit `+0.180625`? The emitted would show Constant. The first node kind changed could be that if present. But the incident report should list first changed expression per build, comparing original to emitted. It doesn't say only behavior-affecting changes. It says "Locate the first expression whose node kind changed, traversing functions in source order and their fields in normal Python AST order." So if any unary plus literal earlier, that's first. But likely original source is ordinary without explicit plus. Need inspect.
+
+Also BUILD-B: another build selected a different function? It returned a complex result where original returned a real number. Which build? BUILD-B likely selected `weibullvariate`? Let's infer. The task says one raised unexpected arithmetic error and another returned a complex result where original returned a real number. BUILD-A observed_call raised ValueError. BUILD-B likely observed_call complex? Need see OBS-0003. It probably has compile_request functions=['weibullvariate'] or maybe another function? `weibullvariate` has `-log(u)` with u in (0,1), log negative, -log positive. If buggy removes minus, it becomes `log(u)`, negative, raised to power `1/beta`. In Python, negative float to fractional power yields complex number (e.g. (-x)**(1/3) -> complex). Original returns real positive `(-log(u))**(1/beta)`. Bug: `(-log(u))` becomes `log(u)` negative; `negative ** fraction` yields complex. That matches "returned a complex result where original returned a real number". So BUILD-B likely selected `weibullvariate` and observed_call kind maybe "returned" with complex value? Need reopen OBS-0003 to get exact observed call and emitted tree. It may have `weibullvariate` changed: `UnaryOp(USub, Call(_log(u)))` removed to `Call(_log(u))`. The first changed expression in BUILD-B is inside `weibullvariate`: `u = 1.0 - self.random()` unchanged, Return: original `alpha * (-_log(u)) ** (1.0 / beta)` vs emitted `alpha * _log(u) ** (1.0 / beta)`. First change likely `-_log(u)` node kind changed from UnaryOp to Call. Or if there are earlier unary plus literals? no.
+
+But if BUILD-B selected only `weibullvariate`, changed_functions = ['weibullvariate']; first_change function = 'weibullvariate', before `-_log(u)` (or `-math.log(u)`? In module `_log` is local import alias for math.log; expression uses `_log(u)`. The original expression as ordinary Python: `-_log(u)`? The AST uses Name `_log`; yes. Or perhaps original is `-math.log(u)`? The dump shows ImportFrom math log as _log and Call Name _log. So expression `_log(u)`. The unary minus: `-_log(u)`. Need ordinary Python expression maybe `-_log(u)`? In Python syntax, unary minus with call: `-_log(u)` is valid? Yes: `-_log(u)` means `(-_log(u))`? Actually unary minus has lower precedence than call, so `-_log(u)` parses as `(-_log)(u)`? Let's check Python operator precedence: Calls have higher precedence than unary? The grammar: power has unary? In Python, unary operators bind tighter than ** but less than primary? Let's recall: ` -x * y` is `(-x)*y`. For `-_log(u)`, I think call binds tighter than unary? Python: `-f(x)` means `-(f(x))`? Actually unary minus has lower precedence than attribute/call? Let's test mentally: `-'a'` string. `-'a'*2`? In Python, unary minus precedence is higher than multiplication but lower than power? The syntax: `u_expr: power | '-' u_expr | '+' u_expr | '~' u_expr`; `power: primary ['**' u_expr]`; `primary: atom trailer*`. So u_expr can be `- u_expr`, and `power` includes primary with trailers. `-_log(u)` parses as `-(u_expr? no)`? Actually `- _log (u)`? The `-` applies to a u_expr, and `_log(u)` is power/primary with trailer, so yes `-( _log(u) )`. It is valid. Good.
+
+For BUILD-A first change maybe `log(-p)`? Need exact ordinary expression. Could be `-p` or `-(1.0 - p)`? Need know original.
+
+Let's reopen OBS-0001 now. Need action JSON.

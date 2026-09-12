@@ -2,26 +2,38 @@
 
 ## Project status
 
-The [compiler comparison is ready for its separate execution decision](development/compiler_incident/EXECUTION_READINESS.md).
-The frozen runner proposes two cells, at most 128 completion attempts, and 32
-actions per trajectory including shared work. Twenty-two distinct focused tests
-passed; the final offline rehearsal produced 34 mocked responses and four checked
-submissions, with every actual tool result and reconstructed input replay-verified.
-No Qwen requests or runtime launch occurred. Keep q4/56,576, uncapped xhigh and the
-current interface. The owner execution decision remains pending.
+The [owner-approved compiler comparison is closed](development/compiler_incident/review/RESULTS.md):
+**66 model responses, 65 executed actions, one checked submission**, with every
+complete response directly reviewed and every executed action replay-verified.
+C01's resident branch finishes in 14 total actions with all 26 public cases
+passing. Both **16,000-token input** branches stop at capacity denial with actions
+remaining. C02's first resident continuation uses **38,037 generated tokens**,
+exhausts the 56,576 physical context and returns no final action; that unexpected
+failure stops the attempt without retry. These unequal outcomes do not establish
+a general performance advantage for either condition.
 
-The [compiler incident task is qualified offline](development/compiler_incident/PREPARATION_REVIEW.md).
-Six short scripted paths cross the proposed **16,000-token input working set**
-while fitting the **23,808-token resident ceiling**; their peaks are 18,934–21,582.
-An externalized path retrieves the missing original capture and reaches checked
-submission in 12 actions, with a largest admitted continuation input of 15,817.
-The full repair and incident report pass 26 behavioral contract cases; 19 selected
-preparation tests pass. **Zero model completion calls** were sent. The execution
-safeguards are now prepared above; larger-workload model inference remains unqualified.
+The direct audit finds two distinct problems. Eight accepted results were stored
+but absent from the very next model input; required history eventually exceeded
+16k even with all payload bodies external. Separately, the long resident response
+repeated and later contradicted useful analysis while all previously acquired
+bodies remained visible. The complete attempt used 452,353 generated tokens and
+7.93 model-request hours, counting shared work once. q4/56,576, no MTP and uncapped
+xhigh stayed fixed; minimum sampled free GPU memory was 246 MiB under the accepted
+advisory policy, with no observed CUDA failure. Context exhaustion did occur.
 
-The historical report requires incident evidence; the repair itself can be found
-from source. Partial reports can retain findings across pressure. This is a useful
-report-and-repair task, not demonstrated model discovery or hypothesis reversal.
+The [next steps](development/compiler_incident/review/NEXT_STEPS.md) are offline
+qualification of admission and evidence delivery, followed by a separately
+prepared neutral Qwen dialogue before selecting any presentation change. No host
+patch, new memory mechanism or reasoning change has been adopted. The consumed
+attempt authorizes no retry or successor. The 32,768 generation reserve remains a
+planning allowance, not a cap or guarantee.
+
+The [earlier compiler preparation](development/compiler_incident/PREPARATION_REVIEW.md)
+remains frozen as offline evidence: six scripted paths crossed 16k within the
+23,808 resident ceiling, and the final rehearsal reached four checked submissions
+from 34 mocked responses. Those successes are apparatus checks, not extra model
+outcomes. The historical report requires incident evidence; the optimizer repair
+itself can be found from source. Partial reports are additional evidence copies.
 The [previous Posting candidate](development/incident_pressure/PREPARATION_REVIEW.md)
 remains rejected because its short valid routes stayed below the pressure boundary.
 No extra ordinary-loop run or interface study is activated.

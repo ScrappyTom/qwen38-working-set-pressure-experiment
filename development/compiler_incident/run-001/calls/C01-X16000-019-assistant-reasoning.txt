@@ -1,0 +1,81 @@
+We need answer with one JSON action only. Need analyze task. We have prior events. Need likely continue. Need know current state. Let's inspect all context.
+
+We have repo:
+README.md
+compiler: __init__.py api.py selection.py unary.py
+reports/incident.json
+Task: Two captured optimized builds of a calculation module changed behavior: one raised unexpected arithmetic error, another returned complex result where original returned real. Investigate recorded trees and compiler source. Repair optimizer while preserving supported compilation contract, and complete reports/incident.json with observed comparison for each build. Report which functions changed and first changed expression in each build; distinguish captured behavior from verification of repair. Check current candidate and submit.
+
+We have candidate_id current 28441... no patches yet? Events include reads and observations, no patches. We need investigate and repair.
+
+Observations:
+OBS-0001 target input calculation module (source stage sequence 1)
+OBS-0002 target BUILD-A emitted module
+OBS-0003 target BUILD-B emitted module
+
+Events:
+Seq 15 reopened OBS-0002 fully resident. It contains exact_result_utf8 string:
+{"ast_dump":"Module(body=[ImportFrom(module='math', names=[alias(name='fabs'), alias(name='sqrt'), alias(name='log')], level=0), ImportFrom(module='math', names=[alias(name='log', asname='_log')], level=0), FunctionDef(name='_normal_dist_inv_cdf', args=arguments(posonlyargs=[], args=[arg(arg='p'), arg(arg='mu'), arg(arg='sigma')], kwonlyargs=[], kw_defaults=[], defaults=[]), body=[...
+... FunctionDef(name='weibullvariate', args=arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='alpha'), arg(arg='beta')], ... body=[Expr(value=Constant(value='Weibull distribution.\\n\\n    alpha is the scale parameter and beta is the shape parameter.\\n\\n    ')), Assign(... u = 1.0 - self.random()), Return(value= alpha * (-log(u))**(1.0/beta)) ...
+"build":"BUILD-A","called_function":"_normal_dist_inv_cdf","compile_request":{"functions":["_normal_dist_inv_cdf"]},"observed_call":{"kind":"raised","message":"math domain error","type":"ValueError"},"record_kind":"emitted module"}
+
+So BUILD-A: requested optimize only _normal_dist_inv_cdf? It changed behavior: called _normal_dist_inv_cdf raised ValueError math domain error. Input module likely has functions _normal_dist_inv_cdf and weibullvariate. The original returns real number, optimized raised math domain error? Need inspect input OBS-0001. Need also OBS-0003 BUILD-B likely returned complex result. Need read.
+
+We need repair optimizer while preserving supported compilation contract. Need understand compiler source. We have api.py, selection.py, unary.py? Need read unary.py (we have read event but need reopen? Current source exact? Events show unary.py read at seq 3/11 result body RES-0003 but not resident content. Need reopen_result RES-0003 or read current. Current candidate unchanged? likely yes. Need exact source before mutation. We can read current files. We need maybe patch compiler/unary.py and reports/incident.json. Need know bug. Let's get data.
+
+We have prior observations: OBS-0001, OBS-0003. Need reopen them. But each action only one. We need plan sequence within call limit 14 remaining. Need not waste. We can use reopen_observation for OBS-0001 or RES. Need exact content. Since active phase events already have OBS-0002 full. We need OBS-0001 input module and OBS-0003 BUILD-B. Let's fetch. We have 14 calls. Need also read unary.py, __init__.py maybe reports/incident.json current. We can perhaps infer. Need minimize.
+
+Need know supported compilation contract. README maybe has details. Read README current. We have read event but not content. Need reopen_result RES-0002/RES-0010 or read current. Current unchanged. Could reopen_result RES-0010. Also unary source. Need incident.json current: only line 1 maybe empty? Event read complete returned line 1 end_line 1, content size 32. Need know exact JSON. Could reopen_result RES-0007. We can do several.
+
+Need likely patch unary.py. Let's fetch relevant current exact.
+
+Let's think about optimizer: UnarySimplifier presumably transforms unary operations / negative exponent? The observed build A raised math domain error. From AST: _normal_dist_inv_cdf implementation is Acklam inverse normal CDF. There is likely expression involving (-1.0) ** something? Wait original source? Let's reconstruct from AST in BUILD-A.
+
+Function _normal_dist_inv_cdf(p, mu, sigma):
+```
+q = p - 0.5
+if fabs(q) <= 0.425:
+    r = 0.180625 - q*q
+    num = 2509.0809287301227*r + 33430.57558358813 + 67265.7709270087*r + 45921.95393154987 + 13731.69376550946 + 1971.5909503065513 + 133.14166789178438 + 3.3871328727963665 * q ??? 
+```
+Let's parse AST: It shows num = ... BinOp chain weird. Need exact expression. It seems coefficients multiplied by r, then finally multiplied by q? Actually AST:
+num = BinOp(left=BinOp(... Constant 2509.08 * r), op=Add, right=Constant 33430...), ... then outermost op=Mult right=Name q. The entire polynomial in r is multiplied by q? Standard Acklam rational:
+if |q| <= 0.425:
+    r = 0.180625 - q*q
+    return mu + sigma * ((...)*r + ...)/((...)*r + ...)*r? Wait typical:
+    A0=0.254829592 etc.
+    x = q * (((((a0*r + a1)*r + a2)*r + a3)*r + a4)*r + a5)*r + a6?) No.
+Let's look standard inverse CDF rational approximation:
+```
+r = q * (1 - q*q)
+return (((((a1*r + a2)*r + a3)*r + a4)*r + a5)*r + a6) / (((((b1*r + b2)*r + b3)*r + b4)*r + b5)*r + b6)
+```
+Actually for central:
+```
+r = q*(1 - q*q)
+x = (((((a1*r + a2)*r + a3)*r + a4)*r + a5)*r + a6) / (((((b1*r + b2)*r + b3)*r + b4)*r + b5)*r + b6)
+```
+But here AST central polynomial multiplies by q? It has chain: Constant * r + constant ... + Constant * q. Could be `((((...)*q+...)*q+...) * q + ...`? Let's parse more carefully.
+AST for central `num` assign:
+```
+Assign(num, value=BinOp(left=BinOp(left=... [big chain ending in Constant 3.387 * q] ...), op=Add? Actually nested:
+BinOp(left=BinOp(left=...
+```
+Given AST truncated in readable, it is:
+```
+Constant 2509.08*r + Constant 33430.57 + Constant 67265.77*r + Constant 45921.95 + ... + Constant 3.387*q
+```
+Wait each inner: `Constant(value=2509.0809287301227), op=Mult(), right=Name(r)` then `Add` right `Constant(value=33430.57558358813)`? Then next Add right `Constant(value=67265.7709270087)`? But AST shown: `op=Add(), right=Constant(value=67265.7709270087)`? Actually snippet: `... op=Add(), right=Constant(value=67265.7709270087)), op=Mult(), right=Name(id='r', ctx=Load())), op=Add(), right=Constant(value=45921.95393154987)), ...` Hard.
+Maybe the compiler incorrectly transformed power expressions? Need inspect unary.py to know.
+
+Task says compiler source, two captured optimized builds: one raised arithmetic error, another complex result where original real. The bug likely in unary simplification: e.g. replacing `-x ** y` or `(-1) ** x`? Complex result from sqrt/log domain? Let's inspect.
+
+Observation BUILD-A observed_call raised ValueError math domain error when calling _normal_dist_inv_cdf. In original maybe returns real. The optimized module imported math and _log alias. The function body AST maybe has `sqrt(log(r))` or similar? Standard inverse normal uses `sqrt(log(r))` where `r = p if p <= 0 else 1-p` for tails. If r <= 0 due to p out of (0,1)? math domain error if log of negative? But original maybe uses `log(r)` where r in (0,1). Maybe optimized changed `-log(u)`? For weibull: `alpha * (-_log(u))**(1/beta)`. If u=0, log domain error. But observed call is _normal_dist_inv_cdf raised. Need know input call args. OBS-0001 maybe contains call/expected result? Need reopen.
+
+Could be optimizer simplification of unary minus: It may rewrite `-x ** y` incorrectly to `(-x) ** y` or `(x ** y) * -1`? That can turn real negative base fractional power into complex? Python `(-1) ** 0.5` returns complex? Actually `(-1) ** 0.5` in Python gives `(6.123e-17+0.999999j)` complex. `-( -1 ** 0.5)` different. Math domain error for negative under log/sqrt? Hmm.
+
+Task: one build raised unexpected arithmetic error, another returned complex result where original returned a real number. This sounds bug in optimizer's handling of unary operators and exponentiation:
+- Complex result where original real: e.g. original `(-x) ** y`? Actually `(-1) ** 0.5` is complex in Python; if original was `- (1 ** 0.5)` real. Or original used `sqrt(-x)`? No.
+- Arithmetic error: maybe `math.log` of negative due to rewriting `x - 1` vs `x ** (1/beta)`? Need inspect.
+
+Let's fetch exact. We can call reopen_observation OBS-0001. It returns large exact_result_utf8. Need see. Let's do.
