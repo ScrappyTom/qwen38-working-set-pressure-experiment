@@ -1,14 +1,26 @@
 **Proposal: resume the project after Experiment 020**
 
-Current follow-up: [offline delivery qualification](development/compiler_incident/delivery-qualification/FINDING.md)
-shows that newest-result retention alone exceeds 16k at both sampled omissions.
-The event frame/verification account for 9,143–12,901 marginal tokens in the four
-states. These are capacity measurements and cost ablations, not a selected compact
-view. The owner's latest “Proceed” directs the bounded [Qwen consultation](development/delivery_dialogue/SPEC.md):
-two responses at most, actual historical input first, factual adaptive follow-up
-after complete review. D1 is prepared at 12,968 input tokens; ten focused checks
-pass across qualification and dialogue. A saved-contribution/restart experiment
-follows only after a concrete presentation decision; none is launched here.
+Current follow-up: the [delivery qualification and two-turn consultation are complete](development/delivery_dialogue/review/RESULTS.md).
+Both complete thinking/final responses and actual inputs were directly reviewed
+and independently verified. Qwen recognizes absent evidence; after clarification
+it uses existing version guards and proposes a concrete optimizer patch. A
+separate offline copy passes all 25 optimizer cases while the empty report remains
+the sole failing case. Those scripted operations are not a Qwen continuation.
+The two-turn scope is consumed, at 48.05 request minutes and 46,915 output tokens.
+
+The [offline qualification](development/compiler_incident/delivery-qualification/FINDING.md)
+finds that small repair groups alone fit early states when an unrelated capture
+is released, while the tested report groups do not fit 16k with full history.
+Qwen retains the interface and proposes a 23,808 working-set ceiling as one option.
+A source-checked screen admits the four sampled states at that ceiling, without
+restoring previously externalized bodies or assembling the tested report groups.
+No larger live allowance, metadata refactor or retention policy is adopted.
+The [next preparation](development/delivery_dialogue/review/NEXT_STEPS.md) qualifies
+continuation from the saved checked optimizer into the historical report, testing
+the existing view under an explicit budget first. Ten selected preparation checks
+pass. Original receipt flags used a legacy reserve constant; independent auditing
+preserves them and derives the correct selected-reserve comparison. Both outputs
+finish without truncation, with a 191 MiB sampled minimum under the advisory policy.
 
 Latest outcome: the [approved compiler comparison](development/compiler_incident/review/RESULTS.md)
 is closed without retry after 66 responses and 65 executed actions. All complete

@@ -2,16 +2,30 @@
 
 ## Project status
 
-The [delivery qualification](development/compiler_incident/delivery-qualification/FINDING.md)
-reproduces four recorded input sizes and shows that keeping only the newest result
-already requires 16,950/16,214 tokens at the sampled omissions. One report entry's
-assisted working group requires about 20–21k. The retained history needs attention;
-pinning bodies alone cannot make these states fit 16k. Six focused checks pass.
-The owner-directed [two-turn Qwen consultation](development/delivery_dialogue/SPEC.md)
-is prepared with the exact historical input and no preferred replacement. Its
-first input is 12,968 tokens, with 43,608 physical tokens remaining. Four dialogue
-checks pass. The completed comparison remains preserved below; no new host policy
-or contribution/restart trial has been adopted.
+The [delivery qualification and Qwen consultation are complete](development/delivery_dialogue/review/RESULTS.md).
+Both full responses and actual inputs were directly reviewed and independently
+verified. Qwen correctly distinguishes stored evidence from included evidence;
+after factual clarification it uses existing version guards and proposes a
+concrete optimizer patch. A separate offline copy passes **25 optimizer cases**,
+with only the unfinished report failing. These are reviewer-scripted checks,
+not an additional Qwen repair trajectory. The dialogue cost 48.05 request minutes.
+
+The [offline qualification](development/compiler_incident/delivery-qualification/FINDING.md)
+also narrows the diagnosis: small repair groups alone fit the early states at
+13,948/13,212 tokens when an unrelated capture is released; the tested report
+groups require about 20–21k. Later full event signal exceeds 16k even without
+bodies. Qwen's proposed larger ceiling admits the sampled states, but does not
+restore previously removed bodies or automatically assemble the report groups.
+Retain the interface and keep that budget option explicit. No metadata refactor,
+retention policy or new live working-set allowance is adopted.
+
+The [next preparation](development/delivery_dialogue/review/NEXT_STEPS.md) is
+continuation from the saved optimizer contribution into the historical report,
+with actual evidence/target inclusion through edit and check qualified first.
+Ten selected preparation checks pass; this is not a full-suite run. The audit
+preserves an inherited reserve-reporting error and derives the correct figures.
+Both dialogue responses finished without truncation; minimum sampled GPU free
+memory was 191 MiB under the accepted advisory policy. The two calls are consumed.
 
 The [owner-approved compiler comparison is closed](development/compiler_incident/review/RESULTS.md):
 **66 model responses, 65 executed actions, one checked submission**, with every
@@ -32,9 +46,9 @@ bodies remained visible. The complete attempt used 452,353 generated tokens and
 xhigh stayed fixed; minimum sampled free GPU memory was 246 MiB under the accepted
 advisory policy, with no observed CUDA failure. Context exhaustion did occur.
 
-The [next steps](development/compiler_incident/review/NEXT_STEPS.md) are offline
-qualification of admission and evidence delivery, followed by a separately
-prepared neutral Qwen dialogue before selecting any presentation change. No host
+The [follow-up proposed by that review](development/compiler_incident/review/NEXT_STEPS.md)
+has now completed its offline qualification and separate neutral Qwen dialogue
+above. No host
 patch, new memory mechanism or reasoning change has been adopted. The consumed
 attempt authorizes no retry or successor. The 32,768 generation reserve remains a
 planning allowance, not a cap or guarantee.

@@ -3,11 +3,13 @@
 The offline qualification reproduced all four recorded native input counts and
 measured exact, reviewer-selected retention alternatives with the pinned tokenizer.
 Keeping the newest result is already too large at both sampled omissions. A
-protected working group alone therefore cannot resolve these states at 16k.
+protected working group that also retains that result cannot fit those states
+at 16k. The supplemental measurement below distinguishes changing approach and
+releasing that unrelated result; some local work then fits.
 The completed run, its scores and its sources remain unchanged. No model
 completion or operating-host change occurred in this qualification.
 
-| Next decision | Recorded all-external input | Newest result only | Local repair plus newest | BUILD-A report entry plus newest | Both report entries plus newest |
+| Next decision | Recorded all-external input | Newest event payloads | Local repair plus newest | BUILD-A report entry plus newest | Both report entries plus newest |
 |---|---:|---:|---:|---:|---:|
 | C01 X023 | 13,424 | 16,950 | 17,481 | 20,906 | 24,430 |
 | C02 X021 | 12,688 | 16,214 | 16,745 | 20,171 | 23,695 |
@@ -22,6 +24,37 @@ unique minimum requirements or a model-selected plan. Keeping the newest result
 can include material unnecessary for a subsequently changed approach. The probes
 do not establish which group Qwen would choose, whether a smaller operation would
 suffice, or whether it would complete a contribution.
+
+“Newest” restores the event's existing action-payload and result-body records
+together. The two sampled omissions concern retrievals, whose payload is the
+returned result. At C01 X030 the rejected patch's error already belongs to retained
+signal; the extra payload is its proposed old/new text. Its 16,453 figure is not
+a claim that delivering the error itself requires those extra fields. The
+unchanged all-external history already exceeds 16k there.
+
+## Supplement: permit a changed approach to release unrelated material
+
+The proposed operating rule allows Qwen to change its approach. The initial
+probes' requirement to keep the newest result is stricter than that rule. A
+separately preserved [supplement](offline-002-groups-alone/MEASUREMENTS.json)
+therefore measures each same assisted group without automatically adding the
+newest event. It reuses the qualified rendering and selection code; it changes
+neither the original run nor the first qualification.
+
+The local repair's README and current unary source fit at **13,948 / 13,212**
+tokens in the two omission states. The newest original capture is excluded in
+both, so this does not establish delivery of that requested capture. It does
+show that these states do not make every useful contribution impossible.
+The report-A group still requires **20,906 / 20,171** tokens, because it needs
+the original capture. Both final denied states remain above 16k even for the
+local repair group alone (**16,969 / 16,678**).
+
+Twelve additional group measurements were made with the pinned offline tokenizer.
+Some reproduce identical texts from the first qualification; they are not twelve
+independent scenarios. This supplements the recommendation: distinguish the
+evidence required for a chosen contribution from an unconditional newest-body
+retention rule. It does not prove that Qwen will choose or finish that contribution,
+or that shorter trajectories remove the need to manage long accumulated history.
 
 Nonprefix retention cannot truthfully retain the old prefix counter. The derived
 measurement schema replaces it with an explicit sequence list and recomputes

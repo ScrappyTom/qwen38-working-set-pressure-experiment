@@ -22,18 +22,40 @@ needs a plausible link to the observed need, an assessable expected benefit and
 consideration of added cost. Retaining the current input is a complete outcome;
 neither long thinking alone nor an available suggestion obliges a change or run.
 
-The latest owner-directed follow-up has qualified delivery offline under
+The latest owner-directed follow-up is complete. It qualified delivery offline under
 `development/compiler_incident/delivery-qualification/`. Retaining only the
-newest result costs 16,950/16,214 tokens at the sampled omissions; a protected
-group alone cannot fit those states at 16k. Read its FINDING.md and immutable
-measurements. Six actual-tool/identity checks pass. The owner's latest “Proceed”
-also directs the separate bounded consultation under `development/delivery_dialogue/`:
-at most two responses, unchanged actor/settings, unassisted interpretation before
-adaptive source-checked clarification. Its first input is prepared at 12,968 tokens,
-leaving 43,608 physical tokens; actual server rendering must match before dispatch.
-Four dialogue checks pass after correcting a test-double aliasing mistake recorded
-in TESTING.md. This is new owner-directed development, not reuse of any consumed
-run's allowance. No contribution/restart study or retention policy is yet adopted.
+newest result costs 16,950/16,214 tokens at the sampled omissions; keeping that
+result with a protected group cannot fit those states at 16k. A supplement finds
+that README/current-source repair groups alone fit at 13,948/13,212 when the
+unrelated newest capture is released; report-entry groups still do not fit.
+Read its FINDING.md and immutable measurements. Six actual-tool/identity checks
+pass. The separate consultation under `development/delivery_dialogue/` consumed
+both authorized responses. Read its five review products and DECISION.json.
+Both complete thinking/final responses were directly read, sealed and verified.
+D1 correctly recognizes absent bodies but overstates same-version revalidation;
+D2 uses the existing guards after clarification and proposes a concrete optimizer
+patch. A separate offline copy passes all 25 optimizer cases, while the unfinished
+report remains the sole public failure. Those three reviewer-scripted operations
+are not additional Qwen actions, and Qwen never consumed their feedback.
+
+Qwen recommends retaining the interface and offers 23,808 as a larger working-set
+ceiling. The offline screen admits the four sampled states but does not restore
+already externalized bodies or assemble the tested report groups. Retain that
+budget option for explicit qualification, not as an adopted fix or unchanged 16k
+comparison. No metadata refactor, retention policy, working account or new live
+allowance is adopted. NEXT_STEPS.md prepares continuation from the checked saved
+optimizer into the historical report; its actual input/path must be qualified
+before a separate execution decision. The consumed two-turn scope permits no D3.
+
+The dialogue cost 48.05 model-request minutes and 46,915 output tokens. Both
+responses finish without truncation; sampled GPU free memory reaches 191 MiB
+under the accepted advisory policy. Supplemental offline tokenizations overlapped
+D1, limiting isolated runtime interpretation. Original receipt reserve flags
+incorrectly use the inherited 20,480 constant; verification preserves them and
+derives true against the selected 32,768 for both outputs. The 23,808 input gate
+was correct. Preserve pinned sources; future metrics must use selected settings.
+Four dialogue checks pass after the test-double correction recorded in TESTING.md;
+the ten selected preparation checks are not a full-suite run.
 
 The owner-approved compiler comparison under `development/compiler_incident/`
 is closed without retry. Read its `review/RESULTS.md`, companion transcript, host
@@ -56,9 +78,9 @@ while all previously acquired bodies remained visible. Do not attribute both
 outcomes to memory loss or infer a general condition advantage from these two
 unequally completed cells. Private thinking was omitted immediately in both arms.
 
-Next, qualify admission and delivery offline using these exact transitions, then
-prepare a small neutral Qwen dialogue before settling any presentation change.
-The concrete follow-up is in `review/NEXT_STEPS.md`; it authorizes no model calls.
+The admission/delivery qualification and neutral dialogue proposed by that review
+are now complete above. Its historical `review/NEXT_STEPS.md` does not authorize
+another model call or repetition of the completed development conversation.
 No host patch, memory mechanism, presentation variant or reasoning change has
 been adopted. q4/56,576, no MTP and uncapped xhigh stayed fixed; sampled GPU free
 memory reached 246 MiB under the accepted advisory policy, without observed CUDA
