@@ -32,6 +32,13 @@ This qualifies host paths, not Qwen's use of larger material or accumulated-hist
 capacity. The next pilot still needs a useful checked contribution and actual
 continuation from saved work.
 
+The [next larger-source candidate is screened](development/configparser_backport/CANDIDATE.md):
+a real configuration-parser maintenance task over 207,134 bytes of tagged CPython
+source, tests, documentation and license. Its internal continuation error is
+reproduced and the larger files are admitted. The failed initial probe and its
+corrected observation are both preserved. Full acceptance tests, model input and
+feedback admission remain to be prepared; no Qwen call has been made on this task.
+
 Preparation established the following offline facts:
 Three scripted report paths complete under the existing interface and an explicit
 23,808-token input ceiling, including a rejected edit and correction of an earlier

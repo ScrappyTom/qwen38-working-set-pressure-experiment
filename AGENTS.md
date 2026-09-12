@@ -76,6 +76,13 @@ Historical verification uses its frozen source revision; do not run a consumed
 execution against the changed current host or overwrite its original evidence.
 Next prepare a useful larger-material contribution and its continuation, including
 actual feedback/input admission. No new retention or memory policy is adopted.
+The next candidate is screened under `development/configparser_backport/`.
+Read CANDIDATE.md: 207,134 bytes of tagged CPython source/tests/documentation and
+license are admitted; a real historical continuation error is reproduced. Preserve
+the initial screen's incorrect `items()` assertion and corrected offline probe.
+No Qwen call or full regression-suite run has occurred. Finish dependencies,
+behavioral checks and actual input/feedback qualification before live exposure;
+this known backport is not a fresh independent-discovery benchmark.
 
 The saved-work continuation was prepared under
 `development/saved_work_continuation/`. Read its SPEC.md, PREPARATION_REVIEW.md,
