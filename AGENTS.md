@@ -80,9 +80,23 @@ The next candidate is screened under `development/configparser_backport/`.
 Read CANDIDATE.md: 207,134 bytes of tagged CPython source/tests/documentation and
 license are admitted; a real historical continuation error is reproduced. Preserve
 the initial screen's incorrect `items()` assertion and corrected offline probe.
-No Qwen call or full regression-suite run has occurred. Finish dependencies,
-behavioral checks and actual input/feedback qualification before live exposure;
-this known backport is not a fresh independent-discovery benchmark.
+The task's preparation is now complete. Read its SPEC.md, PREPARATION_REVIEW.md,
+TESTING.md and the sealed input-qualification-003 package. Exact upstream test
+support brings the candidate to ten files/337,239 bytes. The 355-test upstream
+suite runs with five skips; the reference passes the new independent contract,
+while six negative variants fail. Preserve the preparation's mistaken message
+assertion, oversized scripted grammar arguments, relative-path sealing failure
+and incorrect test expectation as documented. The corrected 23/33/24-action
+routes validate every action against the real grammar and deliver every immediate
+result, with peak native input 23,782 and older bodies externalized. Fifteen
+focused runner tests pass, including exact-input/actual-tool continuation.
+The new runner and EXECUTION_MANIFEST freeze one max-40-action attempt, seed
+961207, under the owner's continuing goal. Verify native equality, source,
+runtime and latest-result delivery before exposure. No Qwen call has yet occurred
+on this task. This known backport is not a fresh independent-discovery benchmark;
+review actual code, new tests and documentation as well as all complete transcripts.
+No new metadata, retention or reasoning policy is adopted. Unused scope in a
+consumed run still authorizes no retry or rescue.
 
 The saved-work continuation was prepared under
 `development/saved_work_continuation/`. Read its SPEC.md, PREPARATION_REVIEW.md,

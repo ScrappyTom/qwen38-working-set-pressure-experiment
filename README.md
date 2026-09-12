@@ -32,12 +32,18 @@ This qualifies host paths, not Qwen's use of larger material or accumulated-hist
 capacity. The next pilot still needs a useful checked contribution and actual
 continuation from saved work.
 
-The [next larger-source candidate is screened](development/configparser_backport/CANDIDATE.md):
-a real configuration-parser maintenance task over 207,134 bytes of tagged CPython
-source, tests, documentation and license. Its internal continuation error is
-reproduced and the larger files are admitted. The failed initial probe and its
-corrected observation are both preserved. Full acceptance tests, model input and
-feedback admission remain to be prepared; no Qwen call has been made on this task.
+The [larger-source task is now prepared](development/configparser_backport/PREPARATION_REVIEW.md):
+a real configuration-parser backport over ten tagged CPython source, test,
+documentation and support files totaling 337,239 bytes. The original 355-test
+suite runs with five skips; the reference passes the independent requested
+contract, while six negative variants fail. Corrected 23/33/24-action scripted
+paths fit the 23,808 input ceiling, deliver every immediate result and finish
+checked work after older bodies leave the input. Fifteen focused runner tests
+pass, including exact native inputs and actual tool-result replay. Preparation
+mistakes and their corrections remain preserved. One max-40-action Qwen pilot
+is frozen under the owner's continuing goal; no call on this task has yet been
+sent. This qualifies feasibility on larger real material, not model success or
+novel discovery. The interface and reasoning policy remain unchanged.
 
 Preparation established the following offline facts:
 Three scripted report paths complete under the existing interface and an explicit

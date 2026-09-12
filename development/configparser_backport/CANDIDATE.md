@@ -2,8 +2,9 @@
 
 Use this as the next preparation candidate for useful work on larger source and
 documentation. It is a known historical backport, not a fresh independent-discovery
-benchmark or an unchanged replication of Experiment 020. No model request has
-been made and the live task is not yet prepared.
+benchmark or an unchanged replication of Experiment 020. This screen's prospective
+requirements are now completed in PREPARATION_REVIEW.md and SPEC.md. No model
+request has been made during preparation; the earlier screen below is preserved.
 
 The actual CPython v3.12.10 implementation accepts a valueless option and ordinary
 multi-line string values, but an indented continuation after a valueless option
