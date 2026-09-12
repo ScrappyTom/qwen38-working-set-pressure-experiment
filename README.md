@@ -2,6 +2,16 @@
 
 ## Project status
 
+The [saved-work continuation is prepared](development/saved_work_continuation/PREPARATION_REVIEW.md).
+Three scripted report paths complete under the existing interface and an explicit
+23,808-token input ceiling, including a rejected edit and correction of an earlier
+wrong report entry. Peak admitted input is 23,615; this qualifies feedback delivery,
+not uncapped generation length. All 53 scripted operations replay, and the actual
+runner completes an exact-input mock rehearsal. Fourteen selected tests pass.
+No Qwen calls were made. The frozen proposal is one assisted two-phase attempt,
+at most eight model actions per phase, pending a separate execution decision.
+No compact metadata view or new memory mechanism was adopted.
+
 The [delivery qualification and Qwen consultation are complete](development/delivery_dialogue/review/RESULTS.md).
 Both full responses and actual inputs were directly reviewed and independently
 verified. Qwen correctly distinguishes stored evidence from included evidence;
@@ -19,7 +29,7 @@ restore previously removed bodies or automatically assemble the report groups.
 Retain the interface and keep that budget option explicit. No metadata refactor,
 retention policy or new live working-set allowance is adopted.
 
-The [next preparation](development/delivery_dialogue/review/NEXT_STEPS.md) is
+The [preceding next-step recommendation](development/delivery_dialogue/review/NEXT_STEPS.md) called for
 continuation from the saved optimizer contribution into the historical report,
 with actual evidence/target inclusion through edit and check qualified first.
 Ten selected preparation checks pass; this is not a full-suite run. The audit

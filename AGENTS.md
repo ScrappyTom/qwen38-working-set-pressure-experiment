@@ -22,7 +22,21 @@ needs a plausible link to the observed need, an assessable expected benefit and
 consideration of added cost. Retaining the current input is a complete outcome;
 neither long thinking alone nor an available suggestion obliges a change or run.
 
-The latest owner-directed follow-up is complete. It qualified delivery offline under
+The saved-work continuation is now prepared under
+`development/saved_work_continuation/`. Read its SPEC.md, PREPARATION_REVIEW.md,
+TESTING.md, sealed preparation and exact-input mock rehearsal. The existing V3
+view and prefix policy fit three scripted saved-report paths at an explicit
+23,808 ceiling; peak admitted input is 23,615, leaving 32,961 generation tokens.
+This is input/feedback feasibility, not a bound on uncapped generation. The old
+C02 reacquisition screen still drops the declared report group at that ceiling.
+The new start uses the separate saved proposal history, not a rescue of C02.
+Fourteen selected tests pass; all 53 scripted route operations replay exactly.
+No new Qwen calls or metadata/retention refactor occurred. The frozen manifest
+proposes at most eight actions in each of two assisted phases, 16 completions
+total. A separate owner execution decision is still required for that concrete
+attempt; the already accepted advisory GPU-margin policy remains in force.
+
+The preceding owner-directed follow-up is complete. It qualified delivery offline under
 `development/compiler_incident/delivery-qualification/`. Retaining only the
 newest result costs 16,950/16,214 tokens at the sampled omissions; keeping that
 result with a protected group cannot fit those states at 16k. A supplement finds
