@@ -47,6 +47,17 @@ No pinning policy, memory feature, wording comparison or reasoning cap is adopte
 The sampled complete report groups still exceed 23,808 by 73/565 tokens after
 unrelated bodies are removed. Group capacity is not behavioral efficacy.
 
+That consultation is now prepared under `development/saved_work_dialogue/`.
+Read its SPEC.md and PREPARATION_REVIEW.md. D1 supplies the exact archived C09
+input without its response or the reviewer's answer; 22,286 native input tokens
+leave 34,290 physical generation tokens. Five focused mocked safeguards pass.
+The continuing goal authorizes this concrete at-most-two-response consultation;
+inspect actual turn directories/records before dispatch to avoid duplicates.
+Seal and directly review D1 before deciding whether an adaptive D2 is useful and
+fits. Only 1,522 input tokens remain for the first final answer and follow-up;
+do not silently omit history or change reasoning to force that second call.
+The 87 prepared source bindings must remain unchanged during exposure.
+
 The broader goal is not achieved by this assisted report task. Read
 `development/long_work/READINESS.md` and FINDING.md: nine real files fail 24k
 admission, while a separate process-local larger-file qualification passes 116
