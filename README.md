@@ -9,14 +9,17 @@ directly reviewed and the sealed path independently replayed. Saved work survive
 later evidence externalization, but repeated interpretation remains costly:
 113,857 generated tokens and 123.63 task-loop minutes. The final response
 misquotes a still-visible subtree before preserving the correct checked report.
-The next bounded Qwen consultation concerns that concrete interaction problem;
+The separate Qwen consultation examined that concrete interaction problem;
 no new presentation or memory mechanism is adopted.
 
-The [consultation is prepared](development/saved_work_dialogue/PREPARATION_REVIEW.md)
-with the exact final working input, two neutral interpretation questions and five
-passing safeguard tests. Its first request uses 22,286 native input tokens;
-any second response depends on actual content and capacity. Preparation makes
-zero completion requests.
+The [consultation is closed after one response](development/saved_work_dialogue/review/RESULTS.md).
+Qwen correctly reads the disputed resident tree, distinguishes historical evidence
+from the current passing check, and chooses submission in prose. Complete thinking
+and final were directly reviewed; all 87 source bindings and exact native/output
+bytes verify. It still repeatedly reconsiders correct conclusions: 16,188 generated
+tokens and 17.46 model-request minutes. The focused question is development
+assistance, not an unassisted replay. Retain the interface and close D2 unconsumed;
+another request is not earned by length alone.
 
 The broader goal remains active. A [larger-source qualification](development/long_work/FINDING.md)
 passes all 116 actual offline operations on 40 real files totaling 602,261 bytes,

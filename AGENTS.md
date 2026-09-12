@@ -40,23 +40,25 @@ not uniformly correct understanding. The 123.63-minute loop uses 113,857 generat
 tokens. The owned runtime is closed; minimum sampled free GPU memory is 267 MiB
 under the accepted advisory policy. No reasoning/runtime setting changed.
 
-The next separate Qwen consultation should examine this actual resident-evidence
-misreading and use of checked saved work before settling a presentation. Preserve
-its interpretation before clarification; retaining the interface remains valid.
-No pinning policy, memory feature, wording comparison or reasoning cap is adopted.
+The separate Qwen consultation examined this actual resident-evidence misreading
+and use of checked saved work before settling a presentation. Its result retains
+the interface. No pinning policy, memory feature, wording comparison or reasoning
+cap is adopted.
 The sampled complete report groups still exceed 23,808 by 73/565 tokens after
 unrelated bodies are removed. Group capacity is not behavioral efficacy.
 
-That consultation is now prepared under `development/saved_work_dialogue/`.
-Read its SPEC.md and PREPARATION_REVIEW.md. D1 supplies the exact archived C09
-input without its response or the reviewer's answer; 22,286 native input tokens
-leave 34,290 physical generation tokens. Five focused mocked safeguards pass.
-The continuing goal authorizes this concrete at-most-two-response consultation;
-inspect actual turn directories/records before dispatch to avoid duplicates.
-Seal and directly review D1 before deciding whether an adaptive D2 is useful and
-fits. Only 1,522 input tokens remain for the first final answer and follow-up;
-do not silently omit history or change reasoning to force that second call.
-The 87 prepared source bindings must remain unchanged during exposure.
+That consultation is closed after one response under
+`development/saved_work_dialogue/`. Read D1_REVIEW.md and the five review products
+and DECISION.json under its review directory. The exact archived C09 input is
+supplied without its response or the reviewer's answer. Qwen correctly reads the
+resident unary minus, separates evidence from checked saved work, and chooses
+submission in prose. Its complete thinking still repeatedly reconsiders those
+conclusions. The directed question is assistance, not an unassisted replay or
+causal explanation of the original error. All 87 source identities, native input,
+raw output and custody verify. Cost is 16,188 generated tokens and 17.46 request
+minutes; minimum free GPU memory is 239 MiB under the accepted advisory policy.
+The owned runtime is closed. D2 is closed unconsumed because no unresolved question
+earns it; do not automatically spend that unused response. Retain the interface.
 
 The broader goal is not achieved by this assisted report task. Read
 `development/long_work/READINESS.md` and FINDING.md: nine real files fail 24k
