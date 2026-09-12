@@ -6,7 +6,7 @@ from pathlib import Path
 
 import prepare_interface_comparison as reference
 import prepare_interface_wording as wording
-from working_set_exp.candidate import Candidate
+from working_set_exp.candidate import Candidate, MAX_FILE_BYTES
 from working_set_exp.custody import ArtifactStore, RecordLog, verify_records
 from working_set_exp.ecological_pilot_v2 import EcologicalFixture, admitted_donor_candidate, build_request
 from working_set_exp.interface_consultation import endpoint_request, new_state
@@ -69,7 +69,7 @@ def load_fixture(folder):
     return fixture(candidate, (folder / "TASK.txt").read_text(encoding="utf-8"), (folder / "PUBLIC_CHECK.py").read_bytes())
 
 
-def tool_reference(grammar):
+def tool_reference(grammar, *, candidate: Candidate | None = None):
     # Keep the schema-generated requirements. Replace only the obsolete effects
     # with facts earned by the return repair, then include the reviewed addendum.
     text = reference.tool_reference(grammar)
@@ -89,7 +89,12 @@ def tool_reference(grammar):
         "Recorded reads describe acquisition of the indicated source version; after an edit they do not establish inspection of changed successor content. "
         "An unchanged file can remain applicable across a candidate change.\n"
     )
-    return text.replace(reference.INTRO.rstrip(), reference.INTRO.rstrip() + "\n\n" + common, 1)
+    text = text.replace(reference.INTRO.rstrip(), reference.INTRO.rstrip() + "\n\n" + common, 1)
+    if candidate is not None:
+        original = f"at most {MAX_FILE_BYTES:,} bytes\nper file"
+        require(text.count(original) == 1, "reference file limit needs review")
+        text = text.replace(original, f"at most {candidate.max_file_bytes:,} bytes\nper file", 1)
+    return text
 
 
 def request_for(value, seed, visible_reference):

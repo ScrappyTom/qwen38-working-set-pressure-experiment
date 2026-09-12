@@ -21,13 +21,16 @@ tokens and 17.46 model-request minutes. The focused question is development
 assistance, not an unassisted replay. Retain the interface and close D2 unconsumed;
 another request is not earned by length alone.
 
-The broader goal remains active. A [larger-source qualification](development/long_work/FINDING.md)
-passes all 116 actual offline operations on 40 real files totaling 602,261 bytes,
-including exact paging/recovery and a guarded edit of a 47,907-byte file. It earns
-preparation of an explicit larger-file configuration. It is not model-level large
-repository success or a solution to accumulated-history capacity. The sampled
-full report groups still exceed the current input gate even with unrelated
-bodies removed; simply pinning them is insufficient.
+The broader goal remains active. The [explicit larger-file option is qualified](development/long_work/EXPLICIT_FILE_FINDING.md),
+with the historical 24,000-byte default unchanged. Five new focused tests and
+58 selected existing checks pass. The actual host completes 508 offline operations
+on 40 real source files (602,677 bytes) plus a separate escaped 1 MiB boundary
+file: exact paging/recovery, guarded mutation, stale rejection and syntax checking
+all hold. Eight historical wording actions and all 21 saved-work actions replay
+exactly under the default. The constructed stress file is not model-task material.
+This qualifies host paths, not Qwen's use of larger material or accumulated-history
+capacity. The next pilot still needs a useful checked contribution and actual
+continuation from saved work.
 
 Preparation established the following offline facts:
 Three scripted report paths complete under the existing interface and an explicit

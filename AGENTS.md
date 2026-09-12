@@ -61,11 +61,21 @@ The owned runtime is closed. D2 is closed unconsumed because no unresolved quest
 earns it; do not automatically spend that unused response. Retain the interface.
 
 The broader goal is not achieved by this assisted report task. Read
-`development/long_work/READINESS.md` and FINDING.md: nine real files fail 24k
-admission, while a separate process-local larger-file qualification passes 116
-actual paging/recovery/edit/check operations on 40 files and 602,261 bytes.
-This earns an explicit larger-file configuration for preparation, not a claim of
-model success, adoption of the counterfactual limit or resolution of history growth.
+`development/long_work/EXPLICIT_FILE_FINDING.md` and LARGE_FILE_PREPARATION.md.
+The earned explicit per-candidate file limit is implemented, with the historical
+24,000-byte default unchanged. Five new focused tests and 58 selected existing
+checks pass. A configured 1,048,576-byte qualification passes 508 actual operations
+on 40 real source files (602,677 bytes) plus a separate escaped 1 MiB boundary
+file; that constructed file must not become model-task padding. Eight historical
+wording actions and all 21 saved-work actions replay exactly under the default.
+This qualifies host paths, not model-level large-material work or history growth.
+New larger fixtures must pass the selected policy at creation and reconstruction
+and generate the visible tool reference from the actual candidate. Keep all
+other limits and the model/runtime/reasoning policy explicit and unchanged.
+Historical verification uses its frozen source revision; do not run a consumed
+execution against the changed current host or overwrite its original evidence.
+Next prepare a useful larger-material contribution and its continuation, including
+actual feedback/input admission. No new retention or memory policy is adopted.
 
 The saved-work continuation was prepared under
 `development/saved_work_continuation/`. Read its SPEC.md, PREPARATION_REVIEW.md,

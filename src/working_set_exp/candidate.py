@@ -36,16 +36,21 @@ def canonical_path(value: str, *, allow_root: bool = False) -> str:
 class Candidate:
     files: tuple[tuple[str, bytes], ...]
     candidate_id: str
+    max_file_bytes: int = MAX_FILE_BYTES
 
     @classmethod
-    def create(cls, files: dict[str, bytes]) -> "Candidate":
+    def create(cls, files: dict[str, bytes], *, max_file_bytes: int | None = None) -> "Candidate":
+        if max_file_bytes is None:
+            max_file_bytes = MAX_FILE_BYTES
+        if type(max_file_bytes) is not int or not 1 <= max_file_bytes <= MAX_TOTAL_BYTES:
+            raise CandidateError("candidate file byte limit is outside bounds")
         if not files or len(files) > MAX_FILES:
             raise CandidateError("candidate file count is outside bounds")
         rows: list[tuple[str, bytes]] = []
         total = 0
         for path, data in sorted(files.items()):
             canonical_path(path)
-            if not isinstance(data, bytes) or len(data) > MAX_FILE_BYTES:
+            if not isinstance(data, bytes) or len(data) > max_file_bytes:
                 raise CandidateError(f"file exceeds byte bound: {path}")
             try:
                 text = data.decode("utf-8")
@@ -63,7 +68,7 @@ class Candidate:
                 [{"path": path, "sha256": sha256_bytes(data), "size_bytes": len(data)} for path, data in rows]
             )
         )
-        return cls(tuple(rows), identity)
+        return cls(tuple(rows), identity, max_file_bytes)
 
     @property
     def file_map(self) -> dict[str, bytes]:
@@ -103,7 +108,7 @@ class Candidate:
         successor_text = text.replace(old, new, 1)
         successor_files = self.file_map
         successor_files[path] = successor_text.encode("utf-8")
-        successor = Candidate.create(successor_files)
+        successor = Candidate.create(successor_files, max_file_bytes=self.max_file_bytes)
         if successor.candidate_id == self.candidate_id:
             raise CandidateError("patch must change candidate identity")
         diff = "".join(
@@ -134,4 +139,4 @@ class Candidate:
         return sorted(children.items())
 
     def with_files(self, rows: Iterable[tuple[str, bytes]]) -> "Candidate":
-        return Candidate.create(dict(rows))
+        return Candidate.create(dict(rows), max_file_bytes=self.max_file_bytes)
