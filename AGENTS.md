@@ -22,7 +22,39 @@ needs a plausible link to the observed need, an assessable expected benefit and
 consideration of added cost. Retaining the current input is a complete outcome;
 neither long thinking alone nor an available suggestion obliges a change or run.
 
-The saved-work continuation is now prepared under
+The owner has given the continuing goal: keep working with Qwen as test pilot
+and consultant until the system can complete long-running tasks and work with
+large documents or code repositories. That direction authorizes progressing the
+concrete prepared work. `development/saved_work_continuation/run-001` is closed:
+nine model actions, correction of malformed report JSON, both correct entries,
+26 passing public cases and checked submission. Read its five review products
+and DECISION.json. All complete thinking/final outputs were directly reviewed;
+all 21 setup/model operations and 14 native inputs independently replay/reconstruct.
+The attempt is consumed; do not duplicate, resume or rescue it.
+
+The report survives later actual pressure unchanged, while README/original
+reacquisition displaces other evidence. C09 repeatedly misquotes a BUILD-A subtree
+that remains visible, then submits using the actual passing check and remaining
+allowance without resolving its reading. This is costly successful operation,
+not uniformly correct understanding. The 123.63-minute loop uses 113,857 generated
+tokens. The owned runtime is closed; minimum sampled free GPU memory is 267 MiB
+under the accepted advisory policy. No reasoning/runtime setting changed.
+
+The next separate Qwen consultation should examine this actual resident-evidence
+misreading and use of checked saved work before settling a presentation. Preserve
+its interpretation before clarification; retaining the interface remains valid.
+No pinning policy, memory feature, wording comparison or reasoning cap is adopted.
+The sampled complete report groups still exceed 23,808 by 73/565 tokens after
+unrelated bodies are removed. Group capacity is not behavioral efficacy.
+
+The broader goal is not achieved by this assisted report task. Read
+`development/long_work/READINESS.md` and FINDING.md: nine real files fail 24k
+admission, while a separate process-local larger-file qualification passes 116
+actual paging/recovery/edit/check operations on 40 files and 602,261 bytes.
+This earns an explicit larger-file configuration for preparation, not a claim of
+model success, adoption of the counterfactual limit or resolution of history growth.
+
+The saved-work continuation was prepared under
 `development/saved_work_continuation/`. Read its SPEC.md, PREPARATION_REVIEW.md,
 TESTING.md, sealed preparation and exact-input mock rehearsal. The existing V3
 view and prefix policy fit three scripted saved-report paths at an explicit
@@ -31,10 +63,11 @@ This is input/feedback feasibility, not a bound on uncapped generation. The old
 C02 reacquisition screen still drops the declared report group at that ceiling.
 The new start uses the separate saved proposal history, not a rescue of C02.
 Fourteen selected tests pass; all 53 scripted route operations replay exactly.
-No new Qwen calls or metadata/retention refactor occurred. The frozen manifest
+No Qwen calls or metadata/retention refactor occurred during preparation. The frozen manifest
 proposes at most eight actions in each of two assisted phases, 16 completions
-total. A separate owner execution decision is still required for that concrete
-attempt; the already accepted advisory GPU-margin policy remains in force.
+total. The owner's subsequent continuing-goal direction is recorded as the
+authorization basis in the attempt receipt; the already accepted advisory
+GPU-margin policy remains in force. Do not expand this frozen attempt's scope.
 
 The preceding owner-directed follow-up is complete. It qualified delivery offline under
 `development/compiler_incident/delivery-qualification/`. Retaining only the

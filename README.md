@@ -2,14 +2,32 @@
 
 ## Project status
 
-The [saved-work continuation is prepared](development/saved_work_continuation/PREPARATION_REVIEW.md).
+The [saved-work continuation is complete](development/saved_work_continuation/review/RESULTS.md):
+nine model actions, correction of malformed report JSON, two correct entries,
+26 passing public cases and checked submission. All complete responses were
+directly reviewed and the sealed path independently replayed. Saved work survives
+later evidence externalization, but repeated interpretation remains costly:
+113,857 generated tokens and 123.63 task-loop minutes. The final response
+misquotes a still-visible subtree before preserving the correct checked report.
+The next bounded Qwen consultation concerns that concrete interaction problem;
+no new presentation or memory mechanism is adopted.
+
+The broader goal remains active. A [larger-source qualification](development/long_work/FINDING.md)
+passes all 116 actual offline operations on 40 real files totaling 602,261 bytes,
+including exact paging/recovery and a guarded edit of a 47,907-byte file. It earns
+preparation of an explicit larger-file configuration. It is not model-level large
+repository success or a solution to accumulated-history capacity. The sampled
+full report groups still exceed the current input gate even with unrelated
+bodies removed; simply pinning them is insufficient.
+
+Preparation established the following offline facts:
 Three scripted report paths complete under the existing interface and an explicit
 23,808-token input ceiling, including a rejected edit and correction of an earlier
 wrong report entry. Peak admitted input is 23,615; this qualifies feedback delivery,
 not uncapped generation length. All 53 scripted operations replay, and the actual
 runner completes an exact-input mock rehearsal. Fourteen selected tests pass.
-No Qwen calls were made. The frozen proposal is one assisted two-phase attempt,
-at most eight model actions per phase, pending a separate execution decision.
+No Qwen calls were made during preparation. The frozen execution is one assisted
+two-phase attempt, at most eight model actions per phase.
 No compact metadata view or new memory mechanism was adopted.
 
 The [delivery qualification and Qwen consultation are complete](development/delivery_dialogue/review/RESULTS.md).
