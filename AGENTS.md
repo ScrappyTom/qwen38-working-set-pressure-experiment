@@ -14,6 +14,18 @@ the coached execution approach below; completed assisted records keep their
 original labels and evidence. The current plan is
 `development/bounded_working_set/SYMBIOTIC_PLAN.md`.
 
+The uncoached runner and a useful next coverage task are now prepared under
+`development/uncoached_contribution/`; read PREPARATION_REVIEW.md and SPEC.md.
+There have been no new Qwen completion requests. Fifty-eight selected tests and
+two native scripted contribution paths pass and replay; broad acquisition peaks
+at 23,450 of 23,808 input tokens. These are host qualifications, not model outcomes.
+The opt-in session also fixes a reproduced contract-scope defect: an old passing
+check applies only when both candidate and checker definition match. Preserve
+historical unbound results. The proposed new task extends copying/serialization
+coverage from the completed backport with an empty initial source group. Its
+16-request / 24-operation package is prepared, not executed; do not reuse prior
+allowances or insert reviewer coaching during its eventual run.
+
 The documentation contribution is now closed and checked under c52f26fc; read
 `development/bounded_working_set/parser-documentation/review/RESULTS.md` and its
 four complete turn reviews. Qwen saves both documentation additions, checks and

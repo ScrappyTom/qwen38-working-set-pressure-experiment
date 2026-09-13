@@ -9,6 +9,17 @@ without reviewer coaching. Address and qualify host defects before the next
 exposure. The assisted contributions below retain their original evidence and
 classification; future evaluation must exercise an uncoached working loop.
 
+The [uncoached runner and next task are prepared](development/uncoached_contribution/PREPARATION_REVIEW.md).
+Fifty-eight selected tests and two complete native scripted paths pass and replay,
+including broad reading, failed-check correction and paired edit/check delivery.
+The broad route peaks at 23,450 of 23,808 input tokens. A reproduced host defect
+is also fixed prospectively: an earlier task's passing check cannot authorize
+different requirements merely because the candidate is unchanged. The new task
+adds copying/serialization regressions while preserving the completed backport.
+Its initial source group is empty; Qwen must select evidence and complete the work
+without reviewer coaching. The package is ready, with zero Qwen inference so far;
+scripted success does not establish autonomous selection or an efficiency gain.
+
 The [documentation contribution is complete](development/bounded_working_set/parser-documentation/review/RESULTS.md).
 With reviewer-selected exact source and factual dialogue, Qwen saves the remaining
 API and exception documentation, consumes a passing check and submits. The saved

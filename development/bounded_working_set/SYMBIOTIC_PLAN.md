@@ -42,13 +42,22 @@ without relying on facts a reviewer plans to supply later. Repeated deliberation
 and resolved wrapper uncertainty remain observations, not sufficient grounds for
 another field, memory mechanism or host patch.
 
-The next execution package must use the corrected wire/decoder path and an
-uncoached loop. Do not reuse the closed assisted adapters as an active coached
-continuation or relabel their inputs. Qualify request generation, available
-source access, complete feedback, edit/check binding and closure without manual
-messages before sending model requests. Use an independently useful contribution;
-the completed parser work and its closed allowances are preserved. No model run
-or new reasoning policy is initiated by this clarification.
+That integration is now prepared in
+[uncoached_contribution](../uncoached_contribution/PREPARATION_REVIEW.md), with
+58 selected checks and two native scripted full-loop paths passing. The broad
+route reaches 23,450 input tokens and then narrows to useful source, with complete
+actual feedback. A reproduced check-scope defect is fixed in the opt-in session:
+candidate identity alone cannot make an old task's check applicable to a new
+checker definition. The concrete next task adds missing copying/serialization
+regressions to the completed parser work; it starts with no selected source group.
+The package permits 16 requests / 24 operations but has sent no Qwen completion.
+
+Do not reuse the closed assisted adapters as an active coached continuation or
+relabel their inputs. The automatic runner supplies only declared task/state and
+actual operation feedback. The native routes establish host feasibility, not
+Qwen's ability to select evidence or complete the contribution. The next execution
+is a separate identified attempt; review it before any subsequent consultation
+or reasoning comparison. The completed work and closed allowances are preserved.
 
 The following records the earlier implemented plan and its actual assisted result.
 
