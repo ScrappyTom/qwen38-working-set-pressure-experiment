@@ -18,7 +18,8 @@ class RunLog(RecordLog):
         return super().append(kind, payload, artifacts)
 
 
-def verify_package():
+def verify_package(task_module=None):
+    task = task_module or globals()["task"]
     seal = task.read(task.PACKAGE/"SEAL.json")
     task.require(seal["status"] == "offline_full_path_qualified" and seal["completion_requests"] == 0,
                  "offline qualification incomplete")
@@ -33,8 +34,9 @@ def verify_package():
     return task.read(task.PACKAGE/"QUALIFICATION.json")
 
 
-def plan():
-    result = verify_package()
+def plan(task_module=None):
+    task = task_module or globals()["task"]
+    result = verify_package(task)
     return dict(schema="bounded-parser-execution-v1", actor=task.ACTOR, seed=task.SEED, maximum_requests=task.CALL_LIMIT,
                 input_ceiling=INPUT_LIMIT, initial=result["initial"], source_sha256=task.source_identities(),
                 preparation_seal_sha256=sha256_file(task.PACKAGE/"SEAL.json"),
@@ -45,7 +47,9 @@ def plan():
 
 class Loop:
     def __init__(self, output, store, log, *, url="offline", post=None, render=None, health=None,
-                 source_check=None, initial=None):
+                 source_check=None, initial=None, task_module=None):
+        task = task_module or globals()["task"]
+        self.task = task
         self.output, self.store, self.log, self.url = output, store, log, url
         self.post = post or task.base.post
         self.render = render or self.native_render
@@ -53,8 +57,27 @@ class Loop:
         self.source_check = source_check or (lambda: None)
         self.initial = initial
         self.cache, self.counter, self.sent = {}, 0, 0
+        self.operator_stop = None
+
+    def stop_requested(self):
+        """Drain the current operation; never cancel or invent its response."""
+        task = self.task
+        path = self.output / "STOP_REQUEST.txt"
+        if self.operator_stop is not None:
+            return True
+        if not path.exists():
+            return False
+        raw = path.read_bytes()
+        task.require(0 < len(raw) <= 4096 and raw.decode("utf-8").strip(), "invalid operator stop reason")
+        self.operator_stop = dict(reason=raw.decode("utf-8").strip(),
+            policy="finish_current_operation_then_close", requests_sent=self.sent,
+            no_model_instruction_added=True)
+        self.log.append("operator_stop_observed", self.operator_stop,
+                        [self.store.put("operator-stop-request.txt", raw)])
+        return True
 
     def native_render(self, request, stem):
+        task = self.task
         def send(url, route, raw, timeout):
             task.require(route in {"/apply-template", "/tokenize"}, "native preparation route differs")
             suffix = "template" if route == "/apply-template" else "tokens"
@@ -72,6 +95,7 @@ class Loop:
         return task.pilot.render_only(self.url,request,post=send)
 
     def measure(self, view):
+        task = self.task
         request = task.request_for(view)
         raw = canonical_json_bytes(request)
         digest = sha256_bytes(raw)
@@ -95,6 +119,7 @@ class Loop:
         return count
 
     def snapshot(self, session, stem):
+        task = self.task
         artifacts=[self.store.put(stem+"-state.json",canonical_json_bytes(task.snapshot(session))),
                    self.store.put(stem+"-candidate.json",task.candidate_bytes(session.candidate))]
         for number,diff in session.diffs.items():
@@ -108,6 +133,7 @@ class Loop:
         self.log.append("state_saved",dict(stem=stem,candidate_id=session.candidate.candidate_id),artifacts)
 
     def invoke(self, session):
+        task = self.task
         task.require(not session.submitted and not session.delivery_blocked and self.sent < session.call_limit,
                      "terminal or allowance boundary")
         view = session.view()
@@ -118,10 +144,12 @@ class Loop:
         if self.sent == 0 and self.initial:
             for key in ("prompt_tokens","request_sha256","native_sha256"):
                 task.require(selected[key] == self.initial[key], "first input differs from frozen qualification")
-        session.mark_delivered(view)
         raw = canonical_json_bytes(selected["request"])
         task.require(sha256_bytes(raw) == selected["request_sha256"], "prepared input changed")
         self.source_check()
+        if self.stop_requested():
+            return None
+        session.mark_delivered(view)
         tag = f"C{self.sent+1:02d}"
         self.log.append("invocation_started",dict(id=tag,input_stem=selected["stem"],prompt_tokens=count,
             completion_sent=True,**self.health()),[])
@@ -176,10 +204,17 @@ class Loop:
         self.snapshot(session,"starting")
         disposition="action_allowance_exhausted"
         while self.sent < session.call_limit and not session.submitted:
+            if self.stop_requested():
+                disposition="operator_stopped"
+                break
             if session.delivery_blocked:
                 disposition="feedback_capacity_denied"
                 break
             self.invoke(session)
+        # A stop arriving during the final operation is still recorded, even if
+        # that operation also consumed the allowance or achieved submission.
+        if self.stop_requested() and not session.submitted:
+            disposition="operator_stopped"
         if session.submitted:
             disposition="checked_submission"
         self.snapshot(session,"final")
@@ -190,10 +225,11 @@ class Loop:
         return result
 
 
-def run_once(args):
+def run_once(args, task_module=None):
+    task = task_module or globals()["task"]
     task.require(bool(args.owner_direction.strip()),"record owner direction")
     manifest=task.read(task.MANIFEST)
-    task.require(args.manifest_sha256 == sha256_file(task.MANIFEST) and manifest == plan(), "execution package differs")
+    task.require(args.manifest_sha256 == sha256_file(task.MANIFEST) and manifest == plan(task), "execution package differs")
     task.require(not task.RUN.exists(), "attempt exists; no retry or resume")
     server,model,_=task.runtime_paths()
     args.server,args.model,args.output=server,model,task.RUN
@@ -204,7 +240,7 @@ def run_once(args):
     error,outcome=None,None
     try:
         with task.base.owned_runtime(args,store,log) as url:
-            loop=Loop(task.RUN,store,log,url=url,source_check=lambda:task.verify_sources(manifest["source_sha256"]),initial=manifest["initial"])
+            loop=Loop(task.RUN,store,log,url=url,source_check=lambda:task.verify_sources(manifest["source_sha256"]),initial=manifest["initial"],task_module=task)
             outcome=loop.execute(task.initial_session())
             task.pilot.health(task.RUN)
     except BaseException as problem:

@@ -77,6 +77,18 @@ request has exercised these corrections. The original SPEC/manifest remain froze
 historical documents, not an execution package for the changed current host.
 Run the original verifier from 56deae92; it deliberately rejects changed sources.
 
+The owner next approved implementing the reviewed approach. Read
+`development/bounded_working_set/REVISED_APPROACH.md`. Both actual broad-reading
+states now complete the scripted feedback/group/edit/check path offline, with
+peak input 23,564. This remains researcher-selected feasibility. The runner has
+a graceful, recorded stop that drains the current operation and closes/seals;
+it does not cap or interrupt thinking. Eleven selected preparation tests pass.
+The focused C08 consultation is prepared under visibility-dialogue (at most two
+responses, with direct first-response review before any clarification). Continuing
+owner authorization covers this preparation, consultation and a separately frozen
+completed-contribution evaluation. Do not request duplicate approval. Count host
+enforcement separately from model choice; using work_on itself is not the outcome.
+
 The owner has given the continuing goal: keep working with Qwen as test pilot
 and consultant until the system can complete long-running tasks and work with
 large documents or code repositories. That direction authorizes progressing the

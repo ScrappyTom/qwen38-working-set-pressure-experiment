@@ -3,6 +3,9 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from contextlib import contextmanager
+from types import SimpleNamespace
+from unittest.mock import patch
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"scripts"))
@@ -10,7 +13,7 @@ import bounded_parser as task
 import run_bounded_parser as run
 from working_set_exp.candidate import Candidate
 from working_set_exp.custody import ArtifactStore, verify_records
-from working_set_exp.jsonutil import canonical_json_bytes, sha256_bytes
+from working_set_exp.jsonutil import canonical_json_bytes, sha256_bytes, sha256_file
 from working_set_exp.working_session import WorkingSession
 
 
@@ -75,6 +78,70 @@ class BoundedRunnerTests(unittest.TestCase):
         self.assertEqual(self.session.candidate,before)
         self.assertTrue((self.output/"calls/C01-endpoint-response.json").is_file())
         self.assertEqual((self.output/"calls/C01-assistant-reasoning.txt").read_text(),"MOCK_PRIVATE_EXPLANATION")
+
+    def test_operator_stop_before_first_call_preserves_final_state(self):
+        (self.output/"STOP_REQUEST.txt").write_text("Reviewer stop before exposure",encoding="utf-8")
+        loop=self.loop(lambda state,n:{})
+        outcome=loop.execute(self.session)
+        self.assertEqual(outcome["disposition"],"operator_stopped")
+        self.assertEqual(self.sent,[])
+        self.assertTrue((self.output/"final-state.json").is_file())
+        records=verify_records(self.output/"records.jsonl",self.output)
+        self.assertEqual(sum(r["record_type"]=="operator_stop_observed" for r in records),1)
+
+    def test_stop_during_preparation_does_not_mark_unsent_input_delivered(self):
+        def render(request,stem):
+            (self.output/"STOP_REQUEST.txt").write_text("Stop during native preparation",encoding="utf-8")
+            return fake_render(request,stem)
+        loop=self.loop(lambda state,n:{},render=render)
+        with patch.object(self.session,"mark_delivered",wraps=self.session.mark_delivered) as delivered:
+            outcome=loop.execute(self.session)
+        self.assertEqual(outcome["disposition"],"operator_stopped")
+        self.assertEqual(self.sent,[])
+        delivered.assert_not_called()
+
+    def test_operator_stop_drains_current_response_and_actual_feedback(self):
+        def select(state,n):
+            (self.output/"STOP_REQUEST.txt").write_text("Reviewer identified host friction",encoding="utf-8")
+            return dict(action="read",path="app.py",start_line=1,end_line=0)
+        loop=self.loop(select)
+        outcome=loop.execute(self.session)
+        self.assertEqual(outcome["disposition"],"operator_stopped")
+        self.assertEqual(len(self.sent),1)
+        self.assertEqual(len(self.session.pairs),1)
+        self.assertEqual(self.session.sources()[0]["content"],"value = 1\n")
+        self.assertTrue((self.output/"calls/C01-assistant-reasoning.txt").is_file())
+        records=verify_records(self.output/"records.jsonl",self.output)
+        kinds=[r["record_type"] for r in records]
+        self.assertLess(kinds.index("invocation_completed"),kinds.index("operator_stop_observed"))
+        self.assertEqual(kinds[-1],"task_loop_completed")
+
+    def test_operator_stop_returns_through_runtime_closure_and_seal(self):
+        folder=self.output/"attempt"
+        manifest_path=self.output/"manifest.json"
+        manifest=dict(source_sha256={},initial={})
+        manifest_path.write_bytes(canonical_json_bytes(manifest))
+        @contextmanager
+        def runtime(args,store,log):
+            (args.output/"private-runtime").mkdir()
+            (args.output/"STOP_REQUEST.txt").write_text("Offline lifecycle stop",encoding="utf-8")
+            try:
+                yield "offline-no-inference"
+            finally:
+                log.append("runtime_closed",dict(owned_server_shutdown_verified=True,dedicated_port_free=True),[])
+        module=SimpleNamespace(**{k:getattr(task,k) for k in dir(task) if not k.startswith("_")})
+        module.RUN=folder;module.MANIFEST=manifest_path
+        module.runtime_paths=lambda:(Path("mock-server"),Path("mock-model"),Path("mock-tokenizer"))
+        module.initial_session=lambda:self.session
+        with patch.object(run,"plan",return_value=manifest),patch.object(task.base,"owned_runtime",runtime),\
+             patch.object(task.pilot,"health",return_value={}):
+            run.run_once(SimpleNamespace(owner_direction="offline stop test",manifest_sha256=sha256_file(manifest_path)),module)
+        seal=json.loads((folder/"RESPONSE_SEAL.json").read_text())
+        self.assertEqual(seal["disposition"],"operator_stopped")
+        self.assertEqual(seal["sent_requests"],0)
+        records=verify_records(folder/"records.jsonl",folder)
+        self.assertEqual(records[-1]["record_type"],"runtime_closed")
+        self.assertTrue((folder/"final-candidate.json").is_file())
 
     def test_native_drift_stops_before_dispatch(self):
         def bad(request,stem):
