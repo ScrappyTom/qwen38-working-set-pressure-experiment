@@ -89,6 +89,21 @@ owner authorization covers this preparation, consultation and a separately froze
 completed-contribution evaluation. Do not request duplicate approval. Count host
 enforcement separately from model choice; using work_on itself is not the outcome.
 
+That consultation is now closed after one response, published at 8effe76a. Read
+visibility-dialogue/review: all thinking/final text was reviewed. The main byte,
+missing-query and group-replacement predictions are correct under directed
+questions; confusion between a displayed wrapper and its archive identity remains.
+The unused second call is closed. No generic reminder or reasoning-policy change
+is adopted. The next contribution-v2 package retains the actual search query in
+activity and recognizes fully displayed, verified historical source for the edit
+gate. Partial, stale and snippet evidence do not qualify. Thirty-seven selected
+checks pass. Final native qualification repeats both compact contribution and
+actual broad-state paths; the latter peaks at 23,606 of 23,808 input tokens.
+The new attempt starts from the saved library with an empty working group and
+24 new requests. It remains reused-task development, with autonomous selection
+distinct from offline supplied groups. Prior attempts and their evidence stay
+consumed. Continuing owner approval covers this frozen evaluation and its review.
+
 The owner has given the continuing goal: keep working with Qwen as test pilot
 and consultant until the system can complete long-running tasks and work with
 large documents or code repositories. That direction authorizes progressing the

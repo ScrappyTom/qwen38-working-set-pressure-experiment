@@ -71,7 +71,7 @@ class WorkingSession:
         row = dict(sequence=sequence, episode="prior_work" if sequence <= self.starting_archive_length else "this_contribution",
                    action=action["action"], accepted=result.get("accepted"),
                    result_handle=f"RES-{sequence:04d}", action_handle=f"EVT-{sequence:04d}")
-        for key in ("path", "handle", "check_id"):
+        for key in ("path", "handle", "check_id", "query"):
             if key in action:
                 row[key] = action[key]
         if action["action"] == "work_on":
@@ -150,6 +150,56 @@ class WorkingSession:
             if view[key] != expected[key]:
                 raise ValueError("delivered working state differs")
         self.delivered_sources = copy.deepcopy(view["working_set"]["sources"] + self.feedback_sources(view["latest_feedback"]))
+        pages = list(view["working_set"]["saved_results"])
+        if view["latest_feedback"]:
+            result = view["latest_feedback"]["result"]
+            pages.extend(result.get("saved_results", []))
+            if result.get("kind") == "saved_bytes":
+                pages.append(result)
+        for page in pages:
+            self.delivered_sources.extend(self._archived_sources_visible(page))
+
+    def _archived_sources_visible(self, page):
+        """Credit only a fully displayed archived acquisition of unchanged source.
+
+        The source may belong to an older candidate if this file is unchanged.
+        Partial serialized results, action text and snippets do not establish
+        source delivery. Do not infer hidden fields or recursively mine payloads.
+        """
+        handle = page.get("handle", "")
+        if (page.get("kind") != "saved_bytes" or not handle.startswith("RES-") or
+                page.get("offset") != 0 or page.get("next_offset") is not None):
+            return []
+        body = self.payload(handle)
+        if (page.get("exact_utf8", "").encode() != body or page.get("total_bytes") != len(body) or
+                page.get("sha256") != sha256_bytes(body)):
+            return []
+        pair = self.pairs[int(handle.split("-", 1)[1])-1]
+        result, action = pair["result"], pair["response"]["action"]
+        if not result.get("accepted"):
+            return []
+        if action == "read":
+            sources = [result.get("source", result)]  # Includes legacy exact reads.
+        elif action == "work_on":
+            sources = result.get("sources", [])
+        else:
+            return []
+        verified = []
+        for source in sources:
+            path = source.get("path")
+            data = self.candidate.file_map.get(path)
+            if data is None or source.get("file_sha256") != sha256_bytes(data):
+                continue
+            first, last = source.get("returned_start_line"), source.get("returned_end_line")
+            if not data and source.get("content") == "" and first in (None, 1) and last in (None, 0):
+                first, last = 1, 0
+            elif (type(first) is not int or type(last) is not int or
+                    not 1 <= first <= last <= len(data.decode().splitlines())):
+                continue
+            current = self.source(dict(path=path, start_line=first, end_line=last))
+            if current["content"] == source.get("content"):
+                verified.append(current)
+        return verified
 
     def payload(self, handle):
         prefix, number = handle.split("-", 1)
