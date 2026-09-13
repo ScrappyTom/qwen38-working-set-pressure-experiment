@@ -129,6 +129,18 @@ remain recorded. D2 is closed unused. Retain the host/reference; no reasoning ch
 or further task run was made. NEXT_STEP.md proposes an assisted compact-group
 contribution to separate finishing from selection. Do not recycle closed calls.
 
+The owner then approved the revised recommendation: a short assisted working
+session around one actual parser regression, not the previously proposed full
+tests/documentation run. Read `development/bounded_working_set/assisted-regression/`
+SPEC.md and PREPARATION_REVIEW.md. At most six new replies are authorized after
+qualification, one reply/actual operation followed by normal closure and full
+direct review before a reviewer response. Supplied exact source and retained
+public dialogue are declared assistance; private thinking remains excluded.
+The host/reference and reasoning policy remain fixed. Judge a saved useful test
+and actual check feedback, keeping missing documentation/full submission separate.
+Do not turn a specific question into another general design consultation or count
+assisted selection as autonomous work. The existing long-work goal remains open.
+
 The owner has given the continuing goal: keep working with Qwen as test pilot
 and consultant until the system can complete long-running tasks and work with
 large documents or code repositories. That direction authorizes progressing the

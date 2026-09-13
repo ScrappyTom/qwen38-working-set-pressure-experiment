@@ -24,6 +24,13 @@ would distinguish finishing with assembled evidence from selecting it. No new
 contribution run or reasoning-policy change has been executed. The broader
 long-work objective remains unachieved.
 
+The owner-approved [revised assisted session](development/bounded_working_set/assisted-regression/PREPARATION_REVIEW.md)
+now narrows that recommendation to one saved, checked regression, with a reviewer
+response to each actual reply and operation. Six focused checks pass; the offline
+edit/check path fits at 6,423 initial and 7,429 peak input tokens. This supplies
+exact source based on Qwen's earlier test ideas and retains public dialogue;
+it is explicitly assisted development. No new Qwen reply has yet been sent.
+
 The [first bounded-host parser attempt is closed](development/bounded_working_set/review/RESULTS.md).
 Eight complete responses save no new tests or documentation; the existing correct
 library remains unchanged. The reviewer stopped during C09 after the host
