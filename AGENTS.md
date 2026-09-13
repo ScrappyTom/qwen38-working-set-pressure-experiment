@@ -120,6 +120,15 @@ direction before settling another presentation. Do not reuse old dialogue or
 task allowances, silently change thinking settings, or initiate another
 contribution trajectory merely because this attempt stopped.
 
+The source-eligibility consultation is now closed after D1; read
+`development/bounded_working_set/edit-eligibility-dialogue/review/`. Qwen correctly
+distinguishes visible current-source fragments from incomplete file coverage and
+predicts that work_on returns pages, not guaranteed whole files. All thinking/final
+text was reviewed; repeated reconsideration and an absent verbosity instruction
+remain recorded. D2 is closed unused. Retain the host/reference; no reasoning change
+or further task run was made. NEXT_STEP.md proposes an assisted compact-group
+contribution to separate finishing from selection. Do not recycle closed calls.
+
 The owner has given the continuing goal: keep working with Qwen as test pilot
 and consultant until the system can complete long-running tasks and work with
 large documents or code repositories. That direction authorizes progressing the

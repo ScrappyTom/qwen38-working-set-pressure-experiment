@@ -55,3 +55,28 @@ that operation alone is not success. Keep model selection distinct from supplied
 groups, and report useful saved work, actual checks, rejected attempts, evidence
 delivery/use, termination and cost separately. No new architecture or reasoning
 policy is assumed necessary.
+
+## Completed implementation and evaluation
+
+The final implementation is qualified at 39b10965 and its model attempt/review
+published at ff0ebd56. The initial visibility consultation, mechanical corrections,
+final compact and broad-state qualification, and new autonomous-selection attempt
+are complete. Thirty-seven selected tests pass; these are not a full-suite result.
+The final broad-state peak is 23,606, superseding the intermediate figure above
+for the changed host while preserving the earlier qualification.
+
+The [task attempt](contribution-v2/RESULTS.md) executes eight accepted acquisitions
+and three work_on requests, but saves no tests or documentation. Complete feedback
+reaches each offered next input. C06/C07 infer a whole-file edit requirement;
+C07's broad group replacement releases relevant regions. The recorded operator
+stop drains C08 normally, preserving its recognition of partial pages and a usable
+fragment anchor. The attempt costs 177.407 request minutes and closes its unused
+allowance. It is not evidence of natural non-completion or inability to recover.
+
+The resulting [focused interpretation consultation](edit-eligibility-dialogue/review/RESULTS.md)
+is also complete after one response. Qwen correctly interprets source eligibility
+and group paging, with repeated deliberation and 19.309 additional request minutes.
+Retain the current contract and close D2 unused. The revised implementation is
+delivered; larger-source contribution completion remains unestablished. The
+[next proposed evaluation](edit-eligibility-dialogue/review/NEXT_STEP.md) uses an
+explicitly assisted compact group, keeping selection and completion claims separate.

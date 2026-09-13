@@ -2,6 +2,28 @@
 
 ## Project status
 
+The [revised approach is implemented](development/bounded_working_set/REVISED_APPROACH.md).
+The corrected host qualifies complete feedback, selection, edits and checks from
+Qwen's actual broad-reading states; 37 selected checks pass. Recent search rows
+retain their query, verified recovered source can qualify an edit, and operator
+stops now drain the active response and close/seal normally.
+
+The [new autonomous-selection attempt is closed](development/bounded_working_set/contribution-v2/RESULTS.md).
+Eight accepted acquisitions, including three work_on requests, save no tests or
+documentation in 177.407 model-request minutes. Complete immediate feedback reaches
+every offered next decision. The reviewer stopped after consequential source
+eligibility confusion and a broad group replacement; C08 completed normally and
+partly recovered. This is an adaptive stop, not natural failure to finish. All
+eight full responses, actions and actual subsequent inputs were reviewed.
+
+The [separate source-eligibility consultation is also closed](development/bounded_working_set/edit-eligibility-dialogue/review/RESULTS.md).
+Qwen correctly interprets the visible fragment and returned-page guarantees under
+focused questions, at a further 19.309 request minutes. Retain the current host
+and reference; close the unused follow-up. A [proposed compact assisted contribution](development/bounded_working_set/edit-eligibility-dialogue/review/NEXT_STEP.md)
+would distinguish finishing with assembled evidence from selecting it. No new
+contribution run or reasoning-policy change has been executed. The broader
+long-work objective remains unachieved.
+
 The [first bounded-host parser attempt is closed](development/bounded_working_set/review/RESULTS.md).
 Eight complete responses save no new tests or documentation; the existing correct
 library remains unchanged. The reviewer stopped during C09 after the host

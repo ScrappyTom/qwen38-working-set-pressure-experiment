@@ -1,0 +1,154 @@
+## 1. Patch operation
+
+**Exact-source visibility precondition: yes, on the supplied current state.**
+
+The patch targets:
+
+```text
+Lib/test/test_configparser.py
+```
+
+with:
+
+```text
+old = "class InlineCommentStrippingTestCase(unittest.TestCase):\n"
+```
+
+That exact byte sequence is present in the current input’s working-set source for that file:
+
+- `path`: `Lib/test/test_configparser.py`
+- `returned_start_line`: `755`
+- `returned_end_line`: `1880`
+- `next_start_line`: `1881`
+- `file_sha256`: `c59760dd36d4ff3aa4361018636959f2e7ab770069ec4e5608600ae23d8ca2af`
+- `candidate_id`: `8ac73858f45e89ecb2df138e2accfdb105d0325ffc056e0bad7e9bf7e7c89a2d`
+
+The required `old` text is wholly contained in that exact source page; it is not split across a page boundary. The page is a host-generated exact source view, and its file fingerprint and candidate binding match the patch’s guards:
+
+- `expected_candidate_id` matches the current `candidate_id`.
+- `expected_file_sha256` matches the current `file_sha256` for that file in the working set.
+
+So, as to the supplied records, the “exact `old` source must be visible before editing” precondition is satisfied.
+
+### Host checks that would still remain
+
+Even with visibility satisfied, the host would still independently validate the patch before committing. At minimum, the relevant remaining host checks are:
+
+1. **Current-candidate guard**
+   - `expected_candidate_id` must equal the actual current candidate at commit time.
+   - A stale candidate guard would be rejected.
+
+2. **Pre-edit file fingerprint**
+   - `expected_file_sha256` must equal the actual current file’s pre-edit SHA-256.
+   - Here it matches the supplied current file fingerprint, but the host would still verify it against the live file state.
+
+3. **Existing-file requirement**
+   - The path must name an existing file in the current candidate.
+   - `candidate_limits.existing_files_only` is `true`, so this is an edit to an existing file, not a file creation.
+
+4. **Exactly one occurrence**
+   - The host must find exactly one occurrence of `old` in the current file.
+   - The supplied page shows the expected occurrence, but the host still validates uniqueness against the actual current file.
+
+5. **Non-identical replacement**
+   - Equal replacements are rejected.
+   - Here `new` is not equal to `old`; it adds a leading newline.
+
+6. **UTF-8 and size validation**
+   - The host validates complete UTF-8 sizes.
+   - It enforces the supplied fragment/action limits:
+     - each fragment within the stated UTF-8 byte limit,
+     - the serialized action within the stated action-size limit.
+   - It also checks the displayed `candidate_limits`, including file-size, line-size, total-size, and file-count limits, as applicable to the resulting file.
+
+7. **Next-input capacity**
+   - The host validates that the edit and resulting bindings can fit the next input capacity.
+   - The contract says it never shortens an edit to make it fit; it validates before committing.
+
+8. **Commit result, not check success**
+   - A successful patch returns successor bindings and source-line intervals.
+   - It does **not** run the public check.
+   - The current check is still the failed `RES-0030` result for the current candidate.
+   - If the patch were accepted, it would create a new candidate, and any earlier passing check would no longer apply to the new candidate.
+
+So: **visibility is met on the supplied state**, but the host still performs the normal guard, uniqueness, fingerprint, size, UTF-8, candidate-limit, and next-input capacity checks before an atomic commit.
+
+---
+
+## 2. `work_on` operation
+
+The request is:
+
+```json
+{
+  "action": "work_on",
+  "results": [],
+  "sources": [
+    {"path": "Lib/configparser.py", "start_line": 1, "end_line": 0},
+    {"path": "Lib/test/test_configparser.py", "start_line": 1, "end_line": 0},
+    {"path": "Doc/library/configparser.rst", "start_line": 1, "end_line": 0}
+  ]
+}
+```
+
+### What it guarantees about the next input
+
+This `work_on` requests three source ranges, all beginning at line 1 and using `end_line: 0`, which means “onward” in the `read`/`work_on` sense. It requests no saved results.
+
+If accepted, it would guarantee that the next input’s working set is assembled from:
+
+- `Lib/configparser.py`, starting at line 1,
+- `Lib/test/test_configparser.py`, starting at line 1,
+- `Doc/library/configparser.rst`, starting at line 1,
+
+and that the previous working set is replaced.
+
+Because `results` is empty, the new working set would contain no saved-result working material. In particular, the previously working saved result `RES-0030` would not be retained by this `work_on` request. That does not delete the archive handle or necessarily remove the current-check status from current-state fields, but the full saved-result bytes would no longer be carried in the working set by this request.
+
+The guarantee is **not** that the entire files are returned. `end_line: 0` requests the range onward, but the host chooses pages that fit the complete next input. The actual coverage is described by the returned page metadata:
+
+- `returned_start_line`
+- `returned_end_line`
+- `next_start_line`
+
+Those describe the actual page, not full-file coverage.
+
+It also does not guarantee:
+
+- that the contribution is complete,
+- that the public check will pass,
+- that documentation is correct,
+- that regressions exist,
+- or that any particular omitted line is visible.
+
+It is a working-set assembly operation, not a check or edit.
+
+### What depends on its returned pages
+
+Several later properties depend on the pages actually returned by this `work_on`:
+
+1. **Exact source visible in the next input**
+   - The next input will contain exact source only for the lines actually returned in the pages.
+   - Anything outside the returned pages is not guaranteed to be visible.
+
+2. **Continuation points**
+   - The returned `returned_end_line` and `next_start_line` values determine where further source must be requested if more of a file is needed.
+
+3. **Next-input capacity usage**
+   - The host sizes the pages together for the complete next input.
+   - The amount of source available for other working material depends on how much space those pages consume.
+
+4. **Later exact-source edit visibility**
+   - A later `patch` can rely on exact source only if its `old` text is wholly within a visible exact-source page whose file fingerprint and candidate binding still match.
+   - For example, the earlier patch’s `old` line is visible in the current input because the current test-file page reaches `InlineCommentStrippingTestCase`.
+   - After this `work_on`, that same line would be visible only if the returned `Lib/test/test_configparser.py` page actually reaches that class, or if the source is later acquired again.
+
+5. **Persistence of the working set**
+   - The contract says the host preserves these pages through navigation, search, edits, and checks until another `work_on`.
+   - Edits may refresh open ranges to current source, so the pages are not immutable evidence of a future file state; they are the working set as assembled by the request.
+
+6. **Independence of checks**
+   - The public check does not depend on these pages to execute. It executes against the current candidate.
+   - But submit depends on a passing public check for the exact current candidate, not on the working-set pages themselves.
+
+In short: the `work_on` request would reset the working set to host-sized pages from the beginning of the three named files, with no saved results. The exact later visibility of any source line—especially for a later patch—depends on what those returned pages actually contain.
