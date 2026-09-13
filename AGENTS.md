@@ -68,6 +68,15 @@ before settling another presentation; fixes to mechanical truth do not require a
 preference vote. Do not restart or rescue run-001. The next new package must
 qualify a complete contribution; the broader owner goal remains unachieved.
 
+The prospective corrections are now integrated at 3b96803d, after publication
+of the original run/review at 56deae92. Read
+`development/bounded_working_set/capacity-repair-001/README.md`, QUALIFICATION-002
+and INTEGRATION.json. All four qualified source hashes and 18 original evidence
+hashes match after integration. Twenty-three selected checks pass; no new model
+request has exercised these corrections. The original SPEC/manifest remain frozen
+historical documents, not an execution package for the changed current host.
+Run the original verifier from 56deae92; it deliberately rejects changed sources.
+
 The owner has given the continuing goal: keep working with Qwen as test pilot
 and consultant until the system can complete long-running tasks and work with
 large documents or code repositories. That direction authorizes progressing the

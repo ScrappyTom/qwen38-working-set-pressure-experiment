@@ -51,3 +51,11 @@ assertion; the corrected snapshot matches its recorded SHA exactly. No experimen
 input, action or result was altered. Use the final source and QUALIFICATION-002
 for prospective execution preparation; keep run-001 verification at its frozen
 source revision.
+
+Integration: isolated commit 44339c9 was applied to main as 3b96803d after the
+original attempt and direct review were published at 56deae92. INTEGRATION.json
+checks all four final qualified source identities, 18 original evidence identities
+and the exact Git bytes of the twelve qualification artifacts. No source changed
+in integration and no additional model call was sent. The original verifier is
+available with its frozen host at 56deae92; running it against the corrected host
+is intentionally rejected rather than silently changing the historical replay.

@@ -50,6 +50,9 @@ Neither occurred as an executed Qwen failure. The original probe and failed test
 are preserved; the final 23 selected host/runner tests pass. See the separate
 capacity-repair-001 record after its integration.
 
+That integration is now recorded at 3b96803d; the original run/review is preserved
+at 56deae92. See [qualified corrections](../capacity-repair-001/README.md).
+
 C08 also exposes a deferred decision-view issue: recent search rows keep the
 path but omit the query. Its mistaken query reconstruction concerns an absent
 fact. Adding a minimal operation description could be justified, but this audit

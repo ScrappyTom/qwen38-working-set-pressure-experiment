@@ -11,7 +11,7 @@ closed; no complete C09 response was returned. All eight outputs were directly
 read and replayed, and all 62 native inputs/admission trials reconstruct exactly.
 Completed requests cost 61,847 generated tokens and 67.587 request minutes.
 
-Prospective host corrections are qualified separately: let feedback use the
+The [prospective host corrections are integrated and qualified separately](development/bounded_working_set/capacity-repair-001/README.md): let feedback use the
 reserved room, include grouped acquisitions in file history, and reject candidate
 boundary errors without crashing. Twenty-three selected checks pass. Exact saved
 states confirm the complete check/search feedback fits. These are offline
