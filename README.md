@@ -2,6 +2,15 @@
 
 ## Project status
 
+The [combined contribution plan](development/bounded_working_set/SYMBIOTIC_PLAN.md)
+is implemented in an opt-in reply wrapper: Qwen can request a patch plus its public
+check, and the host binds validation to the accepted successor and preserves both
+receipts. Forty-one selected checks pass. The
+[documentation continuation](development/bounded_working_set/parser-documentation/PREPARATION_REVIEW.md)
+qualifies this loop offline from the actual saved library and regression, with
+reviewer-selected exact source. Its preparation is distinct from a model outcome;
+thinking settings and historical experiment records remain unchanged.
+
 The [revised approach is implemented](development/bounded_working_set/REVISED_APPROACH.md).
 The corrected host qualifies complete feedback, selection, edits and checks from
 Qwen's actual broad-reading states; 37 selected checks pass. Recent search rows

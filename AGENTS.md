@@ -1,5 +1,19 @@
 # Experiment operating rules
 
+Current owner-directed development: implement the combined host/model contribution
+loop under `development/bounded_working_set/SYMBIOTIC_PLAN.md` and the separately
+declared `parser-documentation/SPEC.md`. Assistance is part of the system; identify
+its provider, actual input and cost. The optional edit/check reply is an explicit
+coordination intervention: one Qwen reply can request a patch and a host-bound
+successor check, counted as two actual archive actions. It does not change any
+consumed one-action experiment. Preserve both results in the next input and do not
+claim a hidden model turn received the intermediate edit. Continuing owner direction
+covers the new bounded documentation contribution after qualification; no duplicate
+approval is required. Prior packages and unused calls remain closed. Keep direct
+transcript review and exact custody, judge durable checked work and total cost,
+and avoid requiring an extra explanatory closure when the next useful operation
+already demonstrates feedback use. Thinking settings remain fixed in this tranche.
+
 This repository exists only to test exact-context reconstruction across one or
 more authentic pressure boundaries and its directly earned evidence-to-action
 diagnostics. Keep it smaller than its evidence donors.
