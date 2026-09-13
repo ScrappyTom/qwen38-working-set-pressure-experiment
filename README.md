@@ -2,13 +2,22 @@
 
 ## Project status
 
+The [bounded host and parser continuation are implemented and prepared](development/bounded_working_set/PREPARATION_REVIEW.md).
+Seventeen focused host/runner tests pass. Native-tokenized preparation completes
+checked test/documentation contributions and a fresh-context continuation;
+the relevant source group fits at 4,603 input tokens. History-load input remains
+nearly flat through 10,000 archived actions. A 72,675-byte saved source result is
+recovered exactly in two pages while keeping its library companion.
+These are offline results. The separately authorized 24-request Qwen continuation
+will assess selection, use, completion and cost under the unchanged model settings.
+
 The [revised next priority is host-managed capacity and useful work](development/long_work/HOST_CAPACITY_REVISION.md).
 The owner challenged the cost of asking Qwen to count and split edits. The host
 should handle exact sizing and qualify enough room for a complete edit/check
 operation with its supporting evidence, target and feedback. This supersedes
 retaining the patch cap and making smaller pages the sole next intervention.
-It is a revised preparation direction; no production change or model run has
-occurred under it.
+That correction led to the opt-in host and preparation above; the historical
+experiment host and completed runs remain unchanged.
 
 The [patch consultation and narrower-read qualification are complete](development/configparser_follow_up/review/RESULTS.md).
 Qwen correctly distinguishes the planned and emitted edits and proposes a valid

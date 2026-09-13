@@ -63,6 +63,9 @@ class WorkingSessionTests(unittest.TestCase):
         self.assertEqual(s.candidate.file_map["app.py"], new.encode())
         self.assertEqual(s.sources()[0]["content"], new)
         self.assertEqual(result["previous_candidate_id"], before)
+        self.assertEqual(result["replaced_source_lines"], [1,1])
+        self.assertEqual(result["replacement_source_lines"], [1,len(new.splitlines())])
+        self.assertEqual(s.view()["candidate_limits"]["max_line_utf8_bytes"],512)
         self.assertIn("+value = 2", s.diffs[2])
         self.assertEqual(json.loads(s.payload("EVT-0002"))["new"], new)
 
@@ -157,7 +160,9 @@ class WorkingSessionTests(unittest.TestCase):
             with self.subTest(original=original):
                 s = session({"app.py": original})
                 read(s, first=len(original.splitlines()), last=len(original.splitlines()))
-                self.assertTrue(edit(s, old, "")["accepted"])
+                result=edit(s, old, "")
+                self.assertTrue(result["accepted"])
+                self.assertEqual(result["replacement_source_lines"],[])
                 self.assertEqual(s.candidate.file_map["app.py"], expected)
                 self.assertEqual(s.sources()[0]["content"].encode(), expected)
 

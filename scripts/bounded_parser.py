@@ -13,7 +13,7 @@ from working_set_exp.working_view import request
 ROOT = task.ROOT
 AREA = ROOT / "development/bounded_working_set"
 OLD = task.AREA / "run-001"
-PACKAGE = AREA / "preparation-001"
+PACKAGE = AREA / "preparation-002"
 RUN = AREA / "run-001"
 MANIFEST = AREA / "EXECUTION_MANIFEST.json"
 ACTOR = dict(legacy.ACTOR)

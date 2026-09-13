@@ -9,7 +9,7 @@ import copy
 import difflib
 from typing import Callable
 
-from .candidate import Candidate, canonical_path
+from .candidate import Candidate, canonical_path, MAX_FILES, MAX_TOTAL_BYTES, MAX_LINE_BYTES
 from .hierarchical_p0 import p0_page
 from .jsonutil import canonical_json_bytes, sha256_bytes
 from .tools import SessionState, ToolExecutor
@@ -130,6 +130,9 @@ class WorkingSession:
         n = len(self.pairs)
         return dict(schema_version="bounded-working-view-v1", task=self.task,
                     candidate_id=self.candidate.candidate_id, current_check=self.check_state(),
+                    candidate_limits=dict(existing_files_only=True, max_files=MAX_FILES,
+                        max_file_utf8_bytes=self.candidate.max_file_bytes, max_total_utf8_bytes=MAX_TOTAL_BYTES,
+                        max_line_utf8_bytes=MAX_LINE_BYTES),
                     current_p0=p0_page(self.candidate, path=".", offset=0),
                     working_set=dict(sources=sources, saved_results=saved), latest_feedback=self.last,
                     recent_activity=[self.summary(i) for i in range(max(1, n-recent_count+1), n+1)] if recent_count else [],
@@ -141,7 +144,7 @@ class WorkingSession:
         if view["candidate_id"] != self.candidate.candidate_id:
             raise ValueError("delivered view has stale current candidate")
         expected = self.view()
-        for key in ("task", "working_set", "latest_feedback", "current_check", "archive", "allowance"):
+        for key in ("task", "working_set", "latest_feedback", "current_check", "archive", "allowance", "candidate_limits", "current_p0"):
             if view[key] != expected[key]:
                 raise ValueError("delivered working state differs")
         self.delivered_sources = copy.deepcopy(view["working_set"]["sources"] + self.feedback_sources(view["latest_feedback"]))
@@ -261,8 +264,8 @@ class WorkingSession:
             changed.splitlines(keepends=True), fromfile="a/"+path, tofile="b/"+path))
         return dict(accepted=True, path=path, previous_candidate_id=before.candidate_id,
                     candidate_id=self.candidate.candidate_id, file_sha256=self.candidate.file_sha256(path),
-                    changed_start_line=text[:start].count("\n")+1,
-                    changed_end_line=changed[:start+len(new)].count("\n")+1,
+                    replaced_source_lines=[text[:start].count("\n")+1,text[:end-1].count("\n")+1] if old else [],
+                    replacement_source_lines=[changed[:start].count("\n")+1,changed[:start+len(new)-1].count("\n")+1] if new else [],
                     exact_action_handle=f"EVT-{len(self.pairs)+1:04d}")
 
     def _reopen(self, action, measure):

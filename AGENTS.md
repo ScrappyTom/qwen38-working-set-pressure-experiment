@@ -33,6 +33,19 @@ expressible workaround does not establish an adequate interface. Historical
 decisions and frozen attempts remain preserved; this revision changes the next
 engineering priority, not the completed results.
 
+The owner subsequently approved implementation and evaluation with "Proceed".
+The opt-in bounded host is now implemented under `development/bounded_working_set/`;
+read SPEC.md, PREPARATION_REVIEW.md and TESTING.md. It separates exact archive
+custody from six recent records, paged history, current state and a selected
+working group; it supports ordinary atomic edits and host-owned native sizing.
+The declared new contribution starts from the saved parser repair with 24 new
+requests. Existing owner direction authorizes its frozen execution after the
+listed checks; do not request another approval or reuse the old allowance.
+The final offline package is preparation-002, with separate recovery-001 proof.
+Both are engineering evidence, not Qwen outcomes. Keep q4/56,576, no MTP and
+xhigh/uncapped fixed; preserve exact raw responses, actual feedback and full
+transcript review. No model request in this new attempt has yet been sent.
+
 The owner has given the continuing goal: keep working with Qwen as test pilot
 and consultant until the system can complete long-running tasks and work with
 large documents or code repositories. That direction authorizes progressing the
