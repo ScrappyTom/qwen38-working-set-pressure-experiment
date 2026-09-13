@@ -104,6 +104,22 @@ The new attempt starts from the saved library with an empty working group and
 distinct from offline supplied groups. Prior attempts and their evidence stay
 consumed. Continuing owner approval covers this frozen evaluation and its review.
 
+That contribution-v2 attempt is now closed under frozen 39b10965. Read its five
+review products and DECISION.json. Eight accepted acquisitions save no tests/docs;
+Qwen uses work_on three times, but C06/C07 conflate partial current source with
+partial historical-result bytes and infer a whole-file edit requirement. C07's
+broad replacement releases useful regions. The declared operator stop drains C08
+normally; C08 recognizes partial pages and a visible edit anchor, so do not claim
+irreversible confusion or natural non-completion. All eight full responses were
+directly reviewed; 71 native inputs/trials and eight actions replay. Cost is
+160,354 generated tokens and 177.407 model-request minutes. No model edit/check
+occurs; all ten candidate files remain unchanged. The 16 unused requests are
+closed with this attempt. Retain the corrected host; follow FOLLOWUP_PROPOSAL.md
+for the focused interpretation consultation under the standing collaboration
+direction before settling another presentation. Do not reuse old dialogue or
+task allowances, silently change thinking settings, or initiate another
+contribution trajectory merely because this attempt stopped.
+
 The owner has given the continuing goal: keep working with Qwen as test pilot
 and consultant until the system can complete long-running tasks and work with
 large documents or code repositories. That direction authorizes progressing the

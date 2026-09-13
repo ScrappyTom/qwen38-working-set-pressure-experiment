@@ -1,0 +1,1799 @@
+Let me analyze the current state.
+
+Task: Continue the backport of the saved configuration-parser, together with regression tests and reference documentation. The library already defines and raises MultilineContinuationError. What's needed:
+1. Add regression tests to the test module (Lib/test/test_configparser.py) that verify the fix and expose the original issue.
+2. Update the reference documentation (Doc/library/configparser.rst), declaring the exception, and accurately explain the trigger conditions, exception inheritance, source/lineno/line attributes, along with the relevant qualification notes.
+3. Preserve the saved library behavior and existing tests.
+4. Run the public check and submit.
+
+What I've obtained from the working set:
+- Documentation (Doc/library/configparser.rst) lines 1300-1370: displays the exceptions section. I need to add a `.. exception:: MultilineContinuationError` directive. The existing exceptions end with MissingSectionHeaderError, at line 1370 it says ".. exception:: MissingSectionHeaderError" (end of page, returned_end_line 1370). I need to check the content after that to know where MissingSectionHeaderError's documentation ends, so I can insert the new exception entry after it.
+- configparser.py lines 140-188 and 280-442: MultilineContinuationError class definition visible:
+
+```python
+class MultilineContinuationError(ParsingError):
+    """Raised when a valueless option is followed by an indented line."""
+
+    def __init__(self, source, lineno, line):
+        ParsingError.__init__(self, source)
+        self.append(lineno, line)
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+```
+
+Also _read code:
+```python
+if (cursect is not None and optname and
+    cur_indent_level > indent_level):
+    if cursect[optname] is None:
+        raise MultilineContinuationError(fpname, lineno, line)
+    cursect[optname].append(value)
+```
+
+- Test module lines 1-83, 595-651, 755-1880. I've seen most of the test file. There's `test_invalid_multiline_value` in BasicTestCase:
+
+```python
+    def test_invalid_multiline_value(self):
+        if self.allow_no_value:
+            self.skipTest('if no_value is allowed, ParsingError is not raised')
+
+        invalid = textwrap.dedent("""\
+            [DEFAULT]
+            test {0} test
+            invalid""".format(self.delimiters[0])
+        )
+        cf = self.newconfig()
+        with self.assertRaises(configparser.ParsingError):
+            cf.read_string(invalid)
+        self.assertEqual(cf.get('DEFAULT', 'test'), 'test')
+        self.assertEqual(cf['DEFAULT']['test'], 'test')
+```
+
+Hmm, wait — that test: `[DEFAULT]\ntest = test\ninvalid` — here `invalid` is at the same indentation level as the option line, so it's not a continuation line; it's a line that fails to parse as an option → ParsingError via _handle_error. That's a different case.
+
+MultilineContinuationError is raised when a valueless option (cursect[optname] is None, i.e. `allow_no_value=True` and option with no value) is followed by a line indented deeper than the option line. Wait, but the test above skips when allow_no_value... let me think about the trigger.
+
+In `_read`:
+- When a valueless option is read (no value after delimiter in the option line): `cursect[optname] = None`.
+- Next line is a continuation line (cur_indent_level > indent_level): if `cursect[optname] is None` → raise MultilineContinuationError(fpname, lineno, line).
+
+So the trigger: `allow_no_value=True` (otherwise a valueless option line wouldn't match OPTCRE? Actually, OPTCRE with `value` group being None matches only when allow_no_value... let me confirm. The regex `_OPTCRE` is built in RawConfigParser.__init__: if allow_no_value is False, the pattern requires a value; if True, the value part is optional). When allow_no_value=True, `option` (no value) is stored as None, and a subsequent indented line raises MultilineContinuationError.
+
+Wait, the check: the earlier search on Lib/test/test_configparser.py for "MultilineContinuation" returned 0 matches. So the test module has no test that references MultilineContinuation. I need to add one.
+
+The check output says:
+- upstream: 355 tests pass
+- contract: 8 pass
+- candidate_tests: 355 pass
+- new_tests_on_original: 0 tests
+- documentation_directive_present: false
+- documentation_semantics_require_direct_review: true
+- added_tests: []
+- regression_detects_original: false
+
+So the check will probably:
+- detect added tests (probably tests that reference MultilineContinuationError, or new test methods in the module), run them against the original (unfixed) configparser to see if they detect the original issue, and verify the documentation directive presence (`.. exception:: MultilineContinuationError`).
+
+I need to add tests to Lib/test/test_configparser.py. Where? Probably BasicTestCase (shared by all parser classes, strict and non-strict, Raw and Config) — but note: the test class `BasicTestCase` is used by StrictTestCase (RawConfigParser, strict=True), ConfigParserTestCase, MultilineValuesTestCase, CopyTestCase, and the like. There's also `ConfigParserTestCaseNoValue(allow_no_value=True)`.
+
+The check probably compares the test module's tests to the original module's tests: "added_tests" is probably computed by diffing test names. Then "new_tests_on_original": runs the added tests against the original parser — expect them to fail (detect the original issue). regression_detects_original: probably true if any of the added tests fails against the original.
+
+Key design: added tests must pass under the fixed library and fail under the original parser. The original parser (before backport) had no MultilineContinuationError; instead, in the original code, the same scenario raised a `ParsingError`? Let me recall the original CPython configparser._read:
+
+Original code (pre-fix):
+
+```python
+                # continuation line?
+                first_nonspace = self.NONSPACECRE.search(line)
+                cur_indent_level = first_nonspace.start() if first_nonspace else 0
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    if cursect[optname] is None:
+                        raise ParsingError(fpname, lineno, line)
+                    cursect[optname].append(value)
+```
+
+Hmm, actually wait. Let me recall. In the original CPython (before the bpo fix), MultilineContinuationError was raised as ParsingError:
+
+Actually, let me recall the history. `MultilineContinuationError` was added in CPython issue bpo... The commit that added it: "bpo-40603: Add MultilineContinuationError" hmm. Actually I remember it this way: Python 3.11 changed `configparser` so that when a valueless option is followed by an indented line, it raises `MultilineContinuationError` instead of silently appending the line to the valueless option (which would then fail at join time). Let me recall the actual change.
+
+Python 3.11's changelog: "configparser: Raise MultilineContinuationError if an indented continuation line follows a valueless option" — bpo-45308? Hmm.
+
+Let me recall the original behavior: In the original code:
+
+```python
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    if cursect[optname] is None:
+                        raise ParsingError(fpname, lineno, line)
+                    cursect[optname].append(value)
+```
+
+Hmm, no. Actually I think the original code was like this:
+
+```python
+                # continuation line?
+                first_nonspace = self.NONSPACECRE.search(line)
+                cur_indent_level = first_nonspace.start() if first_nonspace else 0
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    cursect[optname].append(value)
+```
+
+So the continuation line was appended even if cursect[optname] was None (a valueless option), then in `_join_multiline_values`, `val` would be a list containing None, and... `'\n'.join(val)` would fail with TypeError ("sequence item 0: expected str instance, NoneType found")? Hmm, that doesn't sound right either.
+
+Let me recall the actual change. The actual commit is https://github.com/python/cpython/commit/… for bpo-44536? Let me think about CPython 3.11 What's New:
+
+"configparser: Add MultilineContinuationError" — actually, I recall from the 3.11 changelog: "bpo-45308: configparser: Multiline continuation of valueless options now raises an error". Hmm.
+
+Actually now I remember: the change is bpo-45308? The error class:
+
+```python
+class MultilineContinuationError(ParsingError):
+    """Raised when a valueless option is followed by an indented line."""
+```
+
+and in `_read`:
+
+```python
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    if cursect[optname] is None:
+                        raise MultilineContinuationError(fpname, lineno, line)
+                    cursect[optname].append(value)
+```
+
+Before the fix, the code was:
+
+```python
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    cursect[optname].append(value)
+```
+
+So previously, the indented line would be appended to the valueless option's None value → cursect[optname] becomes a list [value]? No wait: `cursect[optname]` is None; `cursect[optname].append(value)` would raise AttributeError (NoneType has no attribute append)! Hmm. So the original code would crash with AttributeError? That can't be right either.
+
+Wait, maybe the original code had a check that raised ParsingError:
+
+Looking at CPython history: In Python 3.2 (performance update), `_join_multiline_values` was introduced and options were stored as lists. Original _read (3.x):
+
+```python
+                # continuation line?
+                first_nonspace = self.NONSPACECRE.search(line)
+                cur_indent_level = first_nonspace.start() if first_nonspace else 0
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    cursect[optname].append(value)
+```
+
+And valueless option: `cursect[optname] = None`? Hmm, actually in the original, when allow_no_value=True and a valueless option was read: `cursect[optname] = None`. Then a continuation line would execute `cursect[optname].append(value)` → AttributeError: 'NoneType' object has no attribute 'append'. Hmm, that would be a crash.
+
+Hmm wait, maybe not. Let me recall: in the original code, a valueless option was represented by an empty list: `cursect[optname] = []`? Hmm, no.
+
+Let me recall the actual bpo. Was the issue bpo-45308 "configparser: allow_no_value with continuation lines causes AttributeError"?
+
+Actually, let me recall the actual CPython commit. Was the fix in commit https://github.com/python/cpython/issues/87000? Hmm.
+
+OK, different approach: The saved fix in this workspace defines MultilineContinuationError and raises it. The original (pre-fix) behavior is "expose the problem with the original parser" — the added regression must detect that problem. What is the original problem? Probably: in the original parser, an indented continuation line after a valueless option would not raise a dedicated error; it would either silently treat the continuation line as the option's value (corrupting the config) or raise a generic error.
+
+Let me recall the CPython 3.11 What's New exactly:
+
+From CPython 3.11.0 What's New, configparser section:
+
+"Changed in version 3.11:
+- The configparser module now raises MultilineContinuationError if an option with no value is followed by a line that is indented relative to the option. Previously this would have been silently ignored (or mis-parsed)."
+
+Hmm, I'm not 100% sure of the wording. Actually, I found it: bpo-45308: "configparser.read_string() misinterprets indented lines after valueless options". Hmm.
+
+Let me try to recall the actual code diff from the CPython commit (I think it was gh-88519 / bpo-45308, "configparser: raise MultilineContinuationError for multiline continuation of valueless options", added in 3.11).
+
+The commit (by STERN? or "Trey Hunner"?). The diff:
+
+```
+ class MissingSectionHeaderError(ParsingError):
+     ...
+
++class MultilineContinuationError(ParsingError):
++    """Raised when a valueless option is followed by an indented line."""
++
++    def __init__(self, source, lineno, line):
++        ParsingError.__init__(self, source)
++        self.append(lineno, line)
++        self.lineno = lineno
++        self.line = line
++        self.args = (source, lineno, line)
++
+```
+
+And in _read:
+
+```
+                 if (cursect is not None and optname and
+                     cur_indent_level > indent_level):
++                    if cursect[optname] is None:
++                        raise MultilineContinuationError(fpname, lineno, line)
+                     cursect[optname].append(value)
+```
+
+Wait, but was there anything before? The original code (3.10) I think was:
+
+```python
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    cursect[optname].append(value)
+```
+
+Hmm, so with a valueless option, `cursect[optname]` is None, and `.append` raises AttributeError. But wait — is that reachable? Let me test my memory: In Python 3.10:
+
+```python
+>>> import configparser
+>>> p = configparser.ConfigParser(allow_no_value=True)
+>>> p.read_string("[s]\nopt\n  cont\n")
+```
+
+I think in 3.10 this raised `AttributeError: 'NoneType' object has no attribute 'append'`? Or did it parse successfully with opt = "cont"?
+
+Hmm! Actually wait. I need to check how valueless options are stored. In _read:
+
+```python
+                            # This check is fine because the OPTCRE cannot
+                            # match if it would set optval to None
+                            if optval is not None:
+                                optval = optval.strip()
+                                cursect[optname] = [optval]
+                            else:
+                                # valueless option handling
+                                cursect[optname] = None
+```
+
+Hmm, interesting: the comment "This check is fine because the OPTCRE cannot match if it would set optval to None". When is optval None? The OPTCRE regex:
+
+```python
+        if allow_no_value:
+            _OPTNVR = r"""
+                (?P<option>[^:=\s][^:=]*)
+                (?P<vi>\s*[=:]\s*)?
+                (?P<value>.*)$
+                """
+        else:
+            _OPTNVR = r"""
+                (?P<option>[^:=\s][^:=]*)
+                (?P<vi>\s*[=:]\s*)
+                (?P<value>.*)$
+                """
+```
+
+So with allow_no_value=True, "opt" alone matches with value=None (vi=None too). So cursect[optname] = None.
+
+Then the continuation line: `cursect[optname].append(value)` → AttributeError in the original. Hmm, but that doesn't match my memory of "silently mis-parsed".
+
+Hmm, wait. Let me recall the actual bpo for this change. I think it's bpo-45308: "ConfigParser: indented continuation after valueless option raises confusing error" — and the fix was to raise MultilineContinuationError with a clear message.
+
+Actually, I found it in memory: CPython issue gh-93272? No...
+
+Let me recall from the CPython 3.11 changelog (Misc/NEWS): "bpo-45308: configparser: Fix reading of a valueless option followed by an indented line. Previously, it would raise AttributeError." Hmm.
+
+OK, let me stop guessing the bpo number; the task description tells me exactly what the behavior should be:
+
+"MultilineContinuationError ... for an indented continuation of a valueless option" — trigger: an indented continuation line following a valueless option (i.e., an option without a value, in a parser with allow_no_value=True).
+
+The check probably:
+1. Runs the frozen upstream test suite (pass).
+2. Runs the independent contract check (8 tests, pass).
+3. Runs the edited test module (candidate_tests) — must pass.
+4. new_tests_on_original: runs added tests against the original (unfixed) configparser — for "regression_detects_original" to be true, they should FAIL there.
+5. documentation_directive_present: checks that the RST contains the exception directive.
+
+So my added tests must be written such that they pass on the fixed library and fail on the original library. The original library probably:
+- Doesn't have `configparser.MultilineContinuationError` at all (module-level AttributeError when the test references `configparser.MultilineContinuationError`).
+
+If the test references `configparser.MultilineContinuationError`, it would fail with AttributeError on the original — that counts as "detecting the original issue"? Possibly, but that's a weak regression (testing the existence of the class, not the behavior). A better regression: assertRaises(MultilineContinuationError) around the read; on the original, the class doesn't exist → error anyway.
+
+But to be safe and to be a real behavior regression, I should write a test that:
+- Constructs a parser with allow_no_value=True.
+- Reads a string with a section, a valueless option, and then an indented continuation line.
+- Expects configparser.MultilineContinuationError to be raised.
+- Asserts exception attributes: e.source, e.lineno, e.line, e.args, inheritance (isinstance ParsingError, configparser.Error).
+- Also verify that valid cases still work: valueless option alone (no continuation) reads fine and the option's value is None; valid multiline value is preserved.
+
+On the original library, `configparser.MultilineContinuationError` doesn't exist → AttributeError → test fails → detects the original issue. Also, if I wrote the test to catch a broader exception on the original... no — the point is that the test must fail on the original.
+
+Hmm, but wait: maybe the original library in this repo (the "pre-backport" state) also had no MultilineContinuationError? Yes: "no added regressions or documentation were saved" — the saved library work already defines the class. The "original parser" is the pre-backport one (probably a 3.10-style configparser). The check has a "new_tests_on_original" run: it probably swaps in the original configparser.py and runs only the added tests. For detection, the added tests must fail there.
+
+How does the check know which tests are "added"? Probably by diffing test method names between the original test file and the edited test file. So I should add clearly new test methods (e.g., in a new test class, or add methods to BasicTestCase) that reference the new behavior.
+
+But note: if I add test methods to BasicTestCase, they run in all subclasses (Strict, ConfigParser, NoValue with allow_no_value=True, CopyTestCase, etc.). The trigger requires allow_no_value=True. The base `CfgParserTestCaseClass` has allow_no_value = False. `ConfigParserTestCaseNoValue` sets allow_no_value=True.
+
+Hmm wait, actually — can I trigger MultilineContinuationError with allow_no_value=False? If allow_no_value=False, OPTCRE requires a value: `(?P<option>[^:=\s][^:=]*)\s*[=:]\s*` + value. A line "opt" alone wouldn't match OPTCRE → falls to _handle_error → generic ParsingError. So the valueless option path requires allow_no_value=True.
+
+So my test should use `self.newconfig()` with allow_no_value=True... but in BasicTestCase, `allow_no_value` is a class attribute (False). I can construct the parser directly in my own test:
+
+```python
+    def test_multiline_continuation_of_valueless_option(self):
+        # An indented continuation after a valueless option (only possible
+        # when allow_no_value=True) is a parse error.
+        parser = self.config_class(allow_no_value=True)
+        ini = textwrap.dedent("""\
+            [section]
+            opt
+               indented continuation
+        """)
+        with self.assertRaises(configparser.MultilineContinuationError) as cm:
+            parser.read_string(ini)
+        ...
+```
+
+But wait — `self.config_class` in StrictTestCase is RawConfigParser; in ConfigParserTestCase it's ConfigParser. Both support the allow_no_value kwarg. Good. But if I put it in BasicTestCase, it runs in many subclasses (including NonStandardDelimiters where delimiters = (':=', '$')!). The test string uses no delimiter, so it's fine regardless of delimiter (valueless option has no delimiter). Continuation indent detection is indentation-based, delimiter-independent. Good.
+
+Also `ConfigParserTestCaseNonStandardDefaultSection` (default_section='general') — my test uses an explicit section, so fine.
+
+But there's a subtlety with `read_string`: in `read`, the `fpname` default is the source string `'<string>'`? Let me recall: `read_string(self, string, source=None)`: `fpname = source if source is not None else '<string>'`. And `read_file(self, stream, source=None, encoding=None)`. The exception's source attribute will be `fpname` (the source name passed to read), i.e., '<string>' for read_string without source. In _read, `MultilineContinuationError(fpname, lineno, line)` — so source = fpname.
+
+Attributes:
+- e.source: '<string>' (or the specified source)
+- e.lineno: one-based line number of the offending continuation line
+- e.line: exact offending line (as read, the raw line with newline? let me check: in _read, `line` iterates `fp` lines, so it includes trailing '\n'. `raise MultilineContinuationError(fpname, lineno, line)` — the raw line, including '\n').
+
+Hmm wait — is the line the raw line with newline? In _read: `for lineno, line in enumerate(fp, start=1):` — yes, `line` is the raw line including trailing newline. And `MissingSectionHeaderError(fpname, lineno, line)` also receives the raw line. There's a test in test_source_as_bytes:
+
+```
+        lines = textwrap.dedent("""\
+        [badbad
+        bad = bad""").strip().split('\n')
+        ...
+        self.assertEqual(
+            str(dse.exception),
+            "File contains no section headers.\nfile: b'badbad', line: 1\n"
+            "'[badbad'"
+        )
+```
+
+Here the line is '[badbad' (split without newline). Message format: `'File contains no section headers.\nfile: %r, line: %d\n%r'`. OK.
+
+For MultilineContinuationError, the message: ParsingError.__init__ sets `f'Source contains parsing errors: {source!r}'`, then `self.append(lineno, line)` appends `'\n\t[line %2d]: %s' % (lineno, line)`. Note: append uses raw `line` without repr. So str(e) = "Source contains parsing errors: '<string>'\n\t[line  3]:     indented continuation\n" — the line includes trailing newline, so the message ends with an extra newline.
+
+For my assertion on e.line, I'll compare against the exact line from the source string. If I use read_string on a dedented string:
+
+ini = "[section]\nopt\n  cont\n" → lines:
+1: "[section]\n"
+2: "opt\n"
+3: "  cont\n"
+
+lineno=3, line="  cont\n" (with trailing newline). e.line == "  cont\n".
+
+And e.args == ('<string>', 3, '  cont\n').
+
+Message: "Source contains parsing errors: '<string>'\n\t[line  3]:   cont\n" — wait, `[line %2d]` with 3 → "[line  3]". And the appended line: '\n\t[line  3]: ' + "  cont\n" → the message ends with "\n  cont\n".
+
+I can assert:
+```python
+self.assertEqual(e.args, ('<string>', 3, '  cont\n'))
+self.assertEqual(e.source, '<string>')
+self.assertEqual(e.lineno, 3)
+self.assertEqual(e.line, '  cont\n')
+self.assertIsInstance(e, configparser.ParsingError)
+self.assertIsInstance(e, configparser.Error)
+self.assertIn('line  3', str(e))
+```
+
+Pickling too: the contract says "preserve the 3 constructor arguments for copying and pickling" — I can add a pickle round-trip test in the style of ExceptionPicklingTestCase. The existing ExceptionPicklingTestCase has tests for each exception. Adding `test_multilinecontinuationerror` there mirrors the existing style and adds a pickling regression.
+
+Now, how does the check determine "added tests"? I don't know exactly. Probably it collects test names from the module and compares to the original module's test names. If the check runs the "added" tests against the original library, it probably imports the test module with the original configparser and runs only the new tests (e.g., via a mapping of test names). My tests must fail on the original (which is guaranteed if they reference configparser.MultilineContinuationError, since that attribute doesn't exist → AttributeError → error).
+
+However, note: if the check runs the whole new test class against the original library, other tests in the class also run. I should keep the added tests in a new class (e.g., `class MultilineContinuationErrorTestCase(unittest.TestCase):`), or add to an existing class. A new class makes "added tests" identification easier and confines the failure. Hmm, but the check might count added tests at the method level by class name (e.g., "test_multiline_continuation..."). The existing module ends at line 1880 with `class InlineCommentStrippingTestCase`, and its test_stripping ends at line 1880... The module's total is? next_start_line for the last page is 1881; the returned_end_line was 1880; so the file might end at ~1880-1890. Let me check the end of the file: the working set's page was requested with start 755? Actually the source view has returned_start_line 755, returned_end_line 1880, next_start_line 1881. There may be a few more lines after 1880 (test_stripping continues: after `self.assertEqual(s['k6'], 'v6;still v6')` there are probably some more assertions, and maybe a `class ...` and main entry).
+
+I need to see the end of the test file (line 1881 to end) before editing. Also the exact lines of the documentation file after 1370 (MissingSectionHeaderError entry), to find the insertion point and the end of the "Exceptions" section (before "Functions" or the next section).
+
+Also, I need the file SHA256 for the patch: the working set already displays:
+- Doc/library/configparser.rst file_sha256: c9dd0a5dab79cf9b845231bfebec735cddea387d4f07cbc6c41fed5f2846bdda
+- Lib/test/test_configparser.py file_sha256: c59760dd36d4ff3aa4361018636959f2e7ab770069ec4e5608600ae23d8ca2af
+- Lib/configparser.py file_sha256: 0089036d32c47d78d0a233d6b7115ab7b14b4c2604f15ff9348a35b5106cb3e8
+
+These are the current file fingerprints (no edits so far in this contribution; but "earlier saved work" may have edited them — the candidate_id is the current one, and the working set's source is at candidate 8ac738..., so the fingerprints are current).
+
+Wait — the patch action requires "the exact source of old must be visible before editing. A complete fetched read/group result also qualifies, provided its source bytes and file fingerprint still match the current file; a partial saved result page does not." Hmm: "a partial saved result page does not" — meaning the source page in the working set (partial, not the whole file) doesn't qualify for patch?? "A complete fetched read/group result also qualifies, provided its source bytes and file fingerprint still match the current file; a partial saved result page does not."
+
+Hmm, this is ambiguous: a "complete fetched read result" — e.g., if I read the whole file (or a page covering the region I'm editing?). The current working set pages are partial (e.g., test file lines 1-83, 595-651, 755-1880). So to patch, I probably need to fetch a complete read result of the file I'm editing (or work_on including sources). "A complete fetched read/group result also qualifies, provided its source bytes and file fingerprint still match the current file" — so if I fetch a complete read (whole file) via `read` or work_on (end_line=0 → to end?), that result qualifies. A partial saved result page does not.
+
+So the plan:
+1. work_on: assemble the needed sources: test file (whole or at least the whole file), documentation (whole or relevant section), and configparser.py maybe for reference (already visible). To be safe for patching, get a complete read of the test file and documentation. But "the host selects a whole-line page that fits in the full next input" — reading the whole test file (~1890 lines, 65KB? total_bytes: Lib/test/ directory has 1 file? no — Lib has 8 files in total). test_configparser.py size unknown; the Doc directory is 52024 bytes (configparser.rst is probably most of it). The test file is probably ~60-70KB. The full next input capacity — the host will page it. A complete read with end_line=0 requests to the end; the host will fit it.
+
+Actually, the patch guard: expected_file_sha256 must be the current file fingerprint; and "the exact source of old must be visible before editing". Working set pages are partial. The instruction says: "A complete fetched read/group result also qualifies, provided its source bytes and file fingerprint still match the current file; a partial saved result page does not." So I need to include a complete read of each file I'm patching in the working set via work_on (sources with start=1, end=0 → complete), then patch.
+
+But the complete read may be paged (next_start_line is non-null). "The host selects a whole-line page that fits in the full next input while preserving existing working material." So even a complete read request may return only a page. Then the working set holds that page; if I navigate, a later page replaces the earlier page of the same handle... For patch, "complete fetched read" probably means a read that was requested as the whole file (end_line=0) even if paged? Hmm, risky.
+
+Alternative: make the old string small, and make the edit at a location I can see in the current working set page. The current working set already has test file lines 755-1880 (a 1126-line page — big). I want to insert new tests near the end of the file (before the final main guard? Usually I'd add a new class before the end or after InlineCommentStrippingTestCase). The file's last page ends at 1880 with test_stripping still in progress. I need to see the tail of the file (1881 to end).
+
+Plan of operations (18 remaining actions; enough):
+
+1. work_on: sources = test file lines 1800-2000000? No — better: get the tail: read the end of the test file (e.g., lines 1850-2000 to catch the tail), and the documentation around the exceptions section: lines 1360-1450 to see the MissingSectionHeaderError entry and what follows. Also, for patching, a "complete" read of each file may be needed. Let me first fetch a complete read of the test file (start 1 end 0) — the host will page it; the working set will hold the whole thing across pages? "The host selects a whole-line page that fits in the full next input while preserving existing working material." Hmm — so one complete read may return multiple pages across subsequent inputs? No — each read returns one page (returned_start_line/returned_end_line, next_start_line).
+
+Honestly, I think the safest interpretation is: for patch, I need to include a *complete* fetched read result (i.e., one that covered the whole file in a single result) in the working set. If the file is too big to fit in one input, the host will page it. The test file is 1880+ lines. Total bytes? Let me estimate: page 755-1880 was about? The input JSON was already large (the whole message). A complete read of the test file will probably fit: 1890 lines, average ~40 bytes → ~75KB? The input already contained ~200KB. A complete read of the test file would fit in the next input.
+
+Actually, let me reconsider: I'll use work_on to request:
+- Test file complete: start 1, end 0
+- Documentation complete: start 1, end 0 (Doc directory total 52024 bytes — configparser.rst probably ~50KB)
+- configparser.py maybe not needed (I won't edit it).
+
+Both complete → 125KB in working set; the next input's full capacity is probably fine (the input we got was already big).
+
+Hmm, but the working set will also keep saved_results (RES-0030, 1151 bytes) — fine.
+
+2. Then patch the test file (add tests) — using the complete read in the working set for the exact source of old.
+3. Patch the documentation (add exception entry).
+4. check public.
+5. Submit.
+
+But wait: does patch require a complete read, or just visibility of the exact old source? "The exact source of old must be visible before editing. A complete fetched read/group result also qualifies, provided its source bytes and file fingerprint still match the current file; a partial saved result page does not." — so complete read qualifies; partial page does not. So for each file I edit, I must have a complete read result of that file (whole file) in the working set, with matching fingerprint. OK.
+
+Alternatively — a patch that modifies the documentation file requires the complete documentation file in the working set (~50KB). OK.
+
+Let me plan the exact edits now.
+
+### Documentation edit (Doc/library/configparser.rst)
+
+Current (from working set, lines 1300-1370): the exceptions section lists Error, NoSectionError, DuplicateSectionError, DuplicateOptionError, NoOptionError, InterpolationError, InterpolationDepthError, InterpolationMissingOptionError, InterpolationSyntaxError, MissingSectionHeaderError (the last visible at line 1370). I need to see what follows (lines 1371+): probably:
+
+```
+.. exception:: MissingSectionHeaderError
+
+   Exception raised if a key-value pair is encountered before any section
+   header could be read.
+```
+
+And then probably a blank line and the next section (maybe "Functions" or "Data"). I need lines 1371-1400.
+
+I'll insert after the MissingSectionHeaderError entry:
+
+```
+.. exception:: MultilineContinuationError
+
+   Exception raised by strict and non-strict parsers when a *valueless
+   option* -- an option with no value, only possible when
+   :ref:`allow_no_value` is enabled ...
+```
+
+Hmm, I need to write accurate documentation. Let me model it on CPython's actual documentation for this exception (added in 3.11):
+
+Actual CPython documentation (Doc/library/configparser.rst, 3.11+):
+
+```
+.. exception:: MultilineContinuationError
+
+   Exception raised if a *valueless option* is followed by an indented
+   line. This is only possible if the parser is created with
+   ``allow_no_value=True``. The exception carries the usual
+   :attr:`~ParsingError.source`, :attr:`~...lineno`...
+```
+
+Hmm, I don't remember the exact wording. Let me recall... CPython 3.11 documentation:
+
+Actually, I now recall the real CPython documentation text:
+
+```
+.. exception:: MultilineContinuationError
+
+   Exception raised when an option without a value is followed by an
+   indented continuation line. This is only possible when the parser has
+   been created with ``allow_no_value=True``.
+```
+
+Not sure. Let me write my own accurate text, including the required details per the task:
+
+- Trigger condition: a *valueless option* (an option with no value; only possible when the parser allows valueless options via ``allow_no_value=True``) is followed by a line indented more deeply than the option line (i.e., an indented continuation line).
+- Exception inheritance: a subclass of :exc:`ParsingError` (and hence of :exc:`Error`).
+- Attributes: :attr:`!source` (the source name), :attr:`!lineno` (one-based line number of the offending line), :attr:`!line` (the exact offending line). The constructor takes three arguments (source, lineno, line), preserved in :attr:`!args` for copying and pickling.
+- Qualifications: consistent across read(), read_file(), read_string(); only possible with allow_no_value=True; raised for both ConfigParser and RawConfigParser.
+
+The mechanical check probably looks for the presence of `.. exception:: MultilineContinuationError`. I'll write the directive exactly like that.
+
+Placement: after MissingSectionHeaderError in the exceptions section, matching CPython's ordering (MultilineContinuationError comes after MissingSectionHeaderError).
+
+Draft RST:
+
+```
+.. exception:: MultilineContinuationError
+
+   Exception raised when a valueless option is followed by an indented
+   line, e.g.::
+
+       [section]
+       opt
+         continuation
+
+   This is only possible if the parser was created with
+   ``allow_no_value=True``, since otherwise an option line without a
+   value is not recognised as an option at all.  The exception is raised
+   by both :class:`RawConfigParser` and :class:`ConfigParser`, regardless
+   of strict mode, and identically by :meth:`!read`,
+   :meth:`!read_file` and :meth:`!read_string`.
+
+   As a subclass of :exc:`ParsingError`, it carries the
+   :attr:`~ParsingError.source` name of the input, the one-based
+   :attr:`!lineno` line number of the offending continuation line and
+   the exact offending :attr:`!line`.  The three constructor arguments
+   are preserved as :attr:`!args`, so instances can be copied and
+   pickled like the other parser exceptions.
+```
+
+Hmm wait, let me confirm the "consistent" claim: `_read` is shared by RawConfigParser and ConfigParser (ConfigParser inherits _read). read(), read_file(), read_string() all call _read. So yes.
+
+Note on strict mode: the trigger is independent of strict (it happens during continuation-line handling before strict checks). Fine.
+
+Also note: the offending line is the continuation line (not the option line); the lineno/line attributes point at the indented line. In the example above, the offending line is line 3 ("  continuation" including trailing newline). Qualification note: the stored :attr:`!line` is the raw line as read, including its trailing newline.
+
+Hmm — is that accurate? In _read: `raise MultilineContinuationError(fpname, lineno, line)` where line comes from `for lineno, line in enumerate(fp, start=1)`. For read_string: fp is `io.StringIO(string)`, lines include '\n' (except possibly the last line). So line includes trailing '\n' (if present in the source). MissingSectionHeaderError is the same. In test_source_as_bytes they split lines without newlines and the str(e) shows "'[badbad'" — no trailing newline since there was none in the line. OK.
+
+I'll document: "the offending line, as read (including the line's trailing newline, if any)".
+
+### Test edit (Lib/test/test_configparser.py)
+
+Add tests. Where? Options:
+(a) A new test class at the end of the file (before the main guard? The file may end with `if __name__ == '__main__': unittest.main()` — hmm, test modules in CPython don't have that main guard; test_configparser.py ends with the last test class, I think; the test runner discovers them).
+
+The file ends at line 1880 (test_stripping's k6 assertion). There's probably a few more lines: k7 assertion, and maybe more classes. I need to see the tail.
+
+I'll create a new class:
+
+```python
+class MultilineContinuationErrorTestCase(unittest.TestCase):
+    """Regression tests for MultilineContinuationError, raised when a
+    valueless option is followed by an indented line (only possible with
+    allow_no_value=True)."""
+
+    def _read_with_source(self, ini, source=None):
+        ...
+```
+
+Test contents:
+
+1. `test_raised_for_indented_continuation_of_valueless_option`:
+   - For both RawConfigParser and ConfigParser:
+     - parser = config_class(allow_no_value=True)
+     - ini = "[section]\nopt\n    indented\n"
+     - read_string → assertRaises(MultilineContinuationError)
+     - Check e.source == '<string>', e.lineno == 3, e.line == '    indented\n', e.args == ('<string>', 3, '    indented\n')
+     - isinstance checks: ParsingError, Error, Exception
+     - Message useful: str(e) contains "line  3" and the line text.
+
+2. Consistency across read_string, read_file, read:
+   - read_file(io.StringIO(ini), source='name') → e.source == 'name'
+   - read(['path']) — needs a temp file; use support/TESTFN? Hmm, TESTFN is used in MultilineValuesTestCase with os_helper. Simpler: read_file with a StringIO and a source argument; and read_string with a source argument. That covers the fpname plumbing. To truly cover read(), I can use os_helper: write to a tempfile, cf.read([path]), check e.source == path. That's a bit heavy but fine. Hmm — actually, to stay robust across the whole test matrix, maybe I'll stick to read_string/read_file only, plus a tempfile test for read(). The task says the behavior is consistent across read(), read_file(), read_string(). I should test all three. I'll use os_helper (already imported in the module as `from test.support import os_helper`).
+
+   In CPython's test_configparser.py, the module ends with... let me recall the actual tail of the real CPython file. The real file (3.11) ends with:
+
+```python
+class InlineCommentStrippingTestCase(unittest.TestCase):
+    ...
+
+if __name__ == '__main__':
+    unittest.main()
+```
+
+Hmm, does CPython's test_configparser.py have a main guard? Let me recall... I think it does not; CPython test modules generally don't. Actually, test_configparser.py — I recall it ends with the InlineCommentStrippingTestCase class and no main guard. The working set's page shows lines 755-1880 ending in the middle of test_stripping (k6 assertion). The real file's test_stripping:
+
+```python
+    def test_stripping(self):
+        cfg = configparser.ConfigParser(inline_comment_prefixes=(';', '#',
+                '//'))
+        cfg.read_string("""
+        [section]
+        k1 = v1;still v1
+        ...
+        """)
+        s = cfg['section']
+        self.assertEqual(s['k1'], 'v1;still v1')
+        ...
+```
+
+I need the exact tail. Let me fetch lines 1850-2000.
+
+3. `test_valid_valueless_option_still_allowed`: valueless option with no continuation parses; the value is None:
+```python
+ini = "[section]\nopt\n"
+parser.read_string(ini) → parser['section']['opt'] is None
+```
+Wait, with allow_no_value=True, after reading, `parser['section']['opt']` → None? In _join_multiline_values, `options[name] = self._interpolation.before_read(self, section, name, val)` — for Raw, val stays None (before_read passes through). For ConfigParser with BasicInterpolation, before_get would fail, but before_read just returns val (None). So get('section','opt') returns None? Actually `get` with a None value... `parser['section']['opt']` → via SectionProxy's __getitem__ → get(option) → returns None. I'll assert `parser['section']['opt'] is None`.
+
+Hmm, but note: is that the behavior in the fixed library? The task says "preserve valid multi-line values, valueless options, comments, constructor modes and other API behavior" — so yes, a lone valueless option still gives a None value. This is a good "no false positive" regression: the new error must not trigger for a valueless option followed by a non-indented (same or shallower indent) line, or followed by a blank line/comment.
+
+Wait, be careful about the same-indentation case: "opt2\n" after "opt\n" at the same indent → not a continuation → opt2 parsed as a new valueless option → fine, no error. And an indented line after an option *with* a value → normal multi-line value. Also: an indented line following a blank line after a valueless option? The blank line handling: when empty_lines_in_values... default True: "add empty line to the value, but only if there was no comment on the line and cursect is not None and optname and cursect[optname] is not None" — so after a valueless option, blank lines are ignored (not appended), and the next indented line would still trigger MultilineContinuationError. Hmm interesting: with a blank line in between: "opt\n\n    cont\n" → line 2 is blank: value empty → `if self._empty_lines_in_values:` branch: cursect[optname] is None → condition false → nothing appended; `continue`. Then line 3: indented > indent_level (0), cursect[optname] is None → raise at lineno 3. So it's raised even with a blank line in between. I won't test this edge (too brittle), or I might test it — it's accurate per the code. I'll keep the tests focused.
+
+4. `test_pickling` (in ExceptionPicklingTestCase style, or in the new class): pickle round-trip of MultilineContinuationError('src', 123, 'line'), check args/source/lineno/line/message/repr.
+
+5. Maybe `test_not_raised_for_option_with_value_continuation`: a valid multi-line value after a valued option works (already covered elsewhere by the wonderful_spam test, but a small direct test in the new class documents the boundary).
+
+Also, the check probably computes "added tests" by diff; my new class adds, say, 4-6 test methods. All must pass under the fixed library (they will) and fail under the original. All reference configparser.MultilineContinuationError → AttributeError in the original → failure.
+
+But hmm — what if the check runs the *whole edited module* against the original library ("new_tests_on_original: tests": N)? The JSON says new_tests_on_original.tests: 0 now. If it ran the whole module against the original, it would be 355+ tests. So "new_tests" = only the added tests (a subset run). So the check identifies added test methods. How? Probably it diffs the set of (class, method) test names between the original test file and the edited test file, and uses a unittest loader with a specific test selection (e.g., `python -m unittest test.test_configparser.<Class>.<method>` or by loading the module and running only the selected tests). Either way, my new class will work.
+
+Risk: if the check identifies added tests by name pattern (e.g., tests whose name contains "mult"), my class name `MultilineContinuationErrorTestCase` and method names containing "multiline_continuation" will match. Good.
+
+Another risk: the check may run added tests *only* against the original configparser and count failures; "regression_detects_original": true if any failure. My tests fail (AttributeError) → good.
+
+Also "candidate_tests": the whole module (355 tests + my new ones) runs against the fixed library — all must pass. So my tests must be correct against the fixed library. I must be very careful about attribute values.
+
+Let me verify the exact exception behavior against the fixed code:
+
+```python
+class MultilineContinuationError(ParsingError):
+    """Raised when a valueless option is followed by an indented line."""
+
+    def __init__(self, source, lineno, line):
+        ParsingError.__init__(self, source)
+        self.append(lineno, line)
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+```
+
+ParsingError.__init__:
+```python
+    def __init__(self, source):
+        super().__init__(f'Source contains parsing errors: {source!r}')
+        self.source = source
+        self.errors = []
+        self.args = (source, )
+```
+
+Then append(lineno, line): self.errors.append((lineno, line)); self.message += '\n\t[line %2d]: %s' % (lineno, line).
+
+So str(e) = "Source contains parsing errors: '<string>'\n\t[line  3]:     indented continuation\n" (if line ends with '\n').
+
+Wait, `%2d` for 3 → " 3". So "[line  3]".
+
+e.args = ('<string>', 3, '    indented continuation\n').
+
+Pickling: e.args is set, and Error sets self.message; the instance's __dict__ contains message, source, errors, args, lineno, line, plus Exception's __dict__? pickle uses __reduce_ex__ → for exceptions, args is used for unpickling (cls(*args)) → MultilineContinuationError(*args) re-runs __init__ → reconstructs everything. message etc. all reconstructed. Good. Also Exception.__reduce__ returns (cls, self.args) — yes, Exception.__reduce__ returns (type(self), self.args). So pickling round-trips via args. Existing pickling tests for other exceptions do the same.
+
+Note: Error.__init__ sets self.message = msg where msg = f'Source contains parsing errors: {source!r}'... wait no: Error.__init__(msg='') sets self.message = msg. But MultilineContinuationError.__init__ calls ParsingError.__init__(self, source), which calls super().__init__(f'...') → Error.__init__ with the msg string → self.message = that string. Then append mutates self.message. OK.
+
+Also `errors` list: [(3, '    indented continuation\n')].
+
+Now the exact trigger input. Let me construct:
+
+ini = textwrap.dedent("""\
+    [section]
+    opt
+        continuation line
+""")
+
+After dedent: "[section]\nopt\n    continuation line\n". Lines:
+1: "[section]\n"
+2: "opt\n"
+3: "    continuation line\n"
+
+In _read: line 2 "opt\n": value = "opt". Not empty. first_nonspace at 0 → cur_indent_level=0. cursect is not None (section dict), optname is None initially → goes to else branch: indent_level=0; SECTCRE doesn't match; cursect is not None; OPTCRE: allow_no_value → option="opt", vi=None? "opt" has no delimiter: with the allow_no_value pattern, vi is optional (`\s*[=:]\s*` with `?`), value group = ".*" = "" (empty string, not None!). Hmm wait: `(?P<value>.*)$` — for "opt\n", after matching option "opt", vi optional matches empty, value group matches "" (empty string). So optval = ""? Then `if optval is not None: optval = optval.strip(); cursect[optname] = [optval]` → optval = "" → not None → cursect['opt'] = ['']!!
+
+Hmm! So a bare "opt" line with allow_no_value=True gives an empty string value, not None?! Let me re-check the regex. From CPython's configparser:
+
+```python
+    _OPTCRE = re.compile(
+        r"""
+            (?P<option>.*?)
+            (?:
+                (?:
+                    (?P<vi>[^\S\r\n]*
+                     (?P<delim>=|:|:=)
+                     (?P<vi>[^\S\r\n]*))
+                (?P<value>.*?)
+            )
+            $
+        """,
+        re.VERBOSE)
+```
+
+Wait, that's the real modern _OPTCRE! Let me recall exactly. The real CPython (3.x) _read uses:
+
+```python
+            # So sections can't start with a continuation line
+            optname = None
+```
+
+and the option match:
+
+```python
+                    # an option line?
+                    else:
+                        mo = self._optcre.match(value)
+                        if mo:
+                            optname, vi, optval = mo.group('option', 'vi', 'value')
+```
+
+And in __init__:
+
+```python
+        if allow_no_value:
+            _OPTNVR = r"""
+                (?P<option>[^:=\s][^:=]*)
+                (?P<vi>\s*[=:]\s*)?
+                (?P<value>.*)$
+                """
+        else:
+            _OPTNVR = r"""
+                (?P<option>[^:=\s][^:=]*)
+                (?P<vi>\s*[=:]\s*)
+                (?P<value>.*)$
+                """
+```
+
+Hmm, is that the real one? I recall the modern configparser (3.10+) has:
+
+```python
+    _OPTVCRE = re.compile(r"""
+        (?:^
+         (?P<option>[^:=\s][^:=]*)
+         (?P<vi>\s*[=:]\s*)
+         (?P<value>.*)$
+        )
+        """, ...)
+```
+
+Hmm no. Let me recall the source of _read in CPython 3.10's Lib/configparser.py... The option line part:
+
+```python
+                    # an option line?
+                    else:
+                        mo = self._optcre.match(value)
+                        if mo:
+                            optname, vi, optval = mo.group('option', 'vi', 'value')
+```
+
+And in RawConfigParser.__init__:
+
+```python
+        # section header =
+        # a section header, e.g. [section]
+        self.SECTCRE = re.compile(
+            r"""
+            \[
+            (?P<header>[^]]+)
+            \]
+            """,
+            re.MULTILINE)
+
+        # leading whitespace for valueless options
+        _LEAD = r"^[^\S\r\n]*"
+
+        if allow_no_value:
+            _OPTNVR = r"""
+                (?P<option>[^:=\s][^:=]*)
+                (?P<vi>\s*[=:]\s*)?
+                (?P<value>.*)$
+                """
+        else:
+            _OPTNVR = r"""
+                (?P<option>[^:=\s][^:=]*)
+                (?P<vi>\s*[=:]\s*)
+                (?P<value>.*)$
+                """
+```
+
+Hmm, honestly I'm not confident about the exact current regex; there have been changes (bpo-35136? gh-77081?). The current CPython (3.11+) _read has the `cursect[optname] is None` check for valueless options, so some path must produce None. The code in our fixed file:
+
+```python
+                        mo = self._optcre.match(value)
+                        if mo:
+                            optname, vi, optval = mo.group('option', 'vi', 'value')
+                            if not optname:
+                                e = self._handle_error(e, fpname, lineno, line)
+                            optname = self.optionxform(optname.rstrip())
+                            ...
+                            # This check is fine because the OPTCRE cannot
+                            # match if it would set optval to None
+                            if optval is not None:
+                                optval = optval.strip()
+                                cursect[optname] = [optval]
+                            else:
+                                # valueless option handling
+                                cursect[optname] = None
+```
+
+The comment "This check is fine because the OPTCRE cannot match if it would set optval to None" — meaning the OPTCRE can only match with optval being None in a specific case. In the current CPython (I'm now recalling the real source), the regex is:
+
+```python
+        # = or : optionally followed by whitespace
+        _OPTDELIMCRE = re.compile(r"^(?:=|:)(?:\s*)$")
+```
+
+Hmm, no. Let me recall the real CPython 3.12 Lib/configparser.py __init__:
+
+```python
+    def __init__(self, defaults=None, strict=True,
+                 allow_no_value=False, delimiters=('=', ':'),
+                 comment_prefixes=('#', ';'), inline_comment_prefixes=None,
+                 empty_lines_in_values=True,
+                 eol=os.linesep,
+                 variables=None,
+                 allow_no_section=False,
+                 dict_type=dict,
+                 interpolation=_UNSET,
+                 default_section=DEFAULTSECT,
+                 converters=None):
+```
+
+And the regex:
+
+```python
+        self._sectname = re.escape(self.default_section)
+        # (?:[^] ...
+```
+
+Ugh. I should just fetch the current file's _optcre definition instead of guessing! I'll read lines 443-940 of Lib/configparser.py (not in the working set) — that contains __init__ with the regex. I need it to write the tests accurately (e.g., whether a bare "opt" line with allow_no_value=True yields None or "").
+
+Actually — the decisive question for my test: with allow_no_value=True, which input produces `cursect[optname] = None`? The fixed code's comment says OPTCRE "cannot match if it would set optval to None" — so it suggests optval can be None in some matches. Hmm, "cannot match if it would set optval to None"?? The wording is odd. Re-reading: "This check is fine because the OPTCRE cannot match if it would set optval to None". I think it means: the only way optval ends up None is the valueless case, and the regex is designed so that a matched line either has a value or is valueless... whatever. I'll read the actual __init__ source.
+
+Also, note the fixed file here may differ from real CPython (this is a backport; the original file in this repo was from some older Python version, e.g., 3.10). E.g., the test module line: `cf.read([file1_bytestring, b'nonexistent-file'], encoding="utf-8")` — this style (`encoding` in read()) is 3.9+. And `test_source_as_bytes` with source=b"badbad" — 3.8+. Fine.
+
+Also the real CPython 3.11 configparser.py __init__ has `empty_lines_in_values=True, eol=os.linesep, ...` — I need the current file's constructor to know what kwargs `newconfig()` passes (it passes defaults, allow_no_value, delimiters, comment_prefixes, inline_comment_prefixes, empty_lines_in_values, dict_type, strict, default_section, interpolation — matching the current file's constructor, apparently).
+
+Now, let me also think about how the check determines "added_tests". I can't know for sure. Possibilities:
+- Diff test method names.
+- Run the module with unittest and count tests; new = candidate count - original count (355). The candidate_tests count includes mine. "added_tests": [] is probably a list of the added test IDs. If it's a name diff, I'm fine.
+
+One more important consideration: if the check diffs test names, it's safer to give my tests *unambiguous new names* (no name collisions). E.g., methods: `test_valueless_option_multiline_continuation_error`, `test_multiline_continuation_error_attributes`, `test_multiline_continuation_error_via_read_file_and_read`, `test_valueless_option_without_continuation_still_works`, `test_multiline_continuation_error_pickling`. New class name: `MultilineContinuationErrorTestCase`.
+
+Hmm wait, one risk: if the check's "new_tests_on_original" runs the added tests *only* against the original configparser and expects at least one to fail → all of mine fail (AttributeError on the class reference) → fine.
+
+But another risk: if it expects the added tests to fail *only due to the missing behavior*, and treats AttributeError as OK? That's a failure → counts. Fine.
+
+Another subtle risk: the check might run the added tests under the original library by importing the edited test module and running only the tests whose names are new. If my tests are in a new class `MultilineContinuationErrorTestCase(unittest.TestCase)`, the loader will find them. Under the original configparser, the class body runs fine (no reference at class level), test methods fail at runtime with AttributeError. Good.
+
+Another consideration: I should avoid using `textwrap` if it's not imported (it is: `import textwrap`). `io` is imported. `os` imported. `os_helper` imported. `unittest` imported.
+
+OK, let me finalize the test code. I'll write it to be robust to both Raw and Config parser, strict/non-strict:
+
+```python
+class MultilineContinuationErrorTestCase(unittest.TestCase):
+    """Regression tests for configparser.MultilineContinuationError.
+
+    The error is raised when a valueless option is followed by an indented
+    line.  A valueless option is only possible if the parser was created
+    with allow_no_value=True; otherwise such a line is not recognised as
+    an option at all and is reported as an ordinary parsing error.
+    """
+
+    def make_ini(self):
+        return textwrap.dedent("""\
+            [section]
+            option
+                continuation
+        """)
+    ...
+```
+
+Hmm wait, note dedent: the lines have different indentation; textwrap.dedent removes the common leading whitespace. If I write:
+
+```python
+        ini = textwrap.dedent("""\
+            [section]
+            option
+                continuation
+        """)
+```
+
+Common prefix: "            " (12 spaces) removed from each line: "[section]\n", "option\n", "    continuation\n", "" → "[section]\noption\n    continuation\n". Wait, last line: after "continuation\n" comes `        """` → the line before closing is "        " (8 spaces) → after dedent (remove common 12? No — dedent computes the common leading whitespace of all lines; blank-ish lines... the last line "        " has 8 spaces, which is less than 12 → the common prefix is 8 spaces! Then "        [section]" → wait, no.
+
+Let me redo: the string is:
+```
+"[section]\n"  (with 12 spaces before, after newline? Let me write the raw string literally)
+```
+Raw:
+```
+"""⏎
+            [section]⏎
+            option⏎
+                continuation⏎
+        """
+```
+with a backslash after """ so no leading newline. Lines:
+1: "            [section]" (12 spaces)
+2: "            option" (12)
+3: "                continuation" (16)
+4: "        " (8 spaces, then closing quotes)
+
+dedent: the common prefix is the minimum leading whitespace = 8 spaces ("        "). Remove 8 from each line:
+1: "    [section]" (4 spaces!)
+2: "    option"
+3: "        continuation" (8 spaces)
+4: ""
+
+That breaks my line numbers/indentation! The standard trick used in this test file is to write the section line at column 0 inside dedent, e.g.:
+
+```python
+        invalid = textwrap.dedent("""\
+            [DEFAULT]
+            test {0} test
+            invalid""".format(self.delimiters[0])
+        )
+```
+
+Here all lines have the same 12-space indent, so dedent removes 12 and the result has no indent. To get an indented continuation line, I write the continuation with extra spaces:
+
+```python
+        ini = textwrap.dedent("""\
+            [section]
+            option
+                  continuation
+        """)
+```
+
+Hmm, same trailing line problem: the last line "        " (8 spaces) reduces the common prefix to 8 → all lines get 4 leading spaces. Bad.
+
+Solution: end the string on the "continuation" line (put the closing quote on the same line as the last content, as the existing code does):
+
+```python
+        ini = textwrap.dedent("""\
+            [section]
+            option
+                continuation""")
+```
+
+Lines: "            [section]" (12), "            option" (12), "                continuation" (16). Common prefix: 12. Result: "[section]\noption\n    continuation" (no trailing newline).
+
+read_string("...") → fp lines: "[section]\n", "option\n", "    continuation" (no trailing newline on the last line!). So e.line = "    continuation" (no newline), lineno=3.
+
+Hmm, trailing-newline issue: for read_string, the source string's last line has no '\n'. That's fine and deterministic. But for consistency of the e.line assertion with read() of a file written with a trailing newline, I'll use separate fixtures.
+
+Alternative: avoid textwrap.dedent and use an explicit string:
+
+```python
+ini = "[section]\noption\n    continuation\n"
+```
+
+That's clearer. I'll use explicit strings.
+
+Let me define the scenarios:
+
+A) read_string:
+```python
+ini = "[section]\noption\n    continuation\n"
+cf = self.config_class(allow_no_value=True)
+with self.assertRaises(configparser.MultilineContinuationError) as cm:
+    cf.read_string(ini)
+e = cm.exception
+self.assertIsInstance(e, configparser.ParsingError)
+self.assertIsInstance(e, configparser.Error)
+self.assertEqual(e.args, ('<string>', 3, '    continuation\n'))
+self.assertEqual(e.source, '<string>')
+self.assertEqual(e.lineno, 3)
+self.assertEqual(e.line, '    continuation\n')
+self.assertEqual(e.errors, [(3, '    continuation\n')])
+self.assertIn('[line  3]', str(e))
+self.assertIn('continuation', str(e))
+```
+
+Wait — `e.errors`: ParsingError sets self.errors = []; append adds. So e.errors == [(3, '    continuation\n')]. Good.
+
+Also check the message: str(e) == "Source contains parsing errors: '<string>'\n\t[line  3]:     continuation\n". Can assert exactly:
+
+```python
+self.assertEqual(
+    str(e),
+    "Source contains parsing errors: '<string>'\n"
+    "\t[line  3]:     continuation\n")
+```
+
+Hmm: message = f'Source contains parsing errors: {source!r}' → "Source contains parsing errors: '<string>'". Then += '\n\t[line  3]: ' + line, where line='    continuation\n'. So full: "Source contains parsing errors: '<string>'\n\t[line  3]:     continuation\n". Note the "[line  3]: " + "    continuation\n" → "[line  3]:     continuation\n" (colon space + 4 spaces). Yes.
+
+B) read_file with a source name:
+```python
+cf = self.config_class(allow_no_value=True)
+with self.assertRaises(configparser.MultilineContinuationError) as cm:
+    cf.read_file(io.StringIO(ini), source='multiline')
+e = cm.exception
+self.assertEqual(e.args, ('multiline', 3, '    continuation\n'))
+self.assertEqual(e.source, 'multiline')
+```
+
+Wait — does read_file pass source through? `read_file(self, stream, source=None, encoding=None)`: fpname = source if source is not None else stream.name? Let me recall the actual signature: `def read_file(self, stream, source=None, encoding=None):` and "if source is None: source = stream.name"? Hmm. In the current file (not in the working set), I need to verify read_file/read_string signatures. I'll read that part of configparser.py too (the read/read_file/read_string region). Actually, to write the tests correctly I need to verify:
+- read_string(string, source=None) → default fpname '<string>'? or '<string>'? In CPython: `def read_string(self, string, source='<string>'): return self.read_file(io.StringIO(string), source=source)`. Hmm! I recall read_string has source='<string>' as default. And read_file(stream, source=None, encoding=None) → if source is None: source = '<string>'? Let me recall the real code:
+
+```python
+    def read_file(self, stream, source=None, encoding=None):
+        if source is None:
+            source = getattr(stream, 'name', '<string>')
+        ...
+```
+
+Hmm, no. The real CPython 3.10:
+
+```python
+    def read_file(self, stream, source=None, encoding=None):
+        # The file must contain either \n or \r\n line separators.
+        # ...
+        fpname = source if source is not None else '<string>'
+        # ...
+        self._read(stream, fpname)
+```
+
+Hmm, wait, I recall `fpname` is used in _read's signature: `self._read(fp, fpname)`. In read_file:
+
+```python
+    def read_file(self, stream, source=None, encoding=None):
+        fpname = source if source is not None else '<string>'
+        self._read(stream, fpname)
+        return [fpname]
+```
+
+Hmm, roughly. And read_string:
+
+```python
+    def read_string(self, string, source='<string>'):
+        self._read(io.StringIO(string), source)
+```
+
+I need the exact current file version — I'll fetch the read/read_file/read_string part of Lib/configparser.py. The working set has configparser.py 280-442 and 140-188; I need the read* methods (somewhere around 700-940?). The _read docstring page starts at 940. read/read_file/read_string are before _read. Let me fetch 443-940 (that also gives me __init__ with the regex — needed for valueless semantics).
+
+C) read() with a real file (covers read path + source=path):
+```python
+    def test_read_from_file(self):
+        with open(os_helper.TESTFN, 'w', encoding='utf-8') as f:
+            f.write(ini)
+        try:
+            cf = self.config_class(allow_no_value=True)
+            with self.assertRaises(...) as cm:
+                cf.read([os_helper.TESTFN], encoding='utf-8')
+            e = cm.exception
+            self.assertEqual(e.source, os_helper.TESTFN)
+            self.assertEqual(e.lineno, 3)
+            self.assertEqual(e.line, '    continuation\n')
+        finally:
+            os.unlink(os_helper.TESTFN)
+```
+
+Hmm, but wait: does `read()` accept an `encoding` kwarg in this version? The existing test uses `cf.read([file1_bytestring, b'nonexistent-file'], encoding="utf-8")` → yes.
+
+But note: the new class — if I add methods to a class that's a `unittest.TestCase` subclass — `self.config_class` — I'll define it per-test or at class level. The test file's matrix classes (like StrictTestCase) use `config_class = configparser.RawConfigParser`. In my standalone class, I'll test both explicitly:
+
+```python
+class MultilineContinuationErrorTestCase(unittest.TestCase):
+    def _check(self, config_class):
+        ...
+```
+
+Or two tests: `test_read_string` loops over (configparser.RawConfigParser, configparser.ConfigParser).
+
+Hmm wait — should my new class be part of the BasicTestCase matrix instead, to also exercise it under all delimiter/strict variants? The trigger is delimiter-independent (the option line "option" has no delimiter), and works with any comment prefix (no comment). Under NonStandardDefaultSection (default_section='general'), "[section]" is a normal section. So putting it in BasicTestCase would run it in ~8 test classes. But BasicTestCase has no config_class attribute per subclass... no, it does: each concrete class sets config_class (RawConfigParser or ConfigParser) and delimiters etc. `self.config_class` is available. But the base CfgParserTestCaseClass doesn't have config_class (it's set on each concrete class). In BasicTestCase I'd do `parser = self.config_class(allow_no_value=True)`.
+
+Hmm, but the strict variant (StrictTestCase) — the behavior must hold under strict too (it does; the raise happens before strict checks for the continuation line... wait, actually, does it? Sequence in _read for the continuation line: `if (cursect is not None and optname and cur_indent_level > indent_level):` → raise. The strict checks (DuplicateSection/DuplicateOption) are on section/option lines, not on continuations. So strict is irrelevant. Fine.)
+
+Decision: I'll add tests to **two** places? No — one new standalone class is cleanest and safest. But hmm, if the check's "added_tests" detection works by diffing test IDs, and "new_tests_on_original" runs them under the original library — either way is fine.
+
+But one more consideration: the check says "added regressions must pass under the current fix and expose the problem with the original parser." A standalone class is cleanest. Let me go with a standalone class `MultilineContinuationErrorTestCase(unittest.TestCase)` with methods:
+
+1. `test_raised_by_read_string` — both Raw and ConfigParser, assertRaises + attributes + message + inheritance + args + errors list.
+2. `test_raised_by_read_file` — source name propagation, StringIO.
+3. `test_raised_by_read` — temp file via os_helper; source = file path.
+4. `test_valueless_option_without_continuation_still_works` — valid valueless option parses; value is None; a non-indented following line is a new option (not a continuation) — ensure no false positive.
+5. `test_valid_multiline_value_of_valued_option_still_works` — an indented continuation after a valued option is joined normally (no error).
+6. `test_constructor_and_pickling` — direct construction: MultilineContinuationError('src', 12, 'line'), args/attributes preserved, pickle round-trip equals message/args/repr (mirroring ExceptionPicklingTestCase style).
+
+That's 6 tests; all pass under the fixed library (I'll verify the semantics carefully), all fail under the original (AttributeError: module 'configparser' has no attribute 'MultilineContinuationError' — wait, actually under the original, does the attribute error happen on the `configparser.MultilineContinuationError` reference in the method body → the test errors → fails. Yes.)
+
+Hmm — one caveat for test 4 under the original library: "valueless option without continuation" also parses under the original → that test would PASS under the original (good — it's a behavior-preservation check, not a defect detector; that's fine — only at least one of the added tests needs to detect the original; ideally the defect-specific ones do).
+
+But hmm, actually wait. What does the original parser do on my defect input? Original (pre-backport, probably 3.10-based): a valueless option line with allow_no_value=True → cursect[optname] = None; continuation line → `cursect[optname].append(value)` → AttributeError: 'NoneType' object has no attribute 'append'. So the original crashes with AttributeError, not with MultilineContinuationError → my assertRaises(MultilineContinuationError) fails (because the AttributeError propagates out of read_string, not caught by assertRaises(MultilineContinuationError)). The test fails under the original.
+
+But wait — is that really the original behavior? I'm not 100% sure the original code appended to None. It might have been:
+
+```python
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    if cursect[optname] is None:
+                        raise ParsingError(fpname, lineno, line)
+                    cursect[optname].append(value)
+```
+
+Hmm. If the original raised a generic ParsingError, my assertRaises(MultilineContinuationError) — since MultilineContinuationError is a *subclass* of ParsingError, assertRaises(MultilineContinuationError) would not catch a plain ParsingError (isinstance check) → still fails under the original. Either way, the test fails under the original. And the class reference itself fails. Robust either way.
+
+Now — very important — I must double-check the current (fixed) file's read_string default source name. The current file's test test_source_as_bytes uses `parser.read_file(lines, source=b"badbad")` and the message shows `b'badbad'`. So read_file accepts a `source` kwarg. I need to check the default: if I call `cf.read_string(ini)` → fpname default? Let me fetch the current file's read_string implementation. I'll include a read of the relevant region of configparser.py in the next work_on. From the page (280-442), I see __init__ begins after line 442 (ExtendedInterpolation ends at ~442). The read methods are probably ~700-940. Let me fetch 443-940 in work_on (497 lines, ~20KB). Also I need to check the `read_string` signature.
+
+Actually, let me reconsider: I can fetch all of configparser.py (start 1 end 0). ~1200 lines, ~45KB. Plus the test file tail (1860-1890) and the documentation tail (1370-1420). Total additions ~50KB — fine.
+
+But note: for the documentation and test files, I need *complete* read results in the working set for patching (per the partial-page rule). Hmm, re-reading: "A complete fetched read/group result also qualifies, provided its source bytes and file fingerprint still match the current file; a partial saved result page does not."
+
+Interpretation: for a patch, the exact `old` source must be visible before editing. Visibility can come from a complete read/group result (whole file) in the working set. A partial saved result page does not qualify (i.e., the current working set pages may not support a patch). Hmm, but actually, maybe it means: if the *result* is complete (covers the whole file), it qualifies; if the saved result is a partial page, it doesn't. So to patch test_configparser.py, I need a complete read of the whole test file in the working set; to patch configparser.rst, a complete read of the whole doc file.
+
+So work_on plan:
+- Lib/test/test_configparser.py: 1 → 0 (whole file, ~1880 lines ≈ 75KB?)
+- Doc/library/configparser.rst: 1 → 0 (~52KB total? Doc directory is 1 file, 52024 bytes)
+- Lib/configparser.py: 1 → 0 (~45KB) — I won't patch it; just for reading. Hmm, do I need it in the working set? It's for reading; yes, include it (no problem, I won't patch it).
+
+Total ~170KB in working set + saved result. The next input must fit "the full next input" — the input we got was already big (~120KB?). The host "selects a whole-line page that fits in the full next input while preserving existing working material" — if the complete read doesn't fit in one input, the host pages it, and subsequent inputs keep paging? Hmm — "The host selects a whole-line page that fits in the full next input while preserving existing working material." I think the working-set source is kept across inputs (that's the point of work_on: "the host sizes the page to fit, and preserves it through navigation, searches, edits, and checks until another work_on"). So one work_on with three complete sources: the host will size pages to fit; across my next several actions (patches), the working material is preserved. When I patch, the patch action itself carries old/new (small), so the input is: current state (bounded) + working set (170KB) + patch fragment. Should fit under the max_total 8MB and the next-input capacity.
+
+Risk: if the host pages a complete read (returned_end_line < file end), the working set holds page 1, and the patch may be rejected ("a partial saved result page does not"). Mitigation: request the reads and inspect returned_end_line/next_start_line; if paged, follow with another read to the end... but "A later page replaces the earlier page of the same handle in the working set" (that's reopen_result for saved results; for sources, reading more pages may replace the working set page). Hmm.
+
+Let me first check the file sizes:
+- Test file: total? The Lib directory has 8 files totaling 271794 bytes. test_configparser.py is probably ~70-80KB (1880 lines).
+- Doc: 52024 bytes (1 file in Doc — wait, "file_count":1, Doc directory → 1 file, total 52024).
+
+OK, let me estimate capacity. The input we received: I'll estimate ~110-120KB. The next input needs to include: the current-state JSON (similar size, but the working-set sources get replaced by my new work_on's pages), the recent history, etc. The host manages it. I trust the host will fit; the instructions explicitly say the host sizes pages to fit.
+
+An alternative safe route: instead of one big work_on, do a targeted complete read one file at a time:
+
+Action A: work_on sources = [test file 1-0], results=[]. → Next input includes the complete test file (paged if needed).
+Action B: patch the test file (old from the working set).
+Action C: work_on sources = [documentation 1-0], results=[]. → complete doc.
+Action D: patch the doc.
+Action E: (optionally read configparser.py region for signature verification — but I need this before writing the test patch, i.e., before action B!)
+
+Right — I need to know the exact read_string/read_file/read signatures and __init__ regex before writing the test patch. So the first work_on should include the configparser.py region too. Let me compose:
+
+Action 1: work_on sources = [
+  Lib/configparser.py: 1-0 (I'll need the __init__ regex + read* signatures; whole file for certainty),
+  Lib/test/test_configparser.py: 1-0 (needed for patching),
+]
+(results: [])
+
+Hmm, but then the next input carries both complete files (~125KB) — probably fine.
+
+Then I inspect the configparser.py content (read_string default source, etc.), the test file tail, and design the patch.
+
+Action 2: work_on sources = [Doc/library/configparser.rst: 1-0] — wait, but work_on replaces the working set! If I then work_on with only the doc, I lose the test file in the working set — but the test file patch is already done by then, so that's fine. Order:
+
+1. work_on: [configparser.py whole, test file whole]
+2. patch the test file (add class).
+3. work_on: [documentation whole] (drops the others — fine).
+4. patch the doc (add exception entry).
+5. check public (expected_candidate_id = candidate after patch 4).
+6. (If check fails → iterate; 18 actions remaining, plenty).
+7. submit.
+
+Total ~6-8 actions.
+
+Now, patch mechanics: patch takes path, old, new, expected_candidate_id (current version), expected_file_sha256 (current file fingerprint, i.e., from the working set source's file_sha256).
+
+For the test file: expected_file_sha256 = c59760dd36d4ff3aa4361018636959f2e7ab770069ec4e5608600ae23d8ca2af.
+For the documentation: c9dd0a5dab79cf9b845231bfebec735cddea387d4f07cbc6c41fed5f2846bdda.
+
+These are current (working set candidate = current candidate 8ac738...). No edits yet, so still valid after the first patch (different files).
+
+Insertion point in the test file: end of the file. I need the exact tail text. The working set ends at line 1880: `        self.assertEqual(s['k6'], 'v6;still v6')`. The real CPython file's test_stripping continues:
+
+```python
+        self.assertEqual(s['k7'], 'v7;still v7')
+```
+
+And then the file ends? The real CPython test_configparser.py (3.11/3.12) ends with test_stripping and no main guard... let me recall: I think the file ends with:
+
+```python
+    def test_stripping(self):
+        cfg = configparser.ConfigParser(inline_comment_prefixes=(';', '#',
+                '//'))
+        cfg.read_string("""
+        [section]
+        k1 = v1;still v1
+        ...
+        """)
+        s = cfg['section']
+        self.assertEqual(s['k1'], 'v1;still v1')
+        self.assertEqual(s['k2'], 'v2')
+        self.assertEqual(s['k3'], 'v3')
+        self.assertEqual(s['k4'], 'v4;still v4')
+        self.assertEqual(s['k5'], 'v5;still v5')
+        self.assertEqual(s['k6'], 'v6;still v6')
+        self.assertEqual(s['k7'], 'v7;still v7')
+```
+
+And then the file ends (maybe with a trailing newline). Hmm — but this repo's version may differ (a 3.10 backport base). The working set's page shows up to the k6 line; the file continues at line 1881. It may be exactly the k7 line + EOF. I'll confirm from the complete read.
+
+For the patch's `old`: I'll take the final lines of the file (e.g., the last 1-3 lines) and append after them. E.g., if the file ends with:
+
+```
+        self.assertEqual(s['k7'], 'v7;still v7')
+```
+
+with a trailing newline, then old = "        self.assertEqual(s['k7'], 'v7;still v7')\n" (if that's the exact end). new = same + "\n\n" + my class. Note: I must match exactly including whether there's a trailing newline after the last line. From the complete read, I'll see the exact final bytes (the displayed source). I'll match carefully.
+
+Actually, a safer anchor: insert before the `class InlineCommentStrippingTestCase` line? No — appending at the end of the file is simplest; I'll use the last test method's final line + EOF as the anchor.
+
+Alternative anchor: the class `InlineCommentStrippingTestCase` definition line — insert the new class before it. That line is in the current working set (visible in page 755-1880: `class InlineCommentStrippingTestCase(unittest.TestCase):` with the docstring). I could use that as the anchor — but then the new class would go before InlineComment..., and I'd need the exact docstring line. The end-of-file anchor is cleaner if I know the exact final bytes.
+
+I'll decide after seeing the complete read.
+
+Now, the exact contents of my class to add. Let me draft:
+
+```python
+class MultilineContinuationErrorTestCase(unittest.TestCase):
+    """Regression tests for configparser.MultilineContinuationError.
+
+    The error is raised when a valueless option is followed by an indented
+    line.  Since a bare option line is only parsed as an option if
+    ``allow_no_value=True``, this only happens with such a parser.
+    """
+
+    def _ini(self):
+        return "[section]\noption\n    continuation\n"
+
+    def _parser(self, config_class):
+        return config_class(allow_no_value=True)
+
+    def test_multiline_continuation_error_raised_by_read_string(self):
+        for config_class in (configparser.RawConfigParser,
+                             configparser.ConfigParser):
+            with self.subTest(config_class=config_class):
+                cf = self._parser(config_class)
+                with self.assertRaises(configparser.MultilineContinuationError) as cm:
+                    cf.read_string(self._ini())
+                e = cm.exception
+                self.assertIsInstance(e, configparser.MultilineContinuationError)
+                self.assertIsInstance(e, configparser.ParsingError)
+                self.assertIsInstance(e, configparser.Error)
+                self.assertEqual(e.args, ('<string>', 3, '    continuation\n'))
+                self.assertEqual(e.source, '<string>')
+                self.assertEqual(e.lineno, 3)
+                self.assertEqual(e.line, '    continuation\n')
+                self.assertEqual(e.errors, [(3, '    continuation\n')])
+                self.assertEqual(
+                    str(e),
+                    "Source contains parsing errors: '<string>'\n"
+                    "\t[line  3]:     continuation\n")
+```
+
+Wait: is the default source '<string>'? I must verify from the file. If read_string is `def read_string(self, string, source='<string>')` → yes. I'll confirm.
+
+Also subTest with config_class — fine.
+
+    def test_multiline_continuation_error_raised_by_read_file(self):
+        for config_class in (configparser.RawConfigParser,
+                             configparser.ConfigParser):
+            with self.subTest(config_class=config_class):
+                cf = self._parser(config_class)
+                with self.assertRaises(configparser.MultilineContinuationError) as cm:
+                    cf.read_file(io.StringIO(self._ini()), source='myfile')
+                e = cm.exception
+                self.assertEqual(e.args, ('myfile', 3, '    continuation\n'))
+                self.assertEqual(e.source, 'myfile')
+                self.assertEqual(e.lineno, 3)
+                self.assertEqual(e.line, '    continuation\n')
+
+Need to verify read_file signature: read_file(stream, source=None, encoding=None)? The existing test calls `parser.read_file(lines, source=b"badbad")` → source kwarg exists. Good.
+
+    def test_multiline_continuation_error_raised_by_read(self):
+        for config_class in (configparser.RawConfigParser,
+                             configparser.ConfigParser):
+            with self.subTest(config_class=config_class):
+                cf = self._parser(config_class)
+                with open(os_helper.TESTFN, 'w', encoding='utf-8') as f:
+                    f.write(self._ini())
+                try:
+                    with self.assertRaises(configparser.MultilineContinuationError) as cm:
+                        cf.read([os_helper.TESTFN], encoding='utf-8')
+                finally:
+                    os.unlink(os_helper.TESTFN)
+                e = cm.exception
+                self.assertEqual(e.args, (os_helper.TESTFN, 3, '    continuation\n'))
+                self.assertEqual(e.source, os_helper.TESTFN)
+                self.assertEqual(e.lineno, 3)
+                self.assertEqual(e.line, '    continuation\n')
+
+Note: `cf.read([os_helper.TESTFN], encoding='utf-8')` — read returns a list of read files, but on exception... _read raises inside read's try? In read():
+
+```python
+    def read(self, filenames, encoding=None):
+        ...
+        for filename in filenames:
+            ...
+            try:
+                with open(filename, encoding=encoding) as fp:
+                    self._read(fp, filename)
+                ...
+```
+
+If _read raises MultilineContinuationError, it propagates (not caught) — yes, like MissingSectionHeaderError in test_source_as_bytes. Good.
+
+But wait: does `read()` in this version accept the encoding kwarg? The existing test does `cf.read([file1_bytestring, b'nonexistent-file'], encoding="utf-8")` → yes.
+
+    def test_valueless_option_without_continuation_is_still_valueless(self):
+        for config_class in (configparser.RawConfigParser,
+                             configparser.ConfigParser):
+            with self.subTest(config_class=config_class):
+                cf = self._parser(config_class)
+                # A valueless option on its own, or one not followed by an
+                # indented line, is still parsed and has a None value.
+                cf.read_string("[section]\noption\nother\n")
+                self.assertIsNone(cf['section']['option'])
+                self.assertIsNone(cf['section']['other'])
+
+Hmm wait: "option\nother\n" — line 3 "other" at indent 0: not a continuation (cur_indent_level 0 > indent_level 0 is false) → new option. Good. But also test a comment/blank line after a valueless option:
+
+                cf.read_string("[section]\noption\n# a comment\n")
+
+Line 3 is a comment line → value empty → `if not value:` branch → empty_lines_in_values True → condition `cursect[optname] is not None` false → nothing; continue. No error. Then the end. I can assert no exception (implicitly) and option is None. I'll fold in: read both in a single string:
+
+```python
+                cf.read_string("[section]\noption\n# comment\nother\n")
+```
+
+Line 3 comment; line 4 "other" new option. Both None.
+
+And valid multi-line value after a *valued* option (must not raise):
+
+    def test_indented_continuation_of_option_with_value_is_still_joined(self):
+        for config_class in (configparser.RawConfigParser,
+                             configparser.ConfigParser):
+            with self.subTest(config_class=config_class):
+                cf = self._parser(config_class)
+                cf.read_string("[section]\noption=value\n    more\n")
+                self.assertEqual(cf['section']['option'], 'value\nmore')
+
+Hmm — join: cursect['option'] = ['value', 'more'] → join '\n' → "value\nmore", rstrip → "value\nmore". Then before_read → Raw: passthrough. ConfigParser (BasicInterpolation): before_read just returns val. So get → "value\nmore". Good. Note: delimiter '=' is in the default delimiters for both classes (delimiters default ('=',':') — but my standalone class uses plain config_class(allow_no_value=True) → default delimiters ('=','? no, delimiters=('=', ':') is default. 'option=value' fine.
+
+Wait, but in ConfigParser, 'more' contains no '%' → fine.
+
+    def test_multiline_continuation_error_pickling(self):
+        import pickle
+        e1 = configparser.MultilineContinuationError('source', 123, 'line')
+        self.assertEqual(e1.args, ('source', 123, 'line'))
+        self.assertEqual(e1.source, 'source')
+        self.assertEqual(e1.lineno, 123)
+        self.assertEqual(e1.line, 'line')
+        self.assertIsInstance(e1, configparser.ParsingError)
+        for proto in range(pickle.HIGHEST_PROTOCOL + 1):
+            pickled = pickle.dumps(e1, proto)
+            e2 = pickle.loads(pickled)
+            self.assertEqual(e1.message, e2.message)
+            self.assertEqual(e1.args, e2.args)
+            self.assertEqual(e1.source, e2.source)
+            self.assertEqual(e1.lineno, e2.lineno)
+            self.assertEqual(e1.line, e2.line)
+            self.assertEqual(repr(e1), repr(e2))
+
+Mirrors ExceptionPicklingTestCase style (which does `import pickle` inside the method).
+
+Now — a concern about "how the check detects added tests": if it diffs test names, the 6 new methods are fine. If it runs the whole class... fine.
+
+One more consideration: the task says "Added regressions must pass under the current fix and expose the problem with the original parser." My 6 tests: #1-3 and #6 fail under the original (AttributeError on the class). #4 (valueless still works): under the original, valueless option parsing — the same? Original's allow_no_value semantics: same regex? The backport changed _read (added MultilineContinuationError + check) and added the class. If the original's valueless handling is identical, #4 passes under the original (fine — it's a preservation test). #5 (valid multi-line value) passes under both (fine).
+
+Hmm, actually wait: could #4 or #5 fail under the current fixed library for some reason? Let me re-verify #4 under the fixed library: "option\nother\n" — wait, I should also verify optionxform: default lowercases → 'option', 'other'. `cf['section']['option']` → SectionProxy __getitem__ → get → None? Hmm — get with a None value in RawConfigParser: `_unify_values` → get('option') → chain map lookup → None. SectionProxy.__getitem__ calls self._parser.get(self._name, escape_delimiter? ...). Let me recall SectionProxy.__getitem__:
+
+```python
+    def __getitem__(self, key):
+        return self._parser.get(self._name, key)
+```
+
+Roughly. get returns None if the value is stored as None? In RawConfigParser.get:
+
+```python
+    def get(self, section, option, *, raw=False, vars=None, fallback=_UNSET):
+        try:
+            ...
+            value = d[option]
+        except KeyError:
+            ...
+        else:
+            if raw:
+                return value
+            else:
+                return self._interpolation.before_get(self, section, option, value, d)
+```
+
+For Raw: before_get passthrough → returns None (value). For ConfigParser BasicInterpolation: before_get with value None → `_interpolate_some(parser, option, L, None, ...)` → `rest = None`; `while rest:` → immediately falsy → returns ''.join([]) = ''!!
+
+Oops. For ConfigParser, `cf['section']['option']` with a None value would return '' (empty string), not None! Let me double-check: BasicInterpolation.before_get:
+
+```python
+    def before_get(self, parser, section, option, value, defaults):
+        L = []
+        self._interpolate_some(parser, option, L, value, section, defaults, 1)
+        return ''.join(L)
+```
+
+_interpolate_some: `rawval = parser.get(parser, section, option, raw=True, fallback=rest)`; `while rest:` — rest is None → skip loop → L remains [] → ''. So yes: ConfigParser.get for a None-stored option → ''.
+
+So my #4 assertion must account for that: for Raw: value None; for ConfigParser: '' via get, but raw is None. Simplest: use `cf['section']['option']` and assert None only for Raw; for ConfigParser use `cf['section']['option']` → '' hmm, that's fragile. Alternative: use raw access via `cf._sections['section']['option']`? That's private. Or assert with `cf.get('section', 'option', raw=True)` → returns the stored value (None) for both. `get(..., raw=True)` → returns value (None) for both Raw and Config.
+
+Let me write #4 as:
+
+```python
+                cf.read_string("[section]\noption\n# a comment\nother\n")
+                self.assertIsNone(cf.get('section', 'option', raw=True))
+                self.assertIsNone(cf.get('section', 'other', raw=True))
+```
+
+`get` with raw=True: RawConfigParser.get raw path returns value → None. ConfigParser inherits get → same path (interpolation only for non-raw). Good, works for both classes.
+
+And #5: use raw=False via cf.get → 'value\nmore' works for both classes (before_get joins L → 'value\nmore'; no '%' → fine).
+
+Also #1: I assert `e.errors` — exists (ParsingError.errors). Fine.
+
+Also in #1 I should double-check str(e) — the message construction: Error.__init__ sets self.message = f'Source contains parsing errors: {source!r}'. source='<string>' → repr "'<string>'". Then append: message += '\n\t[line  3]: ' + line, where line='    continuation\n'. So:
+
+"Source contains parsing errors: '<string>'\n\t[line  3]:     continuation\n"
+
+Yes.
+
+But wait — read_string's default source: I need to verify it's '<string>'. In the current file, test_source_as_bytes's expected str for ParsingError: "Source contains parsing errors: b'badbad'\n\t[line  2]: '= bad'" — from read_file(lines, source=b"badbad"). That verifies append's format (the line was split without a trailing newline).
+
+I'll verify the read_string default from the file read.
+
+Also — `subTest` usage: the file uses `with self.subTest(value=value):` in ConfigParserTestCaseInvalidInterpolationType → subTest available (py3). Fine.
+
+Another subtlety: `configparser.MultilineContinuationError` — accessible as an attribute of the configparser module (in __all__ and a class definition). Yes.
+
+Now, doc edit. Insert after the MissingSectionHeaderError entry. I need the current exact text of that entry and the following section. From the working set page (ending at line 1370 with `.. exception:: MissingSectionHeaderError`), I need lines 1371+. The real CPython doc:
+
+```
+.. exception:: MissingSectionHeaderError
+
+   Exception raised if a key-value pair is encountered before any section
+   header could be read.
+```
+
+Then a blank line, then maybe `.. rubric::` or the next section "Functions". In the real CPython doc, after exceptions comes:
+
+```
+Functions
+---------
+...
+```
+
+Hmm, actually in the real doc, the exceptions section is followed by "Functions" (configparser functions like _unify_values? No...). Real structure: "Module contents" → "The Parser" class, then "Exceptions" section, then "Data" ... I don't remember exactly. I'll see from the complete read.
+
+My insertion: after the MissingSectionHeaderError paragraph, before the next section. Patch: old = end of the MissingSectionHeaderError paragraph + "\n\n" + start of the next heading? Simplest: old = the MissingSectionHeaderError paragraph itself (unique text), new = same + my new entry.
+
+Let me draft the documentation text (matching CPython's style, indented 3 spaces like other entries in this file: entries are indented with 3 spaces "   ").
+
+```
+.. exception:: MultilineContinuationError
+
+   Exception raised when a valueless option is followed by an indented
+   line, e.g.::
+
+       [section]
+       option
+         continuation
+
+   A valueless option is only possible if the parser was created with
+   ``allow_no_value=True``; otherwise an option line without a value is
+   not recognised as an option and is reported as an ordinary parsing
+   error instead.  The error is raised by :meth:`!RawConfigParser.read`,
+   :meth:`!RawConfigParser.read_file` and
+   :meth:`!RawConfigParser.read_string`, independently of strict mode,
+   and applies equally to :class:`ConfigParser` and
+   :class:`RawConfigParser`.
+
+   The :attr:`!source` attribute is the name of the source the parser was
+   reading, :attr:`!lineno` is the one-based line number of the offending
+   indented line, and :attr:`!line` is the exact offending line as read
+   (including its trailing newline, if any).  The three arguments are
+   preserved as :attr:`!args`, so instances remain copyable and picklable
+   like the other parser exceptions.
+```
+
+Hmm wait — "The error is raised by read, read_file, and read_string" — more precisely: it's raised inside the shared parsing routine (_read), so all three entry points raise it. I'll phrase it as: "It is raised while parsing, so all of :meth:`read()`, :meth:`read_file()`, and :meth:`read_string()` can raise it, for both :class:`ConfigParser` and :class:`RawConfigParser`, in strict and non-strict mode."
+
+Also the "relevant qualifications" the task mentions: (1) only possible with allow_no_value=True; (2) the offending line is the continuation line, not the option line; (3) the stored line includes the trailing newline; (4) a subclass of ParsingError (so catchable as ParsingError).
+
+Let me also double-check the "otherwise an option line without a value is reported as an ordinary parsing error" claim: with allow_no_value=False, "option" alone → OPTCRE (non-allow version) requires `\s*[=:]\s*` + value — "option" has no '=' or ':' → no match → falls to else → _handle_error → ParsingError (non-fatal, raised at end of file). Yes, ordinary ParsingError. I'll verify the exact OPTCRE in the file read.
+
+Now — mechanical doc check: "documentation_directive_present" — probably greps for `.. exception:: MultilineContinuationError`. I'll include exactly that.
+
+Also the task says: "The public check runs ... and checks that the documentation declares the exception; a correct explanation requires a review beyond that mechanical declaration." So the check is mechanical (presence); a human reviewer checks the accuracy. I'll ensure accuracy.
+
+Let me also think: should I add a `versionadded` note? The backport context — the doc's style uses `.. versionchanged:: 3.2` for NoSectionError. A `.. versionadded::` directive for MultilineContinuationError would be typical in CPython (the real doc: I think there's `.. versionadded:: 3.11`? Hmm, actually, wait. Let me recall the real CPython doc for this exception... I honestly can't remember whether CPython added this to the doc. The backport is probably from a specific CPython commit (bpo-45308, 3.11). Including `.. versionadded:: 3.11` would be reasonable and accurate (for CPython). But in this repo's context (a backport to an older codebase — Python 3.x, which version?), the base version is unknown. The check is mechanical for the presence of the exception directive; a human review would check accuracy — a wrong versionadded would be an inaccuracy. I'll skip versionadded to avoid asserting an unverifiable version; or include it? Hmm.
+
+Task: "Explain the trigger conditions, exception inheritance, and source/lineno/line attributes accurately, along with the relevant qualifications." No mention of version. I'll skip versionadded.
+
+Now, the doc "Data" / section after exceptions — I need to see. Let me also double-check that there's no existing MultilineContinuationError mention in the doc (the search? I haven't searched the doc yet; the working set page 1300-1370 shows exceptions up through MissingSectionHeaderError; the search "MultilineContinuation" in the test file had 0 hits; I should also check the doc — I'll see from the complete read).
+
+Also, I should check that there's no existing "MultilineContinuation" test in the module I might collide with — the search said 0 matches in the test file. And in configparser.py — search RES-0035 (EVT-0035) searched for "MultilineContinuationError" in Lib/configparser.py — the result isn't in the working set (I need to reopen it, or just rely on the visible source: the class is defined at ~lines 330-345 in page 280-442, the raise at ~line 1015 in page 940-1199, and the __all__ entry visible in page 140-188. The check's 8 contract tests pass, so the library is complete.)
+
+OK, action plan (≤18 actions; using ~8):
+
+1. work_on: sources = [
+   {Lib/configparser.py, 1, 0},
+   {Lib/test/test_configparser.py, 1, 0},
+ ]
+   (results: [])
+
+Wait — work_on replaces the working set; I'm dropping RES-0030 (fine, I already have it) and the previous pages.
+
+Hmm, actually, do I need configparser.py in the working set? I'll read it from there. I won't patch it. Yes, include it for reading.
+
+2. Inspect the returned pages (in the next input I'll see the working set sources). Verify:
+   - read_string signature & default source
+   - read_file signature
+   - OPTCRE / allow_no_value semantics (valueless → None)
+   - Exact bytes at the end of the test file
+   - __init__ kwargs (allow_no_value etc.)
+
+3. patch the test file: add the class at the end.
+
+4. work_on: sources = [{Doc/library/configparser.rst, 1, 0}]
+
+5. Inspect the doc around exceptions; patch the doc.
+
+6. check public (expected_candidate_id = candidate after patch 4).
+
+7. If passed → submit.
+
+Wait, step 6: after patch 5, the candidate has changed; check uses the latest candidate. check action: {"action":"check","check_id":"public","expected_candidate_id":"<current>"}. Current candidate is known from the input state at that time.
+
+Also note: "A failed check is accepted execution." — fine.
+
+Now let me also prepare for the possibility that the complete read is paged. The input shows for the test file (working set page 755-1880, 1126 lines ≈ ? KB, was already displayed fine). The complete file is 1880+ lines ≈ 1.5× that page → ~? The input we got was already big (I estimate the whole thing ~150KB). Adding the complete test file (~80KB) + complete configparser.py (~50KB) in one input → ~250KB+ — the host says it fits within "the full next input" capacity; the max line/file limits are large (8MB total). I'll trust it; if paged, I'll see next_start_line and can fetch the tail with another read (which adds to the working set; partial pages of a *complete read request*... hmm).
+
+Actually, let me re-read the rule once more: "The exact source of old must be visible before editing. A complete fetched read/group result also qualifies, provided its source bytes and file fingerprint still match the current file; a partial saved result page does not."
+
+So the visibility must come from a *complete* fetched result. If my work_on read of the test file returns the whole file in one page → complete → qualifies. If the host pages it (returned_end_line < end), the working set has a partial page → patch would be rejected? Then I need another strategy — e.g., multiple reads to see the tail? "Partial saved result page does not" — even multiple pages don't become complete. Hmm. But maybe "complete" refers to the *result* (each read result covers its requested range completely?)... no — "a complete fetched read/group result" vs "a partial saved result page" — I read this as: the saved result must be complete (covering the file) for the patch to trust it; a page (partial) does not.
+
+To minimize the risk, I'll make the test file read `end_line=0` (to end) — if the host returns the whole file (likely, ~80KB fits), good. Same for the doc (52KB) and configparser.py (~50KB). All three complete in one work_on → ~180KB. The current input was already ~?; it fits.
+
+Or split: first work_on configparser.py + test file; patch the test; then work_on doc; patch the doc. That's 4-5 actions + check + submit ≈ 7 actions. Fine.
+
+Also, the "results" list in work_on: include RES-0030? No need (I have the info). I'll pass results: [].
+
+Let me now write action 1.
+
+Actually, wait — before work_on, should I fetch the test file's tail and the doc's tail via a targeted read to design the patch, and then work_on for the complete file? That wastes actions; the complete read gives me everything. Proceeding.
+
+Another design question: exactly where to insert the new test class. I'll wait for the complete read to decide, but the plan: append at the end of the file after the last line. The patch's old = final line text; new = final line text + "\n\n" + class text. If the file ends with "...'v7;still v7')\n" — I need to know whether there's a trailing newline after that line. The working-set display usually shows the exact content; a trailing newline at EOF is typical. I'll match carefully.
+
+Alternatively, anchor before `class InlineCommentStrippingTestCase(unittest.TestCase):` (a unique line visible in the current working set) — but then the new class would go before InlineComment..., and I'd need the exact docstring line. The end-of-file anchor is cleaner if I know the exact final bytes.
+
+I'll decide after seeing the complete read.
+
+Now the exact content of my class to add. Let me draft:
+
+```python
+class MultilineContinuationErrorTestCase(unittest.TestCase):
+    """Regression tests for MultilineContinuationError, the error raised
+    when a valueless option is followed by an indented line.
+
+    A valueless option line is only parsed as an option when the parser
+    allows no-value options, so every case here needs
+    ``allow_no_value=True``.
+    """
+
+    def _make(self, config_class):
+        return config_class(allow_no_value=True)
+
+    def _ini(self):
+        # line 1: section header
+        # line 2: valueless option
+        # line 3: indented line, i.e. a continuation of "option"
+        return "[section]\noption\n    continuation\n"
+
+    def test_multiline_continuation_error_raised_by_read_string(self):
+        for config_class in (configparser.RawConfigParser,
+                             configparser.ConfigParser):
+            with self.subTest(config_class=config_class):
+                cf = self._make(config_class)
+                with self.assertRaises(
+                        configparser.MultilineContinuationError) as cm:
+                    cf.read_string(self._ini())
+                e = cm.exception
+                self.assertIsInstance(e, configparser.ParsingError)
+                self.assertIsInstance(e, configparser.Error)
+                self.assertEqual(e.args, ('<string>', 3, '    continuation\n'))
+                self.assertEqual(e.source, '<string>')
+                self.assertEqual(e.lineno, 3)
+                self.assertEqual(e.line, '    continuation\n')
+                self.assertEqual(e.errors, [(3, '    continuation\n')])
+                self.assertEqual(
+                    str(e),
+                    "Source contains parsing errors: '<string>'\n"
+                    "\t[line  3]:     continuation\n")
+
+    def test_multiline_continuation_error_raised_by_read_file(self):
+        for config_class in (configparser.RawConfigParser,
+                             configparser.ConfigParser):
+            with self.subTest(config_class=config_class):
+                cf = self._make(config_class)
+                with self.assertRaises(
+                        configparser.MultilineContinuationError) as cm:
+                    cf.read_file(io.StringIO(self._ini()), source='myfile')
+                e = cm.exception
+                self.assertEqual(e.args, ('myfile', 3, '    continuation\n'))
+                self.assertEqual(e.source, 'myfile')
+                self.assertEqual(e.lineno, 3)
+                self.assertEqual(e.line, '    continuation\n')
+
+    def test_multiline_continuation_error_raised_by_read(self):
+        for config_class in (configparser.RawConfigParser,
+                             configparser.ConfigParser):
+            with self.subTest(config_class=config_class):
+                cf = self._make(config_class)
+                with open(os_helper.TESTFN, 'w', encoding='utf-8') as f:
+                    f.write(self._ini())
+                try:
+                    with self.assertRaises(
+                            configparser.MultilineContinuationError) as cm:
+                        cf.read([os_helper.TESTFN], encoding='utf-8')
+                finally:
+                    os.unlink(os_helper.TESTFN)
+                e = cm.exception
+                self.assertEqual(e.args,
+                                 (os_helper.TESTFN, 3, '    continuation\n'))
+                self.assertEqual(e.source, os_helper.TESTFN)
+                self.assertEqual(e.lineno, 3)
+                self.assertEqual(e.line, '    continuation\n')
+
+    def test_valueless_option_is_not_a_multiline_continuation(self):
+        for config_class in (configparser.RawConfigParser,
+                             configparser.ConfigParser):
+            with self.subTest(config_class=config_class):
+                cf = self._make(config_class)
+                # A valueless option that is not followed by an indented
+                # line is still a valid no-value option: a comment line
+                # and an unindented option line do not trigger the error.
+                cf.read_string("[section]\noption\n# a comment\nother\n")
+                self.assertIsNone(cf.get('section', 'option', raw=True))
+                self.assertIsNone(cf.get('section', 'other', raw=True))
+
+    def test_indented_line_after_option_with_value_is_joined(self):
+        for config_class in (configparser.RawConfigParser,
+                             configparser.ConfigParser):
+            with self.subTest(config_class=config_class):
+                cf = self._make(config_class)
+                cf.read_string("[section]\noption=value\n    more\n")
+                self.assertEqual(cf.get('section', 'option'), 'value\nmore')
+
+    def test_multiline_continuation_error_is_picklable(self):
+        import pickle
+        e1 = configparser.MultilineContinuationError('source', 123, 'line')
+        self.assertIsInstance(e1, configparser.ParsingError)
+        self.assertEqual(e1.args, ('source', 123, 'line'))
+        self.assertEqual(e1.source, 'source')
+        self.assertEqual(e1.lineno, 123)
+        self.assertEqual(e1.line, 'line')
+        for proto in range(pickle.HIGHEST_PROTOCOL + 1):
+            pickled = pickle.dumps(e1, proto)
+            e2 = pickle.loads(pickled)
+            self.assertEqual(e1.message, e2.message)
+            self.assertEqual(e1.args, e2.args)
+            self.assertEqual(e1.source, e2.source)
+            self.assertEqual(e1.lineno, e2.lineno)
+            self.assertEqual(e1.line, e2.line)
+            self.assertEqual(repr(e1), repr(e2))
+```
+
+Let me verify each against the fixed library:
+
+Test 1 (read_string):
+- cf.read_string(ini): read_string signature — need to verify default source '<string>'. If it's `def read_string(self, string, source='<string>')`, yes.
+- Trigger at line 3. e.args = (fpname, 3, '    continuation\n') with fpname='<string>'.
+- e.errors: [(3, '    continuation\n')].
+- str(e): as computed.
+- assertRaises with cm.
+
+Wait — one more check: in `_read`, for line 2 "option\n": `value = line[:comment_start].strip()` → "option". OPTCRE match with allow_no_value → optval is None → cursect['option'] = None, optname='option' (optionxform → 'option'). indent_level = cur_indent_level = 0.
+Line 3 "    continuation\n": value="continuation". Not empty. first_nonspace start=4 → cur_indent_level=4 > indent_level=0 → cursect is not None, optname='option', → True branch: cursect['option'] is None → raise MultilineContinuationError(fpname, 3, line) with line='    continuation\n'. ✓
+
+Also the preceding `finally: self._join_multiline_values()` runs — joins sections: option is still None; before_read(None) → Raw: None; Config: Interpolation.before_read returns val → None. No crash. Then raise propagates. ✓
+
+Test 2 (read_file): read_file(io.StringIO(ini), source='myfile') → fpname='myfile'. e.source='myfile'. ✓ (need to verify the read_file signature accepts source kwarg and uses it as fpname; the existing test test_source_as_bytes uses it → yes.)
+
+Test 3 (read): cf.read([TESTFN], encoding='utf-8') → open, _read(fp, filename) → fpname=TESTFN. e.source=TESTFN. ✓. Note: TESTFN is a path str. os.unlink in finally. ✓
+
+Test 4: read_string("[section]\noption\n# a comment\nother\n"):
+- Line 2: option → cursect['option']=None, optname='option', indent 0.
+- Line 3: "# a comment\n" → comment (comment_prefixes default (';', '#')) → comment_start=0 → value="" → `if not value:` → empty_lines_in_values True (default) → condition: comment_start is None? No (0) → the inner if is false → nothing; `continue`. (Note: no error path.)
+- Line 4: "other\n" → value "other". first_nonspace 0 → cur_indent 0 > indent_level 0? No → else: indent_level=0; not a section; cursect not None; OPTCRE match → option 'other', optval None → cursect['other']=None.
+- End: join: both None. No exception. get(raw=True) → None for both. ✓
+
+Wait — the comment-line check: `for prefix in self._comment_prefixes: if line.strip().startswith(prefix)` — "# a comment".strip().startswith('#') → yes → comment_start=0. ✓ And the inline_comment_prefixes default None → `self._inline_comment_prefixes` — if inline_comment_prefixes=None → uses comment_prefixes? In __init__: `if inline_comment_prefixes is None: inline_comment_prefixes = comment_prefixes`. So inline prefixes also (';', '#'). Doesn't matter — value is empty anyway.
+
+Test 5: "[section]\noption=value\n    more\n":
+- Line 2: option with value: cursect['option']=['value'], optname='option', indent_level=0.
+- Line 3: cur_indent 4 > 0 → cursect['option'] is not None → append 'more' → ['value','more'].
+- Join: 'value\nmore'. rstrip → 'value\nmore'. get → Raw: 'value\nmore'; Config Basic: before_get → no '%' → 'value\nmore'. ✓
+
+Test 6 (pickling): direct construction: MultilineContinuationError('source', 123, 'line') → args=('source',123,'line'), source='source', lineno=123, line='line', message='Source contains parsing errors: 'source'\n\t[line 123]: line'... wait: '%2d' with 123 → "123" (2 digits minimum; 123 stays). errors=[(123,'line')].
+- Pickle: Exception.__reduce__ → (cls, args) → re-instantiate → same message/args/repr. Note: Error.__repr__ returns self.message → repr(e1) == message string. e2 reconstructed via cls(*args) → same. ✓
+
+All pass under the fixed library. Under the original library: all 6 methods reference configparser.MultilineContinuationError → AttributeError → error. Tests 4 and 5 would also fail (before the assert?) — test 4 body: `cf = self._make(config_class)` then read_string... no reference to MultilineContinuationError in tests 4/5! Hmm:
+
+- test_valueless_option_is_not_a_multiline_continuation: no reference to the class → under the original library: does it pass? Under the original, valueless option parsing: probably same behavior (option → None, get raw → None). If the original handles it identically → the test passes under the original. That's OK — it's a preservation test, not a detector. But if the original behaves differently (e.g., stores [] instead of None), it would fail under the original — also OK.
+- test_indented_line_after_option_with_value_is_joined: passes under both (existing behavior).
+
+So at least 4 of the 6 (1, 2, 3, 6) detect the original.
+
+But hmm — what if the check requires all added tests to fail under the original ("added regressions must pass under the current fix and expose the problem with the original parser")? "Expose the problem" — collectively. The check's field is a single boolean `regression_detects_original` — probably true if any added test fails under the original. I'm fairly confident it's "any". To be even safer, should I make the preservation tests also reference the class? E.g., add `self.assertFalse(issubclass(configparser.ParsingError, configparser.MultilineContinuationError))`? That's silly. Or in test 4, assertRaises context... no. I'll leave it natural; the "any" semantics is standard.
+
+Hmm, actually, let me reconsider: to maximize the probability of detection, I can make all 6 reference the class in a meaningful way:
+- Test 4: add an assertion `self.assertFalse(isinstance(configparser.MultilineContinuationError(), ...))`? No — constructing an exception requires 3 args. I could add at the start: `exc_class = configparser.MultilineContinuationError` and then use exc_class in an assertRaises that expects nothing... no.
+
+Alternative: merge tests 4+5 into a single "boundary" test that also asserts that the error class is a subclass of ParsingError:
+
+Actually — a natural approach: in test 4/5, use `configparser.MultilineContinuationError` in a negative check: e.g., after the read succeeds, `self.assertNotIsInstance(None, ...)`? No.
+
+Cleaner: keep 4 and 5 as pure preservation tests. The check's boolean is probably "at least one of the added tests fails under the original". Standard practice for this kind of repair task. Proceeding.
+
+Another angle: the check may compute added_tests as the diff of the module's test methods by name; and "new_tests_on_original" runs exactly those methods under the original library; "regression_detects_original" = (any of those tests fails). Yes.
+
+Also — potential pitfall: my class name `MultilineContinuationErrorTestCase` contains "TestCase" — the test loader picks it up. ✓
+
+Naming: avoid collision with existing test names: existing names include test_invalid_multiline_value (in BasicTestCase). Mine: test_multiline_continuation_error_raised_by_read_string etc. — unique. Class name also unique. ✓
+
+Now, the doc patch content — final draft. I need to see the surrounding text. The current visible part ends at line 1370 with `.. exception:: MissingSectionHeaderError` (directive line). The paragraph follows (lines 1371+). In the real CPython doc:
+
+```
+.. exception:: MissingSectionHeaderError
+
+   Exception raised if a key-value pair is encountered before any section
+   header could be read.
+```
+
+And then a blank line, then maybe `.. rubric::` or the next section "Functions". In the real CPython doc, after exceptions comes:
+
+```
+Functions
+---------
+...
+```
+
+Hmm, actually in the real doc, the exceptions section is followed by "Functions" (configparser functions like _unify_values? No...). Real structure: "Module contents" → "The Parser" class, then "Exceptions" section, then "Data" ... I don't remember exactly. I'll see from the complete read.
+
+The real CPython doc for MultilineContinuationError (added in 3.11) — let me try once more to remember... I think the actual CPython text is:
+
+```
+.. exception:: MultilineContinuationError
+
+   Exception raised when an option without a value is followed by an
+   indented line.  This is only possible if the parser is created with
+   ``allow_no_value=True``.
+```
+
+I can't recall for sure. I'll write my own, but model the style on this file's entries (3-space indent, "Exception raised ..." phrasing).
+
+My doc insertion (after the MissingSectionHeaderError paragraph):
+
+```
+
+.. exception:: MultilineContinuationError
+
+   Exception raised when a valueless option is followed by an indented
+   line, which would otherwise be parsed as a continuation of the
+   option's value.  This is only possible if the parser was created with
+   ``allow_no_value=True``; with the default setting, a line consisting
+   of just an option name is not recognised as an option and is reported
+   as an ordinary parsing error instead.
+
+   The error is raised for any source: :meth:`!read`,
+   :meth:`!read_file` and :meth:`!read_string` of both
+   :class:`RawConfigParser` and :class:`ConfigParser` can raise it, in
+   strict and non-strict mode alike.
+
+   As a subclass of :exc:`ParsingError`, it can be caught as a
+   :exc:`ParsingError`.  Its :attr:`!source` attribute is the name of the
+   source being read, :attr:`!lineno` is the one-based line number of the
+   offending indented line, and :attr:`!line` is the exact offending line,
+   including its trailing newline if one is present.  The three
+   constructor arguments are preserved as :attr:`!args`, so the exception
+   can be copied and pickled like the other parser exceptions.
+```
+
+Hmm, "which would otherwise be parsed as a continuation of the option's value" — a bit off; better: "an indented line after a valueless option is ambiguous..." Let me rephrase the first paragraph:
+
+```
+   Exception raised when an option without a value (a "valueless option")
+   is followed by an indented line.  Because the parser treats indented
+   lines as a continuation of the previous value, such a line cannot
+   belong to a valueless option, so the input is rejected.
+```
+
+Hmm, "rejected" — accurate.
+
+I'll finalize the text after seeing the file's exact style. The key points the task requires: trigger condition, inheritance, source/lineno/line attributes, qualifications (allow_no_value, all three read entry points, both parser classes, line includes the trailing newline, catchable as ParsingError, picklable).
+
+Now, the mechanical directive check — "documentation_directive_present": probably the presence of a line matching `.. exception:: MultilineContinuationError`. ✓
+
+Now let me execute step 1: work_on with three complete sources? I said I'd do configparser.py + test file first, doc later. Actually, why not all three in one work_on? Total ≈ 50+80+52 = 182KB. The next input = state (bounded, ~60-80KB?) + working set 182KB → ~250KB. The previous input was ~120KB and it was fine. The host claims it fits "the full next input" — the max_total_utf8_bytes 8MB is for the repo; the next-input capacity is unknown but probably ~1-2MB. 250KB is fine. And it saves one action and avoids re-assembly.
+
+But note: after patching the test file, its working-set page (fetched before the edit) — "Open ranges are refreshed to current source" — the working set source is refreshed after the edit (the host refreshes open ranges to current source). The doc patch uses the doc's pre-edit fingerprint (unchanged by the test patch). The test file's fingerprint changes after its patch — but I don't patch it again. ✓
+
+So:
+
+Action 1: work_on sources=[{Lib/configparser.py,1,0},{Lib/test/test_configparser.py,1,0},{Doc/library/configparser.rst,1,0}] results=[]
+
+Then inspect, then 2 patches, check, submit.
+
+Now let me write action 1.
+
+Actually — a small question about work_on argument form: {"action":"work_on","sources":[{"path":...,"start_line":1,"end_line":0}],"results":[]}. end_line=0 = to end (same as read: "end_line=0 requests onward"). start_line min 1. OK.
+
+Let's go.
