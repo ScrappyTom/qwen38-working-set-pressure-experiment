@@ -1,5 +1,12 @@
 # Next prepared work
 
+The owner subsequently challenged the edit-counting burden and the focus on
+smaller pages. The [revised host-capacity priority](../../long_work/HOST_CAPACITY_REVISION.md)
+supersedes the recommendation below to retain the patch limit and make counted
+reads the sole intervention. Qualify ordinary edits and usable evidence/target/
+feedback co-presence as one working operation. The earlier proposal is preserved
+below as the recommendation made at the close of the consultation.
+
 Prepare one separately identified continuation contribution from the saved correct library repair: add useful regressions and documentation, check the resulting full candidate, and preserve that checked work for a subsequent contribution. The original max-40-action run remains closed; its eight unused actions are not a budget. Clearly identify the existing repair and what remains unfinished in the actual task input.
 
 Use the existing actor_selected_count operation with complete consistent argument/effect descriptions, retaining the current patch contract, exact version guards, source custody and result delivery gate. No new selection or pinning mechanism is selected. The assisted ranges are evaluator-side feasibility examples; do not present them as a mandatory reading list or assert that Qwen will select them. Allow ordinary search and historical result access to establish useful locations and anchor uniqueness.

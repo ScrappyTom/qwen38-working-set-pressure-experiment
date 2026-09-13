@@ -22,6 +22,17 @@ needs a plausible link to the observed need, an assessable expected benefit and
 consideration of added cost. Retaining the current input is a complete outcome;
 neither long thinking alone nor an available suggestion obliges a change or run.
 
+The latest owner correction prioritizes host-managed capacity over requiring
+Qwen to count or fragment edits to fit incidental limits. Read
+`development/long_work/HOST_CAPACITY_REVISION.md`. The recommendation to retain
+the 512-character patch cap and select counted reads as the sole next intervention
+is superseded. Qualify a useful edit/check operation with its supporting source,
+target and immediate feedback together. Exact size arithmetic belongs in the
+host; semantic selection still needs evidence and evaluation. A technically
+expressible workaround does not establish an adequate interface. Historical
+decisions and frozen attempts remain preserved; this revision changes the next
+engineering priority, not the completed results.
+
 The owner has given the continuing goal: keep working with Qwen as test pilot
 and consultant until the system can complete long-running tasks and work with
 large documents or code repositories. That direction authorizes progressing the
@@ -118,7 +129,8 @@ source is invalid Python, as it recognizes in thinking; the final is correct.
 Complete-source checking establishes a shorter unique anchor and an equivalent
 reviewer-constructed 420-character single patch. Do not credit that single patch
 to Qwen's final selection. D2 is closed unconsumed: source-checking resolves the
-missing fact without another endorsement request. Retain the patch limit for now.
+missing fact without another endorsement request. The initial recommendation to
+retain the patch limit is superseded by the owner correction recorded above.
 
 The consultation costs 48,494 generated tokens and 49.510 request minutes. It
 exceeds the prospective 32,768 reserve but finishes with 3,225 physical tokens
@@ -136,10 +148,10 @@ coverage. Smaller pages preserve companion source at C25/C27 and deliver the
 latest C32 result, although the library page is still external in that last case.
 A separately reviewer-assembled compact source group fits at 20,028 tokens with
 all ordered signal. This is static assisted capacity evidence, not a Qwen path
-or reversal of the consumed eviction frontier. Select bounded reads as the one
-prospective operation variant for the next separately prepared saved-library
-contribution with regressions/documentation. Qualify its actual input/feedback
-path before dispatch. No production metadata, retention, memory or reasoning
+or reversal of the consumed eviction frontier. Bounded reads were the initially
+selected next variant; the owner correction now requires preparing the complete
+working operation rather than treating smaller pages as sufficient. Qualify its
+actual input/feedback path before dispatch. No production metadata, retention, memory or reasoning
 change is made here. Preserve all original and unsuccessful evidence; the broad
 long-work goal remains unachieved.
 

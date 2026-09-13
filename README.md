@@ -2,11 +2,19 @@
 
 ## Project status
 
+The [revised next priority is host-managed capacity and useful work](development/long_work/HOST_CAPACITY_REVISION.md).
+The owner challenged the cost of asking Qwen to count and split edits. The host
+should handle exact sizing and qualify enough room for a complete edit/check
+operation with its supporting evidence, target and feedback. This supersedes
+retaining the patch cap and making smaller pages the sole next intervention.
+It is a revised preparation direction; no production change or model run has
+occurred under it.
+
 The [patch consultation and narrower-read qualification are complete](development/configparser_follow_up/review/RESULTS.md).
 Qwen correctly distinguishes the planned and emitted edits and proposes a valid
 two-patch construction. Complete-source checking also verifies an equivalent
-reviewer-built single 420-character patch. Retain the patch limit for now; select
-the existing line-count read mode for the next prepared work episode.
+reviewer-built single 420-character patch. That establishes expressibility, not
+the efficiency or suitability of the current limit.
 The consultation costs 48,494 generated tokens and 49.510 minutes, exceeding the
 planning reserve while finishing within physical context. All thinking and final
 content were directly reviewed. D2 is closed unconsumed.
