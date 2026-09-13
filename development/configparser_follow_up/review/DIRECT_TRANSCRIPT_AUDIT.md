@@ -1,0 +1,15 @@
+# Direct transcript audit
+
+I directly read the full prepared input/evidence and all 168,195 thinking characters in contiguous ranges 0–18,000, 18,000–36,000, 36,000–54,000, 54,000–72,000, 72,000–108,000, 108,000–144,000 and 144,000–168,195, plus all 11,001 final characters. Native/source/output identities separately verify. This audit is not inferred from the metrics.
+
+Qwen recognizes the key source effect early: the plan inserts the class while retaining the comment and `_UNSET`; the actual final replacement drops the end of the comment and `_UNSET`. It ultimately explains both correctly and distinguishes the supplied actual successor from a hypothetical preserving successor. It does not invent a returned identifier or claim that the host executed the plan.
+
+There is extensive recovered confusion and repeated work inside this one response. Much of the first roughly 30,000 characters revisits blank lines and diff prefixes. Qwen repeatedly transcribes the supplied `+#` diff line without its plus and wonders whether the diff is malformed, although the exact returned diff contains the plus. The final explanation resolves that concern. This is a misreading of available evidence, not missing source custody.
+
+It initially estimates the full proposed replacement will fit, then counts 539/511, later corrects a missed character in the constructor declaration and reaches the correct 540/512 totals. Counting is relevant to the explicit limit. However, the later response repeatedly rehearses already-established counts, newline sequences, exact strings and answer organization with no new evidence arriving. The two-step construction and shorter-anchor possibility recur across long passages. No defensible fraction of all generation is labelled wasted.
+
+At thinking character offsets 118,804 and 162,651, Qwen invokes "Desired oververbosity 9". No verbosity instruction appears anywhere in the complete supplied native input; the actual question asks for a focused final answer. The unsupported instruction attribution is preserved. It cannot establish a causal share of the long response.
+
+The final two-patch proposal uses the supplied proven full anchor and correctly reserves operation 2's guards for operation 1's returned identifiers. It allows that a shorter unique anchor could permit one patch. That uniqueness is genuinely unestablished by the selected excerpts. The final also overstates uncertainty about the same full anchor after adding a header; complete-source replay establishes that it remains unique. The thinking recognizes the intermediate syntax problem at approximately character 90,342; the final omits it. The actual host accepts both edits and constructs their successor inputs.
+
+This supports a valid conditional operational interpretation with costly repeated deliberation. It does not prove that the cap caused the historical corruption, that all lengthy thinking is interface friction, or that a larger cap would improve complete work. The prior run's direct audit remains intact.

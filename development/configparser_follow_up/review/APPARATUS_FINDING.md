@@ -1,0 +1,11 @@
+# Apparatus finding
+
+D1 is an assisted diagnostic conversation, not a replay or comparison. Source selection, explicit questions, full tool text and an outer JSON packet differ from the original action input. The packet contains JSON action text inside JSON string fields. Its extra escaping is visible in the actual native input. That is a presentation difference; its causal contribution to the response length is unmeasured. The original response and later repair were not supplied wholesale, and shorter-anchor uniqueness/file size were not supplied.
+
+The final answer correctly treats that incomplete source scope as a limit on proving an alternative anchor unique. A source-check resolves the fact; another model endorsement is unnecessary. Do not characterize its two-patch proposal as proof that one patch is impossible. Do not interpret accepted patches as syntax guarantees or the checked class insertion as completion of the whole backport.
+
+D1 also supplies a useful adverse result: 49.510 minutes and 48,494 generated tokens for two diagnostic questions, despite ultimately correct distinctions. No tokenizer measurements overlapped generation. Lightweight coding, four focused host checks and an approximately two-second source replay occurred while D1 ran; this is recorded development cost, not an isolated speed benchmark.
+
+The independent read screen makes 44 offline tokenizations over three original and nine count substitutions. Counts are reviewer-selected, with original starting lines. It reproduces the actual C33 feedback denial. A separate six-input assisted screen selects both starts and counts for imports, exception support and a test insertion target. Both screens retain all ordered signal and use the same physical/input/reserve definitions. They qualify exact return/input capacity, not Qwen's selection, future action count, task correctness or generation length.
+
+The assisted complete group fits at prefix 24, earlier than the consumed terminal frontier 25. It is a static counterfactual input and cannot restore already externalized material in the original run. A future task must qualify its actual action/admission trajectory. Neither screen solves indefinite growth of ordered signal.

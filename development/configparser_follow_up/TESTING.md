@@ -1,0 +1,15 @@
+# Validation record
+
+`py -3.12 -B -X utf8 -m unittest discover -s tests -p test_configparser_patch_dialogue.py -v`: five selected tests passed before preparation. Preparation completed with zero model requests and 4,857 input tokens. No failed formal tests or preparation attempts.
+
+An additional inline verification raised AssertionError when checking unstripped message contents against the native template. The inspected template strips outer whitespace; the corrected assertion passes for complete stripped contents. The shell continued to the independently guarded D1 runner after that error; it did not check the first Python command's exit. Preserve this operational mistake. Runtime input/capacity verification remained enforced, and no saved request was changed or retried. PREPARATION_REVIEW.md was written after runtime startup began.
+
+Four focused bounded-read checks passed: coherent read requirements across state/schema/reference, exact 30-line delivery and historical recovery with partial coverage, invalid count/shape rejection without state changes, and native-envelope settings isolation. These are actual host checks, not Qwen behavior. They ran during D1; no tokenizer measurement or other model inference overlapped.
+
+D1 verified: 207 source identities, 11 sealed public files/records, exact native rendering/tokenization and raw response, closure and telemetry. It completed naturally with 48,494 output tokens, exceeding the planning reserve; the verifier handles the recorded completion or a preserved incomplete final without changing execution.
+
+The first read screen used 44 CLI tokenizations after runtime closure. A six-input assisted group screen also completed. Three original baselines and nine single-read substitutions preserve exact source/result/recovery limits; the terminal baseline reproduces the frozen denial. The assisted scripted source replay verifies the four complete selected bodies and unchanged terminal candidate. These are offline checks, not live Qwen continuations.
+
+The final two-patch proposal was extracted exactly and replayed with second guards taken from the actual first result. Both operations are accepted; first syntax is invalid, second syntax valid, and next input construction works at both states. A source-checked reviewer single patch is equivalent. Module construction, exception attributes/message and shallow/deep copy/pickle pass. These checks do not run the full host suite or claim the original backport task completed.
+
+SINGLE_CHECK.json initially described the reviewer-constructed short-anchor patch as a model-proposed edit through a generic helper label. The calculations were correct; the provenance label was not. Preserve that first output. The helper now requires explicit provenance, and SINGLE_CHECK_CORRECTED.json records reviewer_constructed. No model request or original artifact was repeated or changed. The exact two-operation replay is independently reproducible via verify_configparser_dialogue_sequence.py.

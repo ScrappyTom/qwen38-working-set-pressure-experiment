@@ -1,0 +1,11 @@
+# Preparation review
+
+Five focused unittest checks passed before preparation: exact source excerpts and planned/final distinction; fresh nonexecuting request; full adaptive conversation shape; selected reserve accounting; and native-drift/capacity denials with zero completion dispatch and no retry. This is not a full-suite run.
+
+The exact proposed JSON is parsed from saved reasoning without rewriting its strings. It contains 540 new-field characters, while the final has 512; the source and actual returned diff are separate identified evidence. Source lines 280–345 include ParsingError, append behavior, the insertion anchor and surrounding text. The complete historical system/tool reference is supplied. Later repairs and the reviewer's favored solution are omitted. This selected evidence is not the original full decision input or a causal experiment.
+
+Offline preparation uses the pinned tokenizer and verified historical native envelope. The native input is 4,857 tokens, leaving 51,719 physical generation tokens, above the unchanged 32,768 planning reserve. The native renderer strips outer message whitespace. Complete stripped message contents and the native thinking suffix match. The owned server must reproduce the exact prepared bytes and count before dispatch; that invariant is enforced by the runner. Preparation sent zero completions.
+
+A redundant exploratory assertion compared unstripped messages against the native prompt and failed on outer whitespace. PowerShell continued to the separately safeguarded runner because the first command's exit was not explicitly checked. The preparation itself, its source identities and the runner's exact-native/capacity gates remained unchanged. This review document was written after launch began. The exploratory assertion was corrected to reflect the inspected template behavior; no model request was retried or input changed.
+
+Owner direction authorizes D1 and at most one separately justified follow-up after preserving and reviewing D1. The lifecycle records exact HTTP output before parsing, forbids tool execution, monitors q4/no-MTP/full offload and seals after owned runtime closure. The advisory GPU policy remains accepted. No consumed historical run is reopened.

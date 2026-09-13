@@ -2,6 +2,22 @@
 
 ## Project status
 
+The [patch consultation and narrower-read qualification are complete](development/configparser_follow_up/review/RESULTS.md).
+Qwen correctly distinguishes the planned and emitted edits and proposes a valid
+two-patch construction. Complete-source checking also verifies an equivalent
+reviewer-built single 420-character patch. Retain the patch limit for now; select
+the existing line-count read mode for the next prepared work episode.
+The consultation costs 48,494 generated tokens and 49.510 minutes, exceeding the
+planning reserve while finishing within physical context. All thinking and final
+content were directly reviewed. D2 is closed unconsumed.
+
+Offline smaller pages preserve useful companion source at two saved states and
+allow the formerly blocked final read to be delivered. A separately assisted
+compact group fits at 20,028 tokens; neither result proves Qwen will select those
+ranges or complete the task. [Next preparation](development/configparser_follow_up/review/NEXT_STEPS.md)
+continues from the saved correct library into regressions and documentation.
+No production host, memory, retention or reasoning change is made here.
+
 The [larger-source configparser pilot is closed](development/configparser_backport/review/RESULTS.md):
 32 accepted actions save a correct library repair, but no required tests or
 documentation and no submission. The library passes 355 upstream tests (five
@@ -14,10 +30,9 @@ Actual pressure rotates library/test evidence. After the last read, the next
 input needs 23,928 tokens to retain immediate feedback, 120 over its frozen
 ceiling. The host stops before C33; eight unused actions do not authorize rescue.
 All 32 result and four edit payloads remain exactly retrievable offline. A damaged
-512-character edit and extensive fragment counting also earn a focused Qwen
-consultation. [Next work](development/configparser_backport/review/NEXT_STEPS.md)
-prepares that dialogue and offline qualification of narrower exact reads before
-selecting an intervention. No host, memory or reasoning change is yet adopted.
+512-character edit and extensive fragment counting earned the focused follow-up
+recorded above. The [original next-work proposal](development/configparser_backport/review/NEXT_STEPS.md)
+remains preserved alongside the consumed attempt.
 The broader goal remains unachieved; the owned runtime is closed.
 
 The [saved-work continuation is complete](development/saved_work_continuation/review/RESULTS.md):

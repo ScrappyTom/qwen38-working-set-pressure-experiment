@@ -109,14 +109,39 @@ wrappers remain exactly retrievable offline; storage success is not delivery.
 The owned runtime is closed; minimum GPU free memory is 261 MiB under the
 accepted advisory policy. No runtime or reasoning setting changed.
 
-The next earned development work is a small neutral Qwen consultation about
-the actual 512-character patch construction failure and offline qualification
-of narrower exact reads. Source-check its answer before selecting a change.
-The complete reference was supplied; do not call this missing signatures.
-Large pages rotate source while all ordered signal continues growing. Extensive
-speculation also occurs before externalization, so do not attribute all cost to
-memory. No metadata, retention, memory or reasoning change is adopted by this
-review. Preserve the final source-only repair and all unsuccessful evidence.
+That focused follow-up is now complete under `development/configparser_follow_up/`.
+Read its five review products, DECISION.json and NEXT_STEPS.md. All 168,195
+thinking characters and 11,001 final characters were directly read. Qwen correctly
+distinguishes the planned and emitted edits, calculates 540 versus 512 characters,
+and proposes two host-valid patches using the known full anchor. Its intermediate
+source is invalid Python, as it recognizes in thinking; the final is correct.
+Complete-source checking establishes a shorter unique anchor and an equivalent
+reviewer-constructed 420-character single patch. Do not credit that single patch
+to Qwen's final selection. D2 is closed unconsumed: source-checking resolves the
+missing fact without another endorsement request. Retain the patch limit for now.
+
+The consultation costs 48,494 generated tokens and 49.510 request minutes. It
+exceeds the prospective 32,768 reserve but finishes with 3,225 physical tokens
+remaining. Do not treat that reserve as a bound, or infer an ordinary-action
+budget from this selected diagnostic packet. Thinking repeatedly misreads diff
+prefixes, counts fragments and rehearses conclusions; it also invokes an absent
+verbosity instruction. Preserve these observations without assigning all cost
+to an interface defect, memory or a private mechanism. All 207 source identities
+and exact native/output custody verify; the owned runtime is closed, minimum
+free GPU memory 280 MiB under the accepted advisory policy.
+
+The offline read screen qualifies the existing actor_selected_count option with
+consistent visible requirements, exact return/recovery bounds and partial read
+coverage. Smaller pages preserve companion source at C25/C27 and deliver the
+latest C32 result, although the library page is still external in that last case.
+A separately reviewer-assembled compact source group fits at 20,028 tokens with
+all ordered signal. This is static assisted capacity evidence, not a Qwen path
+or reversal of the consumed eviction frontier. Select bounded reads as the one
+prospective operation variant for the next separately prepared saved-library
+contribution with regressions/documentation. Qualify its actual input/feedback
+path before dispatch. No production metadata, retention, memory or reasoning
+change is made here. Preserve all original and unsuccessful evidence; the broad
+long-work goal remains unachieved.
 
 The saved-work continuation was prepared under
 `development/saved_work_continuation/`. Read its SPEC.md, PREPARATION_REVIEW.md,
