@@ -2,6 +2,13 @@
 
 ## Project status
 
+The [current operating direction](development/bounded_working_set/SYMBIOTIC_PLAN.md)
+uses Qwen as a test pilot: design consultation occurs outside active runs. During
+a run, the actor receives the declared interface/state and actual tool feedback,
+without reviewer coaching. Address and qualify host defects before the next
+exposure. The assisted contributions below retain their original evidence and
+classification; future evaluation must exercise an uncoached working loop.
+
 The [documentation contribution is complete](development/bounded_working_set/parser-documentation/review/RESULTS.md).
 With reviewer-selected exact source and factual dialogue, Qwen saves the remaining
 API and exception documentation, consumes a passing check and submits. The saved

@@ -1,5 +1,57 @@
 # Complete contributions with host and model
 
+Current direction, following the owner's test-pilot clarification: develop the
+host with Qwen outside active runs. Active runs use the declared task, interface,
+state and actual tool feedback without reviewer coaching. The completed sessions
+below remain assisted development evidence. Their factual reminders, supplied
+source and prose endorsements are not a template for future run-time behavior.
+
+The four priorities now apply as follows:
+
+1. Keep a completed contribution as the unit: current work, objective, relevant
+   evidence and actual verification. Judge preservation of earlier work and
+   useful completion, including acquisition, inference, elapsed time and review
+   costs. Reviewer assessment may grade the completed artifact afterward; it
+   must not become an undeclared instruction to the actor during the run.
+2. Put coordination into the declared host. It owns sizing, truthful visibility,
+   exact retrieval, version guards and model-requested successor checks. Useful
+   semantic support must be implemented and qualified as an explicit component
+   before exposure, with its cost included. Codex supplying a missing fact during
+   execution does not establish that component.
+3. Use Qwen as a test pilot and design collaborator between runs. Preserve actual
+   input, complete response and work; inspect operational consequences; then
+   consult about a specific unresolved interpretation in a separate conversation.
+   Source-check proposals and retain the interface when no change is earned.
+   During a run, review and monitor without adding hints or selecting the next
+   action. A host obstruction may justify a recorded stop; close the attempt
+   before repair or consultation, and identify any later run separately.
+4. Qualify reasoning allocation on completed work with the same host and starting
+   conditions. The xhigh/uncapped baseline remains unchanged until an explicit
+   comparison is prepared. Host defects and coaching must not be uncontrolled
+   differences between effort conditions. The last session did not qualify an
+   alternative effort policy.
+
+Host work before the next exposure is specific. The demonstrated reply-order
+defect is already corrected and qualified offline: 45 selected host tests and six
+native constraint cases pass. Actual combined use by Qwen remains untested.
+The earlier constructor omission is a source-preparation failure; the constructor
+can be obtained through exact source reading. A supplied group is not proof of
+semantic sufficiency, and automatic prerequisite selection is not implemented.
+Future preparation must establish an accessible route to configuration evidence
+without relying on facts a reviewer plans to supply later. Repeated deliberation
+and resolved wrapper uncertainty remain observations, not sufficient grounds for
+another field, memory mechanism or host patch.
+
+The next execution package must use the corrected wire/decoder path and an
+uncoached loop. Do not reuse the closed assisted adapters as an active coached
+continuation or relabel their inputs. Qualify request generation, available
+source access, complete feedback, edit/check binding and closure without manual
+messages before sending model requests. Use an independently useful contribution;
+the completed parser work and its closed allowances are preserved. No model run
+or new reasoning policy is initiated by this clarification.
+
+The following records the earlier implemented plan and its actual assisted result.
+
 Implemented and closed: Qwen completes the documentation contribution with
 reviewer-selected source and factual dialogue; read
 [the results](parser-documentation/review/RESULTS.md). Four replies save two edits,

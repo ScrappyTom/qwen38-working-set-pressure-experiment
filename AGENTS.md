@@ -1,5 +1,19 @@
 # Experiment operating rules
 
+Current owner clarification: Qwen is the test pilot. Design collaboration and
+interpretation consultations take place outside active runs, in separate
+conversations after the relevant attempt is closed. During a run, supply only
+the declared task/interface/state and actual feedback produced by the declared
+host operations. Do not insert reviewer coaching, corrective source facts,
+remaining-work reminders, action suggestions or prose endorsements between
+model decisions. Direct transcript review and monitoring remain observational.
+If a material host obstruction warrants stopping, preserve and close the attempt,
+then diagnose, repair and qualify separately. Predeclared host sizing, retrieval,
+guards and requested checks remain part of the operating system. This supersedes
+the coached execution approach below; completed assisted records keep their
+original labels and evidence. The current plan is
+`development/bounded_working_set/SYMBIOTIC_PLAN.md`.
+
 The documentation contribution is now closed and checked under c52f26fc; read
 `development/bounded_working_set/parser-documentation/review/RESULTS.md` and its
 four complete turn reviews. Qwen saves both documentation additions, checks and
@@ -16,10 +30,10 @@ The original completed evidence and verifier are preserved at 16ce028e. Qualify
 illustrated response forms through the actual serialized request and decoder
 constraints; semantic JSON validation alone does not establish their availability.
 
-Current owner-directed development: implement the combined host/model contribution
-loop under `development/bounded_working_set/SYMBIOTIC_PLAN.md` and the separately
-declared `parser-documentation/SPEC.md`. Assistance is part of the system; identify
-its provider, actual input and cost. The optional edit/check reply is an explicit
+The completed owner-directed contribution tranche followed
+`development/bounded_working_set/SYMBIOTIC_PLAN.md` and the separately declared
+`parser-documentation/SPEC.md`. It included assistance, whose provider, actual
+input and cost remain identified. The optional edit/check reply is an explicit
 coordination intervention: one Qwen reply can request a patch and a host-bound
 successor check, counted as two actual archive actions. It does not change any
 consumed one-action experiment. Preserve both results in the next input and do not
@@ -34,11 +48,12 @@ This repository exists only to test exact-context reconstruction across one or
 more authentic pressure boundaries and its directly earned evidence-to-action
 diagnostics. Keep it smaller than its evidence donors.
 
-The central development method is collaboration with the operating model.
-When consequential misunderstanding appears, preserve and diagnose the actual
-interaction, then use a small separate conversation with Qwen to examine its
-interpretation before settling the next presentation. Save its answer before
-clarifying facts; respond to what it actually says and source-check its proposals.
+The central development method is collaboration with the operating model outside
+active runs. When consequential misunderstanding appears, preserve and diagnose
+the actual interaction. After the attempt closes, use a small separate conversation
+with Qwen to examine its interpretation before settling the next presentation.
+Save its answer before clarifying facts; respond to what it actually says and
+source-check its proposals.
 Carry an earned distinction into the actual model input and assess its use during
 task work. A frontier-authored audit or governance note alone does not complete
 this learning loop. Qwen's explanations are design evidence, not privileged
