@@ -90,13 +90,33 @@ and incorrect test expectation as documented. The corrected 23/33/24-action
 routes validate every action against the real grammar and deliver every immediate
 result, with peak native input 23,782 and older bodies externalized. Fifteen
 focused runner tests pass, including exact-input/actual-tool continuation.
-The new runner and EXECUTION_MANIFEST freeze one max-40-action attempt, seed
-961207, under the owner's continuing goal. Verify native equality, source,
-runtime and latest-result delivery before exposure. No Qwen call has yet occurred
-on this task. This known backport is not a fresh independent-discovery benchmark;
-review actual code, new tests and documentation as well as all complete transcripts.
-No new metadata, retention or reasoning policy is adopted. Unused scope in a
-consumed run still authorizes no retry or rescue.
+That max-40-action attempt, seed 961207, is now closed and consumed. Read the
+five review products, DECISION.json and NEXT_STEPS.md under its review directory.
+All 32 complete responses and actual feedback changes were directly reviewed;
+all 65 native inputs and 32 actual actions/states reconstruct or replay exactly
+against the 194 frozen sources. Qwen saves the correct library repair, including
+recovering from an edit that temporarily removed `_UNSET`. The source passes
+355 upstream tests (five skips) and eight independent contract methods. No added
+tests or documentation are saved, so the overall check fails and no submission
+occurs. The loop costs 230,047 generated tokens and 258.18 minutes. The complete
+larger contribution and the owner's long-work goal remain unachieved.
+
+At attempted C33, retained signal plus the newest test read requires 23,928
+input tokens, 120 over the frozen 23,808 ceiling. Removing that body fits but
+withholds immediate feedback, so the host stops before another model call.
+Eight unused actions authorize no rescue. All 32 result and four patch payload
+wrappers remain exactly retrievable offline; storage success is not delivery.
+The owned runtime is closed; minimum GPU free memory is 261 MiB under the
+accepted advisory policy. No runtime or reasoning setting changed.
+
+The next earned development work is a small neutral Qwen consultation about
+the actual 512-character patch construction failure and offline qualification
+of narrower exact reads. Source-check its answer before selecting a change.
+The complete reference was supplied; do not call this missing signatures.
+Large pages rotate source while all ordered signal continues growing. Extensive
+speculation also occurs before externalization, so do not attribute all cost to
+memory. No metadata, retention, memory or reasoning change is adopted by this
+review. Preserve the final source-only repair and all unsuccessful evidence.
 
 The saved-work continuation was prepared under
 `development/saved_work_continuation/`. Read its SPEC.md, PREPARATION_REVIEW.md,

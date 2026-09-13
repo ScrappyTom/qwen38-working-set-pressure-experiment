@@ -1,0 +1,480 @@
+We need answer with JSON action only. Need continue task. We have event frame. Current candidate after one patch: 031dc6a45f2420df7280230764ac30170def27f5f0db52fe37995c4a668bb08d. File sha Lib/configparser.py ce124971bcf9653b590c4e83a2637dde143e9de72c01867b0dacdffb56e7765e. We need inspect current state. Need know task: add MultilineContinuationError derived from ParsingError, with source, lineno, line attributes, constructor args, useful message. Reject unsupported continuation when allow_no_value=True? The input:
+[service]
+optional_flag
+    continuation
+This has valueless option followed by continuation line indented. Current parser: valueless option cursect[optname] = None. Later continuation? In _read, after valueless option, cursect[optname] = None. Continuation line branch: if cursect is not None and optname and cur_indent_level > indent_level: cursect[optname].append(value). But if value is None (not list), AttributeError 'NoneType' object has no attribute 'append'. Need catch/raise MultilineContinuationError. But need only unsupported continuation after valueless option? The task says Reject this unsupported continuation with public MultilineContinuationError. Preserve valid multiline values, valueless options, comment handling etc. So in parser, when a valueless option is followed by an indented continuation line, raise MultilineContinuationError(source, lineno, line). In CPython there is issue? Let's recall actual Python 3.13/3.12? There is MultilineContinuationError added in CPython? Yes gh? configparser: raise MultilineContinuationError when a valueless option is followed by an indented line? Let's recall. In CPython 3.12? There is exception MultilineContinuationError in configparser? Let's search memory: Python docs list exceptions: NoSectionError, DuplicateOptionError, DuplicateSectionError, NoOptionError, InterpolationError, InterpolationMissingOptionError, InterpolationSyntaxError, InterpolationDepthError, ParsingError, MissingSectionHeaderError, MultilineContinuationError? I think Python 3.13? It was added: "MultilineContinuationError" raised when a valueless option is followed by an indented line. The exception stores source, lineno, line. It derives from ParsingError? Let's check exact class. In CPython Lib/configparser.py maybe:
+
+class MultilineContinuationError(ParsingError):
+    """Raised when a valueless option is followed by an indented line."""
+    def __init__(self, source, lineno, line):
+        super().__init__(source)
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+
+Message maybe 'Source contains parsing errors: {source!r}\n\t[line %2d]: %s' inherited? But ParsingError __init__ sets message f'Source contains parsing errors: {source!r}' and errors list. If subclass adds attributes, maybe append? Wait ParsingError.append uses self.message += ... But if not called? Need message includes offending line. Task says useful message. Could construct:
+class MultilineContinuationError(ParsingError):
+    """Raised when a valueless option is followed by an indented line."""
+    def __init__(self, source, lineno, line):
+        ParsingError.__init__(self, source)
+        self.errors.append((lineno, line))
+        self.message += '\n\t[line %2d]: %s' % (lineno, line)
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+But task says preserve those three constructor arguments for copying/pickling. So args exactly. If using ParsingError.__init__ sets self.args = (source,), then override. Need perhaps exact CPython implementation. Let's recall from CPython commit.
+
+I remember CPython issue 101305? MultilineContinuationError. Implementation maybe:
+class MultilineContinuationError(ParsingError):
+    """Raised when a valueless option is followed by an indented line."""
+
+    def __init__(self, source, lineno, line):
+        ParsingError.__init__(self, source)
+        self.errors.append((lineno, line))
+        self.message += '\n\t[line %2d]: %s' % (lineno, line)
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+But maybe they don't append to errors? Let's search memory from docs: Exceptions section:
+.. exception:: MultilineContinuationError(source, lineno, line)
+    Raised when a valueless option is followed by an indented line.
+
+In class:
+class MultilineContinuationError(ParsingError):
+    """Raised when a valueless option is followed by an indented line."""
+
+    def __init__(self, source, lineno, line):
+        ParsingError.__init__(self, source)
+        self.errors.append((lineno, line))
+        self.message += '\n\t[line %2d]: %s' % (lineno, line)
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+
+Need add to __all__ (done). Need raise in _read. How exactly? In current _read: when option matched and optval None, cursect[optname] = None. Then continuation line branch if cursect is not None and optname and cur_indent_level > indent_level: cursect[optname].append(value). We need if cursect[optname] is None then raise MultilineContinuationError(fpname, lineno, line). But careful: The continuation branch currently for any optname; if valueless option then cursect[optname] is None. If previous option had value list then append ok. Need only when valueless. But also consider valueless option and then another option on next non-indented line? Not continuation, no error. Indented continuation after valueless line should raise. Need exact line: the offending line is continuation line (indented line) not option line. One-based line number from enumerate. line variable original line (with newline maybe). Task input says exact offending line. The example offending line is "    continuation\n" or maybe stripped? MissingSectionHeaderError uses line variable original line. In _handle_error e.append(lineno, repr(line)) uses original. For MultilineContinuationError likely source, lineno, line. The line should be exact offending line. In _read line includes newline. Need pass line. Good.
+
+Need maybe update _read to:
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    cursect[optname].append(value)
+But if cursect[optname] is None then AttributeError. We can do:
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    if cursect[optname] is None:
+                        raise MultilineContinuationError(fpname, lineno, line)
+                    cursect[optname].append(value)
+But what if optname in cursect is not present? It should exist as either list or None. For section headers optname=None. For valueless option yes None. What about after section header? cursect changed and optname reset to None. Good.
+
+Need check whether valueless options can have legitimate continuation? In configparser, no. allow_no_value True: valueless options accepted; continuation lines are not allowed? Task says preserve valueless options, but reject unsupported continuation. Good.
+
+Need also maybe raise when cursect[optname] is None and line is a continuation, but what if continuation line is empty? Empty lines are handled before and continue. If empty_lines_in_values False, empty line marks end of value indent_level=maxsize. Then continuation not processed. If empty_lines_in_values True and valueless option? Empty line: code if self._empty_lines_in_values:
+    if comment_start is None and cursect is not None and optname and cursect[optname] is not None:
+        cursect[optname].append('')
+So if valueless, does nothing. Then subsequent continuation after empty? indent_level not changed? Actually for empty line it continues without updating indent_level? Code:
+if not value:
+    if self._empty_lines_in_values:
+        # add empty line to value... if cursect[optname] is not None: append('')
+    else:
+        indent_level = sys.maxsize
+    continue
+So with empty_lines_in_values True and valueless option, empty line ignored, indent_level remains from valueless option. If after empty line continuation indented, still cur_indent_level > indent_level and cursect[optname] None, raises. Is that intended? likely.
+
+Need maybe update _join_multiline_values? It checks isinstance(val, list). For None no issue.
+
+Need tests. Need inspect Lib/test directory. Existing test module likely Lib/test/test_configparser.py. Need p0_page Lib/test or tree. Current p0 root shows Lib total bytes 271320 and file_count 8? But earlier Lib had 2 entries? Maybe because root p0 complete? Let's see current p0 entries: Doc, LICENSE, Lib. Lib total file_count 8? It has directory. Need get Lib/test. Use p0_page path Lib or tree? The event sequence 4 p0_page Lib/test showed total_entries 4. But maybe current candidate same (only added all exception) test directory unchanged. Need inspect Lib/test entries to know test file path. Use p0_page or tree. Need exact source before mutation for test file and Doc. We need read current test file, doc library. Need know file sizes and structure.
+
+Resource calls remaining 30. Need be efficient. We have current reads: configparser current around 300-741 after patch? We need exact current source for patch locations. We have current file after one patch, but need exact old strings. We can use search to locate lines? Need patch exact old/new. We know from read (RES-0010) current source after line 300-741 includes exceptions and start of RawConfigParser? It stopped around read_dict, not _read. Need current _read section. We have from previous read of original at lines 734-1145? Wait original lines after patch shifted by +1. Current candidate lines: first patch inserted one line at ~154. So original line 734 is now 735? Event RES-0006 read start 734 original up to 1145 included _read etc. After patch, start line shifted by +1: original line 734 now 735? But event RES-0010 read start 300 returned up to 741 current, and content ended at read_dict. Need current _read likely from current line ~? Let's reconstruct. Original RES-0005 start 290 to 733; RES-0006 start 734 to 1145. It includes from _read_defaults? Actually RES-0006 content started:
+            for key, value in keys.items():
+                key = self.optionxform(str(key))
+...
+    def get...
+...
+    def _read(self, fp, fpname):
+...
+That's original line 734? The content at start line 734 started inside read_dict. It included _read around maybe line 877? We need current exact line numbers not needed for patch old string. Need exact old snippet for class and _read.
+
+Need patch 1: add class after MissingSectionHeaderError. We have current source from RES-0010 (start 300) including:
+class MissingSectionHeaderError(ParsingError):
+    ...
+        self.args = (filename, lineno, line)
+
+
+# Used in parser getters...
+_UNSET = object()
+We need insert class MultilineContinuationError before # Used in parser getters. The exact current text:
+class MissingSectionHeaderError(ParsingError):
+    """Raised when a key-value pair is found before any section header."""
+
+    def __init__(self, filename, lineno, line):
+        Error.__init__(
+            self,
+            'File contains no section headers.\nfile: %r, line: %d\n%r' %
+            (filename, lineno, line))
+        self.source = filename
+        self.lineno = lineno
+        self.line = line
+        self.args = (filename, lineno, line)
+
+
+# Used in parser getters to indicate the default behaviour when a specific
+# option is not found it to raise an exception. Created to enable `None` as
+# a valid fallback value.
+_UNSET = object()
+
+Need patch old maybe:
+# Used in parser getters to indicate the default behaviour when a specific
+# option is not found it to raise an exception. Created to enable `None` as
+# a valid fallback value.
+_UNSET = object()
+to new with class before? But need unique? It likely appears once. Could patch:
+old:
+# Used in parser getters to indicate the default behaviour when a specific
+# option is not found it to raise an exception. Created to enable `None` as
+# a valid fallback value.
+_UNSET = object()
+new:
+class MultilineContinuationError(ParsingError):
+    """Raised when a valueless option is followed by an indented line."""
+
+    def __init__(self, source, lineno, line):
+        ParsingError.__init__(self, source)
+        self.errors.append((lineno, line))
+        self.message += '\n\t[line %2d]: %s' % (lineno, line)
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+
+
+# Used in parser getters...
+_UNSET = object()
+But class name already in __all__; class must be defined before __all__? __all__ references string not object; ok. But class before _UNSET after MissingSectionHeaderError fine. Need use ParsingError already defined. Good.
+
+However, exact CPython maybe class order after ParsingError before MissingSectionHeader? It may be after MissingSectionHeader. __all__ includes. Fine.
+
+Patch 2: _read continuation. Need current exact text. From original RES-0006:
+                # continuation line?
+                first_nonspace = self.NONSPACECRE.search(line)
+                cur_indent_level = first_nonspace.start() if first_nonspace else 0
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    cursect[optname].append(value)
+Need replace with:
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    if cursect[optname] is None:
+                        raise MultilineContinuationError(fpname, lineno, line)
+                    cursect[optname].append(value)
+But ensure exact whitespace. In original read, indentation 16 spaces before if? Let's inspect from RES-0006 content: 
+                # continuation line?
+                first_nonspace = self.NONSPACECRE.search(line)
+                cur_indent_level = first_nonspace.start() if first_nonspace else 0
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    cursect[optname].append(value)
+It looks 16 spaces? The line in content:
+"                if (cursect is not None and optname and\n                    cur_indent_level > indent_level):\n                    cursect[optname].append(value)\n"
+Yes 16 spaces for if, 20 spaces for continuation? Actually Python: inside for loop inside try: for loop has 12? let's count: class RawConfigParser methods def _read 8? body 12? try 12, for 16, inside for 20. The if is at 16? Wait for line:
+        try:
+            for lineno, line in enumerate(fp, start=1):
+                comment_start = sys.maxsize
+...
+                # continuation line?
+                first_nonspace = self.NONSPACECRE.search(line)
+                cur_indent_level = first_npace...
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    cursect[optname].append(value)
+The try is 8? Actually def _read(self, fp, fpname): indent 4, body 8, try 8, for 12, for body 16. The if at 16 spaces. In content it is 16 spaces. The condition continuation line 20 spaces? `                    cur_indent_level` is 20. The append line 20 spaces. So patch new:
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    if cursect[optname] is None:
+                        raise MultilineContinuationError(fpname, lineno, line)
+                    cursect[optname].append(value)
+Here new inner if at 20 spaces, raise at 24 spaces.
+Need old unique? `cursect[optname].append(value)` maybe appears only once. The if block likely unique. Good.
+
+Need maybe also consider if cursect[optname] key missing? No.
+
+Need maybe update docs. Need find Doc/library file. p0_page Doc showed one directory Doc/library with file_count 1 total_bytes 52024. The file probably Doc/library/configparser.rst? Need p0_page Doc/library or tree. Let's inspect.
+
+Need tests. Need p0_page Lib/test to see entries. Could do in parallel? We can only one action per final? The prompt says return one strict bare JSON action object. So one action each turn. Need choose next action. We need gather info. Could use p0_page path Lib/test offset 0 to see test file and maybe docs? One action. But we already know likely test_configparser.py. Need current p0 for Lib/test? The root current p0 doesn't include full. We can use p0_page. Also need doc path. We can use p0_page Doc/library. But only one action. We need prioritize. We need edit library first? Need exact old source. We have enough for class and _read? Need exact file sha/candidate current. We have from event RES-0010 current file sha ce124971... and candidate 031dc... But for patch, need expected_file_sha256 current pre-edit. We know from current read. Need exact old string present exactly. We have current source from RES-0010 for class region. Good. For _read, do we have exact current source? The current _read is shifted by +1; text from original RES-0006 likely unchanged except line shift. Need exact old string. But patch doesn't need line number. We need know exact old string. We have original RES-0006 content but not current? It should be same. However, the read after patch RES-0010 ended before _read. We need ensure old string exact in current, including line endings? The read content in event shows exact lines but maybe truncated? It is exact. Need old string can be from RES-0006. Since the patch inserted line earlier, the _read code hasn't changed. But there might be another patch? no. We can patch based on that exact text. Need guarantee old occurs exactly once. likely.
+
+Could patch class now. Need use expected_candidate_id current and file_sha256 current. That would mutate candidate. Then need read after edit? The patch returns new file sha and candidate. Then need patch _read with new sha. We can do sequentially.
+
+But before editing test/doc we need read them. We can also edit lib first. It's safe. Need ensure class patch old/new exact and within 512 char. New maybe ~450. Old ~260. Good. Need JSON action with new string containing newline and \n escape? In JSON, actual newlines can be escaped \n. Must be valid JSON. final content exactly action. We can use \n sequences. Need be careful exact old string.
+
+Let's construct class patch.
+Old:
+# Used in parser getters to indicate the default behaviour when a specific
+# option is not found it to raise an exception. Created to enable `None` as
+# a valid fallback value.
+_UNSET = object()
+This exact from RES-0010. Does it occur once? yes. New:
+class MultilineContinuationError(ParsingError):
+    """Raised when a valueless option is followed by an indented line."""
+
+    def __init__(self, source, lineno, line):
+        ParsingError.__init__(self, source)
+        self.errors.append((lineno, line))
+        self.message += '\n\t[line %2d]: %s' % (lineno, line)
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+
+
+# Used in parser getters to indicate the default behaviour when a specific
+# option is not found it to raise an exception. Created to enable `None` as
+# a valid fallback value.
+_UNSET = object()
+Need new includes backslash n in message. In Python source, string literal should contain `'\n\t[line %2d]: %s'`. In JSON action, to represent that line, we need escape backslashes? JSON string: "        self.message += '\\n\\t[line %2d]: %s' % (lineno, line)\n" ? Let's think. The final JSON object string value for `new` must contain actual characters: backslash n? In Python source we want characters: backslash n (two chars) or newline? The source line is:
+        self.message += '\n\t[line %2d]: %s' % (lineno, line)
+Here between quotes there is a backslash followed by n, not a newline. In JSON string, to include a backslash character, use \\, then n. So JSON fragment: "        self.message += '\\n\\t[line %2d]: %s' % (lineno, line)\n". That yields string value with backslash n and backslash t. Good.
+
+Potential issue: ParsingError.__init__(self, source) sets self.args = (source,). Then we append and modify message. ParsingError.append method exists; could use self.append(lineno, line) to add to errors and message. But if use self.append, it appends (lineno, line) and updates message. Then set args. Could do:
+        ParsingError.__init__(self, source)
+        self.append(lineno, line)
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+But ParsingError.append uses self.message += '\n\t[line %2d]: %s' % (lineno, line). It also self.errors.append((lineno, line)). That is clean. But exact CPython? Maybe they used self.append. If use self.append, message format same. Task only asks useful. Could use self.append. Need ensure self.message exists. Yes. Use self.append to avoid duplicate formatting. New class:
+class MultilineContinuationError(ParsingError):
+    """Raised when a valueless option is followed by an indented line."""
+
+    def __init__(self, source, lineno, line):
+        ParsingError.__init__(self, source)
+        self.append(lineno, line)
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+This is shorter. Does self.args override after append? append doesn't touch args. Good. Copy/pickle? args contains three. __reduce__? Exception pickling uses args and class? For custom exceptions, pickling may use __reduce_ex__ based on args? It will instantiate with args, okay. Need maybe define __init__ exactly accepts 3. Good.
+
+Potential issue: Exception copy? The task says preserve those three constructor arguments for copying/pickling. `args` set. Good.
+
+Need maybe use `super().__init__(source)`? ParsingError __init__ accepts source. Could use `super().__init__(source)`. But then self.args = (source,). Fine. To be explicit use `ParsingError.__init__(self, source)` like other exceptions use Error.__init__. Good.
+
+But if ParsingError.append uses `self.message += ...`, and `Error.__init__` sets self.message = msg. Good.
+
+Now _read patch old/new. Need ensure old exact string. Use old:
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    cursect[optname].append(value)
+New:
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    if cursect[optname] is None:
+                        raise MultilineContinuationError(fpname, lineno, line)
+                    cursect[optname].append(value)
+Need check indentation: 16 spaces before if; 20 before cur_indent; 20 before cursect append; inner if 20, raise 24. Good.
+
+Need maybe if `cursect[optname]` could be missing? not.
+
+Should we raise before or after `elements_added.add`? No, continuation line not option.
+
+Need documentation. Need know Doc file. Maybe Doc/library/configparser.rst. Need add exception declaration and explanation. The check says documentation declares the exception and accurate explanation. Need update reference documentation. Need read doc around exceptions. The file total 52024 bytes. Need find exception list. We can search in Doc for "MissingSectionHeaderError" or "exception::". Search action can query across root or path. Use search path Doc query MissingSectionHeaderError limit maybe 16. Or path '.' query MultilineContinuationError to see current only __all__? The doc may not yet. Need one action. Could use search path Doc query "exception:: MissingSectionHeaderError" maybe literal. Search returns matches. But we can use p0_page on Doc/library to identify file. Let's do p0_page path Doc/library offset 0. But we need maybe file outline. p0_page directory returns entries. It will show file path. Then read relevant doc. But one action. Alternatively search path Doc query "MissingSectionHeaderError" will return path and line, enough to know file and line. Then read around. Search uses current source. Let's choose search path Doc query "MissingSectionHeaderError" offset 0 limit 16. It returns matches with line text. That gives file path (maybe Doc/library/configparser.rst) and lines. But exact path? It returns path. Good. Then read doc around. But we also need test file. Could search root for "class TestRawConfigParser" maybe. But one action. We need plan all.
+
+Maybe use search path "." query "class TestRawConfigParser" to find test file? But need doc too. Could use tree Lib/test? p0_page. Since we already know Lib/test has 4 entries. Need file path and size. Let's use p0_page path Lib/test offset 0. It will list files. This is orientation. Then later read test file and doc. But search maybe faster for doc and test simultaneously? Search can query "MultilineContinuationError" root. It will find __all__ current and maybe no test/doc. Not helpful. Query "class TestRawConfigParser" finds test. Query "exception:: MissingSectionHeaderError" finds doc. Can't do two queries.
+
+We need decide next action. Could perform library class patch now because we have enough. That advances. Then next actions for info. The check flags cleared but okay. Need not read again? The patch uses current file sha from event RES-0010, which is current. We have not done any other edits. Good. Let's patch class now. Need ensure JSON within byte limit. Use exact strings. Let's craft action:
+{"action":"patch","path":"Lib/configparser.py","old":"# Used in parser getters to indicate the default behaviour when a specific\n# option is not found it to raise an exception. Created to enable `None` as\n# a valid fallback value.\n_UNSET = object()","new":"class MultilineContinuationError(ParsingError):\n    \"\"\"Raised when a valueless option is followed by an indented line.\"\"\"\n\n    def __init__(self, source, lineno, line):\n        ParsingError.__init__(self, source)\n        self.append(lineno, line)\n        self.lineno = lineno\n        self.line = line\n        self.args = (source, lineno, line)\n\n\n# Used in parser getters to indicate the default behaviour when a specific\n# option is not found it to raise an exception. Created to enable `None` as\n# a valid fallback value.\n_UNSET = object()","expected_candidate_id":"031dc6a45f2420df7280230764ac30170def27f5f0db52fe37995c4a668bb08d","expected_file_sha256":"ce124971bcf9653b590c4e83a2637dde143e9de72c01867b0dacdffb56e7765e"}
+Need check old occurs exactly once. yes. New differs. Good. But wait: old string appears after MissingSectionHeaderError. It includes no trailing newline? It ends at `_UNSET = object()`. In file there is newline after. Patch replaces exactly the old substring; it doesn't need include trailing newline. If old doesn't include final newline, replacement leaves newline after new? Actually old ends at object() before newline. New ends at object() before newline. The file's newline remains after inserted text. Good.
+
+But if old occurs in another comment? No.
+
+Potential problem: The exact comment from RES-0010:
+# Used in parser getters to indicate the default behaviour when a specific
+# option is not found it to raise an exception. Created to enable `None` as
+# a valid fallback value.
+_UNSET = object()
+It has a blank line before? The old doesn't include preceding blank lines. After patch, new class inserted immediately before comment. There will be existing two blank lines before comment? Let's inspect:
+        self.args = (filename, lineno, line)
+
+
+# Used in parser getters...
+There are two blank lines. Our old starts at comment, so after replacement:
+        self.args = (filename, lineno, line)
+
+
+class MultilineContinuationError(ParsingError):
+...
+        self.args = (source, lineno, line)
+
+
+# Used...
+_UNSET = object()
+Good because new includes two blank lines before comment? It includes after class args line: `\n\n\n# Used`? Let's see new string: `...self.args = (source, lineno, line)\n\n\n# Used...` There are two blank lines? In JSON: after line, `\n\n\n` means one newline ending args line, then blank line, then blank line? Let's count: string segment `line)\n\n\n# Used` = line), newline, blank line (second newline?), actually between lines: "line)\n" ends line, "\n" creates empty line, "\n" creates another empty line? Let's not dwell. In new we wrote `...line)\n\n\n# Used`. That yields two empty lines between class and comment (PEP8). Good.
+
+But class inserted after two blank lines from previous class? Since old starts at comment, the existing two blank lines before comment remain before class. Good.
+
+After class patch, file sha changes. Need patch _read next. Need know new file sha from result. The tool result will be in next event? We only see in active frame after action? As model, after final action, environment returns? We need continue in subsequent turns. Fine.
+
+But is it safe to patch before reading test/doc? yes.
+
+Need think about final submission and check. We need complete library, tests, docs. Need know public check runs frozen upstream regression suite etc. It may run test module. Need added regressions must pass with repaired module and expose original. Need add tests to existing test module. Need know test file and existing test structure. Need add tests for MultilineContinuationError. Also docs.
+
+Let's plan all needed info and edits.
+
+Library edits:
+1 __all__ already done.
+2 class MultilineContinuationError.
+3 _read raise.
+Potential additional: need update module docstring? Maybe not. But maybe docs for exceptions in module docstring? The module docstring lists exceptions? Not necessary.
+Potential: need update `ParsingError`? no.
+Potential: need `MultilineContinuationError` in `__all__` done.
+
+Testing:
+Need add regressions to existing test module. Need know test file name and current imports. Likely Lib/test/test_configparser.py. It imports from configparser import * or specific? Need inspect. Need add tests for:
+- RawConfigParser with allow_no_value=True read_string input raises MultilineContinuationError with source, lineno, line.
+- ConfigParser with allow_no_value=True too.
+- read_file/read consistency.
+- valid valueless option without continuation doesn't raise.
+- valid multiline value still works.
+- exception derives from ParsingError.
+- attributes and args/pickle/copy maybe.
+- original module would raise AttributeError; tests catch MultilineContinuationError so fail on original? They will not pass original because original raises AttributeError, but if tests assert raises MultilineContinuationError, original fails. Good.
+Need ensure tests are added, keep existing intact. Could append new test class at end. Need know file end and imports. Use unittest. Need maybe import copy, pickle? Existing test file may import many. We can use unittest, io.StringIO. Could add tests using self.assertRaises(configparser.MultilineContinuationError). If test file imports module as `import configparser`? In test_configparser.py, likely `import configparser` and `from configparser import ...`? Need inspect.
+
+Let's recall CPython test_configparser.py structure. It has imports:
+import io
+import os
+import sys
+import unittest
+import warnings
+from pathlib import Path
+from test.support import os_helper
+from test.support.import_helper import import_fresh_module
+import configparser
+from configparser import *
+Maybe. It defines TESTFILE etc. It has class TestConfigParser(unittest.TestCase), TestRawConfigParser, TestInterpolation, etc. It likely uses `configparser.RawConfigParser()`.
+
+Need maybe add a new class TestMultilineContinuationError(unittest.TestCase):
+    def test_valueless_continuation(self):
+        for cls in (configparser.RawConfigParser, configparser.ConfigParser):
+            with self.subTest(config=cls.__name__):
+                parser = cls(allow_no_value=True)
+                input_ = "[section]\nopt\n    continuation\n"
+                with self.assertRaises(configparser.MultilineContinuationError) as ctx:
+                    parser.read_string(input_)
+                exc = ctx.exception
+                self.assertEqual(exc.source, '<string>')
+                self.assertEqual(exc.lineno, 3)
+                self.assertEqual(exc.line, '    continuation\n')
+                self.assertEqual(exc.args, ('<string>', 3, '    continuation\n'))
+                self.assertIsInstance(exc, configparser.ParsingError)
+
+But source for read_string default '<string>'. For read_file, source may be f.name or source. Test can use read_string and read_file.
+Need test read_file: create StringIO with name? We can use io.StringIO(input_, name='test.ini')? StringIO has name? In Python, io.StringIO(initial_value=None, newline='\n', write_through=False, newline=None, initial_value? It doesn't have name? Actually io.StringIO has .name? Let's check: io.StringIO object has name attribute? I think TextIOWrapper has name, StringIO maybe has name? In CPython, io.StringIO has `name` property? I think yes? Maybe not. Safer use tempfile.NamedTemporaryFile? But test module may avoid. Could use `io.BytesIO` no. `read_file` can accept f with `.name` attribute? It tries f.name, if AttributeError uses '<unknown>'? Actually source = f.name except AttributeError source = '<???>'. We can create object with name? We can pass `io.StringIO(input_)` then source maybe '<???>' if no name. But I think StringIO has name '<_io.StringIO object at ...>'? Let's not rely. We can test read() with tempfile or test support. But task says behavior consistent through read(), read_file() and read_string(). Need tests perhaps use read_string and read_file/read. We can use `parser.read_string` and `parser.read_file(io.StringIO(...), source='test.ini')` because read_file has optional source. It calls _read(f, source). So source can be specified. For read(), need file. Could use `os_helper`? But maybe add test using tempfile.TemporaryDirectory? Need not overly complex. The check likely tests independent contract, and added regressions need expose original. It may not require all three methods in tests? Task says add regressions; public check runs edited test module. We should include robust tests.
+
+Could use `io.StringIO` with `.name` set? In Python, you can set `sio.name = 'test.ini'`? I think TextIOWrapper and StringIO have `name` attribute? Let's verify from memory: `io.StringIO` has `name` property? In Python 3, `io.StringIO().name` returns '<_io.StringIO object at 0x...>'? Actually I used StringIO and `.name` exists? I think yes for TextIOWrapper and BytesIO? Let's check mentally: `help(io.StringIO)` lists methods: close, detach, fileno, flush, isatty, readable, read, read1, readline, seek, seekable, tell, truncate, writable, write, writelines. Attributes: closed, encoding, errors, newlinemode, softspace, line_buffering? There is `name`? For BufferedReader has name, TextIOWrapper has name, StringIO maybe has name? I recall `io.StringIO().name` returns `'_io.StringIO'`? Not sure. But we can monkey set: `sio = io.StringIO(input_); sio.name = 'test.ini'` if attribute allowed? Python objects often allow arbitrary attribute unless __slots__. StringIO likely allows? Maybe. But not needed.
+
+Use tempfile:
+import tempfile
+with tempfile.TemporaryDirectory() as d:
+    path = os.path.join(d, 'test.ini')
+    with open(path, 'w') as f: f.write(input_)
+    with self.assertRaises(...): parser.read([path])
+But adding tempfile import? Need check test file imports. Could use `test.support` already. But patching tests by appending can reference `tempfile` if imported at top. If not imported, NameError. We can add `import tempfile` in test? But patch to top requires exact. Better use existing imports. The test module likely imports `io`, `os`, `unittest`. Maybe not tempfile. It might import `tempfile`? CPython test_configparser may import `tempfile`? Let's recall. It uses `TESTFILE = os.path.join(...)` and `TESTFILE2` maybe. It might import `os.path`, not tempfile. It has helper `getParser()`.
+
+Could use `parser.read_file(io.StringIO(input_), source='test.ini')` to test read_file. For read(), we can create a `types.SimpleNamespace`? `read` accepts filename, opens it. Could use `io.StringIO` no. We can test `read` with a file created by `io.BytesIO`? No. Could use `parser.read_string` for main. But task says consistent through read(), read_file() and read_string(); the implementation in _read covers all, so tests maybe not need all. But to be safe, test read_file with source, and maybe read using `tempfile` if we can add import. We can patch test file to add `import tempfile` if not present. Need know.
+
+Alternatively use `parser.read([__file__])`? Not. Could use `parser.read(['nonexistent.ini'])` no.
+
+Maybe test file has `os_helper` from test.support and can create tempdir. But simpler: use `io.BytesIO`? `read` calls open(filename), filename can be a file path only, not file object. So need file.
+
+Could use `unittest.mock`? `open` patch? Too much.
+
+Maybe we can add test using `io.StringIO` and `read_file`, and one `read_string`. The public check likely verifies behavior via its own independent checks, not necessarily our tests cover all methods. But our added regressions must pass and expose original; they can use read_string.
+
+Need know exact test file end to append. Need read test file. Since it may be long; need p0_page or read. We can p0_page Lib/test to get file path and size. Then read end maybe from start_line high? We need exact end for patch. Could read from 1 to see imports and maybe append via patch at end? Patch requires old exact. Easier: use patch to insert before a unique existing class? Or append by matching end of file? Need old exactly once. Could read last page to get final lines. Need know file length. p0_page file outline may show total lines? It shows entries with line ranges? p0_page file outline returns Python signatures and line ranges, not exact source. Could use read from start_line maybe 1 to page, then continue to end. But large file maybe ~2000 lines; call limit 30, can do. Or search for a unique string near end. For appending to end, we can patch a unique final line? Need exact. Could use `search` query "if __name__ == \"__main__\":" maybe test file ends with main. It has `if __name__ == '__main__': unittest.main()` maybe unique. We can patch that block to add tests before it. Need exact. Search will show line. Could read around.
+
+Maybe easier: use p0_page file outline for test file; it lists function/class signatures and line ranges. But to patch, need exact source of a small unique anchor, e.g. `if __name__ == '__main__':\n    unittest.main()`. That likely exact. We can patch it to insert new test class before it, using old:
+if __name__ == '__main__':
+    unittest.main()
+new:
+class TestMultilineContinuationError(unittest.TestCase):
+    ...
+
+if __name__ == '__main__':
+    unittest.main()
+But if file has trailing newline? The block likely exactly. If `unittest.main()` maybe with `unittest.main()` only. Need exact. Search/read to confirm.
+
+Could append by patch old `if __name__ == '__main__':` and new class plus block, but old may occur once. Need include following line to be unique and preserve. Could old just `if __name__ == '__main__':` new class + `if __name__ == '__main__':` but would insert class before guard at module indent, okay. But need exact following? It would leave original line and rest unchanged. If old occurs once. That is easier, no need know following line. However, if there are blank lines before guard, inserting class right before guard will have maybe no blank lines? It will replace the guard line with class text then guard line? Wait old is just `if __name__ == '__main__':`; new is `class Test...:\n    ...\n\n\nif __name__ == '__main__':`. It replaces that line, leaving following `    unittest.main()` after inserted guard line? Actually new ends with guard line, so original following line remains after new guard line, resulting:
+class ...
+...
+
+if __name__ == '__main__':
+    unittest.main()
+Good. But if old line appears once. It will. Need ensure class inserted at top-level with correct indentation. If there is a blank line before guard, after replacement: blank line then class. Good.
+
+But if file has multiple `if __name__`? no.
+
+Need know imports in test file to reference `configparser`, `io`, `unittest`. The test file likely has `import configparser` and `from configparser import *`? If not, we can use module names? We need know. Could add new test class using fully qualified `configparser` if imported. If test file only `from configparser import *`, `configparser` not imported? Actually `from configparser import *` imports __all__ names, not module. It may also `import configparser` at top. Need inspect.
+
+Could write tests using `RawConfigParser` and `ConfigParser` names if star imported. But need exception name `MultilineContinuationError`, `ParsingError`. If star imported after our library adds to __all__, it will import them. But in current test module, star import occurs at import time from current module; __all__ includes new exception, so names available if we rely on star. However, if we add test class code referencing bare `MultilineContinuationError`, it will be in namespace due to star import (assuming no `__all__` issue). But if test file uses `import configparser` too, better use `configparser.`. Need know.
+
+Could avoid import uncertainty by referencing `sys.modules['configparser']`? Ugly. Better inspect.
+
+Need docs. Need add exception in doc. Let's search doc after library patches? Search current source independent of edits? It will see current candidate after patches. We can search for `exception:: MissingSectionHeaderError` in Doc. Need exact doc syntax. CPython docs use:
+.. exception:: NoSectionError
+.. exception:: DuplicateSectionError
+...
+.. exception:: ParsingError
+.. exception:: MissingSectionHeaderError
+Maybe in alphabetical order? Need insert MultilineContinuationError after MissingSectionHeaderError? In current docs, maybe order:
+.. class:: ConfigParser
+...
+Exceptions:
+.. exception:: NoSectionError
+.. exception:: DuplicateSectionError
+.. exception:: DuplicateOptionError
+.. exception:: NoOptionError
+.. exception:: InterpolationError
+.. exception:: InterpolationMissingOptionError
+.. exception:: InterpolationSyntaxError
+.. exception:: InterpolationDepthError
+.. exception:: ParsingError
+.. exception:: MissingSectionHeaderError
+Maybe `MultilineContinuationError` should be after MissingSectionHeaderError or after ParsingError? In CPython docs maybe order in `__all__`? In CPython current docs for configparser: exceptions order: NoSectionError, DuplicateSectionError, DuplicateOptionError, NoOptionError, InterpolationError, InterpolationMissingOptionError, InterpolationSyntaxError, InterpolationDepthError, ParsingError, MissingSectionHeaderError, MultilineContinuationError. Maybe. Need add:
+.. exception:: MultilineContinuationError(source, lineno, line)
+
+    Raised when a valueless option is followed by an indented line.
+
+Need also explain behavior maybe in `allow_no_value` or reading section. The task says update reference documentation to explain behavior and new exception. Mechanical check checks documentation declares exception. But accurate documentation explanation required. We should add both exception declaration and a note in `read`/`allow_no_value`? Need doc file.
+
+Could be Doc/library/configparser.rst. It may have a section "Exceptions" with autodoc? Actually CPython docs manually list exceptions. Need inspect.
+
+Let's consider actual CPython backport. The exception improvement likely from CPython commit for issue "configparser: valueless options followed by indented lines raise AttributeError". It added:
+- `MultilineContinuationError` class.
+- in `_read`, `if cursect[optname] is None: raise MultilineContinuationError(...)`
+- in docs, add exception and maybe note in `allow_no_value`:
+  .. versionadded:: 3.12? maybe.
+  When `allow_no_value` is True (default: False), options without values are accepted; the value presented for these is None. If a valueless option is followed by an indented line, a `MultilineContinuationError` is raised.
+Something like that.
+
+Need read doc to place.
+
+Potential issue: The current pinned Python 3.12 module might not have `io.text_encoding`? It does. The parser `read` uses encoding = io.text_encoding(encoding). Good.
+
+Need think about exact behavior of `MultilineContinuationError` message. If we use `self.append(lineno, line)`, `ParsingError.append` uses `self.message += '\n\t[line %2d]: %s' % (lineno, line)`. `line` includes newline; `%s` prints newline and trailing newline? It will produce message with line and newline. MissingSectionHeaderError uses `%r` for line. ParsingError.append uses `%s` not repr. If line ends newline, message has extra newline. That's okay? Task says useful message. Could maybe include repr. CPython's `MultilineContinuationError` maybe uses `ParsingError` append? Let's verify. In CPython, `ParsingError.append` uses `self.message += '\n\t[line %2d]: %s' % (lineno, line)`. In `MissingSectionHeaderError`, it doesn't use append, uses `%r`. In `MultilineContinuationError`, perhaps:
+class MultilineContinuationError(ParsingError):
+    """Raised when a valueless option is followed by an indented line."""
+    def __init__(self, source, lineno, line):
+        super().__init__(source)
+        self.append(lineno, line)
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+This likely.
+
+Need test `str(exc)`? Could not test exact message to avoid format. Maybe test `exc.line`, `lineno`, `source`, `args`, isinstance. Good.
+
+Need ensure `MultilineContinuationError` is exported by `__all__`; if test module does `from configparser import *`, the name is available. But if test file imported before our patch in a running process? No, check runs fresh.
+
+Need maybe add to `Doc/library/configparser.rst` `.. autoclass::`? Let's inspect.
+
+Now action choice. I think patch class now is good. But need be 100% exact old string. Let's verify from RES-0010 content:
+"# Used in parser getters to indicate the default behaviour when a specific\n# option is not found it to raise an exception. Created to enable `None` as\n# a valid fallback value.\n_UNSET = object()\n"
+Yes.
+Potential issue: In current file after __all__ patch, is there another `_UNSET = object()`? no.
+Need include `expected_candidate_id` and file sha. Good.
+
+Let's produce patch action.

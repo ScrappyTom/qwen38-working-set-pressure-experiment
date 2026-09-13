@@ -2,6 +2,24 @@
 
 ## Project status
 
+The [larger-source configparser pilot is closed](development/configparser_backport/review/RESULTS.md):
+32 accepted actions save a correct library repair, but no required tests or
+documentation and no submission. The library passes 355 upstream tests (five
+skips) and eight independent contract methods; the overall check fails because
+the contribution is incomplete. All complete responses and actual input changes
+were directly reviewed, and all 65 native inputs and 32 actions replay or
+reconstruct exactly. The run uses 230,047 generated tokens and 258.18 minutes.
+
+Actual pressure rotates library/test evidence. After the last read, the next
+input needs 23,928 tokens to retain immediate feedback, 120 over its frozen
+ceiling. The host stops before C33; eight unused actions do not authorize rescue.
+All 32 result and four edit payloads remain exactly retrievable offline. A damaged
+512-character edit and extensive fragment counting also earn a focused Qwen
+consultation. [Next work](development/configparser_backport/review/NEXT_STEPS.md)
+prepares that dialogue and offline qualification of narrower exact reads before
+selecting an intervention. No host, memory or reasoning change is yet adopted.
+The broader goal remains unachieved; the owned runtime is closed.
+
 The [saved-work continuation is complete](development/saved_work_continuation/review/RESULTS.md):
 nine model actions, correction of malformed report JSON, two correct entries,
 26 passing public cases and checked submission. All complete responses were
@@ -32,7 +50,7 @@ This qualifies host paths, not Qwen's use of larger material or accumulated-hist
 capacity. The next pilot still needs a useful checked contribution and actual
 continuation from saved work.
 
-The [larger-source task is now prepared](development/configparser_backport/PREPARATION_REVIEW.md):
+The [larger-source task preparation](development/configparser_backport/PREPARATION_REVIEW.md) remains preserved:
 a real configuration-parser backport over ten tagged CPython source, test,
 documentation and support files totaling 337,239 bytes. The original 355-test
 suite runs with five skips; the reference passes the independent requested
@@ -40,10 +58,9 @@ contract, while six negative variants fail. Corrected 23/33/24-action scripted
 paths fit the 23,808 input ceiling, deliver every immediate result and finish
 checked work after older bodies leave the input. Fifteen focused runner tests
 pass, including exact native inputs and actual tool-result replay. Preparation
-mistakes and their corrections remain preserved. One max-40-action Qwen pilot
-is frozen under the owner's continuing goal; no call on this task has yet been
-sent. This qualifies feasibility on larger real material, not model success or
-novel discovery. The interface and reasoning policy remain unchanged.
+mistakes and their corrections remain preserved. Those scripted paths qualify
+their own feasibility on larger real material, not the subsequent Qwen
+trajectory's completion or novel discovery. The actual outcome is recorded above.
 
 Preparation established the following offline facts:
 Three scripted report paths complete under the existing interface and an explicit

@@ -1,0 +1,384 @@
+We need answer with one JSON action. Need continue task. Need understand state. We have read some of configparser.py lines 1-1145? Actually read 1-470, 290-733, 734-1145. File size 53789 bytes, p0 outline ends at 1333. Need read remaining lines maybe from 1146 to EOF. Need inspect test module and Doc file. We need make changes: library, tests, documentation.
+
+We need likely implement MultilineContinuationError(ParsingError) with source, lineno, line attributes; constructor args (source, lineno, line) pickling/copy; message. In _read when valueless option (cursect[optname] is None) and continuation line indented deeper? Current code:
+
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    cursect[optname].append(value)
+
+If cursect[optname] is None, AttributeError because None.append. Need reject continuation after a valueless option with MultilineContinuationError. The task: customer input:
+[service]
+optional_flag
+    continuation
+Reading currently raises internal AttributeError. Reject this unsupported continuation with public MultilineContinuationError derived from ParsingError. identify supplied source, one-based line number and exact offending line through source, lineno and line attributes. constructor arguments for copying/pickling. useful message.
+
+Consistent through read(), read_file(), read_string() for ConfigParser and RawConfigParser. The _read is in RawConfigParser, used by all. Need preserve existing valid multiline values, valueless options, comment handling, constructor modes and other API behavior.
+
+Need add regression to existing test module. Need update reference documentation to explain behavior and new exception. Need keep existing tests intact. Need public check: runs frozen upstream regression suite, independent checks, edited test module; added regressions detect original and docs declare exception. Need not guess. Need inspect current source and docs/tests.
+
+Available actions 32 calls. Need plan. Need exact source before patch. Already have configparser.py source up to 1145, missing 1146 onward. Need read remaining to know class ConfigParser, SectionProxy, ConverterMapping, module tail. Also need exact file_sha256 for patch current: from reads file_sha256 = 8d822edd... candidate f322... Need patch with expected candidate ID current and file sha. Need maybe multiple patches. For each patch, file sha changes. Need reacquire file after each? We can patch sequentially using result new file_sha256. Need old exact occurrences unique. Need maybe add new exception class after MissingSectionHeaderError and before _UNSET? But __all__ add MultilineContinuationError. Need import copy? Exception pickling: Python exceptions pickled via args. If custom attributes set and args set to tuple, copy/pickle? The task: preserve those three constructor arguments for copying/pickling. If args=(source, lineno, line), pickle of Exception with args works? For custom exceptions with attributes not in args, pickle might fail if __reduce__ uses args and __init__ not called? Actually exceptions are pickled via __reduce__? Let's recall: BaseException implements __reduce__ returning (type(self), self.args). If we set self.args = (source, lineno, line), unpickling calls cls(*args). If we don't define __init__, default BaseException __init__ sets args? Actually if cls(*args) with no __init__, args set automatically? BaseException.__new__ sets args; __init__ may not? So okay. But we might want explicit __init__ like MissingSectionHeaderError. Need define class with __init__ accepting source, lineno, line; call Error.__init__ or ParsingError.__init__? ParsingError has __init__(self, source) setting source, errors, args=(source,). But MultilineContinuationError should derive from ParsingError and identify source, lineno, line. Could be:
+
+class MultilineContinuationError(ParsingError):
+    """Raised when a continuation line is found after a valueless option."""
+
+    def __init__(self, source, lineno, line):
+        Error.__init__(
+            self,
+            'Invalid continuation line after a valueless option: '
+            'source: %r, line: %d, content: %r' % (source, lineno, line),
+        )
+        self.source = source
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+
+But ParsingError.__init__ expects source and sets self.source and args=(source). Could instead super().__init__(source) and then set lineno/line and args? But message would be default ParsingError message 'Source contains parsing errors: ...' not useful? Need useful message. Could call Error.__init__ with custom message and set attributes, self.args. But derived from ParsingError doesn't need call its __init__? It's okay not to set errors? But type is ParsingError subclass; might not need .errors. But if tests expect isinstance(e, ParsingError). Could be okay. But maybe check expects e.source etc. Need maybe errors? Not specified. Could set self.errors? Maybe no.
+
+Look at MissingSectionHeaderError(ParsingError): It calls Error.__init__ with message and sets source, lineno, line, args. So follow exactly. Great.
+
+Need where to raise in _read. Need exact offending line: The continuation line itself. One-based line number lineno. Source supplied: _read parameter fpname? In read(), filename may be PathLike or str. read_file source default f.name. read_string source='<string>'. Need _read called with fpname. Use source=fpname. At point:
+
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    cursect[optname].append(value)
+
+If cursect[optname] is None (valueless option), raise MultilineContinuationError(fpname, lineno, line). But also if cursect[optname] is list? append. Need preserve. Could condition:
+
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    optval = cursect[optname]
+                    if optval is None:
+                        raise MultilineContinuationError(fpname, lineno, line)
+                    optval.append(value)
+
+Need exact line text: "exact offending line" probably original line, not stripped. MissingSectionHeaderError passes line (original). In _read line variable is original line. Good. line includes newline? MissingSectionHeader passes line from enumerate, includes trailing newline. Task exact offending line, maybe line. Should we include raw line with newline? Current MissingSectionHeader does. Use line. But note valueless option followed by continuation: line is "    continuation\n". Should line attribute exact offending line. Good.
+
+But what about continuation after valueless option that is a comment? comments stripped, if line only comment then value empty and continue before; not continuation. What if a valueless option line has inline comment? e.g. optional_flag ; comment. The parsed optval None? Then continuation line indented deeper with non-comment should raise. Fine.
+
+What about a valueless option with no continuation but subsequent indented blank line? Empty lines handled earlier continue, no raise. Good.
+
+What about cursect[optname] being None due to valueless but then an option line? Not continuation.
+
+Potential issue: in strict parsers, duplicate option maybe raise before. But continuation after valueless before duplicate? okay.
+
+Need add to __all__.
+
+Need docs. Need find doc file: Doc/library likely one file maybe configparser.rst? Need inspect. Need search maybe. Let's do p0_page Doc/library or tree. Then read doc. Need test module. Need add regressions. Need inspect test_configparser.py relevant parts. It is 87k; need search for allow_no_value, valueless, MultilineContinuationError, MissingSectionHeaderError, read_string, etc. Need maybe know imports and existing tests. Need patch tests. Need know test file current sha. Need read exact target areas.
+
+Call budget 32. Need efficient.
+
+We have current candidate ID f322..., file sha for configparser. We can patch when ready.
+
+First maybe read rest of configparser.py from 1146. We need not for patch if patch before line 1146? Need add exception class around line 312-323. Need add in __all__ around line 152-155. Need patch in _read around line 1050-1060. All within read pages. We have exact content but not line numbers? We have content from reads. Need patch old unique. Need not read remaining. But for safety maybe no. Need know __all__ exact: from read 1: lines around:
+__all__ = ("NoSectionError", "DuplicateOptionError", "DuplicateSectionError",
+           "NoOptionError", "InterpolationError", "InterpolationDepthError",
+           "InterpolationMissingOptionError", "InterpolationSyntaxError",
+           "ParsingError", "MissingSectionHeaderError",
+           "ConfigParser", "RawConfigParser",
+           "Interpolation", "BasicInterpolation",  "ExtendedInterpolation",
+           "LegacyInterpolation", "SectionProxy", "ConverterMapping",
+           "DEFAULTSECT", "MAX_INTERPOLATION_DEPTH")
+
+Need insert after MissingSectionHeaderError: maybe
+           "ParsingError", "MissingSectionHeaderError",
+           "MultilineContinuationError",
+
+Need exact old occurrence unique:
+           "ParsingError", "MissingSectionHeaderError",
+           "ConfigParser", "RawConfigParser",
+Can replace with including new line. That's likely unique. Good.
+
+Add class after MissingSectionHeaderError before _UNSET. Current:
+
+class MissingSectionHeaderError(ParsingError):
+    """Raised when a key-value pair is found before any section header."""
+
+    def __init__(self, filename, lineno, line):
+        Error.__init__(
+            self,
+            'File contains no section headers.\nfile: %r, line: %d\n%r' %
+            (filename, lineno, line))
+        self.source = filename
+        self.lineno = lineno
+        self.line = line
+        self.args = (filename, lineno, line)
+
+
+# Used in parser getters...
+
+Could patch after class. old:
+        self.args = (filename, lineno, line)
+
+
+# Used in parser getters to indicate the default behaviour when a specific
+This exact appears once. Replace with:
+        self.args = (filename, lineno, line)
+
+
+class MultilineContinuationError(ParsingError):
+    """Raised when a valueless option is followed by a continuation line.
+
+    Multiline values are not allowed after an option without a value, even
+    when ``allow_no_value=True``.
+    """
+
+    def __init__(self, source, lineno, line):
+        Error.__init__(
+            self,
+            'Invalid continuation line after a valueless option: '
+            'source: %r, line: %d, content: %r' %
+            (source, lineno, line))
+        self.source = source
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+
+
+# Used in parser getters to indicate the default behaviour when a specific
+Need ensure line <512, old/new <=512? new is >512? Character limit for old/new max 512 characters. The new string above maybe ~600? Need each fragment <=512 chars. Need split patch smaller. Patch new max 512 chars. We can insert class in chunks? Better patch old small unique and new small. Could replace just the two blank lines and comment? Need add entire class maybe under 512. Let's count new maybe: 3 blank? Actually patch old:
+        self.args = (filename, lineno, line)
+
+
+# Used in parser getters to indicate the default behaviour when a specific
+new with class maybe 700 chars. Too long. Need split: first patch replace comment line to include class + comment? old must be unique. old length small, new max 512. Class itself ~650? We can make concise to fit 512. Need include docstring and init. Let's craft under 512.
+
+Option:
+class MultilineContinuationError(ParsingError):
+    """Raised when a continuation follows a valueless option."""
+
+    def __init__(self, source, lineno, line):
+        Error.__init__(
+            self,
+            'Invalid continuation after valueless option: '
+            'source: %r, line: %d, content: %r'
+            % (source, lineno, line))
+        self.source = source
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+
+Length maybe 500? Let's estimate: class line 45, docstring 54, blank, def 44, Error init lines maybe 100, message 70, assignments 100 total ~450. Good.
+
+Need patch old:
+        self.args = (filename, lineno, line)
+
+
+# Used in parser getters to indicate the default behaviour when a specific
+new:
+        self.args = (filename, lineno, line)
+
+
+class MultilineContinuationError(ParsingError):
+    """Raised when a continuation follows a valueless option."""
+
+    def __init__(self, source, lineno, line):
+        Error.__init__(
+            self,
+            'Invalid continuation after valueless option: '
+            'source: %r, line: %d, content: %r'
+            % (source, lineno, line))
+        self.source = source
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+
+
+# Used in parser getters to indicate the default behaviour when a specific
+
+Need check new length. Let's count roughly: first line 37, blank, class 48, docstring 64, blank, def 45, Error 16, self, 12, msg1 48, msg2 41, format 28, indent close 9? assignments: self.source = source (24), self.lineno = lineno (24), self.line = line (21), self.args... (40). blank, comment 72. total maybe 600? Wait too high. Need exact maybe 547. Could shorten docstring and message. Need fit 512. Could do:
+
+class MultilineContinuationError(ParsingError):
+    """A valueless option is followed by a continuation line."""
+
+    def __init__(self, source, lineno, line):
+        Error.__init__(
+            self,
+            'Invalid continuation after valueless option: '
+            'source: %r, line: %d, content: %r'
+            % (source, lineno, line))
+        self.source, self.lineno, self.line = source, lineno, line
+        self.args = (source, lineno, line)
+
+This is shorter. But assignment tuple okay. Message still useful. Length: class 45? Let's count:
+"class MultilineContinuationError(ParsingError):\n" 45? (class 6 + space 1 + name 29? Actually MultilineContinuationError length 27? M u l t i l i n e (9) + Continuation (12) + Error 5 =26? Let's not). We can maybe okay. Need include preceding line and comment. Could patch only after args with old small and new includes class without comment? Need old unique and new not too long. We can do two patches: insert class before comment with a short unique old/new maybe. But if first new under 512. Could insert placeholder? Need final code. Could do:
+old:
+        self.args = (filename, lineno, line)
+
+
+# Used in parser getters to indicate the default behaviour when a specific
+new:
+        self.args = (filename, lineno, line)
+
+
+class MultilineContinuationError(ParsingError):
+    """A valueless option is followed by a continuation line."""
+
+    def __init__(self, source, lineno, line):
+        Error.__init__(
+            self,
+            'Invalid continuation after valueless option: '
+            'source: %r, line: %d, content: %r'
+            % (source, lineno, line))
+        self.source, self.lineno, self.line = source, lineno, line
+        self.args = (source, lineno, line)
+
+
+# Used in parser getters to indicate the default behaviour when a specific
+
+If too long, split: first replace comment with class + comment but no? New includes old comment. Could make docstring one line shorter. Need maybe max 512 characters not bytes. Let's approximate exact new length using manual count maybe. We can count carefully.
+
+String:
+"        self.args = (filename, lineno, line)\n" length? 8 spaces + self.args = (filename, lineno, line) 40? Let's count: 8 + 4? "self.args = (filename, lineno, line)" length: self.args 9? Actually 'self.args' 9, space=1, '=',1, space=1 =>12, '('1, filename 8 =>21, ','1=22, space=23, lineno 6=29, ','=30, space=31, line 4=35, ')'1=36. total 8+36=44.
+blank line 1.
+class line: "class MultilineContinuationError(ParsingError):" length: class 6 +1=7, MultilineContinuationError? count: Multiline 9? M1 u2 l3 t4 i5 l6 i7 n8 e9. Continuation: C1 o2 n3 t4 i5 n6 u7 a8 t9 i10 o11 n12. Error 5 => total 26. (1) ParsingError 13, ):2? String: 7+26+1+13+2 =49? (paren 1, close paren 1 colon 1 => 2, yes 49). +\n
+docstring: "    \"\"\"A valueless option is followed by a continuation line.\"\"\"" length 4+3+? phrase: A1 space2 valueless9? let's not. ~54.
+blank.
+def line: "    def __init__(self, source, lineno, line):" length 4+3+1+8? maybe 44.
+Error.__init__ line: "        Error.__init__(" 8+14? Error 5 + dot 1 + __init__ 8 + (1 =15? with 8 =23? Actually 8 spaces + 'Error.__init__(' length 15? E5 r2 r3 o4 r5 .6 _7 _8 i9 n10 i11 t12 _13 _14 (15. total 23.
+self line: "            self," 12+5=17.
+message line1: "            'Invalid continuation after valueless option: '" count 12 + quotes? string: 'Invalid continuation after valueless option: ' length: Invalid7? Let's count string inside: Invalid(7) space8 continuation12? Wait this is tedious. Maybe total >512? Let's use rough total: first 44 +1 +49+1 +~55+1 +44+1 +23+1 +17+1 + maybe 55+1 +55+1 +35+1 + assignments line 4+ "self.source, self.lineno, self.line = source, lineno, line" length 58? +1 + self.args line 34+1 + blank + comment 72+ maybe. Sum ~550. Too close. Could split into two patches: one inserts a shorter class? But class cannot be split? We can use patch to insert class in two places: first add class declaration and docstring, second add __init__? But patch requires exact old; can insert empty? Simpler: Add class with concise init using super? Maybe shorter.
+
+class MultilineContinuationError(ParsingError):
+    """A valueless option is followed by a continuation line."""
+    def __init__(self, source, lineno, line):
+        Error.__init__(self, 'Invalid continuation after valueless option: '
+                       'source: %r, line: %d, content: %r' % (source, lineno, line))
+        self.source, self.lineno, self.line = source, lineno, line
+        self.args = source, lineno, line
+
+This shorter. But message line long maybe okay. Let's craft with old including args and comment, new maybe:
+        self.args = (filename, lineno, line)
+
+
+class MultilineContinuationError(ParsingError):
+    """A valueless option is followed by a continuation line."""
+    def __init__(self, source, lineno, line):
+        Error.__init__(
+            self,
+            'Invalid continuation after valueless option: '
+            'source: %r, line: %d, content: %r'
+            % (source, lineno, line))
+        self.source, self.lineno, self.line = source, lineno, line
+        self.args = (source, lineno, line)
+
+
+# Used in parser getters to indicate the default behaviour when a specific
+
+Maybe still ~500? Let's count exact with a systematic method. Represent new lines and char counts:
+1 "        self.args = (filename, lineno, line)" count 44 (as above)
+newline 1 ->45
+2 "" newline 1 ->46
+3 "class MultilineContinuationError(ParsingError):" count? Let's count exact: class(6) + space(1)=7. MultilineContinuationError: let's count letters: M1 u2 l3 t4 i5 l6 i7 n8 e9 C10 o11 n12 t13 i14 n15 u16 a17 t18 i19 o20 n21 E22 r23 r24 o25 r26. yes 26 ->33. '(' 1 ->34. ParsingError: P1 a2 r3 s4 i5 n6 g7 E8 r9 r10 o11 r12 ->13 ->47. ')' 1 ->48. ':' 1 ->49. newline ->50
+4 '    """A valueless option is followed by a continuation line."""' count: 4 spaces=4. triple quote 3 =>7. Text: "A valueless option is followed by a continuation line." Count: A1 space2 valueless9? valueless: v1 a2 l3 u4 e5 l6 e7 s8 s9 ->11? Wait start: A(1), space(2), valueless 9 letters ->11, space ->12, option 6 ->18, space ->19, is 2 ->21, space ->22, followed 8 ->30, space ->31, by 2 ->33, space ->34, a 1 ->35, space ->36, continuation 12 ->48, space ->49, line 4 ->53, period 1 ->54. Add triple quote 3 =>57, plus 4 =>61. newline ->107
+5 '    def __init__(self, source, lineno, line):' count: 4 spaces=4, def 3 =>7, space 8, __init__ 8 =>16, ( 17, self 4 =>21, comma 22, space 23, source 6 =>29, comma30, space31, lineno 6=>37, comma38, space39, line 4=>43, )44, :45, newline46. total 46. cumulative 153
+6 '        Error.__init__(' count 8 spaces + Error.__init__(15) =23 newline24. cum177
+7 '            self,' count 12 spaces + self 4 =16 comma 17 newline18 cum195
+8 "            'Invalid continuation after valueless option: '" count: 12 spaces. string inside? Let's count including quotes: quote 1. Text: Invalid 7 ->8? Wait include leading quote: positions: 1 ', I2 n3 v4 a5 l6 i7 d8 space9 c10 o11 n12 t13 i14 n15 u16 a17 t18 i19 o20 n21 space22 a23 f24 t25 e26 r27 space28 v29 a30 l31 u32 e33 l34 e35 s36 s37 space38 o39 p40 t41 i42 o43 n44 :45 space46 '47. plus 12 spaces =59. newline60. cum255
+9 "            'source: %r, line: %d, content: %r'" count: 12 spaces + quote1=1. source 6 =>7? Let's count: quote1, s2 o3 u4 r5 c6 e7 :8 space9 %10 r11 ,12 space13 l14 i15 n16 e17 :18 space19 %20 d21 ,22 space23 c24 o25 n26 t27 e28 n29 t30 :31 space32 %33 r34 '35. +12=47 newline48 cum303
+10 '            % (source, lineno, line))' count: 12 spaces + % 1 =>13 space14 (15 source6=21 comma22 space23 lineno6=29 comma30 space31 line4=35 )36 )37 newline38 cum341
+11 '        self.source, self.lineno, self.line = source, lineno, line' count: 8 spaces. self.source 11? self 4 + . 1 + source6 =11. comma12 space13 self.lineno: self4 .1 lineno6=11 =>24, comma25 space26 self.line: self4 .1 line4=9 =>35, space36 =37 space38 source6=44 comma45 space46 lineno6=52 comma53 space54 line4=58. +8=66 newline67 cum408
+12 '        self.args = (source, lineno, line)' count: 8 spaces + self.args 9? self4 .1 args4 =9, space=10, =11, space12, (13, source6=19 comma20 space21 lineno6=27 comma28 space29 line4=33 )34. +8=42 newline43 cum451
+13 blank newline 1 cum452
+14 " # Used in parser getters to indicate the default behaviour when a specific" Wait comment line no leading spaces: "# Used in parser getters to indicate the default behaviour when a specific" count: #1 space2 Used4? Let's count: '#'1, space2, Used 4 ->6, space7, in 2 ->9, space10, parser 6 ->16, space17, getters 7 ->24, space25, to 2 ->27, space28, indicate 8 ->36, space37, the 3 ->40, space41, default 7 ->48, space49, behaviour 9 ->58, space59, when 4 ->63, space64, a 1 ->65, space66, specific 8 ->74. newline75. total new length 526? 452+75=527? I likely overcount. It may exceed 512. Need reduce.
+
+Could avoid including long comment in old/new; instead old just the two blank lines? But blank lines not unique. Could old be the comment line only (unique) and new class + comment. Need new length = class block + blank + comment. That's similar but no first args line. Save 45 chars. Then ~482. Better.
+
+old:
+# Used in parser getters to indicate the default behaviour when a specific
+new:
+class MultilineContinuationError(ParsingError):
+    """A valueless option is followed by a continuation line."""
+    def __init__(self, source, lineno, line):
+        Error.__init__(
+            self,
+            'Invalid continuation after valueless option: '
+            'source: %r, line: %d, content: %r'
+            % (source, lineno, line))
+        self.source, self.lineno, self.line = source, lineno, line
+        self.args = (source, lineno, line)
+
+
+# Used in parser getters to indicate the default behaviour when a specific
+
+Need check old occurrence unique? The comment line appears maybe once. yes. New length: class block without first args line: 527-45? =482. Good under 512. But new starts at column 0 where comment originally column 0. Good. Need preserve blank line separation: After MissingSectionHeaderError there are two blank lines before comment. If we replace comment line only, class inserted immediately before comment, with no blank lines before class? The text before old comment includes two blank lines. Since old is just comment line, new class + two blank lines + comment. So result: after args line, blank, blank, class..., blank, blank, comment. Perfect. Need ensure PEP? okay.
+
+Could further shorten message if needed. We'll use this.
+
+Need patch __all__: old:
+           "ParsingError", "MissingSectionHeaderError",
+           "ConfigParser", "RawConfigParser",
+new:
+           "ParsingError", "MissingSectionHeaderError",
+           "MultilineContinuationError",
+           "ConfigParser", "RawConfigParser",
+Both under 512. Unique? likely.
+
+Need patch _read: old:
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    cursect[optname].append(value)
+new:
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    optval = cursect[optname]
+                    if optval is None:
+                        raise MultilineContinuationError(fpname, lineno, line)
+                    optval.append(value)
+Need old occurs once? likely. Under 512. Good.
+
+Potential: What if cursect[optname] is not None but not list? In parser, valueless options set None, values set [optval]. After _join? During _read no join yet. Good.
+
+Need tests. Need inspect test_configparser.py. Need add regression tests. Need know imports and existing test class style. Could add to test module near end or in appropriate class. Need patch test file exact. Need current sha. Need read relevant sections. We can search for "allow_no_value" in test file. Need maybe test class TestBasicInterpolation? But can add top-level test functions? The test module likely uses unittest. Need see structure. Use search action path Lib/test/test_configparser.py query "allow_no_value" limit maybe 16. This returns matches. Then read around. Also search for "MissingSectionHeaderError" to see exception test style. Could add simple tests to existing class or module-level functions. Need keep existing tests intact. Need added regressions pass repaired and expose original. Original would raise AttributeError not MultilineContinuationError; if test asserts raises MultilineContinuationError, original fails (because AttributeError != expected). Good.
+
+Need tests cover read(), read_file(), read_string() and ConfigParser/RawConfigParser. Could add a test class or functions. Need ensure imports: configparser likely imported as cp. Need inspect top. Could search "import" or "from Lib". The test module likely in Lib/test/test_configparser.py with `from test.support import unittest` maybe. Need know exact alias. Use read start_line 1 maybe large. Could read first 100 lines? read pages max ~18k; okay. Need maybe search. Let's plan calls:
+1 p0_page Doc/library? to find doc file. (1)
+2 p0_page Lib/test? maybe known. (not needed)
+3 search in test file for allow_no_value. (1)
+4 search in test file for MissingSectionHeaderError or "valueless" maybe. (1)
+5 read test top maybe. (1)
+6 read around matches. (maybe 2)
+7 patch test file. (1-2)
+8 doc read/patch. (2)
+9 check (1)
+10 submit (1). Plus 3 configparser patches. Total ~12. Fine.
+
+Need doc. Use p0_page path Doc/library. Need maybe one file. Then read relevant portion. Search in Doc for "MissingSectionHeaderError" to locate. Need update to declare exception. Could be Doc/library/configparser.rst. Need add class entry to exceptions and behavior maybe in allow_no_value parameter. Need exact current source before patch. Use search to find lines. Need patch docs. Need know doc declares exception: likely `.. exception:: MultilineContinuationError`. Need add to exception list and maybe text. Need ensure mechanical check docs declare exception. Add `.. exception:: MultilineContinuationError` and maybe mention after valueless option. Need maybe add to `.. class:: ParsingError`? Not needed.
+
+Need consider upstream regression suite: It may run existing tests. Our library changes must not break existing tests. Need ensure MultilineContinuationError not raised for valid cases. Existing tests likely include valueless options with no continuation. Need maybe existing tests for multiline values and comments. Good.
+
+Need think about exact behavior with allow_no_value=False (default). In default, valueless options are not accepted? Let's inspect _read: OPTCRE requires value; with allow_no_value False, OPTCRE_NV not used. For line "optional_flag" no = or :, OPTCRE? _OPT_TMPL requires vi delimiter and value. It will not match; goes to else _handle_error ParsingError. So original already raises ParsingError for valueless when allow_no_value False. With allow_no_value True, it matches no value and sets cursect[optname] = None. Then continuation line indented > indent triggers append to None -> AttributeError. Our fix raises new exception. Good.
+
+But task says reject unsupported continuation with MultilineContinuationError. Should it be only allow_no_value=True? yes. If allow_no_value=False, valueless line is parse error (non-fatal) and then continuation? Let's trace: line "optional_flag" no value -> e = ParsingError. Next line continuation indented > indent: cursect is not None and optname? optname remains previous? Wait if no match, optname not changed. But cursect is section dict. indent_level set to cur_indent_level for option line. Continuation indent > indent_level, condition true, optname is previous option (maybe from earlier). It might append to previous option's value erroneously? But if previous option existed. If no previous, optname None. Hmm. But allow_no_value=False valueless unsupported; existing behavior maybe parsing error. We shouldn't change.
+
+What about valueless option line has inline comment? With allow_no_value True, line "optional_flag # comment" after stripping inline comment value "optional_flag". OPTCRE_NV matches no value, sets None. Continuation raises. Good.
+
+What about a valueless option then a continuation that is a comment-only line? comment stripped -> value empty, continue before, no raise. Fine.
+
+What about valueless option then indented blank line? Empty line: if _empty_lines_in_values True and optname and cursect[optname] is not None; if None, no append; else? For empty line, continue. Then subsequent non-empty indented line? Condition uses indent_level from valueless line; continuation raises. If blank line then continuation after blank? It still raises (continuation after valueless). Is that desired? Maybe continuation after valueless regardless blank? Probably yes if indented deeper. But empty line in values not allowed? okay.
+
+Potential bug: In _read, `line` includes newline. In exception message, %r includes newline. Fine.
+
+Need test exact line attribute: Could assert exc.line == '    continuation\n' or line.rstrip? Task exact offending line. If using line, includes newline. Good. But maybe tests should be robust? We control tests. Could assert lineno and source and line. Need include exact. If reading from StringIO, source='<string>' by default, or custom. For read_file, source can be given. For read() with file path, source is filename. Testing read() maybe requires temp file. Existing test module likely has support files. Could avoid read() file by using read() with StringIO? read expects filenames, not file object. Could use tempfile or existing data? But tests need consistent. Could test read_file and read_string thoroughly, and maybe read() via tempfile. The task says consistent through read(), read_file(), read_string(). Need regression maybe cover all. Could use tempfile in test. Need know test imports: maybe `import io`, `import os`, `import tempfile`, `import unittest`, `from test.support import os_support`? Need inspect. Could add test using `tempfile.TemporaryDirectory` if available. Simpler: use `os.path.join`? Need exact import names. Could read top of test module.
+
+Maybe there is existing `class TestReadDict` etc. Could add a new test class at end. Need know module imports: likely `from Lib import configparser as cp`? Wait in CPython test, file Lib/test/test_configparser.py imports `from test.support import os_helper`? Let's inspect. Since repository path has Lib, maybe test uses `from test.support.import_helper import import_fresh_module`? Let's read first 80 lines.
+
+Need also documentation. Could be RST. Need search. Let's start actions. We can only output one action per turn? The user request: final content exactly one action. Each assistant turn likely one action. We need make sequential. We can do one action now. Need choose next. Could first patch library? We have enough for library. But maybe need test/doc before check. We can start patch __all__ now. But if we patch now, file sha changes. Need subsequent patches use new sha from result. Since we get result in next turn. Fine. Need ensure expected_file_sha256 current pre-edit. We have current file_sha256 8d822edd... from reads. Candidate ID f322... Good. Let's patch __all__ first.
+
+But wait: Need exact old occurrence. In read 1, __all__ lines:
+__all__ = ("NoSectionError", "DuplicateOptionError", "DuplicateSectionError",
+           "NoOptionError", "InterpolationError", "InterpolationDepthError",
+           "InterpolationMissingOptionError", "InterpolationSyntaxError",
+           "ParsingError", "MissingSectionHeaderError",
+           "ConfigParser", "RawConfigParser",
+           "Interpolation", "BasicInterpolation",  "ExtendedInterpolation",
+           "LegacyInterpolation", "SectionProxy", "ConverterMapping",
+           "DEFAULTSECT", "MAX_INTERPOLATION_DEPTH")
+
+The old:
+           "ParsingError", "MissingSectionHeaderError",
+           "ConfigParser", "RawConfigParser",
+This string occurs exactly once? likely. It is 13+... under 512. new adds line. Need old and new differ. Good.
+
+Potential issue: `__all__` order doesn't matter. Good.
+
+Let's output patch.

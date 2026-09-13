@@ -1,0 +1,945 @@
+We need to continue from sequence 24. Need understand current state. Candidate id 8ac73858f45e89ecb2df138e2accfdb105d0325ffc056e0bad7e9bf7e7c89a2d, file sha 0089036d32c47d78d0a233d6b7115ab7b14b4c2604f15ff9348a35b5106cb3e8 for Lib/configparser.py. There are 16 calls remaining. Need add tests and docs, possibly check and submit. We already patched library to raise MultilineContinuationError when cursect[optname] is None and continuation. But need ensure exception class correctly has source/lineno/line attributes and constructor preserves args. We have current code from sequence 22 includes class MultilineContinuationError defined with __init__(self, source, lineno, line): ParsingError.__init__(self, source); self.append(lineno, line); self.lineno = lineno; self.line = line; self.args = (source, lineno, line). It likely already existed? Wait original sequence 22 read lines 148-615 after previous patches. It showed MultilineContinuationError in __all__ and class defined. Did we add it earlier? Sequence 9,11,13 patches unknown, but probably added exception class. We need inspect remaining lines of configparser.py, tests, docs. We need add regression tests to test_configparser.py and update docs. Need know exact current source for test file and docs around relevant sections. We have limited calls, need be strategic. We can use search and read. Need likely know current candidate ID. We can patch with expected_candidate_id and file_sha for target files. For test file we don't have file_sha256 yet. Need read test file to acquire exact file_sha? read returns file_sha256, but to patch we need file_sha256. We can read part of test file and use returned file_sha256. But read must be existing file; yes. Need know where to add tests. Could append near end before if __name__? We need exact old string unique. We know line 2141 contains `if __name__ == '__main__':`. Could patch by inserting new test methods before that line, using old as maybe `if __name__ == '__main__':` if unique. Search says total_matches 1. But `if __name__ == '__main__':` likely exactly once in test file. We can patch old that line to new lines including test methods + line. Need expected_file_sha256 for test file; we can get by reading a small portion? read returns file_sha256. We need exact current source before mutation: reading test file line 2140 or 1 sufficient? The requirement exact current source before mutation? We need have read target file at least once. But also patch old must occur exactly once. If we read start_line 2140, we get exact line. But old fragment can be `if __name__ == '__main__':` if unique. Need ensure no trailing spaces? search line text exactly `if __name__ == '__main__':`. We can use old string that. new: new test methods plus line. But adding methods to a class? The `if __name__` is at module level after all test classes. If we insert module-level functions, not methods. We need add tests inside existing test module, probably as methods in test classes. Better insert a new test class before `if __name__`, e.g. `class MultilineContinuationErrorTests(unittest.TestCase):` with methods. Need import configparser and support? Existing test module likely has imports. Need know module imports. Could read top of test file. Need file sha. We can read start_line 1 maybe huge but okay. But call budget 16. Need also doc file. Could search doc for exception list, valueless options. Need file sha for doc. We can read part of Doc/library/configparser.rst. Need patch docs. We can combine? We have limited calls. Let's plan:
+
+Calls used 24, remaining 16.
+Need actions likely:
+1 read test file start_line 1 (or targeted) to get sha and imports and maybe locate insertion point. 1 call.
+2 patch test file: insert tests before if __name__. 1 call.
+3 read doc file targeted to get sha and exact text for exception list / valueless option behavior. 1 call.
+4 patch doc exception list: add MultilineContinuationError to exception classes. 1 call.
+5 patch doc behavior description maybe valueless options. Could require two patches. Need maybe one patch if we can insert near exception section and maybe a sentence. But doc should explain behavior and new exception. We can add exception entry plus a paragraph under `allow_no_value` or multiline values. Need know exact current text. Maybe search doc for "allow_no_value" and "MultilineContinuationError" (currently absent). We can search to find lines. Search returns line and text, but not file sha. Could read those lines. Need exact old for patch. Could patch `.. exception:: MultilineContinuationError`? Need see structure. We can search for "MissingSectionHeaderError" or "exception" in doc.
+6 check public (1 call). If fail, maybe fix.
+7 submit (1). Total ~7-9. Fine.
+
+But need ensure tests actually expose original module and pass repaired. They need test behavior through read_string, read, read_file? We can add tests likely in existing test class or new. Need use `self.assertEqual`? Need imports. Existing test file likely `import configparser` and `import unittest`. We can write a new class using `configparser.MultilineContinuationError`, `configparser.ParsingError`, `configparser.RawConfigParser`, `configparser.ConfigParser`. Need test allow_no_value=True.
+
+Need know current library behavior: In `_read`, valueless option: `cursect[optname] = None` if optval is None. Then continuation line where cur_indent_level > indent_level and cursect[optname] is None -> raise MultilineContinuationError(fpname, lineno, line). Note: `line` is raw line from file (including newline?). The exception stores line as passed; doc says exact offending line. In `read_string`, file object via StringIO? Need see `read_string` implementation. It likely splits into lines, uses `self._read(fp, source)`, where fp returns lines with newline? Let's check: In Python 3.12 configparser, `read_string` uses `_read_lines`? Let's recall:
+```
+def read_string(self, string, source='<string>'):
+    if '\x00' in string:
+        raise ValueError("String argument contains null bytes")
+    f = StringIO(string)
+    try:
+        self._read(f, source)
+    finally:
+        f.close()
+```
+Yes. So lines include newline. `line` attribute will include newline for offending line, maybe `    continuation\n` or without final newline? The input `[service]\noptional_flag\n    continuation\n` yields lines with newline. For read_string, offending line = `    continuation\n`? If no trailing newline? `read_string` on string without final newline still `line` no newline. The task says exact offending line. Good.
+
+Need consider `read()` and `read_file()`. `read` calls `_read` with files. `read_file` also `_read`. Good.
+
+Need tests:
+- read_string on config with allow_no_value=True raises MultilineContinuationError, exception attributes source, lineno, line, args, isinstance ParsingError, message? Maybe test `str(exc)` contains source? ParsingError message after append: initial message `Source contains parsing errors: '<string>'`, then append adds newline [line 3]: '    continuation\n'. Our class `MultilineContinuationError.__init__` calls `ParsingError.__init__(self, source)` then `self.append(lineno, line)`, so message includes source and line. It sets `self.args=(source, lineno, line)` after. Good.
+- test valid multiline value continues works with allow_no_value=True: `[service]\nkey = value\n    continuation\n` should get `value\ncontinuation`? Need note join: initial `cursect[optname] = [optval]`, then append value, join with `\n`. Yes.
+- test valueless option without continuation works: `[service]\noptional_flag\n` and maybe `config.get('service','optional_flag')`? For valueless option, value stored as None. But `get` with fallback? `config.get('service', 'optional_flag', fallback='...')`? In configparser, `get` returns string or fallback. For None value, I think `before_get` gets value None? Let's check: RawConfigParser.get uses `_unify_values`, `value = d.get(option, fallback)`? Wait if option value None, `value` is None. Then `before_get` maybe returns None? In `get`, after `value = d.get(option, fallback)`, if raw=False: `value = self._interpolation.before_get(...)`. For valueless, `None` may return fallback? Need not test get, just has_option and maybe `config['service']['optional_flag'] is None`? SectionProxy getitem calls parser.get, which may return fallback. Hmm. We can just assert option in config['service'] or `config.has_option`. But existing valid valueless behavior: value stored None. Could test internal? Avoid.
+- test comments still ignored? Maybe not needed.
+
+But regression tests need be in existing test module, likely can use `support`? We can just use unittest and configparser. Need know test file imports at top. We can read top to confirm. It may use `from test.support import os_helper`? But standard. We can add a standalone class. Need no external imports beyond configparser. We can import inside test to be safe: `import configparser` already probably. But if not, we can include import in new class? Better new class methods can use `configparser` if imported at module top. Existing test module surely imports `configparser`. Need verify. We'll read start_line 1.
+
+Need docs: Need find exact place to add exception. The reference doc likely has section `Exceptions` with autoclass? Let's recall Python doc for configparser.rst:
+```
+.. exception:: NoSectionError
+...
+.. exception:: MissingSectionHeaderError
+.. exception:: InterpolationError
+...
+.. exception:: ParsingError
+.. exception:: DuplicateOptionError
+.. exception:: DuplicateSectionError
+```
+Need insert after `MissingSectionHeaderError` or in appropriate order. We can search `MissingSectionHeaderError` in doc. Search returns line and text. Then read around. We need exact file sha. We can use one read of doc around line. Search doesn't give file sha. Could read start_line 1 of doc to get sha and maybe locate? But doc 52KB; read start_line 1 returns large page maybe enough to get __all? But file sha included. Then we need exact old text around exception. Could search after read. Search call maybe. We can use search for `MissingSectionHeaderError` (1), read around that line (1), patch (1). Also need explanation of behavior. Could patch doc around `allow_no_value` description or multiline values. Need another search/read/patch. But maybe we can add explanation in exception entry itself: "Raised when a valueless option is followed by an indented continuation line." That's an accurate explanation, perhaps enough. Task: "update reference documentation to explain behavior and new exception." The exception entry explains behavior and new exception. It may be enough. But mechanical check checks doc declares exception, not necessarily behavior. But accurate documentation explanation: add a detailed entry. Could be one patch.
+
+Need know doc structure. Could search for `MissingSectionHeaderError` in doc, then read a small window. Search returns line number, but text at most 320 chars. We can read from that line with start_line to get exact source. Need old unique. We can choose an existing line like `.. exception:: MissingSectionHeaderError`? There may be cross-reference in other sections. Search total maybe multiple. We can choose a unique exception line. Need inspect. Could search `exception:: MissingSectionHeaderError` query? Search literal case-folded, query max 128. `.. exception:: MissingSectionHeaderError` maybe exact. It may match once. Use that. Then read around line.
+
+Potential issue: patch `old` must be unique. `.. exception:: MissingSectionHeaderError` likely unique. Good. New: that line + new exception entry.
+
+But if docs use `.. exception::` without blank lines? We need match exact. Read gives exact.
+
+Need also add to exception list? The doc may have a summary list in class or module section? Let's recall `configparser.rst` has:
+```
+.. _configparser-exceptions:
+
+Exceptions
+==========
+
+.. autoexception:: NoSectionError
+...
+```
+Maybe no list. Or module section has `.. exception:: NoSectionError` etc. We'll see.
+
+Need tests: Could add test class at end. Need ensure `MultilineContinuationError` in `__all__` (yes). Could test `isinstance(e, configparser.ParsingError)` and `isinstance(e, configparser.MultilineContinuationError)`.
+
+Need consider original module bug: With original module, valueless option followed by continuation likely `cursect[optname].append(value)` where cursect[optname] is None -> AttributeError. Our tests raise specific exception. On original, `assertRaises(configparser.MultilineContinuationError)` will fail because AttributeError? Actually `assertRaises` requires exception class, if AttributeError raised, test fails? It catches only that class? `assertRaises` will propagate AttributeError? Yes if unexpected exception, it propagates? In unittest, `assertRaises` only catches subclasses of specified exception; if AttributeError not subclass, it will propagate, causing failure/error. Good. If original didn't have `MultilineContinuationError` attribute, test module fails on AttributeError? But public check says added regressions must detect original; probably original has no class? Wait original pinned Python 3.12 module might not have `MultilineContinuationError`? In task says currently raises AttributeError. We backport new exception. If original module lacks the class, tests referencing `configparser.MultilineContinuationError` will fail with AttributeError before reading, still detect. Good. But public check may run edited test module on original? It likely checks that added tests fail. Good.
+
+Need ensure tests pass with repaired module. Need test exact `line` attribute. What exactly does `_read` pass? For `read_string("[service]\noptional_flag\n    continuation\n")`, line for offending continuation is `    continuation\n`. The line number 3. If we test with `read_string` source `'<string>'` by default. For `read_file`, source is filename passed? `read_file(f, source=?)` signature? In 3.12: `def read_file(self, f, source=None):` if source is None: `fpname = f.name if hasattr(f, 'name') else '<file object>'`? Let's check. `read(files)` calls `for filename in files: self._read(filename)`, where `_read` uses `fpname = filename`? Need actual. In `read_string`, source='<string>'. In `read_file`, if source None, source maybe `f.name` or '<file object>'. For tests, we can pass source explicitly: `read_string(string, source='test.txt')`? Does `read_string` accept source second positional? In Python 3.12 yes `read_string(string, source='<string>')`. `read_file(f, source=None)`? Let's check: I think `read_file(self, f, source=None)`. `read_string(self, string, source='<string>')`. We can use `read_string(config, source='test.cfg')` to control source. But if signature in this pinned module maybe `read_string(self, string, source='<string>')` yes.
+
+Need test `read()` with actual temporary file? Could use `tempfile`? Existing tests may avoid. But task wants behavior consistent through read(), read_file() and read_string(); tests can cover read_string and maybe read_file with StringIO. `read()` with file path requires temporary file; can use `tempfile` module if imported? Could add `import tempfile` in test class? We can just test `read_file` and `read_string`; read() uses same `_read`, but requirement maybe tests should cover. Could use `tempfile.NamedTemporaryFile` to test `read()`. But more imports. We can use `tempfile` standard. But added tests should be robust. Could do:
+```
+class TestMultilineContinuationError(unittest.TestCase):
+    def _check_error(self, source, exc):
+        self.assertIsInstance(exc, configparser.MultilineContinuationError)
+        self.assertIsInstance(exc, configparser.ParsingError)
+        self.assertEqual(exc.source, source)
+        self.assertEqual(exc.lineno, 3)
+        self.assertEqual(exc.line, '    continuation\n')
+        self.assertEqual(exc.args, (source, 3, '    continuation\n'))
+        self.assertIn(source, str(exc))
+        self.assertIn('[line 3]', str(exc))
+```
+But for `read()` with temp file source filename maybe path; line includes newline. Need use `tempfile` and `os`. Could be overkill. Maybe simpler:
+```
+def test_read_string(self):
+    parser = configparser.RawConfigParser(allow_no_value=True)
+    with self.assertRaises(configparser.MultilineContinuationError) as cm:
+        parser.read_string(self.config, source='test.cfg')
+    ...
+```
+For read_file:
+```
+f = io.StringIO(self.config)
+with self.assertRaises...:
+    parser.read_file(f, source='test.cfg')
+```
+Need import `io`. Test module likely imports `io`? Not sure. We can import inside method: `import io`. For read(): use `tempfile` and `os`. Maybe we can use `read_file` and `read_string` only; behavior consistent because both call `_read`. But task explicitly says through read(), read_file(), read_string(). Public checks may test independently, not necessarily our tests. But added regressions should expose problem; likely enough if one path. But to be safe, test read() too with temp file. Need know if test environment can create temp files. Yes.
+
+Could add a helper that creates a file via `tempfile` and calls `parser.read([path])`. Need import `tempfile`, `os`, `textwrap`? We can import at top of class methods.
+
+Potential issue with `line` for `read()` file: If we write file content with newline, line includes newline. Good.
+
+Potential issue: `MultilineContinuationError` args and pickling. Test can test `copy.copy` or `pickle.loads`? Task says preserve constructor arguments for copying/pickling. `Error` exceptions args set; `self.message` maybe not picklable? It is string. `source`, `lineno`, `line` picklable. We can add test:
+```
+import pickle, copy
+exc = configparser.MultilineContinuationError('src', 3, 'line\n')
+self.assertEqual(exc.args, (...))
+self.assertEqual(pickle.loads(pickle.dumps(exc)).args, exc.args)
+self.assertEqual(copy.copy(exc).args, exc.args)
+```
+But `Error` classes may be picklable? Yes.
+
+Need test message useful: `str(exc)` includes source, line number, line. For constructor direct: `ParsingError.__init__(source)` sets message `Source contains parsing errors: 'src'`, `append` adds `\n\t[line 3]: 'line\n'`. So `str` includes. Good.
+
+Need ensure direct constructor with source, lineno, line works. It does.
+
+Need test that valid multiline value with `allow_no_value=True` doesn't raise. Use:
+```
+config = "[service]\nkey = value\n    continuation\n"
+parser = configparser.RawConfigParser(allow_no_value=True)
+parser.read_string(config, source='s')
+self.assertEqual(parser.get('service', 'key'), 'value\ncontinuation')
+```
+But `get` may interpolate? Raw no interpolation. Good.
+
+Valueless option without continuation:
+```
+parser = configparser.RawConfigParser(allow_no_value=True)
+parser.read_string("[service]\noptional_flag\n", source='s')
+self.assertTrue(parser.has_option('service', 'optional_flag'))
+```
+But `has_option` works. Could also check `parser['service']['optional_flag'] is None`? SectionProxy `__getitem__` uses `get` which may return fallback? Let's avoid.
+
+Need test comments handling preserved? Existing tests cover. Could add a comment continuation? Maybe not.
+
+Need test both ConfigParser and RawConfigParser. `ConfigParser` with allow_no_value=True. Since `ConfigParser.set` validates, but reading same. Use `configparser.ConfigParser(allow_no_value=True)`.
+
+Could write multiple methods:
+- `test_direct_constructor`
+- `test_read_string_raw`
+- `test_read_string_config`
+- `test_read_file`
+- `test_read`
+- `test_valid_multiline_value`
+- `test_valueless_option`
+
+But to keep patch small (<6000 diff effective, each old/new <=512 chars? Wait patch old/new each max 512 characters and 2000 bytes. New max 512 characters! This is crucial. We cannot insert a huge test class in one patch if new string >512 characters. The patch operation has old/new max 512 characters. We need multiple patches to add tests, each new <=512 chars. Also effective diff <=6000. We can insert incrementally. Need choose insertion anchor that remains unique after each patch. We can add tests in multiple patches by anchoring on `if __name__ == '__main__':` and prepending chunks. But after first patch, anchor line remains at end of new? If we replace `if __name__...` with `class ...` + `if __name__...`, next patch can use same old anchor again; it still occurs once. We can repeatedly replace anchor with additional code + anchor, building before it. However each new string <=512 chars. Need maybe 4-6 patches. We have 16 calls; okay. But need expected_file_sha256 updated after each patch; patch result gives new file_sha. We can use that. Need candidate id updated. We can chain.
+
+But we need exact file sha for first test patch. We'll read test file (returns file_sha). Then patch with old `if __name__ == '__main__':` new first chunk + same line. Need ensure old occurs exactly once. Good.
+
+But adding a class before `if __name__`: We can split class into multiple chunks. For example first patch insert:
+```
+class MultilineContinuationErrorBackportTests(unittest.TestCase):
+    def test_direct_constructor(self):
+        exc = configparser.MultilineContinuationError('src', 3, 'line\n')
+        self.assertIsInstance(exc, configparser.MultilineContinuationError)
+        self.assertIsInstance(exc, configparser.ParsingError)
+        self.assertEqual(exc.args, ('src', 3, 'line\n'))
+        self.assertEqual(exc.source, 'src')
+        self.assertEqual(exc.lineno, 3)
+        self.assertEqual(exc.line, 'line\n')
+        self.assertIn('src', str(exc))
+        self.assertIn('[line 3]', str(exc))
+
+if __name__ == '__main__':
+```
+This new length maybe 600? Need count. Must <=512 chars. Let's craft small chunks.
+
+Could insert a minimal class with one test that uses read_string. Then subsequent patches add more methods inside class before the class closing? Hard if anchor at end of file. We can anchor on the last line of previous inserted chunk, e.g. the previous test method's last line, to insert more methods. But each anchor must be unique. We can design a sequence where each patch appends a new method before a sentinel line that remains unique. For example insert initial class with no methods? Not valid? Class with only docstring okay. Then add methods by replacing the docstring line? Need unique.
+
+Simpler: Insert multiple independent test functions at module level before `if __name__`. Each function is a standalone test? unittest discovers methods in TestCase classes, not module-level functions. But test module can be run by `unittest.main()` and it discovers classes. If we add module-level functions not in class, they won't be run by test runner. Public check likely runs test module, expecting added regressions. Need tests be in a TestCase class. We can create a class and add methods via multiple patches. We can use a sentinel method at end of class and insert before it. For example:
+1 patch: Insert class with `_sentinel` method? E.g.
+```
+class MultilineContinuationErrorTests(unittest.TestCase):
+    def _sentinel(self):
+        self.fail("sentinel")
+
+if __name__ == '__main__':
+```
+Then subsequent patches replace `    def _sentinel(self):\n        self.fail("sentinel")\n` with new methods + sentinel. But `_sentinel` is a public method? unittest will run it because starts with `test`? Actually unittest discovers methods whose name starts with `test`, case-insensitive? Default `testMethodPrefix = 'test'`, so `_sentinel` won't be discovered. Good. But if we leave sentinel, not run. Or we can remove later. Better use a sentinel method named `_sentinel` and eventually replace it with nothing? But we need a stable anchor. Could use the sentinel line as anchor until final patch where replace sentinel with last method. But final patch must also <=512. We can build.
+
+Alternatively, use a unique comment line as anchor within class, e.g. `        # more multiline continuation tests` and insert before it. Each patch adds methods before comment, comment remains. At end we can leave comment; harmless. But if comment at method indentation? Need valid. Example class:
+```
+class MultilineContinuationErrorBackportTests(unittest.TestCase):
+    def _sentinel(self):  # pragma: no cover
+        pass
+```
+Then anchor on `    def _sentinel(self):  # pragma: no cover\n        pass\n` and replace with new method + sentinel. Each new <=512.
+
+But maybe easier: We can add one compact test method with multiple assertions covering all required, within 512 chars. That may be enough. We don't need multiple methods. A single test method can test direct constructor, read_string raw/config, read_file, read valid? But `read()` with tempfile might make code long. We can omit read() or test it via `read_file` and `read_string`. Public independent checks cover read(). Added regressions only need expose problem. Could be one test method under 512.
+
+Let's design one TestCase class and one test method, maybe 2 methods if needed. Need new string <=512 chars including anchor line. We can do:
+```
+class MultilineContinuationErrorTests(unittest.TestCase):
+    def test_valueless_continuation(self):
+        text = "[service]\noptional_flag\n    continuation\n"
+        for cls in (configparser.RawConfigParser, configparser.ConfigParser):
+            p = cls(allow_no_value=True)
+            with self.assertRaises(configparser.MultilineContinuationError) as cm:
+                p.read_string(text, source='test.cfg')
+            exc = cm.exception
+            self.assertEqual(exc.source, 'test.cfg')
+            self.assertEqual(exc.lineno, 3)
+            self.assertEqual(exc.line, '    continuation\n')
+            self.assertEqual(exc.args, ('test.cfg', 3, '    continuation\n'))
+            self.assertIsInstance(exc, configparser.ParsingError)
+            self.assertIn('test.cfg', str(exc))
+        p = configparser.RawConfigParser(allow_no_value=True)
+        with self.assertRaises(configparser.MultilineContinuationError):
+            p.read_file(io.StringIO(text), source='test.cfg')
+if __name__ == '__main__':
+```
+Need import `io`. Test module may not import io. We can import inside method: `import io` before use. But inside method code length. Could use `configparser` read_string only and `read_file` via `io`. Could use `from io import StringIO` inside method. Need check test module imports? We can avoid `io` by using `read_string` and `read()` with tempfile? `read` needs file. Could use `tempfile` also. Maybe use `io` since standard. Add `import io` inside method. Code:
+```
+    def test_valueless_continuation(self):
+        import io
+        text = "[service]\noptional_flag\n    continuation\n"
+        for cls in (configparser.RawConfigParser, configparser.ConfigParser):
+            p = cls(allow_no_value=True)
+            with self.assertRaises(configparser.MultilineContinuationError) as cm:
+                p.read_string(text, source='test.cfg')
+            exc = cm.exception
+            self.assertEqual(exc.source, 'test.cfg')
+            self.assertEqual(exc.lineno, 3)
+            self.assertEqual(exc.line, '    continuation\n')
+            self.assertEqual(exc.args, ('test.cfg', 3, '    continuation\n'))
+            self.assertIsInstance(exc, configparser.ParsingError)
+        with self.assertRaises(configparser.MultilineContinuationError):
+            configparser.RawConfigParser(allow_no_value=True).read_file(io.StringIO(text), source='test.cfg')
+```
+Count chars: class line 46, method line 36, import 14, text line 50, for line 49, p line 27, with line 52, p.read 52, exc 22, asserts each ~40-55, 5 asserts ~250, with read_file line ~100. Total maybe 700 >512. Need shorter.
+
+We can split into two methods/patches. Or write a helper? We need keep each patch new <=512. We can insert class with one short test first, then add another method. But if first patch includes class and first test under 512, second patch can anchor on first test's last line? Need unique. Let's plan:
+
+Patch 1 new (including anchor) maybe:
+```
+class MultilineContinuationErrorTests(unittest.TestCase):
+    def test_direct_constructor(self):
+        exc = configparser.MultilineContinuationError('src', 3, 'line\n')
+        self.assertIsInstance(exc, configparser.ParsingError)
+        self.assertEqual(exc.args, ('src', 3, 'line\n'))
+        self.assertEqual(exc.source, 'src')
+        self.assertEqual(exc.lineno, 3)
+        self.assertEqual(exc.line, 'line\n')
+
+if __name__ == '__main__':
+```
+Count: class 46 + newline 1; method 36; exc line 75; assert isinstance 55; asserts 4*? 35+35+35+35=140; blank line; if line 27. Total ~360. Good.
+
+Patch 2 add method before `if __name__`. But anchor `if __name__...` still unique. If we replace anchor with second method? But then class would end? Need insert inside class before `if __name__`. We can replace the anchor line with new method lines + anchor, but new method must be indented inside class. Since class currently has only direct_constructor then blank line then if. If we insert method at class level before `if`, okay. But need ensure previous class ends? Class body includes direct_constructor; inserting another method after it is fine. However if we insert after direct_constructor and before `if`, the new method should be at indentation 4. The anchor is at column 0. We can replace `if __name__ == '__main__':` with:
+```
+    def test_read_string(self):
+        text = "[service]\noptional_flag\n    continuation\n"
+        for cls in (configparser.RawConfigParser, configparser.ConfigParser):
+            p = cls(allow_no_value=True)
+            with self.assertRaises(configparser.MultilineContinuationError) as cm:
+                p.read_string(text, source='test.cfg')
+            self.assertEqual(cm.exception.source, 'test.cfg')
+            self.assertEqual(cm.exception.lineno, 3)
+            self.assertEqual(cm.exception.line, '    continuation\n')
+
+if __name__ == '__main__':
+```
+But if inserted directly before `if`, after class body, okay. However class body currently ends with direct_constructor method and a blank line. Inserting method at column 4 before `if` adds method. Good. Need ensure there is no indentation issue: The text begins with 4 spaces. The previous line before anchor is blank. Good.
+
+Count patch2: method line 33, text 47, for 49, p 27, with 52, p.read 52, asserts 45+45+45=135, blank, if 27 total ~450. Good.
+
+Patch3 add read_file method. Replace anchor again:
+```
+    def test_read_file(self):
+        import io
+        text = "[service]\noptional_flag\n    continuation\n"
+        for cls in (configparser.RawConfigParser, configparser.ConfigParser):
+            p = cls(allow_no_value=True)
+            with self.assertRaises(configparser.MultilineContinuationError) as cm:
+                p.read_file(io.StringIO(text), source='test.cfg')
+            self.assertEqual(cm.exception.source, 'test.cfg')
+            self.assertEqual(cm.exception.lineno, 3)
+
+if __name__ == '__main__':
+```
+Count ~400. Good.
+
+Patch4 add read() method with tempfile maybe. But `read()` signature takes list of file names, returns parsed files. Need create temp file. Could use `tempfile` and `os`. Code:
+```
+    def test_read(self):
+        import tempfile
+        text = "[service]\noptional_flag\n    continuation\n"
+        fd, path = tempfile.mkstemp()
+        with os.fdopen(fd, 'w') as f:
+            f.write(text)
+        for cls in (configparser.RawConfigParser, configparser.ConfigParser):
+            p = cls(allow_no_value=True)
+            with self.assertRaises(configparser.MultilineContinuationError) as cm:
+                p.read([path])
+            self.assertEqual(cm.exception.source, path)
+            self.assertEqual(cm.exception.lineno, 3)
+        os.unlink(path)
+```
+Need `os` imported in test module? Probably yes? Not guaranteed. Could `import os, tempfile`. But `os` may be imported at top. To be safe, `import os, tempfile`. `fdopen` in os. Count maybe 500? Let's estimate: method 25, import 18, text 47, fd 34, with 29, f.write 23, for 49, p 27, with 52, p.read 27, asserts 45+45, os.unlink 25 total ~450. Good. But `p.read([path])` returns list; okay. Source for `read()` likely path. Need confirm `_read` source. In `read`, it calls `self._read(fp, filename)`? If source is path. Good.
+
+Potential issue: `tempfile.mkstemp` leaves file if exception; but test failure? Fine. Could use `addCleanup`? Not necessary. But if `read` raises expected, then unlink. Good. If `read` doesn't raise (original bug AttributeError? It will propagate unexpected exception before unlink? If unexpected AttributeError, test errors and file leak. Acceptable but maybe not. Could use `try/finally`, but length. Could use `tempfile.TemporaryDirectory`? More code. We can use `text = ...; fd, path = tempfile.mkstemp(); ...` okay.
+
+But do we need test `read()`? It adds risk due to `os` and tempfile. Public checks likely have independent checks. Added regressions can be just read_string/read_file. But task says consistent through read, read_file, read_string; tests could cover all. Let's include if space.
+
+Need also test valid multiline and valueless option to ensure no regression. Could add patch5:
+```
+    def test_valid_multiline_and_valueless(self):
+        text = "[service]\nkey = value\n    continuation\nflag\n"
+        p = configparser.RawConfigParser(allow_no_value=True)
+        p.read_string(text, source='s')
+        self.assertEqual(p.get('service', 'key'), 'value\ncontinuation')
+        self.assertTrue(p.has_option('service', 'flag'))
+```
+Count maybe 300. Need add before anchor. But note after previous patches, anchor still unique. We can insert. This test checks no false positive. Need `has_option` for valueless. Good.
+
+Need ensure `read_string` with `source='s'` signature accepts source. If not? Python 3.12 yes.
+
+Potential issue: `configparser.ConfigParser` with `allow_no_value=True` and reading valueless option. `ConfigParser` extends Raw; okay.
+
+Potential issue: `assertRaises` in for loop: In `test_read_string`, if exception raised for first class, `cm.exception` okay. Then second class. Good.
+
+Potential issue: `MultilineContinuationError` is a subclass of `ParsingError`; `assertRaises` catches. Good.
+
+Need check if `read_file` with `source='test.cfg'` signature: `read_file(self, f, source=None)` yes. But if pinned 3.12 maybe `read_file(self, f, source=None)`? Let's verify from memory: `read_file(self, f, source=None):` docstring says source optional. If source is None, use f.name. It calls `self._read(f, source)`? If source None, `_read` expects source? In `_read`, `fpname` used in exceptions. If source None maybe `fpname = source`? Actually `_read(self, fp, fpname)`; if source None, `fpname` None? But we pass source. Good.
+
+Potential issue: `read_string(text, source='test.cfg')` in Python 3.12 accepts source second positional. yes.
+
+Need know current test file has `if __name__ == '__main__':` exactly one. We can patch anchor repeatedly. But after inserting class before anchor, the anchor line remains at end. Good.
+
+Need get file_sha for test file. We can read start_line 2140 maybe small. But read returns largest page fitting 18k; start near end maybe small. We need file_sha. Read start_line 2140 returns lines 2140 to end maybe. It will include `if __name__` line. Need ensure file exists. We know line 2141 from search. Read start_line 2135 perhaps. But read page size max, small. Let's do read start_line 2135. That returns exact lines, file_sha. Need exact old anchor? We know. But also need confirm there are no other `if __name__`? Search total_matches 1. Good.
+
+However patch requires `expected_file_sha256` equal current PRE-EDIT target file fingerprint. We can get from read. Good.
+
+But after patching test file, candidate_id changes. Need use new candidate_id for doc patch. Patch result returns candidate_id. We can use that. But doc patch expected_candidate_id must equal current candidate id (after test patches). We can chain.
+
+Need doc file sha. We can search doc for exception line first? Search doesn't give file_sha. Could read doc after test patches, using current candidate. Search can use current source. We can search `.. exception:: MissingSectionHeaderError` in Doc. But to patch doc we need file_sha. We can read the line found. Need call sequence:
+- search doc query `.. exception:: MissingSectionHeaderError` (1). It returns line.
+- read doc start_line that line (1) to get file_sha and exact context.
+- patch doc (1).
+But we need expected_candidate_id at that time. Search doesn't need candidate. Good.
+
+Potential issue: The doc may not use `.. exception:: MissingSectionHeaderError` exactly; search query includes dots and colons; literal case-folded. Should match if present. If no match, total_matches 0. We can then search `MissingSectionHeaderError`. We need adapt. We can first search `MissingSectionHeaderError` maybe multiple. But we can choose a query that likely unique: `MissingSectionHeaderError`. Search returns up to 16 lines. It might appear in exception section and maybe in `read` docs? But we can inspect. Use search query `MissingSectionHeaderError` in Doc. Then read around first match. But patch old must be unique. Could use a line from match. We need know exact. Search returns text (line). Could use that exact line if unique? Search total_matches may >1, but a specific line with text may be unique if includes `.. exception::`. Query can be exact line. Let's search `.. exception:: MissingSectionHeaderError`. If zero, fallback.
+
+Doc structure maybe:
+```
+.. exception:: MissingSectionHeaderError
+
+   Subclass of :exc:`ParsingError` ...
+```
+Need add after. We can patch old `.. exception:: MissingSectionHeaderError` with old + new entry. But if there are blank lines after, new inserted before blank? If old is just line, replacement inserts line plus new lines but no extra blank? Example:
+old: `.. exception:: MissingSectionHeaderError`
+new: `.. exception:: MissingSectionHeaderError\n\n.. exception:: MultilineContinuationError\n\n   Raised when a valueless option is followed by an indented continuation line.`
+If original has a blank line after old, after patch it becomes new line, blank, blank? Let's see: original:
+```
+.. exception:: MissingSectionHeaderError
+<blank>
+   ...
+```
+If old only first line, new first line + `\n\n.. exception::...` then original next char after old is newline? Actually old line without newline; patch replaces substring. If original had newline after old, after replacement that newline remains. New ends with `... line.` no newline; then original newline -> line ends. Then original blank line remains. Result:
+```
+.. exception:: MissingSectionHeaderError
+
+.. exception:: MultilineContinuationError
+<original newline?> Wait new includes \n\n after first line. Let's concrete:
+old text = A (no newline). original = A\nB (where B is blank line maybe empty). new = A\n\nC. result = A\n\nC\nB. If B is empty line (i.e. newline), result A\n\nC\n\n. That's fine: blank between C and next content? Need RST expects blank line after directive? Actually directive line followed by indented body optional. For exception directive with no body, okay. We may want a blank line after new directive if followed by next content. If original B is blank line, result C\n\n, good. If original B is next content not blank, need include blank. But likely blank. We can read exact.
+
+Could add body indented:
+```
+.. exception:: MultilineContinuationError
+
+   Raised when a valueless option is followed by an indented continuation
+   line.
+```
+This is an accurate doc. Need maybe mention `ParsingError` subclass and attributes. RST exception directive can have description. Example:
+```
+.. exception:: MultilineContinuationError
+
+   Raised when a valueless option is followed by an indented continuation
+   line. Subclass of :exc:`ParsingError`.
+```
+Need cross-reference? Maybe not.
+
+But task: documentation explains behavior and new exception. Could add more detailed body:
+```
+.. exception:: MultilineContinuationError
+
+   Raised by :meth:`RawConfigParser.read`, :meth:`read_file` and
+   :meth:`read_string` when a valueless option (created by parsing with
+   ``allow_no_value=True``) is followed by an indented continuation line.
+   It is a subclass of :exc:`ParsingError` and records the source, one-based
+   line number and offending line in ``source``, ``lineno`` and ``line``.
+```
+Need new <=512. Fine.
+
+Need maybe update `allow_no_value` parameter docs? It might say valueless options. But exception entry enough.
+
+Potential issue: The public check may look for `MultilineContinuationError` in documentation and maybe a sentence explaining valueless continuation. Our entry includes. Good.
+
+Need also check library current code. We patched raise but need ensure `MultilineContinuationError` is defined and in `__all__`. Sequence 22 shows it. Need ensure no other places where valueless continuation could happen: What about continuation after valueless option in `DEFAULT` section? cursect is defaults dict, same. Good. What about `cursect[optname]` None but continuation line is a comment? The code handles comments before continuation: if line comment, value empty -> continue, not continuation. Good. What about blank line? If `empty_lines_in_values=True` and cursect[optname] is None? The code for empty line: `if (comment_start is None and cursect is not None and optname and cursect[optname] is not None): append('')` else indent_level = maxsize. So blank line doesn't raise, ends value. Is that desired? Valueless option followed by blank line then indented line? Since blank line sets indent_level maxsize, next indented line not continuation. Existing behavior. Good.
+
+Need ensure `MultilineContinuationError` constructor uses `source` attribute. In our class, `ParsingError.__init__(self, source)` sets `self.source = source`. Then we set `self.source`? Actually code:
+```
+class MultilineContinuationError(ParsingError):
+    def __init__(self, source, lineno, line):
+        ParsingError.__init__(self, source)
+        self.append(lineno, line)
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+```
+Good.
+
+Need verify `append` uses `self.message += ...`; `ParsingError.__init__` sets message f-string. Good.
+
+Need check if exception class is public in `__all__`, yes.
+
+Need maybe expose `MultilineContinuationError` in `Doc/library/configparser.rst` exception list. We'll add.
+
+Need consider if current library patch is enough for `read_string` with no trailing newline. If offending line is last without newline, line attribute no newline. Tests use trailing newline.
+
+Need run public check. It may run test module; our tests use `tempfile.mkstemp` and `os.fdopen`. Need ensure test file has `os` imported? We'll import inside method. Good.
+
+Potential problem: In `test_read`, `p.read([path])` may return before raising? It raises. Source in exception? Need confirm `read` source is filename. Let's recall `_read` signature in current file from sequence 17: `def _read(self, fp, fpname):`. `read` implementation likely:
+```
+def read(self, filenames, encoding=None):
+    if isinstance(filenames, str):
+        filenames = [filenames]
+    created = []
+    for filename in filenames:
+        ...
+        with open(filename, encoding=encoding) as fp:
+            try:
+                self._read(fp, filename)
+            finally:
+                fp.close()
+        created.append(filename)
+    return created
+```
+Yes source path. Good.
+
+Potential problem: `tempfile.mkstemp` creates file with permission, we write text. On Windows line endings? We use `os.fdopen(fd, 'w')` default newline translation? On Windows, writing `\n` may convert to `\r\n` in text mode, causing file lines with `\r\n`, offending line `    continuation\r\n`, and our assertion `exc.line == '    continuation\n'` would fail. Test environment likely Linux, but to be safe use newline=''? `os.fdopen(fd, 'w', newline='')` writes no translation. Or use `tempfile.TemporaryFile(mode='w', newline='')`. But code length. Could open with `newline=''`: `with os.fdopen(fd, 'w', newline='') as f:`. Need import os. Good. But `os.fdopen` accepts newline? yes. Or use `with open(path, 'w', newline='') as f:` after mkstemp? Need close fd. Could use `tempfile.TemporaryFile('w', newline='')` and `read([f.name])`? But file object still open, on Linux okay. Better:
+```
+fd, path = tempfile.mkstemp()
+with os.fdopen(fd, 'w', newline='') as f:
+    f.write(text)
+```
+Good.
+
+Potential problem: `os.fdopen(fd, 'w', newline='')` on some platforms? yes.
+
+Potential problem: `os.unlink(path)` after test, but if file still open? It's closed by with. Good.
+
+Potential problem: `read()` may not accept keyword encoding? We call `p.read([path])`. Good.
+
+Need maybe use `text` with final newline. Good.
+
+Now, need inspect test file top to ensure `configparser` imported and `unittest`. Read start_line 2135 won't show top. But we can assume? To be safe, read start_line 1 maybe huge but one call. It will show imports. We can combine with getting file_sha. But read page max 18k; test file 87k, returns first page. That's fine. It will show top and file_sha. Let's read start_line 1. This also establishes exact source before mutation? We patch anchor near end not read exactly? We have search line and read top not anchor. The patch old anchor string is known from search, but exact current source requirement maybe read target file at least. Reading top may suffice? The instruction "Read exact current source before mutation" likely means have read file. We will read top. But to be safe, also the anchor line from search. Could read start_line 2135 instead to see anchor exact, but not top. We need know imports. Could search top? We can use search query `^import configparser`? Not necessary. Existing test module definitely imports configparser. But to be safe, read start_line 1. It will include file_sha. It won't include anchor exact but search already gave exact line. Patch old is literal. The host validates old occurs exactly once; if search line had trailing spaces? Search text says `if __name__ == '__main__':` no trailing. Good.
+
+Could there be a line with same text in a string? Search total_matches 1, so no.
+
+After patching test file multiple times, we need file_sha each time. Patch result returns file_sha256. We can use for next patch. Candidate_id returned. Good.
+
+But we need know current candidate_id after test patches for doc patch. Patch result gives candidate_id. We'll track.
+
+Call budget detailed:
+1 read test file start_line 1 (call 25) -> file_sha_test0, candidate current 8ac7...
+2 patch test file direct_constructor (26) -> new candidate A, file_sha_test1
+3 patch test file test_read_string (27) -> B
+4 patch test file test_read_file (28) -> C
+5 patch test file test_read (29) -> D
+6 patch test file test_valid (30) -> E
+7 search doc for exception (31)
+8 read doc around line (32)
+9 patch doc (33)
+10 check public (34)
+11 submit (35)
+Total 11 calls, within 16. Good. If doc search fails or check fails, still some budget.
+
+Could reduce test patches by fewer methods. But 5 test patches okay. Need each new <=512. Let's carefully design each patch new string with exact indentation and no overly long lines. Also old/new fragments max 512 characters. Need count exact characters (not bytes; ASCII so same). We'll keep under ~450.
+
+Patch1 old: `if __name__ == '__main__':`
+new:
+```
+class MultilineContinuationErrorTests(unittest.TestCase):
+    def test_direct_constructor(self):
+        exc = configparser.MultilineContinuationError('src', 3, 'line\n')
+        self.assertIsInstance(exc, configparser.ParsingError)
+        self.assertEqual(exc.args, ('src', 3, 'line\n'))
+        self.assertEqual(exc.source, 'src')
+        self.assertEqual(exc.lineno, 3)
+        self.assertEqual(exc.line, 'line\n')
+
+if __name__ == '__main__':
+```
+Need count characters. Let's count roughly:
+Line1: `class MultilineContinuationErrorTests(unittest.TestCase):` length? "class " 6 + "MultilineContinuationErrorTests" 29? Let's count: Multiline(9?) Actually "MultilineContinuationErrorTests": Multiline 9? M u l t i l i n e =9, Continuation 12? C o n t i n u a t i o n =12, Error 5, Tests 5 total 31. class + space 6 -> 37? Wait string: `class MultilineContinuationErrorTests(unittest.TestCase):` = 6 +31 +1 +18 +1? `unittest.TestCase` 17? colon. Maybe 56. Let's not exact. Total likely 450. Need ensure <512.
+Let's count using manual maybe:
+L1 56?
+L2 4 spaces + `def test_direct_constructor(self):` = 4+34=38.
+L3 8 + `exc = configparser.MultilineContinuationError('src', 3, 'line\n')`. `exc = ` 6, `configparser.` 13, `MultilineContinuationError` 25, `('src', 3, 'line\n')` 20? total 64 +8=72.
+L4 8 + `self.assertIsInstance(exc, configparser.ParsingError)` = 8+50? `self.`5 + `assertIsInstance`16 + `(exc, configparser.ParsingError)` 33? total 54 +8=62.
+L5 8 + `self.assertEqual(exc.args, ('src', 3, 'line\n'))` = 8+49? total 57.
+L6 8 + `self.assertEqual(exc.source, 'src')` = 8+35=43.
+L7 8 + `self.assertEqual(exc.lineno, 3)` = 8+33=41.
+L8 8 + `self.assertEqual(exc.line, 'line\n')` = 8+38=46.
+blank 0? newline.
+if line 27.
+Sum ~56+38+72+62+57+43+41+46+27 = 442 plus newlines 9 = 451. Good.
+
+Patch2 old same anchor. new:
+```
+    def test_read_string(self):
+        text = "[service]\noptional_flag\n    continuation\n"
+        for cls in (configparser.RawConfigParser, configparser.ConfigParser):
+            p = cls(allow_no_value=True)
+            with self.assertRaises(configparser.MultilineContinuationError) as cm:
+                p.read_string(text, source='test.cfg')
+            self.assertEqual(cm.exception.source, 'test.cfg')
+            self.assertEqual(cm.exception.lineno, 3)
+            self.assertEqual(cm.exception.line, '    continuation\n')
+
+if __name__ == '__main__':
+```
+Count:
+L1 4+25? `def test_read_string(self):` 27 +4=31.
+L2 8+ `text = "[service]\noptional_flag\n    continuation\n"`: text = 6, string content? `"[service]\noptional_flag\n    continuation\n"` length: quote 1 + [service] 9? including brackets 9? `[service]` 9, `\n` 2, `optional_flag` 13, `\n` 2, 4 spaces 4, `continuation` 12, `\n` 2, quote 1 => 46? total 52 +8=60.
+L3 8+ `for cls in (configparser.RawConfigParser, configparser.ConfigParser):` = 8+73? total81.
+L4 12+ `p = cls(allow_no_value=True)` = 12+26=38.
+L5 12+ `with self.assertRaises(configparser.MultilineContinuationError) as cm:` = 12+73=85.
+L6 16+ `p.read_string(text, source='test.cfg')` =16+38=54.
+L7 12+ `self.assertEqual(cm.exception.source, 'test.cfg')` =12+50=62.
+L8 12+ `self.assertEqual(cm.exception.lineno, 3)` =12+41=53.
+L9 12+ `self.assertEqual(cm.exception.line, '    continuation\n')` =12+58=70.
+blank, if 27. Sum ~31+60+81+38+85+54+62+53+70+27=561 plus newlines 10=571 >512. Too long. Need shorten. We can reduce asserts or move common checks to helper? But helper adds. We can only check one class? But need ConfigParser and Raw. Could shorten variable names, less asserts. For regression, maybe just `assertRaises` not attribute checks in test_read_string; direct_constructor tests attributes. We can test read_string only for RawConfigParser? But need ConfigParser. Could do:
+```
+    def test_read_string(self):
+        text = "[service]\noptional_flag\n    continuation\n"
+        for cls in (configparser.RawConfigParser, configparser.ConfigParser):
+            p = cls(allow_no_value=True)
+            with self.assertRaises(configparser.MultilineContinuationError):
+                p.read_string(text, source='test.cfg')
+```
+Count: L1 31, L2 60, L3 81, L4 38, L5 12+53? `with self.assertRaises(configparser.MultilineContinuationError):` length 59? +12=71, L6 16+38=54, if 27 total ~362+newlines=369. Good. This exposes. Attribute checks in direct_constructor. But we also want ensure source/lineno/line for read paths. Could add one test with cm.exception but maybe length. We can have test_read_file with asserts maybe shorter? Or add a separate small test for exception attributes from read_string:
+```
+    def test_read_string_error_attrs(self):
+        p = configparser.RawConfigParser(allow_no_value=True)
+        text = "[service]\noptional_flag\n    continuation\n"
+        with self.assertRaises(configparser.MultilineContinuationError) as cm:
+            p.read_string(text, source='test.cfg')
+        self.assertEqual(cm.exception.args, ('test.cfg', 3, '    continuation\n'))
+```
+Count: method 35? text 60, p line 74? with 71, read 54, assert 80 total maybe 400. Could include. But maybe too many patches. We have budget but each patch call. Could combine test_read_string and attrs in one method under 512 if shorten class tuple? Maybe use only RawConfigParser for attrs and separate for Config? Let's design a single method that covers both classes and attrs within 512 by shortening lines:
+```
+    def test_read_string(self):
+        text = "[service]\noptional_flag\n    continuation\n"
+        for cls in (configparser.RawConfigParser, configparser.ConfigParser):
+            p = cls(allow_no_value=True)
+            with self.assertRaises(configparser.MultilineContinuationError) as cm:
+                p.read_string(text, source='test.cfg')
+            self.assertEqual(cm.exception.args, ('test.cfg', 3, '    continuation\n'))
+```
+This is previous 561? Let's count more accurately. It includes one assert instead of three, saving ~115. Sum previous 561 - (62+53+70-80) = 456? plus newlines maybe 466. Under 512. Good. Let's use that. Need exact new length maybe 466. Good.
+
+Patch2 new:
+```
+    def test_read_string(self):
+        text = "[service]\noptional_flag\n    continuation\n"
+        for cls in (configparser.RawConfigParser, configparser.ConfigParser):
+            p = cls(allow_no_value=True)
+            with self.assertRaises(configparser.MultilineContinuationError) as cm:
+                p.read_string(text, source='test.cfg')
+            self.assertEqual(cm.exception.args, ('test.cfg', 3, '    continuation\n'))
+
+if __name__ == '__main__':
+```
+Count likely <512. Good.
+
+Patch3 test_read_file similar:
+```
+    def test_read_file(self):
+        import io
+        text = "[service]\noptional_flag\n    continuation\n"
+        for cls in (configparser.RawConfigParser, configparser.ConfigParser):
+            p = cls(allow_no_value=True)
+            with self.assertRaises(configparser.MultilineContinuationError) as cm:
+                p.read_file(io.StringIO(text), source='test.cfg')
+            self.assertEqual(cm.exception.args, ('test.cfg', 3, '    continuation\n'))
+
+if __name__ == '__main__':
+```
+Count: adds import 14, method 33, text60, for81, p38, with71, read_file line: 16+ `p.read_file(io.StringIO(text), source='test.cfg')` length? p.read_file 11 + io.StringIO(text) 19 + source 20 total 50? +16=66. assert80, if27 sum ~460. Good.
+
+Patch4 test_read:
+```
+    def test_read(self):
+        import os, tempfile
+        text = "[service]\noptional_flag\n    continuation\n"
+        fd, path = tempfile.mkstemp()
+        with os.fdopen(fd, 'w', newline='') as f:
+            f.write(text)
+        for cls in (configparser.RawConfigParser, configparser.ConfigParser):
+            p = cls(allow_no_value=True)
+            with self.assertRaises(configparser.MultilineContinuationError) as cm:
+                p.read([path])
+            self.assertEqual(cm.exception.args, (path, 3, '    continuation\n'))
+        os.unlink(path)
+
+if __name__ == '__main__':
+```
+Count: method 27, import 18, text60, fd 34, with 41, f.write 23, for81, p38, with71, p.read 16+13=29? assert line: 12+ `self.assertEqual(cm.exception.args, (path, 3, '    continuation\n'))` length 70? total82, os.unlink 25, if27. Sum 514? Let's sum: 27+18+60+34+41+23+81+38+71+29+82+25+27 = 557 plus newlines 12=569 >512. Need shorten. We can drop for loop? Test read only RawConfigParser maybe enough? But requirement both ConfigParser/Raw. Could test Config in read_string; read path maybe Raw only. But consistency through read for both? Public independent. For added tests, maybe test read for Raw only. Or combine read and read_file? Need under 512.
+
+Shorten test_read:
+```
+    def test_read(self):
+        import os, tempfile
+        text = "[service]\noptional_flag\n    continuation\n"
+        fd, path = tempfile.mkstemp()
+        with os.fdopen(fd, 'w', newline='') as f:
+            f.write(text)
+        p = configparser.RawConfigParser(allow_no_value=True)
+        with self.assertRaises(configparser.MultilineContinuationError) as cm:
+            p.read([path])
+        self.assertEqual(cm.exception.args, (path, 3, '    continuation\n'))
+        os.unlink(path)
+```
+No for loop. Count: method27, import18, text60, fd34, with41, f.write23, p line: 8+ `p = configparser.RawConfigParser(allow_no_value=True)` = 8+52=60, with71, p.read29, assert82, os.unlink25, if27 total 558? Wait 27+18=45, +60=105, +34=139, +41=180, +23=203, +60=263, +71=334, +29=363, +82=445, +25=470, +27=497, + newlines 11=508. Under 512 barely. Need exact maybe okay. Could shorten by using `import os,tempfile` no space after comma? `import os,tempfile` length 17 vs 18. `with os.fdopen(fd,'w',newline='') as f:` shorter no spaces after commas? Python allows no spaces. We can reduce. Let's craft compact:
+```
+    def test_read(self):
+        import os,tempfile
+        text="[service]\noptional_flag\n    continuation\n"
+        fd,path=tempfile.mkstemp()
+        with os.fdopen(fd,'w',newline='') as f:
+            f.write(text)
+        p=configparser.RawConfigParser(allow_no_value=True)
+        with self.assertRaises(configparser.MultilineContinuationError) as cm:
+            p.read([path])
+        self.assertEqual(cm.exception.args,(path,3,'    continuation\n'))
+        os.unlink(path)
+
+if __name__ == '__main__':
+```
+Need PEP8 not required. Count:
+L1 4+19? `def test_read(self):` 20? total24? Let's count: 4 spaces + `def test_read(self):` 20? `def `4 + test_read 9 + (self) 6 + :1 =20, total24.
+L2 8+ `import os,tempfile` 17 =25.
+L3 8+ `text="[service]\noptional_flag\n    continuation\n"`: no space, 8+46? earlier string 46? total54.
+L4 8+ `fd,path=tempfile.mkstemp()` length 25? fd,path=8? `fd,path` 6 + =1 + tempfile.mkstemp() 18? total25, +8=33.
+L5 8+ `with os.fdopen(fd,'w',newline='') as f:` length? with 4 + space1 + os.fdopen 9 + (fd,'w',newline='') 18? total 32? +8=40.
+L6 12+ `f.write(text)` 13 =25.
+L7 8+ `p=configparser.RawConfigParser(allow_no_value=True)` length: p=1? `p=`2 + configparser.RawConfigParser 30? + (allow_no_value=True) 22? total54? +8=62.
+L8 8+ `with self.assertRaises(configparser.MultilineContinuationError) as cm:` length 71? +8=79.
+L9 12+ `p.read([path])` 14 =26.
+L10 8+ `self.assertEqual(cm.exception.args,(path,3,'    continuation\n'))` length: self.assertEqual 19 + ( 1 + cm.exception.args 17 + , 1 + (path,3,'    continuation\n') 28? + )1 =67? +8=75.
+L11 8+ `os.unlink(path)` 15=23.
+if 27. Sum 24+25+54+33+40+25+62+79+26+75+23+27 = 492 + newlines 11 = 503. Under 512. Good. Use this. Need ensure `import os,tempfile` valid. Yes. `os.fdopen(fd,'w',newline='')` valid. `text=...` no space. Fine.
+
+Patch5 valid test:
+```
+    def test_valid_multiline_and_valueless(self):
+        text = "[service]\nkey = value\n    continuation\nflag\n"
+        p = configparser.RawConfigParser(allow_no_value=True)
+        p.read_string(text, source='s')
+        self.assertEqual(p.get('service', 'key'), 'value\ncontinuation')
+        self.assertTrue(p.has_option('service', 'flag'))
+
+if __name__ == '__main__':
+```
+Count: method line 4+40? `def test_valid_multiline_and_valueless(self):` 44? total48. text: 8+ `text = "[service]\nkey = value\n    continuation\nflag\n"` length maybe 62. p line 8+52=60. read 8+35=43. assertEqual get: 8+ `self.assertEqual(p.get('service', 'key'), 'value\ncontinuation')` length 63? total71. assertTrue: 8+ `self.assertTrue(p.has_option('service', 'flag'))` length 48? total56. if27. Sum 48+62+60+43+71+56+27=367 + newlines 7=374. Good.
+
+But if we insert test_valid after test_read, class has methods. Good.
+
+Need ensure class name not conflict with existing test class? Search maybe. `MultilineContinuationErrorTests` likely not in test file. Could conflict? Existing tests may have class names like `TestConfig`, etc. If conflict, Python allows redefinition? It would override, bad. Need choose unique name maybe `TestMultilineContinuationErrorBackport`. Existing likely no. Use `class TestMultilineContinuationErrorBackport(unittest.TestCase):` length maybe 49. Let's use unique. Patch1 line length increases by 8? `TestMultilineContinuationErrorBackport` 39? class line 55. Still under. Good. Need `unittest` imported in test module. It is. Could be `import unittest` yes. If not, fail. Existing test module uses unittest.
+
+Let's adjust Patch1 class name: `class TestMultilineContinuationErrorBackport(unittest.TestCase):`.
+Count line1: 6 + 39? `TestMultilineContinuationErrorBackport`: Test 4 + Multiline 9 + Continuation 12 + Error 5 + Backport 8 =38? plus? total 39. `class `6 -> 45, `(unittest.TestCase):` 21? total66? Actually line maybe 66. Previous 56, +10. Patch1 total 461. Good.
+
+Patch1 new exact:
+```
+class TestMultilineContinuationErrorBackport(unittest.TestCase):
+    def test_direct_constructor(self):
+        exc = configparser.MultilineContinuationError('src', 3, 'line\n')
+        self.assertIsInstance(exc, configparser.ParsingError)
+        self.assertEqual(exc.args, ('src', 3, 'line\n'))
+        self.assertEqual(exc.source, 'src')
+        self.assertEqual(exc.lineno, 3)
+        self.assertEqual(exc.line, 'line\n')
+
+if __name__ == '__main__':
+```
+Good.
+
+Potential issue: `configparser.MultilineContinuationError` may not exist in original, test module fails at class definition? No, attribute access inside method only at runtime. Class definition references `unittest.TestCase`, not configparser. Good. `test_direct_constructor` references; on original, AttributeError when test runs, fails. Good.
+
+Potential issue: The test file may already have a `if __name__ == '__main__':` line with trailing newline? Patch old string no newline; replaces substring. Good.
+
+Need after each patch, new candidate. But patch old same anchor. Does old occur exactly once after inserting class? yes, only final anchor. But our new strings include anchor line at end. The inserted methods do not include `if __name__`. Good.
+
+Need ensure patch `old` and `new` differ; yes. `old` occurs exactly once. `new` includes `old` at end, okay.
+
+Need consider `old` max 512; yes. `new` max 512; we need be absolutely sure. Could count with a script mentally but risk. Let's count each new exact characters including newlines. Need ensure <=512. We'll do precise-ish.
+
+Patch1 new string:
+Line1: `class TestMultilineContinuationErrorBackport(unittest.TestCase):`
+Count: `class ` = 6. `TestMultilineContinuationErrorBackport`: let's count letters: Test(4)+Multiline(9)=13+Continuation(12)=25+Error(5)=30+Backport(8)=38. `(unittest.TestCase):` = 1+8+1+8+1+1? `(`1, `unittest`8, `.`1, `TestCase`8, `)`1, `:`1 =20. Total 6+38+20=64. newline 1 ->65.
+L2: 4 spaces + `def test_direct_constructor(self):`. `def `4 + `test_direct_constructor` 21? test 4 + _ 1 + direct 7 + _1 + constructor 11 =24? Let's count: test(4) _(1) direct(7) _(1) constructor(11) =24. `(self):` 7? (1 self4 ):1 =7. total 4+24+7=35, +4=39. newline ->104.
+L3: 8 spaces + `exc = configparser.MultilineContinuationError('src', 3, 'line\n')`.
+`exc = ` 6. `configparser.` 13. `MultilineContinuationError` count: Multiline9+Continuation12+Error5=26. `(`1 `'src'`5 `, `2 `3`1 `, `2 `'line\n'`? string includes quote, line, backslash n, quote = 8? `'line\n'` characters: quote1 line4 backslash1 n1 quote1 =8. `,`? Let's assemble: `('src', 3, 'line\n')`: (1 + 'src'5 + , space2 + 3 1 + , space2 + 'line\n'8 + )1 =20. Total 6+13+26+20=65. +8=73. newline ->178.
+L4: 8 + `self.assertIsInstance(exc, configparser.ParsingError)`.
+`self.`5 + `assertIsInstance`16 =21. `(exc, configparser.ParsingError)`: (1 exc3 , space2 configparser.ParsingError? configparser.13 + ParsingError12 =25, )1 =>32. total 53? Wait 21+32=53. +8=61. newline ->240.
+L5: 8 + `self.assertEqual(exc.args, ('src', 3, 'line\n'))`.
+`self.assertEqual`? `self.`5 + `assertEqual`11 =16. `(exc.args, ('src', 3, 'line\n'))`: (1 + exc.args 8 + , space2 + (1 + 'src'5 + , space2 + 3 1 + , space2 + 'line\n'8 + )1 + )1 =? 1+8+2+1+5+2+1+2+8+1+1=32. total48. +8=56. newline ->296.
+L6: 8 + `self.assertEqual(exc.source, 'src')`. self.assertEqual16, `(exc.source, 'src')`: (1 exc.source 11 , space2 'src'5 )1 =20. total36+8=44. newline ->340.
+L7: 8 + `self.assertEqual(exc.lineno, 3)`. 16 + `(exc.lineno, 3)`: 1+11? exc.lineno = 10? exc3 .1 lineno6=10, ,2 3 1 )1 =15? total31? +8=39. newline ->379.
+L8: 8 + `self.assertEqual(exc.line, 'line\n')`. 16 + `(exc.line, 'line\n')`: 1+8? exc.line 8? exc3 .1 line4=8, ,2, 'line\n'8, )1 =20, total36+8=44. newline ->423.
+blank line: newline ->424.
+if line: `if __name__ == '__main__':` count: if2 space1 __name__8? `__name__` 8, space1 ==2 space1 '__main__' 10? quote8? `__main__` 8 + quotes2=10, :1. total 2+1+8+1+2+1+10+1=26? Actually `if `3 + `__name__`8 =11 + ` `1=12 + `==`2=14 + ` `1=15 + `'__main__'`10=25 + `:`1=26. newline maybe file existing after anchor? Our new ends with line but no newline? The patch new string as JSON will include no trailing newline after anchor? We likely include no newline after final anchor? In action string, we can end with colon no newline. The original anchor line had newline after; replacing substring leaves newline. New string doesn't need final newline. Count 26. Total 450. Good.
+
+Patch2 new exact:
+```
+    def test_read_string(self):
+        text = "[service]\noptional_flag\n    continuation\n"
+        for cls in (configparser.RawConfigParser, configparser.ConfigParser):
+            p = cls(allow_no_value=True)
+            with self.assertRaises(configparser.MultilineContinuationError) as cm:
+                p.read_string(text, source='test.cfg')
+            self.assertEqual(cm.exception.args, ('test.cfg', 3, '    continuation\n'))
+
+if __name__ == '__main__':
+```
+Count no final newline.
+L1: 4 + `def test_read_string(self):` = def4 + test_read_string? test4 _1 read4 _1 string6 =16? Actually `test_read_string`: test 4 + _1 + read 4 + _1 + string 6 =16. `(self):`7. total 4+16+7=27 +4=31.
+L2: 8 + `text = "[service]\noptional_flag\n    continuation\n"`.
+`text = `7. string: quote1 + [service]9 + \n2 + optional_flag13 + \n2 + 4 spaces4 + continuation12 + \n2 + quote1 =46. total53 +8=61.
+L3: 8 + `for cls in (configparser.RawConfigParser, configparser.ConfigParser):`
+`for `4 + cls3 + ` in `4? space i n space =4? Actually ` in ` 4. `(configparser.RawConfigParser, configparser.ConfigParser):`
+(1 + configparser.RawConfigParser? configparser.13 + RawConfigParser16? Raw5 Config6 Parser6=17? Wait RawConfigParser = Raw 3? Let's count: Raw(3) Config(6) Parser(6)=15. configparser. 13 ->28. , space2. configparser.ConfigParser: configparser.13 + ConfigParser? Config6 Parser6=12 ->25. )1 :1. Total 1+28+2+25+1+1=58. plus for part 4+3+4+1? `for cls in ` = 4+3+1+3+1? Let's simpler line length likely 82. +8=90.
+L4: 12 + `p = cls(allow_no_value=True)` = p1 space1 =1 space1 cls3 ( allow_no_value True? `(allow_no_value=True)` 22? total 29? +12=41.
+L5: 12 + `with self.assertRaises(configparser.MultilineContinuationError) as cm:`
+`with `5 + self.assertRaises? self.5 assertRaises12? assertRaises = 12? a s s e r t R a i s e s 12. total17? `(configparser.MultilineContinuationError)` 1+13+26+1=41. ` as cm:` 6? space a s space c m : =6. total 5+17+41+6=69? +12=81.
+L6: 16 + `p.read_string(text, source='test.cfg')`: p.read_string 13? p1 .1 read_string10? read4 _1 string6=11? p.read_string total 13? (13? let's count p . read_string = 1+1+10? read_string 11? p=1, .=1, read_string 11? total13) + `(text, source='test.cfg')`: (1 text4 ,2 source=7? `source`6 + =1 + 'test.cfg' 10? quote test.cfg 8 + quotes2 =10, )1 =>25. total38 +16=54.
+L7: 12 + `self.assertEqual(cm.exception.args, ('test.cfg', 3, '    continuation\n'))`
+self.assertEqual16. `(cm.exception.args, ('test.cfg', 3, '    continuation\n'))`:
+(1 + cm.exception.args? cm2 .1 exception10 .1 args4 =18? cm.exception.args = 18, , space2, (1, 'test.cfg'10, , space2, 3 1, , space2, '    continuation\n' ? quote1 + 4 spaces + continuation12 + \n2 + quote1 =20, )1, )1. Sum 1+18+2+1+10+2+1+2+20+1+1=60. total76 +12=88.
+blank newline ->1.
+if 26.
+Sum: 31+61=92; +90=182; +41=223; +81=304; +54=358; +88=446; + newline after L7? We included newlines between lines: 7 newlines? Let's sum with newlines: L1 31+1=32, L2 61+1=64 total96, L3 90+1=91 total187, L4 41+1=42 total229, L5 81+1=82 total311, L6 54+1=55 total366, L7 88+1=89 total455, blank line is just newline? We have an empty line before if: that's a newline after L7 already? Actually structure: after L7 newline, then blank line means another newline, then if. In count above L7+1 gives newline ending L7. Then blank line is another newline (1). Then if 26. So total 455 +1 +26 =482. Under 512. Good.
+
+Patch3 new exact:
+```
+    def test_read_file(self):
+        import io
+        text = "[service]\noptional_flag\n    continuation\n"
+        for cls in (configparser.RawConfigParser, configparser.ConfigParser):
+            p = cls(allow_no_value=True)
+            with self.assertRaises(configparser.MultilineContinuationError) as cm:
+                p.read_file(io.StringIO(text), source='test.cfg')
+            self.assertEqual(cm.exception.args, ('test.cfg', 3, '    continuation\n'))
+
+if __name__ == '__main__':
+```
+Similar to patch2 plus import line (8+10=18+newline) and read_file line maybe 16+ `p.read_file(io.StringIO(text), source='test.cfg')`. p.read_file 11? (p1 .1 read4 _1 file4 =11) + `(io.StringIO(text), source='test.cfg')`: (1 io.StringIO(text) 17? io2 .1 StringIO8? (1 text4 )1 =17? ,2 source10 )1 =22? total33 +16=49. Patch2 total 482 - L6 54 + L6 49 =477 + import 19 =496. Under.
+
+Patch4 new exact compact counted ~503. Need ensure under 512. Let's precise:
+String:
+```
+    def test_read(self):
+        import os,tempfile
+        text="[service]\noptional_flag\n    continuation\n"
+        fd,path=tempfile.mkstemp()
+        with os.fdopen(fd,'w',newline='') as f:
+            f.write(text)
+        p=configparser.RawConfigParser(allow_no_value=True)
+        with self.assertRaises(configparser.MultilineContinuationError) as cm:
+            p.read([path])
+        self.assertEqual(cm.exception.args,(path,3,'    continuation\n'))
+        os.unlink(path)
+
+if __name__ == '__main__':
+```
+Count:
+L1: 4 + `def test_read(self):` = def4 + test_read? test4 _1 read4 =9? `(self):`7 total20 +4=24.
+L2: 8+`import os,tempfile` = import6 space1 os2 ,1 tempfile8 =18? 6+1+2+1+8=18. +8=26.
+L3: 8+`text="[service]\noptional_flag\n    continuation\n"`: text4 =1, string46 =51? Wait no spaces: `text=` 5, string 46 =>51 +8=59.
+L4: 8+`fd,path=tempfile.mkstemp()`: fd2 ,1 path4 =1? `fd,path`6, =1, `tempfile.mkstemp()`? tempfile8 .1 mkstemp7? mkstemp 7? m k s t e m p =7, ()2 =>18? total6+1+18=25 +8=33.
+L5: 8+`with os.fdopen(fd,'w',newline='') as f:`: with4 space1 os.fdopen9? os2 .1 fdopen6 =9, `(`1 fd2 ,1 'w'3 ,1 newline8 =1? newline6? `newline`6 + =1 + ''2 =9? Let's count `(fd,'w',newline='')`: (1 fd2 ,1 'w'3 ,1 newline=8? `newline=''` 10? newline6 + =1 + ''2 =9, )1. total 1+2+1+3+1+9+1=18. as f: space a s space f : =5? total 4+1+9+18+5=37? +8=45.
+L6: 12+`f.write(text)` f.write 9? f1 .1 write5 =7? Actually `f.write` 7, `(text)`6 =>13 +12=25.
+L7: 8+`p=configparser.RawConfigParser(allow_no_value=True)`: p1 =1 configparser.RawConfigParser? configparser.13 + RawConfigParser15 =28, `(allow_no_value=True)`? (1 allow_no_value14? allow6 _1 no2 _1 value5 =14? =1 True4 =>17? total 2+28+17=47? +8=55.
+L8: 8+`with self.assertRaises(configparser.MultilineContinuationError) as cm:` as before 69 +8=77? Wait earlier L5 patch2 with indent12 was 81. With indent8 ->77.
+L9: 12+`p.read([path])`: p.read 6? p1 .1 read4 =6, `([path])`7? [path]5 + ()2 =7 total13 +12=25.
+L10: 8+`self.assertEqual(cm.exception.args,(path,3,'    continuation\n'))`:
+self.assertEqual16. `(cm.exception.args,(path,3,'    continuation\n'))`:
+(1 + cm.exception.args18 + ,1 + (1 + path4 + ,1 + 3 1 + ,1 + '    continuation\n'20 + )1 + )1 =? 1+18+1+1+4+1+1+1+20+1+1=50. total66 +8=74.
+L11: 8+`os.unlink(path)` os3 .1 unlink6? unlink6 =10? (path)6 =>16? +8=24.
+if 26.
+Add newlines: 10 between lines + blank? Let's sum lines + newline after each except if:
+L1 24+1=25
+L2 26+1=26 total51
+L3 59+1=60 total111
+L4 33+1=34 total145
+L5 45+1=46 total191
+L6 25+1=26 total217
+L7 55+1=56 total273
+L8 77+1=78 total351
+L9 25+1=26 total377
+L10 74+1=75 total452
+L11 24+1=25 total477
+blank line? There is a blank line before if: we already have newline after L11? Structure: L11 newline then blank line (another newline) then if. In line-by-line, after L10 newline, L11 line, newline ending L11, then blank line is an empty line meaning another newline. We counted L11+1 includes newline ending L11. Need one more newline for blank line. +1 =478. if 26 =504. Under 512. Good.
+
+Patch5 new count earlier 374. Good.
+
+Need ensure patch4 `self.assertRaises(configparser.MultilineContinuationError)` on original module? It exists after repair. On original, if class absent, `assertRaises` evaluation of second arg raises AttributeError before `p.read`? In `with self.assertRaises(configparser.MultilineContinuationError) as cm:`, Python evaluates exception class before entering with. On original module lacking class, test errors with AttributeError, good. If original has class but not raised, `p.read` raises AttributeError, not caught? Wait `assertRaises` context manager catches only specified exception; if AttributeError occurs, it will propagate (not caught). Good.
+
+Potential issue: In test_read, if `p.read([path])` raises expected exception, `cm.exception.args` uses `path`. But after `with` block exits, exception is raised and caught. Good. `os.unlink` executes. Good.
+
+Potential issue: `os.fdopen(fd,'w',newline='')` returns file object; `fd` closed by `os.fdopen`? Yes, `os.fdopen` closes fd when file object closed. Good.
+
+Potential issue: `tempfile.mkstemp` returns path with random name; on Unix, source in exception is path string. Good.
+
+Potential issue: If test environment runs tests with `-b` or warnings, not relevant.
+
+Need docs patch. Let's think of exact RST. Need search. Use query `.. exception:: MissingSectionHeaderError`. If no match, maybe docs use `.. autoexception:: MissingSectionHeaderError`? Let's recall Python library docs often use `.. autoexception::`? For configparser, maybe:
+```
+.. autoexception:: NoSectionError
+.. autoexception:: DuplicateSectionError
+.. autoexception:: DuplicateOptionError
+.. autoexception:: NoOptionError
+.. autoexception:: InterpolationError
+.. autoexception:: InterpolationMissingOptionError
+.. autoexception:: InterpolationSyntaxError
+.. autoexception:: InterpolationDepthError
+.. autoexception:: ParsingError
+.. autoexception:: MissingSectionHeaderError
+```
+Maybe yes. In CPython Doc/library/configparser.rst, exceptions are documented with `.. autoexception::`? Let's recall from docs: It lists exceptions with full docstrings auto-generated? I see in HTML: "exception NoSectionError", "exception DuplicateSectionError", etc. The source may use `.. autoexception:: NoSectionError` etc. For `MissingSectionHeaderError`, maybe `.. autoexception:: MissingSectionHeaderError`. If so our query `.. exception::` fails. We can search `autoexception:: MissingSectionHeaderError` or just `MissingSectionHeaderError`. Let's do search query `MissingSectionHeaderError` in Doc. It may return multiple lines: one autoexception, maybe in `read` docs? Let's see. We need choose unique line. Search result lines with text. We can then read around first line. If first line is `.. autoexception:: MissingSectionHeaderError`, we can patch that. If multiple, maybe use full line as old if unique. Search total_matches may show. We can use query `MissingSectionHeaderError` and inspect. Search call one.
+
+Then read doc from line. The read returns file_sha and exact lines. Need know where to insert. If `autoexception` directive, it auto-generates docstring from class. We can add a new `.. autoexception:: MultilineContinuationError` after it. But does `autoexception` work for class? It reads docstring. Our class docstring is "Raised when a valueless option is followed by an indented line." Good. But `autoexception` may require class defined in module. Yes. The doc build not in check, but mechanical check likely just text. Using `autoexception` is appropriate.
+
+If docs use manual `.. exception::`, we can add manual. Need inspect.
+
+Search query `MissingSectionHeaderError` may match also in `.. exception::`? We'll see.
+
+Need doc patch new <=512. If using autoexception:
+old: `.. autoexception:: MissingSectionHeaderError`
+new: old + `\n.. autoexception:: MultilineContinuationError` maybe with blank line? For autoexception directives, each on separate line maybe no blank needed? RST directives can be consecutive? Better include blank lines? Example:
+```
+.. autoexception:: MissingSectionHeaderError
+.. autoexception:: MultilineContinuationError
+```
+Should be okay? Each directive has no content block; consecutive directives maybe need blank? RST may parse as separate directives if blank line? Actually directive block ends with following line if indented? A directive with no content can be immediately followed by another directive? I think a blank line is not required between directives? To be safe, insert blank line:
+new = old + `\n\n.. autoexception:: MultilineContinuationError`
+If original next char newline, result has blank. Good.
+But if using `autoexception`, the exception's docstring explains behavior but not attributes/source/lineno/line. The docstring currently: "Raised when a valueless option is followed by an indented line." It doesn't mention source/lineno/line. Task doc should explain behavior and new exception. Maybe autoexception only shows docstring, not attributes. Could be insufficient. We can add a manual paragraph after autoexception? But new length. Maybe use manual exception directive with detailed body. But if existing uses autoexception, adding manual is okay. We can add:
+```
+.. autoexception:: MultilineContinuationError
+
+   Raised when a valueless option is followed by an indented continuation
+   line. It records the source, one-based line number and offending line
+   in ``source``, ``lineno`` and ``line``.
+```
+But `autoexception` directive cannot have content? It may ignore content. We can just use `.. exception::` manual. Need choose based on doc style. If existing uses autoexception, a manual `.. exception::` will still work? It defines exception role? `.. exception::` is a directive for exceptions, yes. It can have body. Could duplicate? Fine.
+
+Maybe simpler: Add a paragraph in the "Exceptions" section after existing exception, not directive. But mechanical check may look for `MultilineContinuationError` text, not directive. But reference doc should declare exception. Use directive.
+
+Could patch old `.. autoexception:: MissingSectionHeaderError` with:
+```
+.. autoexception:: MissingSectionHeaderError
+
+.. exception:: MultilineContinuationError
+
+   Raised when a valueless option is followed by an indented continuation
+   line. The exception is a subclass of :exc:`ParsingError` and records the
+   source, one-based line number and offending line in ``source``, ``lineno``
+   and ``line``.
+```
+New length maybe 300. Good. If old not unique? likely unique.
+
+Need if existing uses `.. exception:: MissingSectionHeaderError`, same.
+
+Could search query `MissingSectionHeaderError` and choose the line with `.. autoexception::` or `.. exception::`. If multiple, we can use the exact line from search if unique. Need maybe line text includes directive. We can use that exact line as old. Good.
+
+Need doc file sha. Read from that line. But if read page starts at line, it may include line and surrounding. We need exact old line. Search already gave exact line text maybe with leading spaces? Directive at column 0. Use search text. Good.
+
+Potential issue: The doc may have `.. autoexception:: MissingSectionHeaderError` line, but if we patch with `.. exception:: MultilineContinuationError`, Sphinx maybe duplicate? Not running build. Fine.
+
+Need maybe update `__all__`? Already.
+
+Need check public. It may run frozen upstream regression suite and independent checks. Our tests added may be considered part of test module; if they fail due to environment (tempfile permissions) maybe fail. Need ensure no syntax errors. Let's review inserted class methods indentation. We insert before `if __name__`. The class begins at column 0. Methods at 4 spaces. Good.
+
+Patch1 inserts class then if. After patch, file has:
+```
+class TestMultiline...:
+    def test_direct_constructor...
+        ...
+
+if __name__...
+```
+Patch2 replaces if with methods + if. Since old if occurs once, new methods inserted before if. Result:
+```
+class Test...:
+    def test_direct_constructor...
+        ...
+
+    def test_read_string...
+        ...
+
+if __name__...
+```
+Wait there is a blank line before if from patch1. Patch2 old is if line only; new starts with 4 spaces method. The preceding character before if is newline from blank line. So result has blank line, then method. Good.
+Patch3 similarly inserts another method after previous method? There is a blank line before if from patch2. It inserts method before if, after blank. Good.
+Patch4, Patch5 similar. Final class has methods separated by blank lines. Good.
+
+Potential issue: The class body ends with test_valid method then blank line then if. Good.
+
+Need ensure no line exceeds 512 bytes source line limit. Our lines under. Existing test file maybe okay.
+
+Need consider public check runs "edited test module" maybe using `python -m unittest` or `python Lib/test/test_configparser.py`. Our class methods will run. The test module has `if __name__ == '__main__':` likely calls `unittest.main()`. Good.
+
+Potential issue: Our test class name starts with `Test`, discovered. Good.
+
+Potential issue: The test module may use `support.os_helper` and `unittest` but not import `io` etc. We import inside. Good.
+
+Potential issue: `configparser.MultilineContinuationError` in test_direct_constructor direct args uses string with `\n` in Python source. In patch JSON, we need actual backslash n or newline? We want Python string literal `'line\n'` meaning backslash n in source. In JSON action, to represent backslash, need `\\n` in JSON string. The action JSON we output must have `new` string containing literal backslash followed by n, not an actual newline? For Python source, we want two characters `\` and `n` inside string literal. In JSON, to include backslash, escape as `\\`. The final JSON string will contain `\n`? Wait JSON string `"\\n"` decodes to backslash n. If we write in JSON content `"... 'line\n' ..."` that would decode to actual newline, not desired. We must ensure JSON action string includes `\\n` for Python's `\n`. The tool contract: final action is strict JSON object. We need produce JSON with escaped backslashes. In our analysis, when we say new string contains `line\n`, in JSON we need `line\\n`. The read/patch results show Python source with `\n` as two chars represented in JSON as `\\n`? In event frame, content had `'\\n'.join(val)`? It showed `val = '\\n'.join(val).rstrip()` in JSON? The user message had content with `\\n`? It displayed `"content":"... val = '\\n'.join(val)..."`? In the frame, resident content shows `val = '\\n'.join(val)`? It appears as `"content":"... val = '\\n'.join(val)..."`? Actually in user JSON, it shows `val = '\\n'.join(val)`? Let's inspect: In sequence 17 content: `val = '\\n'.join(val).rstrip()`? The text in message: `val = '\\n'.join(val).rstrip()`? It shows `"content":"... val = '\\n'.join(val).rstrip()..."`? I see in provided: `val = '\\n'.join(val).rstrip()`? The raw user has `val = '\\n'.join(val).rstrip()`? It displays `val = '\\n'.join(val)`? In the prompt, inside JSON string, backslashes are escaped: `val = '\\n'.join(val)`? Actually the visible text: `val = '\\n'.join(val).rstrip()`? It shows `val = '\\n'.join(val)` with double? The user content is a JSON object, so to represent Python source `val = '\n'.join(val)`, JSON contains `val = '\\n'.join(val)`. In the prompt rendered, it appears as `val = '\\n'.join(val)`? It shows `val = '\\n'.join(val)` maybe. We must output proper JSON. In final answer, we will write a JSON object; string values with `\n` for actual newlines in Python source lines? We need actual newline characters in the patch string to separate lines. JSON can include `\n` escape for actual newline. But Python string literals containing newline escape need `\\n` in JSON. So in final JSON, for a line like `        text = "[service]\noptional_flag\n    continuation\n"`, we need JSON string: `        text = \"[service]\\noptional_flag\\n    continuation\\n\"` with actual newlines between lines represented by `\n`. This is tricky but possible. The final action must be a JSON object; we can output with escaped newlines. The tool likely parses JSON. We need ensure each `new` string is <=512 characters after JSON decoding, not raw JSON length. The 512 char limit is decoded string. We need count decoded. Our counts above use decoded characters, where `\n` inside Python string literal counts as 2 characters (backslash and n), and line breaks count as 1 each. In JSON, backslashes doubled. Good.
+
+When crafting final JSON, we can use `\n` for actual newlines and `\\n` for Python newline escapes. Also quotes: Python strings use single quotes, so no need escape double quotes except JSON string uses double quotes. Python strings with double quotes for text contain double quotes; in JSON we need escape them as `\"`. Example decoded line: `        text = "[service]\noptional_flag\n    continuation\n"`. JSON: `        text = \"[service]\\noptional_flag\\n    continuation\\n\"`. Good.
+
+Patch1 contains `'line\n'` decoded: single quotes, backslash n. JSON: `'line\\n'`. Good.
+
+Need be careful with `assertEqual(cm.exception.args, ('test.cfg', 3, '    continuation\n'))`: decoded string contains backslash n. JSON: `'    continuation\\n'`.
+
+Potential issue: The patch `old` and `new` fragments max 512 characters decoded. We counted. But JSON raw length may exceed 5000 action? Whole action JSON must fit 5000 bytes. Each patch action includes path, old, new, expected ids. New ~500 decoded, JSON escaped maybe + for quotes/backslashes. Each patch action maybe <2KB. Fine.
+
+Need output one action per turn? The task says final action object. We can only output one action now. Need choose next action. We can't do multiple patches in one action. We need proceed sequentially. We are at sequence 24. The next action should be read test file? Or maybe we can use `reopen_result` to retrieve saved content? We have read test file? We haven't read test file exact, only search. We need file_sha. Could use `read` start_line 1. That is next. But we already have current candidate id and file? Need read. Let's do read test file start_line 1. But maybe to save calls, can we get file_sha from search? No. Read returns file_sha. We need read test file. Could read start_line 2135 to get file_sha and anchor, less content. But also need imports? We assume. To minimize content, read start_line 2135. But if we need verify `unittest` imported? Not necessary? Could search `unittest` maybe. But existing test module surely. However, if `unittest` not imported, our class fails. Could read top to verify. One call either way. Read start_line 1 gives top and file_sha. Use it. It returns large page but okay. Let's do read test file start_line 1.
+
+But note: The current candidate id is 8ac738... The read action doesn't require expected id. It returns file_sha256. Good.
+
+Next action JSON:
+```
+{"action":"read","path":"Lib/test/test_configparser.py","start_line":1}
+```
+Need no extra keys. final content exactly one JSON object. Do that.
