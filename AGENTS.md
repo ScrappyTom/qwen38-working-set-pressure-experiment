@@ -141,6 +141,25 @@ and actual check feedback, keeping missing documentation/full submission separat
 Do not turn a specific question into another general design consultation or count
 assisted selection as autonomous work. The existing long-work goal remains open.
 
+That assisted session is now closed after four replies. Read its five products
+under `assisted-regression/review/`, per-turn reviews and DECISION.json. Qwen saves
+one parser regression, corrects a default-constructor assumption after the reviewer
+supplies exact omitted source, checks the current candidate, and uses the complete
+feedback to close without submission. The edited suite has 356 tests/five skips
+and no failures/errors; the added test reaches the original None.append defect.
+Documentation remains absent and the overall check remains false. All four full
+responses were read; eight native inputs, three operations and discussion-only
+closure verify. Four replies cost 26,984 generated tokens and 25.534 request minutes.
+T04's minimum free GPU memory is 84 MiB under the unchanged advisory policy, with
+no observed CUDA failure/truncation; do not call that comfortable capacity.
+The two unused replies are closed. Preserve the actual checked test and prior
+incorrect draft. The scripted initial group did not establish source sufficiency:
+its constructor setting came from reviewer knowledge absent from the model input.
+The operational conversation repaired that specific gap. Retain the host/reference;
+do not infer autonomous selection, pressure continuity or a thinking-policy remedy.
+Remaining documentation is a separate next contribution, not an automatic new
+request under this consumed six-reply package.
+
 The owner has given the continuing goal: keep working with Qwen as test pilot
 and consultant until the system can complete long-running tasks and work with
 large documents or code repositories. That direction authorizes progressing the

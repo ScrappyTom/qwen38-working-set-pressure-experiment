@@ -19,17 +19,22 @@ eight full responses, actions and actual subsequent inputs were reviewed.
 The [separate source-eligibility consultation is also closed](development/bounded_working_set/edit-eligibility-dialogue/review/RESULTS.md).
 Qwen correctly interprets the visible fragment and returned-page guarantees under
 focused questions, at a further 19.309 request minutes. Retain the current host
-and reference; close the unused follow-up. A [proposed compact assisted contribution](development/bounded_working_set/edit-eligibility-dialogue/review/NEXT_STEP.md)
-would distinguish finishing with assembled evidence from selecting it. No new
-contribution run or reasoning-policy change has been executed. The broader
-long-work objective remains unachieved.
+and reference; close the unused follow-up. Its [proposed compact assisted contribution](development/bounded_working_set/edit-eligibility-dialogue/review/NEXT_STEP.md)
+was narrowed by subsequent owner direction to the completed session below.
+The broader long-work objective remains unachieved.
 
-The owner-approved [revised assisted session](development/bounded_working_set/assisted-regression/PREPARATION_REVIEW.md)
-now narrows that recommendation to one saved, checked regression, with a reviewer
-response to each actual reply and operation. Six focused checks pass; the offline
-edit/check path fits at 6,423 initial and 7,429 peak input tokens. This supplies
-exact source based on Qwen's earlier test ideas and retains public dialogue;
-it is explicitly assisted development. No new Qwen reply has yet been sent.
+The owner-approved [assisted session is complete](development/bounded_working_set/assisted-regression/review/RESULTS.md).
+Qwen saves a regression, corrects its constructor choice after receiving an exact
+source fact missing from the supplied group, checks it, and uses actual feedback
+to close. The [saved patch](development/bounded_working_set/assisted-regression/CONTRIBUTION.patch)
+passes on the repair and reaches the original parser's actual defect. The edited
+suite runs 356 tests with five skips and no failures/errors. Only the test file
+changes; missing documentation keeps the full backport check false.
+All four replies were directly reviewed and verified, costing 26,984 generated
+tokens and 25.534 model-request minutes. No pressure boundary occurs. Source
+assistance and public dialogue are explicit; this does not establish autonomous
+selection or solve long deliberation. T04 reaches 84 MiB free without observed
+CUDA failure; all owned runtimes are closed. Two unused replies are closed.
 
 The [first bounded-host parser attempt is closed](development/bounded_working_set/review/RESULTS.md).
 Eight complete responses save no new tests or documentation; the existing correct
