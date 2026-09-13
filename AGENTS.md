@@ -1,5 +1,16 @@
 # Experiment operating rules
 
+The documentation contribution is now closed and checked under c52f26fc; read
+`development/bounded_working_set/parser-documentation/review/RESULTS.md` and its
+four complete turn reviews. Qwen saves both documentation additions, checks and
+submits while preserving the prior library and regression. The combined reply is
+not exercised: canonical request sorting makes the runtime grammar exclude its
+illustrated key order. Preserve the completed run before correcting serialization
+prospectively. Exact native probes establish this host defect; do not attribute
+the omitted check field simply to Qwen or claim a combined-operation speed gain.
+The two unused replies are closed. No additional inference is needed to qualify
+the correction.
+
 Current owner-directed development: implement the combined host/model contribution
 loop under `development/bounded_working_set/SYMBIOTIC_PLAN.md` and the separately
 declared `parser-documentation/SPEC.md`. Assistance is part of the system; identify

@@ -2,14 +2,22 @@
 
 ## Project status
 
+The [documentation contribution is complete](development/bounded_working_set/parser-documentation/review/RESULTS.md).
+With reviewer-selected exact source and factual dialogue, Qwen saves the remaining
+API and exception documentation, consumes a passing check and submits. The saved
+library and regression remain unchanged. Four replies cost 19,743 generated tokens
+and 19.078 model-request minutes. The edited suite runs 356 tests with five skips
+and no failures/errors; the regression also reaches the original parser defect.
+
 The [combined contribution plan](development/bounded_working_set/SYMBIOTIC_PLAN.md)
-is implemented in an opt-in reply wrapper: Qwen can request a patch plus its public
-check, and the host binds validation to the accepted successor and preserves both
-receipts. Forty-one selected checks pass. The
-[documentation continuation](development/bounded_working_set/parser-documentation/PREPARATION_REVIEW.md)
-qualifies this loop offline from the actual saved library and regression, with
-reviewer-selected exact source. Its preparation is distinct from a model outcome;
-thinking settings and historical experiment records remain unchanged.
+adds an optional patch plus host-bound successor check. Its offline tests pass,
+but the actual attempt exposes a [request-order defect](development/bounded_working_set/parser-documentation/grammar-review/FINDING.md):
+canonical schema sorting excludes the illustrated combined reply from the runtime
+grammar. Qwen finishes through ordinary operations after the issue is identified.
+The combined feature has no demonstrated model efficiency benefit. Preserve this
+completed evidence and correct serialization prospectively; no additional model
+calls are needed for native constraint qualification. Thinking settings remain
+unchanged, and sustained autonomous productivity remains unqualified.
 
 The [revised approach is implemented](development/bounded_working_set/REVISED_APPROACH.md).
 The corrected host qualifies complete feedback, selection, edits and checks from
