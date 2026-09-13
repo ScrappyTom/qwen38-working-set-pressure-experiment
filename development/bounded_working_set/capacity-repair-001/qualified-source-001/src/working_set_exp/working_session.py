@@ -9,7 +9,7 @@ import copy
 import difflib
 from typing import Callable
 
-from .candidate import Candidate, CandidateError, canonical_path, MAX_FILES, MAX_TOTAL_BYTES, MAX_LINE_BYTES
+from .candidate import Candidate, canonical_path, MAX_FILES, MAX_TOTAL_BYTES, MAX_LINE_BYTES
 from .hierarchical_p0 import p0_page
 from .jsonutil import canonical_json_bytes, sha256_bytes
 from .tools import SessionState, ToolExecutor
@@ -361,7 +361,7 @@ class WorkingSession:
                         # The read-only operation did happen. Preserve its actual
                         # result and stop, rather than relabeling it a rejection.
                         proposed.delivery_blocked = True
-        except (CandidateError, ValueError, KeyError, UnicodeError) as error:
+        except (ValueError, KeyError, UnicodeError) as error:
             proposed = self.clone()
             proposed._record(action, dict(accepted=False, error=str(error)))
             if not proposed._fits(measure, margin=0):
