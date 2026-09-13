@@ -44,7 +44,29 @@ listed checks; do not request another approval or reuse the old allowance.
 The final offline package is preparation-002, with separate recovery-001 proof.
 Both are engineering evidence, not Qwen outcomes. Keep q4/56,576, no MTP and
 xhigh/uncapped fixed; preserve exact raw responses, actual feedback and full
-transcript review. No model request in this new attempt has yet been sent.
+transcript review. The new run-001 is closed and consumed under frozen commit
+2a58d31 and manifest
+cc3372d8b1dacaa8c344538d83fee6ddd7934d4f0f44534f465638e1ce28501a.
+Read its five review products, DECISION.json and NEXT_STEPS.md. Eight complete
+responses were directly read and replayed; all 62 native inputs/admission trials
+reconstruct. The reviewer stopped during C09 after repeated host reserve failures.
+This is an adaptive stopping-rule deviation, not a natural model completion
+failure. C09 has no complete response. The process-group interrupt bypassed the
+runner seal; a later explicit reviewer-stop receipt preserves that fact without
+rewriting the original 441-record log. The runtime and monitor are closed.
+
+The eight completed requests cost 61,847 generated tokens / 67.587 model-request
+minutes and save no new test or documentation. The original correct library is
+unchanged. The host rejects a complete 23,348-token check retrieval and withholds
+a 22,838-token search result despite a 23,808 input ceiling: its 1,024 acquisition
+reserve was required to remain unused after feedback. Correct this prospectively;
+do not ask Qwen to count or work around it. Separate fixes for filtered grouped
+history and candidate-error rejection are qualified offline, not model-tested.
+C08 also treats an explicitly partial saved page as fully visible and invents a
+query absent from its recent summary. Consult about the actual interpretation
+before settling another presentation; fixes to mechanical truth do not require a
+preference vote. Do not restart or rescue run-001. The next new package must
+qualify a complete contribution; the broader owner goal remains unachieved.
 
 The owner has given the continuing goal: keep working with Qwen as test pilot
 and consultant until the system can complete long-running tasks and work with

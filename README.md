@@ -2,14 +2,29 @@
 
 ## Project status
 
-The [bounded host and parser continuation are implemented and prepared](development/bounded_working_set/PREPARATION_REVIEW.md).
-Seventeen focused host/runner tests pass. Native-tokenized preparation completes
-checked test/documentation contributions and a fresh-context continuation;
-the relevant source group fits at 4,603 input tokens. History-load input remains
-nearly flat through 10,000 archived actions. A 72,675-byte saved source result is
-recovered exactly in two pages while keeping its library companion.
-These are offline results. The separately authorized 24-request Qwen continuation
-will assess selection, use, completion and cost under the unchanged model settings.
+The [first bounded-host parser attempt is closed](development/bounded_working_set/review/RESULTS.md).
+Eight complete responses save no new tests or documentation; the existing correct
+library remains unchanged. The reviewer stopped during C09 after the host
+repeatedly withheld fitting feedback to preserve an unspendable reserve. This is
+an explicit adaptive stop, not a natural model termination result. The runtime is
+closed; no complete C09 response was returned. All eight outputs were directly
+read and replayed, and all 62 native inputs/admission trials reconstruct exactly.
+Completed requests cost 61,847 generated tokens and 67.587 request minutes.
+
+Prospective host corrections are qualified separately: let feedback use the
+reserved room, include grouped acquisitions in file history, and reject candidate
+boundary errors without crashing. Twenty-three selected checks pass. Exact saved
+states confirm the complete check/search feedback fits. These are offline
+corrections, not a successful model continuation. The [next work](development/bounded_working_set/review/NEXT_STEPS.md)
+also examines specific visibility misunderstandings with Qwen before choosing
+another presentation. The long-work objective remains unachieved.
+
+The [original bounded-host preparation](development/bounded_working_set/PREPARATION_REVIEW.md)
+qualifies checked contributions and fresh-context continuation offline. The
+relevant source group fits at 4,603 tokens, history input stays nearly flat
+through 10,000 archived actions, and a 72,675-byte result recovers exactly in two
+pages with its library companion. Qwen has not yet demonstrated these complete
+paths under this host. Preserve the distinction from the stopped model attempt.
 
 The [revised next priority is host-managed capacity and useful work](development/long_work/HOST_CAPACITY_REVISION.md).
 The owner challenged the cost of asking Qwen to count and split edits. The host
