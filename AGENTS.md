@@ -5,11 +5,16 @@ The documentation contribution is now closed and checked under c52f26fc; read
 four complete turn reviews. Qwen saves both documentation additions, checks and
 submits while preserving the prior library and regression. The combined reply is
 not exercised: canonical request sorting makes the runtime grammar exclude its
-illustrated key order. Preserve the completed run before correcting serialization
-prospectively. Exact native probes establish this host defect; do not attribute
+illustrated key order. The completed run retains that original serialization.
+Exact native probes establish this host defect; do not attribute
 the omitted check field simply to Qwen or claim a combined-operation speed gain.
-The two unused replies are closed. No additional inference is needed to qualify
-the correction.
+The two unused replies are closed. The prospective wire correction is implemented
+and qualified in
+`development/bounded_working_set/parser-documentation/WIRE_CORRECTION.md`: 45 selected host tests
+and six native constraint cases pass, with zero additional model inference.
+The original completed evidence and verifier are preserved at 16ce028e. Qualify
+illustrated response forms through the actual serialized request and decoder
+constraints; semantic JSON validation alone does not establish their availability.
 
 Current owner-directed development: implement the combined host/model contribution
 loop under `development/bounded_working_set/SYMBIOTIC_PLAN.md` and the separately

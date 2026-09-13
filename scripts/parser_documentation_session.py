@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import bounded_parser as base
 from run_bounded_parser import Loop, RunLog
 from working_set_exp import working_view
-from working_set_exp.contribution_reply import process_reply, reply_schema
+from working_set_exp.contribution_reply import completion_request_bytes, process_reply, reply_schema
 from working_set_exp.candidate import Candidate
 from working_set_exp.custody import ArtifactStore, verify_records
 from working_set_exp.jsonutil import canonical_json_bytes, load_json_strict, sha256_bytes, sha256_file
@@ -109,11 +109,14 @@ class Counter:
         raw = canonical_json_bytes(request)
         digest = sha256_bytes(raw)
         if digest not in self.cache:
+            wire = completion_request_bytes(request)
             native = base.expected_native(request)
             count = tokenizer_count(self.profile, native)
             stem = f"inputs/I{len(self.rows)+1:04d}"
-            row = dict(stem=stem, prompt_tokens=count, request_sha256=digest, native_sha256=sha256_bytes(native))
-            for suffix, value in (("-request.json", raw), ("-native.txt", native), ("-count.json", row)):
+            row = dict(stem=stem, prompt_tokens=count, request_sha256=digest,
+                       wire_request_sha256=sha256_bytes(wire), native_sha256=sha256_bytes(native))
+            for suffix, value in (("-request.json", raw), ("-wire-request.json", wire),
+                                  ("-native.txt", native), ("-count.json", row)):
                 base.save(self.output, stem + suffix, value)
             self.rows.append(row)
             self.cache[digest] = row
@@ -127,12 +130,15 @@ class Counter:
 def receive(loop, session, tag, selected):
     """Preserve the response; execute only its declared contribution operations."""
     adapter = loop.task
-    raw_request = canonical_json_bytes(selected["request"])
-    base.require(sha256_bytes(raw_request) == selected["request_sha256"], "prepared input changed")
+    raw_request = completion_request_bytes(selected["request"])
+    base.require(sha256_bytes(canonical_json_bytes(load_json_strict(raw_request))) == selected["request_sha256"],
+                 "prepared input changed")
+    base.require(sha256_bytes(raw_request) == selected["wire_request_sha256"], "prepared wire request changed")
     loop.source_check()
     session.mark_delivered(session.view())
     loop.log.append("invocation_started", dict(id=tag, input_stem=selected["stem"],
-        prompt_tokens=selected["prompt_tokens"], **loop.health()), [])
+        prompt_tokens=selected["prompt_tokens"], wire_request_sha256=sha256_bytes(raw_request), **loop.health()),
+        [loop.store.put(f"calls/{tag}-wire-request.json", raw_request)])
     print(f"Starting {tag}: {selected['prompt_tokens']} input tokens", flush=True)
     started = time.monotonic()
     try:
@@ -258,6 +264,7 @@ def run_turn(turn, owner_direction):
             selected = loop.cache[sha256_bytes(canonical_json_bytes(adapter.request_for(session.view())))]
             base.require(initial <= INPUT_LIMIT and all(selected[k] == plan["initial"][k] for k in
                 ("prompt_tokens", "request_sha256", "native_sha256")), "actual input differs from preparation")
+            selected["wire_request_sha256"] = plan["initial"]["wire_request_sha256"]
             receive(loop, session, f"T{turn:02d}", selected)
             loop.snapshot(session, "final")
             store.put("final-dialogue.json", canonical_json_bytes(adapter.dialogue))

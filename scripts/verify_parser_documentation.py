@@ -1,4 +1,8 @@
-"""Verify and replay one closed assisted turn using its actual native counts."""
+"""Verify a prospective turn, including exact completion-request wire custody.
+
+The original four documentation turns use the verifier at commit 16ce028e.
+Their frozen implementation and records predate the request-order correction.
+"""
 import argparse
 
 import parser_documentation_session as task
@@ -70,6 +74,10 @@ def verify(turn):
     assert request == adapter.request_for(session.view()) and measure(session.view()) == started["prompt_tokens"] <= task.INPUT_LIMIT
     assert all(initial[k] == task.base.read(folder / "PLAN.json")["initial"][k]
                for k in ("request_sha256", "native_sha256", "prompt_tokens"))
+    wire = (folder / f"calls/{tag}-wire-request.json").read_bytes()
+    assert wire == task.completion_request_bytes(request)
+    assert task.base.read(folder / f"calls/{tag}-wire-request.json") == request
+    assert sha256_bytes(wire) == started["wire_request_sha256"] == task.base.read(folder / "PLAN.json")["initial"]["wire_request_sha256"]
     session.mark_delivered(session.view())
     response = task.base.read(folder / f"calls/{tag}-endpoint-response.json")
     assert len(response["choices"]) == 1

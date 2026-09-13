@@ -7,8 +7,10 @@ forms, custody, source eligibility and check semantics remain unchanged.
 from __future__ import annotations
 
 import copy
+import json
 
 from . import working_view
+from .jsonutil import canonical_json_bytes, load_json_strict
 
 
 def reply_schema():
@@ -23,6 +25,25 @@ def reply_schema():
             working_view.obj(dict(discussion=discussion, operation=patch,
                                   check_after=dict(type="string", const="public"))),
         ])))
+
+
+def completion_request_bytes(request):
+    """Preserve illustrated reply order for the runtime's ordered JSON grammar.
+
+    Canonical JSON remains the logical identity. Only the top-level reply forms'
+    properties follow their declared required order on the wire; nested action
+    schemas and all other values keep their previous canonical representation.
+    """
+    ordered = load_json_strict(canonical_json_bytes(request))
+    for form in ordered["response_format"]["json_schema"]["schema"]["oneOf"]:
+        properties, required = form["properties"], form["required"]
+        if (not isinstance(properties, dict) or not isinstance(required, list)
+                or not all(isinstance(key, str) for key in required)
+                or len(required) != len(set(required)) or set(required) != set(properties)):
+            raise ValueError("reply property order requires every property exactly once")
+        form["properties"] = {key: properties[key] for key in required}
+    return json.dumps(ordered, ensure_ascii=False, separators=(",", ":"),
+                      allow_nan=False).encode("utf-8")
 
 
 def process_reply(session, reply, measure, preceding_feedback, record_operation=None):

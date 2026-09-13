@@ -14,10 +14,13 @@ adds an optional patch plus host-bound successor check. Its offline tests pass,
 but the actual attempt exposes a [request-order defect](development/bounded_working_set/parser-documentation/grammar-review/FINDING.md):
 canonical schema sorting excludes the illustrated combined reply from the runtime
 grammar. Qwen finishes through ordinary operations after the issue is identified.
-The combined feature has no demonstrated model efficiency benefit. Preserve this
-completed evidence and correct serialization prospectively; no additional model
-calls are needed for native constraint qualification. Thinking settings remain
-unchanged, and sustained autonomous productivity remains unqualified.
+The combined feature has no demonstrated model efficiency benefit. The
+[prospective correction is implemented](development/bounded_working_set/parser-documentation/WIRE_CORRECTION.md):
+45 selected host tests and six native constraint cases pass. Exact wire bytes now
+preserve the offered order and are checked against preparation before sending.
+No additional model inference was used. The original completed evidence remains
+at 16ce028e. Thinking settings remain unchanged, and sustained autonomous
+productivity remains unqualified.
 
 The [revised approach is implemented](development/bounded_working_set/REVISED_APPROACH.md).
 The corrected host qualifies complete feedback, selection, edits and checks from

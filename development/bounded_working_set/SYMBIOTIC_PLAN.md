@@ -1,5 +1,16 @@
 # Complete contributions with host and model
 
+Implemented and closed: Qwen completes the documentation contribution with
+reviewer-selected source and factual dialogue; read
+[the results](parser-documentation/review/RESULTS.md). Four replies save two edits,
+consume a passing check and submit without changing the prior library/regression.
+The proposed combined reply reveals a host wire-order defect during execution.
+The [prospective correction](parser-documentation/WIRE_CORRECTION.md) is implemented
+and qualified with 45 selected tests and six native cases, without further model
+inference. The ordinary-route completion and corrected feature's offline status
+remain separate. The following plan is retained to identify the intended scope;
+its execution is not reopened by the unused allowance.
+
 Owner direction: "Proceed to plan and implement", following the September 13
 assessment of the combined host/model system. Optimize correct, durable work for
 total inference, elapsed time and reviewer effort. Assistance is part of the

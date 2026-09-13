@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import parser_documentation_session as task
 from run_bounded_parser import Loop, RunLog
 from working_set_exp.candidate import Candidate
-from working_set_exp.custody import ArtifactStore
+from working_set_exp.custody import ArtifactStore, verify_records
 from working_set_exp.jsonutil import canonical_json_bytes, sha256_bytes
 from working_set_exp.working_session import WorkingSession
 from working_set_exp.working_view import validate
@@ -35,6 +35,10 @@ class ContributionReplyTests(unittest.TestCase):
             self.assertEqual(route, "/v1/chat/completions")
             request = json.loads(raw)
             self.assertNotIn("PRIVATE_EXPLANATION", raw.decode())
+            # Check exact custody before the endpoint receives anything.
+            self.assertEqual((self.output/"calls/T01-wire-request.json").read_bytes(), raw)
+            forms = request["response_format"]["json_schema"]["schema"]["oneOf"]
+            self.assertEqual(list(forms[2]["properties"]), ["discussion", "operation", "check_after"])
             self.sent.append(request)
             return canonical_json_bytes(dict(choices=[dict(finish_reason=finish, message=dict(
                 reasoning_content="PRIVATE_EXPLANATION", content=canonical_json_bytes(reply).decode()))],
@@ -46,6 +50,7 @@ class ContributionReplyTests(unittest.TestCase):
     def invoke(self, loop, tag="T01"):
         loop.measure(self.session.view())
         key = sha256_bytes(canonical_json_bytes(self.adapter.request_for(self.session.view())))
+        loop.cache[key]["wire_request_sha256"] = sha256_bytes(task.completion_request_bytes(loop.cache[key]["request"]))
         return task.receive(loop, self.session, tag, loop.cache[key])
 
     def operation(self):
@@ -108,6 +113,55 @@ class ContributionReplyTests(unittest.TestCase):
         reference = task.working_view.system_prompt().split("\n\n", 1)[1]
         self.assertIn(reference, request["messages"][0]["content"])
         self.assertIn("operation", request["messages"][0]["content"])
+
+    def test_wire_changes_only_reply_property_order_and_preserves_native_input(self):
+        request = self.adapter.request_for(self.session.view())
+        original = canonical_json_bytes(request)
+        wire = task.completion_request_bytes(request)
+        decoded, canonical = json.loads(wire), json.loads(original)
+        self.assertEqual(decoded, canonical)
+        self.assertEqual(canonical_json_bytes(request), original)  # no in-place mutation
+        self.assertEqual(task.base.expected_native(decoded), task.base.expected_native(canonical))
+        self.assertNotEqual(wire, original)
+        for form in decoded["response_format"]["json_schema"]["schema"]["oneOf"]:
+            self.assertEqual(list(form["properties"]), form["required"])
+            form["properties"] = dict(sorted(form["properties"].items()))
+        self.assertEqual(json.dumps(decoded, ensure_ascii=False, separators=(",", ":")).encode(), original)
+
+    def test_wire_rejects_incomplete_or_duplicate_property_order(self):
+        for order in (["discussion"], ["discussion", "operation", "check_after", "check_after"],
+                      ["discussion", "operation", "invented"], "discussion", ["discussion", []]):
+            with self.subTest(order=order):
+                request = self.adapter.request_for(self.session.view())
+                request["response_format"]["json_schema"]["schema"]["oneOf"][2]["required"] = order
+                with self.assertRaisesRegex(ValueError, "every property exactly once"):
+                    task.completion_request_bytes(request)
+
+    def test_changed_wire_identity_stops_before_delivery_or_completion(self):
+        loop = self.make_loop(dict(discussion="Unused response."))
+        loop.measure(self.session.view())
+        key = sha256_bytes(canonical_json_bytes(self.adapter.request_for(self.session.view())))
+        selected = loop.cache[key]
+        selected["wire_request_sha256"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "prepared wire request changed"):
+            task.receive(loop, self.session, "T01", selected)
+        self.assertEqual(self.sent, [])
+        self.assertEqual(self.session.delivered_sources, [])
+        self.assertFalse((self.output/"calls/T01-wire-request.json").exists())
+
+    def test_preparation_records_wire_and_logical_identities_separately(self):
+        with patch.object(task.base, "runtime_paths", return_value=(Path("server"), Path("model"), Path("tokenizer"))), \
+             patch.object(task, "sha256_file", side_effect=[task.base.ACTOR["model_sha256"], task.base.delivery.TOKENIZER_SHA]), \
+             patch.object(task, "tokenizer_count", return_value=500) as count:
+            counter = task.Counter(self.output, self.adapter)
+            row = counter.row(self.session.view())
+            wire = (self.output/(row["stem"] + "-wire-request.json")).read_bytes()
+            logical = (self.output/(row["stem"] + "-request.json")).read_bytes()
+            self.assertEqual(sha256_bytes(wire), row["wire_request_sha256"])
+            self.assertEqual(sha256_bytes(logical), row["request_sha256"])
+            self.assertEqual(json.loads(wire), json.loads(logical))
+            self.assertEqual(counter.row(self.session.view()), row)
+            count.assert_called_once()
 
     def test_requested_check_binds_successor_and_both_receipts_reach_input(self):
         operation = self.operation()
@@ -255,7 +309,8 @@ class ContributionReplyTests(unittest.TestCase):
              patch.object(task.base.base, "port_free", return_value=True):
             request = self.adapter.request_for(self.session.view())
             initial = dict(prompt_tokens=500, request_sha256=sha256_bytes(canonical_json_bytes(request)),
-                           native_sha256=sha256_bytes(task.base.expected_native(request)))
+                           native_sha256=sha256_bytes(task.base.expected_native(request)),
+                           wire_request_sha256=sha256_bytes(task.completion_request_bytes(request)))
             for name, value in (("starting-state.json", task.base.snapshot(self.session)),
                 ("starting-candidate.json", task.base.candidate_bytes(self.session.candidate)),
                 ("dialogue.json", self.adapter.dialogue), ("preceding-feedback.json", []),
@@ -271,6 +326,11 @@ class ContributionReplyTests(unittest.TestCase):
         self.assertEqual(sealed["disposition"], "completed_assisted_turn")
         self.assertEqual(sealed["sent_requests"], 1)
         self.assertEqual(task.base.read(area/"turn-01/final-dialogue.json")[-1]["text"], "One reply is complete.")
+        wire = (area/"turn-01/calls/T01-wire-request.json").read_bytes()
+        self.assertEqual(wire, requests[0])
+        started = next(r for r in verify_records(area/"turn-01/records.jsonl", area/"turn-01")
+                       if r["record_type"] == "invocation_started")
+        self.assertEqual(started["payload"]["wire_request_sha256"], sha256_bytes(wire))
 
 
 if __name__ == "__main__":
