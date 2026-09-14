@@ -2,19 +2,29 @@
 
 ## Project status
 
-The [next uncoached contribution is prepared](development/evidence_assembly/pending-contribution/PREPARATION_REVIEW.md)
-under the owner's continuing direction: one eight-request/twelve-operation attempt
-from the actual rejected-proposal checkpoint. Both direct completion and a real
-failed-check/correction route qualify offline. The run uses the revised grouped-action
-contract; no coaching, reference proposal or later consultation enters its input.
+The [uncoached pending contribution is closed without completion](development/evidence_assembly/pending-contribution/review/RESULTS.md).
+Eight requests save fourteen tests but no documentation, actor check or submission;
+independent review finds two failing tests. The attempt costs 71.591 loop minutes
+and 70,813 generated tokens. Earlier work is preserved, and all nonterminal feedback
+arrives. All eight complete responses and exact replay are reviewed. Four unused
+operations are closed, with no coaching or rescue.
+
+Qwen releases implementation evidence and retrieves rejection reasons while its
+prose seeks proposed code; grouped EVT recovery is never actually selected. It then
+reconstructs incorrect expectations. Its earlier rejected test proposal passes an
+independent assessment and fits the later selected group at 7,555 native input tokens.
+That is offline feasibility, not saved actor success. The next question concerns
+keeping pending work and its support usable across selection changes; no further
+presentation remedy or full model attempt is adopted from this result alone.
 
 The [grouped-action extension is implemented and qualified offline](development/evidence_assembly/grouped-actions/RESULTS.md).
 `work_on` now selects exact saved proposals beside their supporting source and saved
 results. From the actual rejection checkpoint, four scripted requests recover the
 proposal, save tests and documentation, check and submit within the original budget.
 The final artifact matches the preceding qualified work. 78 selected host tests,
-ten native grammar cases and exact evidence replay pass. No Qwen request was sent;
-autonomous selection and completion with this extension remain to be evaluated.
+ten native grammar cases and exact evidence replay pass. That qualification sent no
+Qwen request; the later attempt above does not demonstrate autonomous EVT selection
+or completion with the extension.
 
 The [pending-work qualification and consultation are complete](development/evidence_assembly/pending-work/RESULTS.md).
 Existing operations recover the exact rejected proposal with its supporting source,

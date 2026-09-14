@@ -6,7 +6,26 @@ state and actual tool feedback without reviewer coaching. The completed sessions
 below remain assisted development evidence. Their factual reminders, supplied
 source and prose endorsements are not a template for future run-time behavior.
 
-The latest [evidence-assembly pair is closed](../evidence_assembly/review/RESULTS.md).
+The latest [pending contribution is closed without completion](../evidence_assembly/pending-contribution/review/RESULTS.md).
+Eight uncoached requests from the reused checkpoint save fourteen tests, with two
+independently verified failures, no docs, no actor check and no submission. All
+nonterminal feedback reaches the next decision, but Qwen selects saved rejection reasons when
+its prose seeks the proposed code, releases implementation support and later guesses
+wrong expectations. Grouped EVT access is not actually exercised. The stronger C02
+proposal passes test assessment and fits at the actual C05 selection offline; it
+never becomes the actor's saved work. The attempt and four unused operations are
+closed. All full transcripts and exact replay are reviewed; no rescue follows.
+
+Keep the host's qualified mechanisms. Before another full task or presentation
+change, the next development question is the actual C04/C05 interpretation: what
+the selected handles contain, which pending work/support remains present, and what
+an earlier capacity rejection establishes after selection changes. A small separate
+Qwen consultation should preserve its answer before clarification and may conclude
+that the interface should stay unchanged. It is not included in the consumed run.
+Any later remedy must make a pending contribution usable through a transition,
+without in-run reviewer coaching or delegating sizing arithmetic back to the model.
+
+The preceding [evidence-assembly pair is closed](../evidence_assembly/review/RESULTS.md).
 Both conditions save partial tests, neither completes the tests/docs contract.
 The assembled condition improves some test assertions but takes 73.730 loop minutes
 versus 42.898 for broad. After a correct admission rejection, the actor narrows the
@@ -30,9 +49,10 @@ work_on accepts exact saved action handles alongside results and current source.
 The actual rejected-state route saves the original tests and reference documentation,
 checks and submits in the four remaining scripted requests. Source eligibility,
 stale guards and exact admission remain intact; ten native grammar cases pass.
-Keep this as the development baseline. The next separately prepared uncoached
-contribution should test actual selection and completed work. No model exposure,
-new vocabulary study or general memory architecture follows from this qualification.
+Keep this as the development baseline. The later pending-contribution attempt above
+tests actual behavior and fails to demonstrate completed work or EVT selection.
+The offline qualification remains feasibility evidence; it does not authorize
+automatic model exposure, a new vocabulary study or general memory architecture.
 
 The owner-approved [reasoning-effort comparison is closed](../reasoning_allocation/RESULTS.md).
 The first seed stops under both settings; the second produces checked work under

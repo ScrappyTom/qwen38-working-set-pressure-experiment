@@ -14,16 +14,25 @@ the coached execution approach below; completed assisted records keep their
 original labels and evidence. The current plan is
 `development/bounded_working_set/SYMBIOTIC_PLAN.md`.
 
-The owner-directed pending-contribution attempt is prepared; read
-`development/evidence_assembly/pending-contribution/SPEC.md` and PREPARATION_REVIEW.md.
-The latest Proceed authorizes this one new eight-request/twelve-operation uncoached
-attempt after qualification. It reuses the actual rejected-state candidate/archive
-with a fresh declared allowance and scoped provenance; historical runs stay closed.
-Both direct and failed-check/correction routes qualify and replay exactly. Preserve
-the frozen inputs and settings, give only actual host feedback during the run, and
-review all complete responses afterward. Do not request duplicate approval, add
-coaching, retry or extend the allowance. This is reused-work development, not a
-matched performance comparison or autonomous creation of its initial source group.
+The owner-directed pending-contribution attempt is closed under frozen 8f5be9d7;
+read `development/evidence_assembly/pending-contribution/review/RESULTS.md` and its
+complete transcript, host and artifact reviews. Eight requests/eight operations
+save fourteen tests but no documentation, actor check or submission. The independent
+saved-artifact assessment has two failures; four unused operations are closed. This is
+uncoached reused-work development with inherited initial-selection assistance, not
+a matched comparison or autonomous creation of that initial group. All eight full
+responses, fourteen native inputs, 187 custody records and 277 source identities
+are reviewed/replayed exactly. Cost is 71.591 loop minutes / 70,813 generated tokens.
+
+Grouped EVT recovery is available but never selected: the actor asks for RES reasons
+while its prose seeks attempted code. It releases implementation evidence and later
+saves guessed expectations. The earlier rejected proposal has passing tests offline
+and fits the actual later group at 7,555 native tokens. Neither assessment is a saved
+actor success. Preserve the native probe's review-script failure and separately
+verified replay; no model inference was added. Retain the host, and consult outside
+a run about this concrete proposal/support/capacity interpretation before settling
+the next presentation. No retry, rescue, extension or automatic successor belongs
+to the consumed package; this run does not earn a productivity claim for the extension.
 
 The owner-directed grouped-action extension is implemented and qualified offline;
 read `development/evidence_assembly/grouped-actions/RESULTS.md`. work_on.results
