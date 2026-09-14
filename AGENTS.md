@@ -14,6 +14,17 @@ the coached execution approach below; completed assisted records keep their
 original labels and evidence. The current plan is
 `development/bounded_working_set/SYMBIOTIC_PLAN.md`.
 
+The owner-directed pending-contribution attempt is prepared; read
+`development/evidence_assembly/pending-contribution/SPEC.md` and PREPARATION_REVIEW.md.
+The latest Proceed authorizes this one new eight-request/twelve-operation uncoached
+attempt after qualification. It reuses the actual rejected-state candidate/archive
+with a fresh declared allowance and scoped provenance; historical runs stay closed.
+Both direct and failed-check/correction routes qualify and replay exactly. Preserve
+the frozen inputs and settings, give only actual host feedback during the run, and
+review all complete responses afterward. Do not request duplicate approval, add
+coaching, retry or extend the allowance. This is reused-work development, not a
+matched performance comparison or autonomous creation of its initial source group.
+
 The owner-directed grouped-action extension is implemented and qualified offline;
 read `development/evidence_assembly/grouped-actions/RESULTS.md`. work_on.results
 now accepts exact saved EVT actions alongside RES results and current source.

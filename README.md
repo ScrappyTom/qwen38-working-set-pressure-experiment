@@ -2,6 +2,12 @@
 
 ## Project status
 
+The [next uncoached contribution is prepared](development/evidence_assembly/pending-contribution/PREPARATION_REVIEW.md)
+under the owner's continuing direction: one eight-request/twelve-operation attempt
+from the actual rejected-proposal checkpoint. Both direct completion and a real
+failed-check/correction route qualify offline. The run uses the revised grouped-action
+contract; no coaching, reference proposal or later consultation enters its input.
+
 The [grouped-action extension is implemented and qualified offline](development/evidence_assembly/grouped-actions/RESULTS.md).
 `work_on` now selects exact saved proposals beside their supporting source and saved
 results. From the actual rejection checkpoint, four scripted requests recover the

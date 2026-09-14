@@ -1,0 +1,258 @@
+--- a/Lib/test/test_configparser.py
++++ b/Lib/test/test_configparser.py
+@@ -2203,6 +2203,255 @@
+             self.assertEqual(cfg['two'].getlen('one'), 5)
+ 
+ 
++class InterpolationMissingOptionErrorTestCase(unittest.TestCase):
++    """Exercise InterpolationMissingOptionError through real parser lookups."""
++
++    def _make_basic_error(self):
++        cf = configparser.ConfigParser()
++        cf.read_string("""
++[Paths]
++home_dir = /Users
++my_dir = %(missing)s/lumberjack
++""")
++        try:
++            cf.get('Paths', 'my_dir')
++        except configparser.InterpolationMissingOptionError as e:
++            return e, cf
++        self.fail("expected InterpolationMissingOptionError")
++
++    def _make_extended_error(self):
++        cf = configparser.ConfigParser(
++            interpolation=configparser.ExtendedInterpolation())
++        cf.read_string("""
++[Paths]
++home_dir = /Users
++my_dir = ${missing}/lumberjack
++""")
++        try:
++            cf.get('Paths', 'my_dir')
++        except configparser.InterpolationMissingOptionError as e:
++            return e, cf
++        self.fail("expected InterpolationMissingOptionError")
++
++    def _make_extended_cross_section_error(self):
++        cf = configparser.ConfigParser(
++            interpolation=configparser.ExtendedInterpolation())
++        cf.read_string("""
++[Common]
++home_dir = /Users
++[Paths]
++my_dir = ${Common:nonexistent}/lumberjack
++""")
++        try:
++            cf.get('Paths', 'my_dir')
++        except configparser.InterpolationMissingOptionError as e:
++            return e, cf
++        self.fail("expected InterpolationMissingOptionError")
++
++    def test_basic_error_attributes(self):
++        e, cf = self._make_basic_error()
++        self.assertIs(type(e), configparser.InterpolationMissingOptionError)
++        self.assertIsInstance(e, configparser.InterpolationError)
++        self.assertIsInstance(e, configparser.Error)
++        self.assertIsInstance(e, Exception)
++        self.assertEqual(e.option, 'offline-wrong-option')
++        self.assertEqual(e.section, 'Paths')
++        self.assertEqual(e.reference, 'missing')
++        self.assertEqual(e.args, ('my_dir', 'Paths',
++                                 '%(missing)s/lumberjack', 'missing'))
++        expected_msg = (
++            "Bad value substitution: option 'my_dir' in section 'Paths' "
++            "contains an interpolation key 'missing' which is not a valid "
++            "option name. Raw value: '%(missing)s/lumberjack'")
++        self.assertEqual(e.message, expected_msg)
++        self.assertEqual(str(e), expected_msg)
++
++    def test_extended_error_attributes(self):
++        e, cf = self._make_extended_error()
++        self.assertIs(type(e), configparser.InterpolationMissingOptionError)
++        self.assertIsInstance(e, configparser.InterpolationError)
++        self.assertIsInstance(e, configparser.Error)
++        self.assertIsInstance(e, Exception)
++        self.assertEqual(e.option, 'my_dir')
++        self.assertEqual(e.section, 'Paths')
++        self.assertEqual(e.reference, 'missing')
++        self.assertEqual(e.args, ('my_dir', 'Paths',
++                                 '${missing}/lumberjack', 'missing'))
++        expected_msg = (
++            "Bad value substitution: option 'my_dir' in section 'Paths' "
++            "contains an interpolation key 'missing' which is not a valid "
++            "option name. Raw value: '${missing}/lumberjack'")
++        self.assertEqual(e.message, expected_msg)
++        self.assertEqual(str(e), expected_msg)
++
++    def test_extended_cross_section_error_attributes(self):
++        e, cf = self._make_extended_cross_section_error()
++        self.assertIs(type(e), configparser.InterpolationMissingOptionError)
++        self.assertIsInstance(e, configparser.InterpolationError)
++        self.assertIsInstance(e, configparser.Error)
++        self.assertIsInstance(e, Exception)
++        self.assertEqual(e.option, 'my_dir')
++        self.assertEqual(e.section, 'Paths')
++        self.assertEqual(e.reference, 'Common:nonexistent')
++        self.assertEqual(e.args, ('my_dir', 'Paths',
++                                 '${Common:nonexistent}/lumberjack',
++                                 'Common:nonexistent'))
++        expected_msg = (
++            "Bad value substitution: option 'my_dir' in section 'Paths' "
++            "contains an interpolation key 'Common:nonexistent' which is "
++            "not a valid option name. "
++            "Raw value: '${Common:nonexistent}/lumberjack'")
++        self.assertEqual(e.message, expected_msg)
++        self.assertEqual(str(e), expected_msg)
++
++    def test_basic_raw_retrieval(self):
++        cf = configparser.ConfigParser()
++        cf.read_string("""
++[Paths]
++home_dir = /Users
++my_dir = %(missing)s/lumberjack
++""")
++        with self.assertRaises(configparser.InterpolationMissingOptionError):
++            cf.get('Paths', 'my_dir')
++        raw = cf.get('Paths', 'my_dir', raw=True)
++        self.assertEqual(raw, '%(missing)s/lumberjack')
++
++    def test_extended_raw_retrieval(self):
++        cf = configparser.ConfigParser(
++            interpolation=configparser.ExtendedInterpolation())
++        cf.read_string("""
++[Paths]
++home_dir = /Users
++my_dir = ${missing}/lumberjack
++""")
++        with self.assertRaises(configparser.InterpolationMissingOptionError):
++            cf.get('Paths', 'my_dir')
++        raw = cf.get('Paths', 'my_dir', raw=True)
++        self.assertEqual(raw, '${missing}/lumberjack')
++
++    def test_extended_cross_section_raw_retrieval(self):
++        cf = configparser.ConfigParser(
++            interpolation=configparser.ExtendedInterpolation())
++        cf.read_string("""
++[Common]
++home_dir = /Users
++[Paths]
++my_dir = ${Common:nonexistent}/lumberjack
++""")
++        with self.assertRaises(configparser.InterpolationMissingOptionError):
++            cf.get('Paths', 'my_dir')
++        raw = cf.get('Paths', 'my_dir', raw=True)
++        self.assertEqual(raw, '${Common:nonexistent}/lumberjack')
++
++    def test_basic_successful_lookup_after_fix(self):
++        cf = configparser.ConfigParser()
++        cf.read_string("""
++[Paths]
++home_dir = /Users
++my_dir = %(missing)s/lumberjack
++""")
++        with self.assertRaises(configparser.InterpolationMissingOptionError):
++            cf.get('Paths', 'my_dir')
++        cf.set('Paths', 'missing', '/tmp')
++        self.assertEqual(cf.get('Paths', 'my_dir'), '/tmp/lumberjack')
++
++    def test_extended_successful_lookup_after_fix(self):
++        cf = configparser.ConfigParser(
++            interpolation=configparser.ExtendedInterpolation())
++        cf.read_string("""
++[Paths]
++home_dir = /Users
++my_dir = ${missing}/lumberjack
++""")
++        with self.assertRaises(configparser.InterpolationMissingOptionError):
++            cf.get('Paths', 'my_dir')
++        cf.set('Paths', 'missing', '/tmp')
++        self.assertEqual(cf.get('Paths', 'my_dir'), '/tmp/lumberjack')
++
++    def test_extended_cross_section_successful_lookup_after_fix(self):
++        cf = configparser.ConfigParser(
++            interpolation=configparser.ExtendedInterpolation())
++        cf.read_string("""
++[Common]
++home_dir = /Users
++[Paths]
++my_dir = ${Common:nonexistent}/lumberjack
++""")
++        with self.assertRaises(configparser.InterpolationMissingOptionError):
++            cf.get('Paths', 'my_dir')
++        cf.set('Common', 'nonexistent', '/tmp')
++        self.assertEqual(cf.get('Paths', 'my_dir'), '/tmp/lumberjack')
++
++    def _check_shallow_copy(self, e1):
++        e2 = copy.copy(e1)
++        self.assertIs(type(e2), type(e1))
++        self.assertEqual(e2.args, e1.args)
++        self.assertEqual(e2.option, e1.option)
++        self.assertEqual(e2.section, e1.section)
++        self.assertEqual(e2.reference, e1.reference)
++        self.assertEqual(e2.message, e1.message)
++        self.assertEqual(str(e2), str(e1))
++
++    def _check_deep_copy(self, e1):
++        e2 = copy.deepcopy(e1)
++        self.assertIs(type(e2), type(e1))
++        self.assertEqual(e2.args, e1.args)
++        self.assertEqual(e2.option, e1.option)
++        self.assertEqual(e2.section, e1.section)
++        self.assertEqual(e2.reference, e1.reference)
++        self.assertEqual(e2.message, e1.message)
++        self.assertEqual(str(e2), str(e1))
++
++    def _check_pickle_all_protocols(self, e1):
++        for proto in range(pickle.HIGHEST_PROTOCOL + 1):
++            with self.subTest(protocol=proto):
++                data = pickle.dumps(e1, proto)
++                e2 = pickle.loads(data)
++                self.assertIs(type(e2), type(e1))
++                self.assertEqual(e2.args, e1.args)
++                self.assertEqual(e2.option, e1.option)
++                self.assertEqual(e2.section, e1.section)
++                self.assertEqual(e2.reference, e1.reference)
++                self.assertEqual(e2.message, e1.message)
++                self.assertEqual(str(e2), str(e1))
++
++    def test_basic_error_shallow_copy(self):
++        e, cf = self._make_basic_error()
++        self._check_shallow_copy(e)
++
++    def test_basic_error_deep_copy(self):
++        e, cf = self._make_basic_error()
++        self._check_deep_copy(e)
++
++    def test_basic_error_pickle(self):
++        e, cf = self._make_basic_error()
++        self._check_pickle_all_protocols(e)
++
++    def test_extended_error_shallow_copy(self):
++        e, cf = self._make_extended_error()
++        self._check_shallow_copy(e)
++
++    def test_extended_error_deep_copy(self):
++        e, cf = self._make_extended_error()
++        self._check_deep_copy(e)
++
++    def test_extended_error_pickle(self):
++        e, cf = self._make_extended_error()
++        self._check_pickle_all_protocols(e)
++
++    def test_extended_cross_section_error_shallow_copy(self):
++        e, cf = self._make_extended_cross_section_error()
++        self._check_shallow_copy(e)
++
++    def test_extended_cross_section_error_deep_copy(self):
++        e, cf = self._make_extended_cross_section_error()
++        self._check_deep_copy(e)
++
++    def test_extended_cross_section_error_pickle(self):
++        e, cf = self._make_extended_cross_section_error()
++        self._check_pickle_all_protocols(e)
++
++
+ class MiscTestCase(unittest.TestCase):
+     def test__all__(self):
+         support.check__all__(self, configparser, not_exported={"Error"})
