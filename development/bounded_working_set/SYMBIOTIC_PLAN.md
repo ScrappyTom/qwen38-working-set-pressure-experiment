@@ -19,8 +19,10 @@ A03's actual work but adds only two imports; no new tests/docs or checked
 submission occur in sixteen requests and 75.798 loop minutes. Source/budget
 corrections retain their measured benefits. A native post-run probe also exposes
 an interaction missed by qualification: binary page search overlooks a fitting
-interval when deduplication changes fragment count. Correct that mechanical path
-prospectively; preserve the run, its adverse cost and the separate model findings.
+interval when deduplication changes fragment count. The prospective correction
+now passes the actual C03 qualification and 80 selected checks; see its
+PAGE_SEARCH_CORRECTION.md. Preserve the run, adverse cost and separate model
+findings. No corrected-host model exposure has occurred.
 The original package and eight unused operations remain closed. A future narrow
 Qwen interpretation consultation is separate from this consumed authorization.
 

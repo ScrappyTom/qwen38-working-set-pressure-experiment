@@ -114,3 +114,8 @@ Evidence: [direct transcript audit](DIRECT_TRANSCRIPT_AUDIT.md),
 [actual saved patch](artifact-assessment-001/ACTUAL_SAVED.patch),
 [artifact/proposal assessment](artifact-assessment-001/SUMMARY.json), and
 [native page-search probe](page-search-probe-001/RESULT.json).
+
+Prospective follow-through, after publishing this frozen outcome at f74466d8:
+the [page-search correction](PAGE_SEARCH_CORRECTION.md) is implemented and
+qualified against the actual C03 state and 80 selected tests. No additional
+Qwen exposure occurs, and the failed run remains unchanged.

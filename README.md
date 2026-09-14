@@ -9,7 +9,9 @@ work is preserved; full transcript review and exact replay are complete. The
 source/budget corrections have measured benefits, but this run establishes no
 productivity improvement. A separate native probe finds a page-search defect:
 deduplication makes input cost non-monotonic, and binary search rejects a page
-that actually fits. Preserve the frozen outcome while correcting that interaction.
+that actually fits. The [prospective correction](development/working_set_continuation/review/PAGE_SEARCH_CORRECTION.md)
+now passes the actual saved-state qualification and 80 selected tests. The frozen
+model outcome remains unchanged; the corrected host has no new model exposure.
 No additional Qwen exposure or reuse of the closed allowance is authorized.
 
 The owner-approved [reasoning-effort comparison is complete](development/reasoning_allocation/RESULTS.md).

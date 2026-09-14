@@ -26,7 +26,10 @@ The initial deduplication and request-display corrections retain their qualified
 benefits, but the run exposes a new page-search defect: source fragmentation makes
 cost non-monotonic, and binary search misses a fitting C03 page. The post-run
 native probe proves 23,748/23,762-token pages fit despite the original rejection.
-Correct and qualify this mechanical interaction prospectively, preserving the run.
+This mechanical interaction is now corrected and qualified prospectively; read
+`development/working_set_continuation/review/PAGE_SEARCH_CORRECTION.md`.
+80 selected tests pass and the actual C03 page fits at 23,762 tokens. Run the
+original exact verifier under f74466d8; no corrected-host model exposure occurs.
 Do not assign the false rejection to Qwen. Later current/partial-source misreading,
 unsupported implementation guesses and a correctly rejected 25,250-token edit
 remain separate findings. A smaller final group misses its intended doc heading.

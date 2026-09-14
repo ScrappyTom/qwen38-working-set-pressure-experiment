@@ -331,6 +331,28 @@ class WorkingSession:
                     high = middle-1
             if best is not None:
                 return best
+            if not replace:
+                # Deduplication can remove a trailing selected fragment when
+                # feedback reaches its end. A shorter page can therefore cost
+                # MORE input, and binary search can miss a fitting interval.
+                # Before rejecting an acquisition, test these known layout
+                # boundaries with the same exact whole-input admission gate.
+                scales = set()
+                for original, length in zip(full, lengths):
+                    if not length:
+                        continue
+                    for retained in self.ranges:
+                        if retained["path"] != original["path"]:
+                            continue
+                        for end in (retained["start_line"]-1, retained["start_line"],
+                                    retained["end_line"], retained["end_line"]+1):
+                            size = end-original["returned_start_line"]+1
+                            if 0 < size < length:
+                                scales.add((size*1_000_000+length-1)//length)
+                for scale in sorted(scales, reverse=True):
+                    current = trial(scale, margin)
+                    if current:
+                        return current
         raise CapacityError("The requested source cannot be placed beside the working set. Use work_on to select the material needed together, or inspect a narrower source location.")
 
     def _refresh_ranges(self, path, old_text, new_text, start, end, replacement):
