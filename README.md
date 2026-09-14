@@ -2,6 +2,14 @@
 
 ## Project status
 
+The [grouped-action extension is implemented and qualified offline](development/evidence_assembly/grouped-actions/RESULTS.md).
+`work_on` now selects exact saved proposals beside their supporting source and saved
+results. From the actual rejection checkpoint, four scripted requests recover the
+proposal, save tests and documentation, check and submit within the original budget.
+The final artifact matches the preceding qualified work. 78 selected host tests,
+ten native grammar cases and exact evidence replay pass. No Qwen request was sent;
+autonomous selection and completion with this extension remain to be evaluated.
+
 The [pending-work qualification and consultation are complete](development/evidence_assembly/pending-work/RESULTS.md).
 Existing operations recover the exact rejected proposal with its supporting source,
 save it, preserve it through documentation work and pass the actual check offline.
@@ -14,8 +22,8 @@ In two separate consultation responses, Qwen uses the supplied base class to res
 the diagnostic misunderstanding and recognizes the proposal's valid edit bindings.
 Its final request-count argument conflates review with task execution; that does not
 justify batch editing. The consultation costs 17.520 request minutes and is closed.
-The next narrow candidate is allowing source grouping to include saved action
-handles, removing the separate recovery step required by the present RES-only form.
+That review earned the source-grouping extension qualified separately above. Its
+original RES-only inputs and consumed consultation remain preserved at 99052976.
 
 The [evidence-assembly pair is closed](development/evidence_assembly/review/RESULTS.md).
 Both conditions save partial tests but neither completes the tests/docs contribution.

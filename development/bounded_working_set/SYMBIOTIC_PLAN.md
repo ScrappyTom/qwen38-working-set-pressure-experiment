@@ -25,12 +25,14 @@ source, while exposing confusion between this review and task request accounting
 Do not adopt batch editing from that mistaken argument or label this assisted
 interpretation as a completed model contribution.
 
-The next narrow candidate is allowing work_on to select saved action handles as
-well as results. Its present RES-only form forces a separate retrieval for the
-rejected proposal. Qualify the contract extension, exact payload/source applicability,
-stale guards and complete native admission before another live task. Evaluate a
-completed uncoached contribution afterward; neither a new vocabulary study nor a
-general memory architecture follows from this result.
+The [grouped-action extension is now qualified offline](../evidence_assembly/grouped-actions/RESULTS.md).
+work_on accepts exact saved action handles alongside results and current source.
+The actual rejected-state route saves the original tests and reference documentation,
+checks and submits in the four remaining scripted requests. Source eligibility,
+stale guards and exact admission remain intact; ten native grammar cases pass.
+Keep this as the development baseline. The next separately prepared uncoached
+contribution should test actual selection and completed work. No model exposure,
+new vocabulary study or general memory architecture follows from this qualification.
 
 The owner-approved [reasoning-effort comparison is closed](../reasoning_allocation/RESULTS.md).
 The first seed stops under both settings; the second produces checked work under

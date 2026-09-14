@@ -14,15 +14,25 @@ the coached execution approach below; completed assisted records keep their
 original labels and evidence. The current plan is
 `development/bounded_working_set/SYMBIOTIC_PLAN.md`.
 
-The subsequent owner-directed pending-work qualification and consultation are
-closed; read `development/evidence_assembly/pending-work/RESULTS.md`. Existing
+The owner-directed grouped-action extension is implemented and qualified offline;
+read `development/evidence_assembly/grouped-actions/RESULTS.md`. work_on.results
+now accepts exact saved EVT actions alongside RES results and current source.
+Selection does not execute proposals, refresh guards or establish source eligibility
+from action text. The actual rejected-state route reaches checked submission in
+four scripted requests/five operations without enlarging the original allowance.
+78 selected host tests, ten native grammar cases and exact custody replay pass.
+This is researcher-selected feasibility, not a new Qwen completion. Keep the revised
+contract as the development baseline; any next model evaluation needs a separately
+prepared uncoached contribution. No new model exposure belongs to this package.
+
+The preceding owner-directed pending-work qualification and consultation are
+closed at 99052976; read `development/evidence_assembly/pending-work/RESULTS.md`. Existing
 operations recover the exact proposal and support into a checked artifact offline,
 but use the four remaining requests before submission. Both consultation responses
 are consumed, with no task actions. Supplied source resolves the diagnostic question;
 Qwen then conflates the separate review with task request accounting. Do not adopt
-batch editing from that false premise. Keep the core; the next narrow candidate is
-allowing work_on to select exact saved actions as well as results. Qualify that
-contract extension before exposure. No additional task run belongs to this package.
+batch editing from that false premise. Its resulting contract-extension candidate
+is qualified separately above. No additional task run belongs to the closed package.
 
 The preceding owner-approved evidence-assembly pair is closed under ae563cf8; read
 `development/evidence_assembly/review/RESULTS.md` and its complete audits. Sixteen
