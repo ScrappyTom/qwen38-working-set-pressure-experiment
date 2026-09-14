@@ -14,14 +14,32 @@ the coached execution approach below; completed assisted records keep their
 original labels and evidence. The current plan is
 `development/bounded_working_set/SYMBIOTIC_PLAN.md`.
 
-The subsequent owner-approved information-availability consultation is closed
+The owner-approved evidence-assembly pair is now closed under ae563cf8; read
+`development/evidence_assembly/review/RESULTS.md` and its complete audits. Sixteen
+requests execute eighteen operations; both save partial tests, neither completes
+the test/documentation contract or submits. Both initial groups are supplied;
+subsequent decisions are uncoached. The assembled run releases the real base-class
+formatter during work_on, then assumes the absent implementation does not exist
+and removes correct diagnostic assertions. Its earlier rejected proposal is sound
+in a separately labeled offline test assessment, but its complete next input required
+25,457 tokens, exceeding the frozen 23,808 limit. Do not turn that assessment into
+a saved actor result.
+All transcripts/custody replay exactly, and the six unused operations are closed.
+Retain the core; the next development target is pending work and supporting evidence
+through selection changes. No further model exposure belongs to this consumed pair.
+Report correction opportunity against both requests and operations, and do not
+equate the checker's same-instance raw-call flag with absence of raw testing. Scope
+future provenance prose to the starting snapshot; the frozen task's present-tense
+"No actions have yet run" becomes stale and remains preserved with these inputs.
+
+The preceding owner-approved information-availability consultation is closed
 after one response. Read `development/working_set_continuation/interpretation-dialogue/`
 RESULTS.md, D1_REVIEW.md and TURN_INFORMATION.md. Qwen correctly identifies the
 current header and missing Extended/diagnostic evidence under focused questions,
 but invents a helper name. All thinking/final text and native custody are reviewed
 and verified. No task operation occurs; the second response is closed unused.
-Retain the interface. Any next evidence-sufficiency comparison must identify
-supplied selection as assistance and judge actual saved, checked work, not a
+Retain the interface. The evidence-assembly comparison above identifies
+supplied selection as assistance and judges actual saved, checked work, not a
 correct consultation answer. Missing prior payloads/drafts, missing implementation
 and misread present source remain different findings.
 

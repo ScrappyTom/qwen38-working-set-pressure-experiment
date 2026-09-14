@@ -1,0 +1,1003 @@
+Let me analyze the current state:
+
+1. **Task**: Add tests for `InterpolationMissingOptionError` through real `ConfigParser.get` calls under both `BasicInterpolation` and `ExtendedInterpolation`, including a missing cross-section reference. For each mode: shallow copy, deep copy, pickle protocols. Check exact exception class, arguments, option, section, reference, diagnostic text. Include raw=True retrieval and successful lookup once the referenced setting exists.
+
+2. **Current state**:
+   - Working set has source from `Lib/test/test_configparser.py` (lines 1-944 and 1866-2212) and `Doc/library/configparser.rst` (lines 334-414 and 1352-1380), plus `Lib/configparser.py` (various ranges).
+   - The existing test file already has `ExceptionContextTestCase` with basic tests for `InterpolationMissingOptionError` (lines around 1948-1980 in the file).
+   - The existing `test_interpolation_missing_value` in `ConfigParserTestCase` tests the basic case.
+   - I need to add comprehensive tests for `InterpolationMissingOptionError` covering:
+     - Real `ConfigParser.get` calls under `BasicInterpolation` and `ExtendedInterpolation`
+     - Missing cross-section reference in ExtendedInterpolation
+     - Shallow copy, deep copy, all pickle protocols
+     - Check exact exception class, arguments, option, section, reference, diagnostic text
+     - raw=True retrieval of unresolved value
+     - Successful lookup once the referenced setting exists
+   - Documentation extension in `Doc/library/configparser.rst`
+
+3. **Actions remaining**: 9 actions, 5 requests remaining.
+
+Let me look at what I need:
+- I need to see the current test file around where I'll add tests (after `ExceptionContextTestCase` or in a suitable location)
+- I need to see the documentation to know where to add the new section
+- I need to understand the exception class structure (already have it from working set)
+
+From the working set, I can see:
+- `InterpolationMissingOptionError.__init__(self, option, section, rawval, reference)` with:
+  - `msg = "Bad value substitution: option {!r} in section {!r} contains an interpolation key {!r} which is not a valid option name. Raw value: {!r}".format(option, section, reference, rawval)`
+  - `self.reference = reference`
+  - `self.args = (option, section, rawval, reference)`
+  - `self.message = msg` (from `Error.__init__`)
+  - `self.option = option`, `self.section = section` (from `InterpolationError.__init__`)
+
+For BasicInterpolation:
+- `reference` is the var name (e.g., "reference" for `%(reference)s`)
+
+For ExtendedInterpolation:
+- `reference` is `":".join(path)` where path is the split of the reference (e.g., "section:option" for `${section:option}`, or just "option" for `${option}`)
+
+Wait, let me re-read the ExtendedInterpolation code:
+```python
+path = m.group(1).split(':')
+...
+except (KeyError, NoSectionError, NoOptionError):
+    raise InterpolationMissingOptionError(
+        option, section, rawval, ":".join(path)) from None
+```
+
+So for `${home_dir1}` (no colon), path = ["home_dir1"], reference = "home_dir1"
+For `${Common:home_dir}` (with colon), path = ["Common", "home_dir"], reference = "Common:home_dir"
+
+Now let me plan my tests. I'll add a new test class `InterpolationMissingOptionErrorTestCase` to the test file.
+
+For the documentation, I need to add a section explaining when the missing-reference error arises, how raw=True differs, and how to supply a missing setting, for both interpolation modes.
+
+Let me first check what's in the test file around the area where I'll add the new tests. Looking at the working set, I have lines 1-944 and 1866-2212. The `ExceptionContextTestCase` is in the 1866-2212 range (around line 1948). I need to add my new test class somewhere appropriate.
+
+Actually, looking at the file structure:
+- Lines 1-944: main content including BasicTestCase, ConfigParserTestCase, etc.
+- Lines 1866-2212: includes InlineCommentStrippingTestCase, ExceptionContextTestCase, ConvertersTestCase, MiscTestCase
+
+I need to see what's between lines 945-1865 to find a good insertion point. But I have limited actions. Let me think about where to insert.
+
+Looking at the end of the file (lines 2200-2212), I see:
+```python
+class MiscTestCase(unittest.TestCase):
+    def test__all__(self):
+        support.check__all__(self, configparser, not_exported={"Error"})
+
+
+if __name__ == '__main__':
+    unittest.main()
+```
+
+I'll add my new test class before `MiscTestCase`. I need to see what's immediately before `MiscTestCase` to get the exact text for the patch.
+
+Actually, from the working set I can see the end of the file. Let me look at what's right before `MiscTestCase`. From the source content at lines 2200-2212:
+
+```python
+        with self.assertRaises(AttributeError):
+            self.assertEqual(cfg['one'].getlen('one'), 5)
+        with self.assertRaises(AttributeError):
+            self.assertEqual(cfg['two'].getlen('one'), 5)
+
+
+class MiscTestCase(unittest.TestCase):
+    def test__all__(self):
+        support.check__all__(self, configparser, not_exported={"Error"})
+
+
+if __name__ == '__main__':
+    unittest.main()
+```
+
+So I can insert before `class MiscTestCase` by patching:
+```
+class MiscTestCase(unittest.TestCase):
+```
+to:
+```
+class InterpolationMissingOptionErrorTestCase(unittest.TestCase):
+    ...
+
+
+class MiscTestCase(unittest.TestCase):
+```
+
+Wait, I need to be more careful. Let me look at the exact text. The line before `class MiscTestCase` has two blank lines after the previous method. Let me use the exact text.
+
+From the source:
+```
+        with self.assertRaises(AttributeError):
+            self.assertEqual(cfg['one'].getlen('one'), 5)
+        with self.assertRaises(AttributeError):
+            self.assertEqual(cfg['two'].getlen('one'), 5)
+
+
+class MiscTestCase(unittest.TestCase):
+```
+
+I'll patch:
+```
+class MiscTestCase(unittest.TestCase):
+    def test__all__(self):
+```
+with:
+```
+class InterpolationMissingOptionErrorTestCase(unittest.TestCase):
+    ...tests...
+
+
+class MiscTestCase(unittest.TestCase):
+    def test__all__(self):
+```
+
+Now for the documentation. I need to see what's in the doc around the `InterpolationMissingOptionError` section and where to add the new content. From the working set, I have lines 1352-1380 of the doc which shows the exception classes. And lines 334-414 which shows the interpolation section.
+
+Let me think about what documentation to add. I'll add a section after the ExtendedInterpolation description (around line 414) or after the exception class descriptions. Actually, looking at the structure, it makes sense to add a new section about "Missing interpolation references" that explains the error, raw=True behavior, and how to fix it.
+
+Let me first read a bit more of the test file to understand the exact context around where I'll insert, and also check the doc file more carefully.
+
+Actually, I have 9 actions remaining and 5 requests. Let me be strategic:
+1. I'll do a `work_on` to load the exact ranges I need for both files
+2. Then patch the test file
+3. Then patch the doc file
+4. Then run the public check
+5. Then submit
+
+Wait, I already have the source in my working set. Let me check if the exact old text is visible for the patch.
+
+For the test file, I can see the exact text:
+```
+class MiscTestCase(unittest.TestCase):
+    def test__all__(self):
+        support.check__all__(self, configparser, not_exported={"Error"})
+```
+
+This is at the end of the file (lines 2205-2207 approximately). The file sha is `c79c1f5513a1baf6b1e4ebd3b3660f9747679c47716af058d0435140b038ab04`.
+
+For the doc file, I need to find a good spot. Let me look at what I have. The doc file sha is `6418b0f63a328a50362fb6d171b04d0ee337821b0e7180b62c5a02b3fc616823`. I have lines 334-414 and 1352-1380. 
+
+Looking at lines 334-414, it ends with:
+```
+      [Arthur]
+      nickname: Two Sheds
+```
+
+And line 414 is where the next content would start. Let me check what's at line 414-415. From the latest_feedback, I read lines 415-430 and got:
+```
+      last_name: Jackson
+      my_dir: ${Common:home_dir}/twosheds
+      my_pictures: ${my_dir}/Pictures
+      python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}
+
+Mapping Protocol Access
+-----------------------
+```
+
+So lines 415-425 show the continuation of the ExtendedInterpolation example and then the "Mapping Protocol Access" section starts.
+
+I think the best place to add documentation is after the ExtendedInterpolation section ends and before "Mapping Protocol Access". Let me look at the exact text around line 414-425.
+
+From the working set (lines 334-414), the last visible line is line 414:
+```
+      nickname: Two Sheds
+```
+
+And from the read result (latest_feedback), lines 415-425:
+```
+      last_name: Jackson
+      my_dir: ${Common:home_dir}/twosheds
+      my_pictures: ${my_dir}/Pictures
+      python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}
+
+Mapping Protocol Access
+-----------------------
+
+.. versionadded:: 3.2
+
+Mapping protocol access is a generic name for functionality that enables using
+```
+
+Wait, that doesn't quite make sense. Let me re-read. The working set shows lines 334-414 of the doc, ending with `nickname: Two Sheds`. Then lines 415+ continue with more of the example.
+
+Actually, I think the ExtendedInterpolation example continues past line 414. Let me read more of the doc to find the right insertion point. But I'm limited on actions.
+
+Let me reconsider my approach. I have:
+- 9 actions remaining
+- 5 requests remaining
+
+Each response consumes 1 request. Each operation consumes 1 action. So I can do at most 5 more responses, each potentially with operations.
+
+Wait, re-reading: "actions_remaining": 9, "requests_remaining": 5. "Each response consumes one request; its operations consume the separate action allowance."
+
+So I have 5 more responses (including this one), and 9 actions total. Let me plan:
+
+Response 1 (this one): I'll do a `work_on` to load the exact ranges I need. Actually wait, I already have the source in my working set. Let me check if I can directly patch.
+
+For the test file patch:
+- File: `Lib/test/test_configparser.py`
+- SHA: `c79c1f5513a1baf6b1e4ebd3b3660f9747679c47716af058d0435140b038ab04`
+- I need to find the exact old text. From the working set (lines 2200-2212), I can see:
+```
+class MiscTestCase(unittest.TestCase):
+    def test__all__(self):
+        support.check__all__(self, configparser, not_exported={"Error"})
+```
+
+But I need to verify this is the exact text. The source shows it clearly. Let me use:
+```
+class MiscTestCase(unittest.TestCase):
+    def test__all__(self):
+        support.check__all__(self, configparser, not_exported={"Error"})
+
+
+if __name__ == '__main__':
+    unittest.main()
+```
+
+as my old text, and prepend my new class before it.
+
+Actually wait - I need to be more careful. The `old` text must be unique in the file. Let me use a smaller unique fragment. `class MiscTestCase(unittest.TestCase):` should be unique since it's a class definition.
+
+Let me plan the test code:
+
+```python
+class InterpolationMissingOptionErrorTestCase(unittest.TestCase):
+    """Exercise InterpolationMissingOptionError through real parser lookups."""
+
+    def _make_basic_error(self):
+        cf = configparser.ConfigParser()
+        cf.read_string("""
+[Paths]
+home_dir: /Users
+my_dir: %(nonexistent)s/lumberjack
+""")
+        try:
+            cf.get('Paths', 'my_dir')
+        except configparser.InterpolationMissingOptionError as e:
+            return e, cf
+        self.fail("expected InterpolationMissingOptionError")
+
+    def _make_extended_error(self):
+        cf = configparser.ConfigParser(
+            interpolation=configparser.ExtendedInterpolation())
+        cf.read_string("""
+[Paths]
+home_dir: /Users
+my_dir: ${nonexistent}/lumberjack
+""")
+        try:
+            cf.get('Paths', 'my_dir')
+        except configparser.InterpolationMissingOptionError as e:
+            return e, cf
+        self.fail("expected InterpolationMissingOptionError")
+
+    def _make_extended_cross_section_error(self):
+        cf = configparser.ConfigParser(
+            interpolation=configparser.ExtendedInterpolation())
+        cf.read_string("""
+[Paths]
+home_dir: /Users
+my_dir: ${Other:missing}/lumberjack
+""")
+        cf.add_section('Other')  # section exists but no 'missing' option
+        try:
+            cf.get('Paths', 'my_dir')
+        except configparser.InterpolationMissingOptionError as e:
+            return e, cf
+        self.fail("expected InterpolationMissingOptionError")
+
+    def test_basic_error_attributes(self):
+        e, cf = self._make_basic_error()
+        self.assertIs(type(e), configparser.InterpolationMissingOptionError)
+        self.assertEqual(e.option, 'my_dir')
+        self.assertEqual(e.section, 'Paths')
+        self.assertEqual(e.reference, 'nonexistent')
+        self.assertEqual(e.args, ('my_dir', 'Paths', '%(nonexistent)s/lumberjack', 'nonexistent'))
+        expected_msg = (
+            "Bad value substitution: option 'my_dir' in section 'Paths' contains "
+            "an interpolation key 'nonexistent' which is not a valid option name. "
+            "Raw value: '%(nonexistent)s/lumberjack'")
+        self.assertEqual(e.message, expected_msg)
+        self.assertIsInstance(e, configparser.InterpolationError)
+        self.assertIsInstance(e, configparser.Error)
+        self.assertIsInstance(e, Exception)
+
+    def test_extended_error_attributes(self):
+        e, cf = self._make_extended_error()
+        self.assertIs(type(e), configparser.InterpolationMissingOptionError)
+        self.assertEqual(e.option, 'my_dir')
+        self.assertEqual(e.section, 'Paths')
+        self.assertEqual(e.reference, 'nonexistent')
+        self.assertEqual(e.args, ('my_dir', 'Paths', '${nonexistent}/lumberjack', 'nonexistent'))
+        expected_msg = (
+            "Bad value substitution: option 'my_dir' in section 'Paths' contains "
+            "an interpolation key 'nonexistent' which is not a valid option name. "
+            "Raw value: '${nonexistent}/lumberjack'")
+        self.assertEqual(e.message, expected_msg)
+
+    def test_extended_cross_section_error_attributes(self):
+        e, cf = self._make_extended_cross_section_error()
+        self.assertIs(type(e), configparser.InterpolationMissingOptionError)
+        self.assertEqual(e.option, 'my_dir')
+        self.assertEqual(e.section, 'Paths')
+        self.assertEqual(e.reference, 'Other:missing')
+        self.assertEqual(e.args, ('my_dir', 'Paths', '${Other:missing}/lumberjack', 'Other:missing'))
+        expected_msg = (
+            "Bad value substitution: option 'my_dir' in section 'Paths' contains "
+            "an interpolation key 'Other:missing' which is not a valid option name. "
+            "Raw value: '${Other:missing}/lumberjack'")
+        self.assertEqual(e.message, expected_msg)
+
+    def test_basic_raw_retrieval(self):
+        cf = configparser.ConfigParser()
+        cf.read_string("""
+[Paths]
+home_dir: /Users
+my_dir: %(nonexistent)s/lumberjack
+""")
+        raw = cf.get('Paths', 'my_dir', raw=True)
+        self.assertEqual(raw, '%(nonexistent)s/lumberjack')
+
+    def test_extended_raw_retrieval(self):
+        cf = configparser.ConfigParser(
+            interpolation=configparser.ExtendedInterpolation())
+        cf.read_string("""
+[Paths]
+home_dir: /Users
+my_dir: ${nonexistent}/lumberjack
+""")
+        raw = cf.get('Paths', 'my_dir', raw=True)
+        self.assertEqual(raw, '${nonexistent}/lumberjack')
+
+    def test_basic_successful_lookup_after_fix(self):
+        cf = configparser.ConfigParser()
+        cf.read_string("""
+[Paths]
+home_dir: /Users
+my_dir: %(target)s/lumberjack
+""")
+        with self.assertRaises(configparser.InterpolationMissingOptionError):
+            cf.get('Paths', 'my_dir')
+        cf.set('Paths', 'target', '/target')
+        self.assertEqual(cf.get('Paths', 'my_dir'), '/target/lumberjack')
+
+    def test_extended_successful_lookup_after_fix(self):
+        cf = configparser.ConfigParser(
+            interpolation=configparser.ExtendedInterpolation())
+        cf.read_string("""
+[Paths]
+home_dir: /Users
+my_dir: ${target}/lumberjack
+""")
+        with self.assertRaises(configparser.InterpolationMissingOptionError):
+            cf.get('Paths', 'my_dir')
+        cf.set('Paths', 'target', '/target')
+        self.assertEqual(cf.get('Paths', 'my_dir'), '/target/lumberjack')
+
+    def test_extended_cross_section_successful_lookup_after_fix(self):
+        cf = configparser.ConfigParser(
+            interpolation=configparser.ExtendedInterpolation())
+        cf.read_string("""
+[Paths]
+home_dir: /Users
+my_dir: ${Other:missing}/lumberjack
+""")
+        cf.add_section('Other')
+        with self.assertRaises(configparser.InterpolationMissingOptionError):
+            cf.get('Paths', 'my_dir')
+        cf.set('Other', 'missing', '/target')
+        self.assertEqual(cf.get('Paths', 'my_dir'), '/target/lumberjack')
+
+    def _check_copy(self, e1):
+        e2 = copy.copy(e1)
+        self.assertIs(type(e2), type(e1))
+        self.assertEqual(e2.args, e1.args)
+        self.assertEqual(e2.option, e1.option)
+        self.assertEqual(e2.section, e1.section)
+        self.assertEqual(e2.reference, e1.reference)
+        self.assertEqual(e2.message, e1.message)
+        self.assertEqual(str(e2), str(e1))
+
+    def _check_deepcopy(self, e1):
+        e2 = copy.deepcopy(e1)
+        self.assertIs(type(e2), type(e1))
+        self.assertEqual(e2.args, e1.args)
+        self.assertEqual(e2.option, e1.option)
+        self.assertEqual(e2.section, e1.section)
+        self.assertEqual(e2.reference, e1.reference)
+        self.assertEqual(e2.message, e1.message)
+        self.assertEqual(str(e2), str(e1))
+
+    def _check_pickle(self, e1):
+        for proto in range(pickle.HIGHEST_PROTOCOL + 1):
+            with self.subTest(protocol=proto):
+                data = pickle.dumps(e1, proto)
+                e2 = pickle.loads(data)
+                self.assertIs(type(e2), type(e1))
+                self.assertEqual(e2.args, e1.args)
+                self.assertEqual(e2.option, e1.option)
+                self.assertEqual(e2.section, e1.section)
+                self.assertEqual(e2.reference, e1.reference)
+                self.assertEqual(e2.message, e1.message)
+                self.assertEqual(str(e2), str(e1))
+
+    def test_basic_error_copy(self):
+        e, cf = self._make_basic_error()
+        self._check_copy(e)
+
+    def test_basic_error_deepcopy(self):
+        e, cf = self._make_basic_error()
+        self._check_deepcopy(e)
+
+    def test_basic_error_pickle(self):
+        e, cf = self._make_basic_error()
+        self._check_pickle(e)
+
+    def test_extended_error_copy(self):
+        e, cf = self._make_extended_error()
+        self._check_copy(e)
+
+    def test_extended_error_deepcopy(self):
+        e, cf = self._make_extended_error()
+        self._check_deepcopy(e)
+
+    def test_extended_error_pickle(self):
+        e, cf = self._make_extended_error()
+        self._check_pickle(e)
+
+    def test_extended_cross_section_error_copy(self):
+        e, cf = self._make_extended_cross_section_error()
+        self._check_copy(e)
+
+    def test_extended_cross_section_error_deepcopy(self):
+        e, cf = self._make_extended_cross_section_error()
+        self._check_deepcopy(e)
+
+    def test_extended_cross_section_error_pickle(self):
+        e, cf = self._make_extended_cross_section_error()
+        self._check_pickle(e)
+```
+
+Wait, I need to check if `copy` and `pickle` are already imported. Looking at the test file imports (lines 1-13):
+```python
+import collections
+import copy
+import configparser
+import io
+import os
+import pickle
+import textwrap
+import unittest
+import warnings
+```
+
+Yes, both `copy` and `pickle` are already imported.
+
+Now for the documentation. I need to add a section explaining the missing-reference error. Let me think about where to place it. Looking at the doc structure:
+- Lines 334-414: Interpolation section with BasicInterpolation and ExtendedInterpolation classes
+- Lines 415+: continuation of ExtendedInterpolation example, then "Mapping Protocol Access"
+- Lines 1352-1380: Exception classes including InterpolationMissingOptionError
+
+I think the best place is right after the ExtendedInterpolation section ends (before "Mapping Protocol Access"). Let me look at what exact text I can use as the insertion point.
+
+From the read of lines 415-425:
+```
+      last_name: Jackson
+      my_dir: ${Common:home_dir}/twosheds
+      my_pictures: ${my_dir}/Pictures
+      python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}
+
+Mapping Protocol Access
+-----------------------
+```
+
+So I'll insert between the example and "Mapping Protocol Access". The exact old text would be:
+```
+      python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}
+
+Mapping Protocol Access
+```
+
+And I'll insert a new section in between.
+
+Actually, wait. Let me reconsider. The task says "Extend Doc/library/configparser.rst with runnable examples explaining when the missing-reference error arises, how raw=True differs from resolving a reference, and how to supply a missing setting. Cover both interpolation modes accurately."
+
+This should be a new section. Let me think about where it fits best in the document structure. It could go:
+1. After the Interpolation section (after ExtendedInterpolation, before Mapping Protocol Access)
+2. Near the exception classes (around line 1352-1380)
+
+I think option 1 makes more sense as it's a continuation of the interpolation discussion.
+
+Let me draft the documentation:
+
+```rst
+When a value references a setting that does not exist, attempting to retrieve
+that value through :meth:`ConfigParser.get` (or :meth:`RawConfigParser.get`
+with interpolation enabled) raises :exc:`InterpolationMissingOptionError`.
+The error occurs lazily at lookup time, not when the configuration is parsed
+or when :meth:`~configparser.ConfigParser.set` is called.
+
+Basic interpolation example::
+
+    >>> import configparser
+    >>> cp = configparser.ConfigParser()
+    >>> cp.read_string("""
+    ... [Paths]
+    ... home_dir = /Users
+    ... my_dir = %(missing)s/lumberjack
+    ... """)
+    >>> try:
+    ...     cp.get('Paths', 'my_dir')
+    ... except configparser.InterpolationMissingOptionError as e:
+    ...     print(f"option={e.option!r}, section={e.section!r}, "
+    ...           f"reference={e.reference!r}")
+    ...
+    option='my_dir', section='Paths', reference='missing'
+
+With :class:`ExtendedInterpolation`, the same applies, including
+cross-section references::
+
+    >>> cp2 = configparser.ConfigParser(
+    ...     interpolation=configparser.ExtendedInterpolation())
+    >>> cp2.read_string("""
+    ... [Common]
+    ... home_dir = /Users
+    ... [Paths]
+    ... my_dir = ${Common:nonexistent}/lumberjack
+    ... """)
+    >>> try:
+    ...     cp2.get('Paths', 'my_dir')
+    ... except configparser.InterpolationMissingOptionError as e:
+    ...     print(f"option={e.option!r}, section={e.section!r}, "
+    ...           f"reference={e.reference!r}")
+    ...
+    option='my_dir', section='Paths', reference='Common:nonexistent'
+
+The ``reference`` attribute records the name that could not be resolved:
+the option name for basic interpolation, or ``section:option`` for a
+cross-section reference in extended interpolation.
+
+Retrieving with ``raw=True`` bypasses interpolation entirely and returns
+the unresolved template text::
+
+    >>> cp.get('Paths', 'my_dir', raw=True)
+    '%(missing)s/lumberjack'
+    >>> cp2.get('Paths', 'my_dir', raw=True)
+    '${Common:nonexistent}/lumberjack'
+
+To fix the error, supply the referenced setting::
+
+    >>> cp.set('Paths', 'missing', '/tmp')
+    >>> cp.get('Paths', 'my_dir')
+    '/tmp/lumberjack'
+
+    >>> cp2.set('Common', 'nonexistent', '/tmp')
+    >>> cp2.get('Paths', 'my_dir')
+    '/tmp/lumberjack'
+```
+
+Hmm, but I need to be careful with the doctest-style examples. The actual Python output for the f-string with the print would need to match exactly. Let me simplify to avoid doctest issues - actually, this is documentation (RST), not actual doctests that will be run by the test suite. The public check evaluates "the existing suite and backport" - it runs the test suite, not the documentation doctests. The task says "Documentation accuracy also receives direct review after the run." So I just need accurate examples.
+
+Actually wait, let me reconsider. The task says the doc examples should be "runnable examples". Let me make them accurate but not necessarily doctest-formatted. Let me use `.. code-block:: python` blocks instead to avoid doctest strictness.
+
+Actually, looking at the existing doc style, they use `.. code-block:: ini` for INI and regular paragraphs with inline code for explanations. Let me match that style.
+
+Let me refine my doc addition. I'll keep it focused and accurate:
+
+```rst
+When a value contains an interpolation reference to a setting that does not
+exist, the error is raised when the value is *retrieved* (not when the
+configuration is parsed or set).  In :exc:`InterpolationMissingOptionError`,
+the attributes ``option``, ``section``, ``reference`` and ``args`` describe
+the failing lookup:
+
+.. code-block:: python
+
+   import configparser
+
+   cp = configparser.ConfigParser()
+   cp.read_string("""
+   [Paths]
+   home_dir = /Users
+   my_dir = %(missing)s/lumberjack
+   """)
+   try:
+       cp.get('Paths', 'my_dir')
+   except configparser.InterpolationMissingOptionError as e:
+       print(e.option)       # 'my_dir'
+       print(e.section)       # 'Paths'
+       print(e.reference)     # 'missing'
+       print(e.args)          # ('my_dir', 'Paths', '%(missing)s/lumberjack', 'missing')
+
+For :class:`ExtendedInterpolation`, a cross-section reference that does not
+resolve produces the same error; ``reference`` is the colon-joined
+``section:option`` pair::
+
+.. code-block:: python
+
+   cp2 = configparser.ConfigParser(
+       interpolation=configparser.ExtendedInterpolation())
+   cp2.read_string("""
+   [Common]
+   home_dir = /Users
+   [Paths]
+   my_dir = ${Common:nonexistent}/lumberjack
+   """)
+   try:
+       cp2.get('Paths', 'my_dir')
+   except configparser.InterpolationMissingOptionError as e:
+       print(e.reference)    # 'Common:nonexistent'
+       print(e.args)          # ('my_dir', 'Paths',
+                              #  '${Common:nonexistent}/lumberjack',
+                              #  'Common:nonexistent')
+
+Passing ``raw=True`` to :meth:`~configparser.RawConfigParser.get` skips
+interpolation and returns the unresolved template string instead of raising::
+
+.. code-block:: python
+
+   cp.get('Paths', 'my_dir', raw=True)    # '%(missing)s/lumberjack'
+   cp2.get('Paths', 'my_dir', raw=True)   # '${Common:nonexistent}/lumberjack'
+
+Supplying the missing setting resolves the reference on the next lookup::
+
+.. code-block:: python
+
+   cp.set('Paths', 'missing', '/tmp')
+   cp.get('Paths', 'my_dir')              # '/tmp/lumberjack'
+
+   cp2.set('Common', 'nonexistent', '/tmp')
+   cp2.get('Paths', 'my_dir')             # '/tmp/lumberjack'
+```
+
+Now let me plan my actions:
+
+1. Patch test file (add the new test class before MiscTestCase)
+2. Patch doc file (add the new section before "Mapping Protocol Access")
+3. Run public check
+4. Submit
+
+That's 4 actions, within my 9 remaining. But I also need to verify my exact old text. Let me check:
+
+For the test file, I need the exact text. From the working set (lines 2200-2212):
+```
+        with self.assertRaises(AttributeError):
+            self.assertEqual(cfg['one'].getlen('one'), 5)
+        with self.assertRaises(AttributeError):
+            self.assertEqual(cfg['two'].getlen('one'), 5)
+
+
+class MiscTestCase(unittest.TestCase):
+    def test__all__(self):
+        support.check__all__(self, configparser, not_exported={"Error"})
+
+
+if __name__ == '__main__':
+    unittest.main()
+```
+
+I'll use `class MiscTestCase(unittest.TestCase):` as the start of my old text. But is it unique? Let me check... it should be, since it's a class definition.
+
+Actually, for safety, let me use:
+```
+class MiscTestCase(unittest.TestCase):
+    def test__all__(self):
+        support.check__all__(self, configparser, not_exported={"Error"})
+
+
+if __name__ == '__main__':
+    unittest.main()
+```
+
+This should be unique.
+
+For the doc file, I need to find the exact text. From my read of lines 415-425:
+```
+      last_name: Jackson
+      my_dir: ${Common:home_dir}/twosheds
+      my_pictures: ${my_dir}/Pictures
+      python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}
+
+Mapping Protocol Access
+-----------------------
+```
+
+Wait, but I need to verify this is the exact text in the file. The read showed lines 415-425 with `returned_end_line: 425`. Let me use the transition from the example to "Mapping Protocol Access" as my anchor.
+
+Actually, I realize I should double-check: is there a blank line between the last line of the example and "Mapping Protocol Access"? From the read result, line 415 starts with `      last_name: Jackson` and line 419 (5 lines later) would be the blank line, then line 420 is `Mapping Protocol Access`. Let me count:
+- 415: `      last_name: Jackson`
+- 416: `      my_dir: ${Common:home_dir}/twosheds`
+- 417: `      my_pictures: ${my_dir}/Pictures`
+- 418: `      python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}`
+- 419: (empty line)
+- 420: `Mapping Protocol Access`
+- 421: `-----------------------`
+- 422: (empty line)
+- 423: `.. versionadded:: 3.2`
+- 424: (empty line)
+- 425: `Mapping protocol access is a generic name...`
+
+Wait, the read said lines 415-425 were returned (11 lines). Let me count from the content:
+```
+      last_name: Jackson\n      my_dir: ${Common:home_dir}/twosheds\n      my_pictures: ${my_dir}/Pictures\n      python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}\n\nMapping Protocol Access\n-----------------------\n\n.. versionadded:: 3.2\n\nMapping protocol access is a generic name for functionality that enables using\n
+```
+
+That's 11 lines (415-425):
+415: `      last_name: Jackson`
+416: `      my_dir: ${Common:home_dir}/twosheds`
+417: `      my_pictures: ${my_dir}/Pictures`
+418: `      python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}`
+419: (empty)
+420: `Mapping Protocol Access`
+421: `-----------------------`
+422: (empty)
+423: `.. versionadded:: 3.2`
+424: (empty)
+425: `Mapping protocol access is a generic name for functionality that enables using`
+
+So my old text for the doc patch would be:
+```
+      python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}
+
+Mapping Protocol Access
+```
+
+And I'll insert my new section between them.
+
+Wait, but I need to be careful. The `python_dir` line is part of a code-block, so I need to preserve the code block ending. Let me think about the RST structure. The code block is `.. code-block:: ini` and it ends when a blank line follows. So the blank line (line 419) ends the code block, and then "Mapping Protocol Access" starts a new section.
+
+So my old text:
+```
+      python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}
+
+Mapping Protocol Access
+-----------------------
+```
+
+New text:
+```
+      python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}
+
+When a value contains an interpolation reference to a setting that does not
+exist, the error is raised when the value is *retrieved*... [my new section]
+
+Mapping Protocol Access
+-----------------------
+```
+
+Let me now compose the full patches.
+
+Actually, I realize I should be careful about one thing: in the extended interpolation cross-section case, when the section doesn't exist at all, does it raise `InterpolationMissingOptionError` or `NoSectionError`? Let me re-read the code:
+
+```python
+elif len(path) == 2:
+    sect = path[0]
+    opt = parser.optionxform(path[1])
+    v = parser.get(sect, opt, raw=True)
+...
+except (KeyError, NoSectionError, NoOptionError):
+    raise InterpolationMissingOptionError(
+        option, section, rawval, ":".join(path)) from None
+```
+
+So it catches `NoSectionError` too and converts to `InterpolationMissingOptionError`. Good, so even if the section doesn't exist, it still raises `InterpolationMissingOptionError`.
+
+But wait, in my test `_make_extended_cross_section_error`, I do `cf.add_section('Other')` first. Let me also test the case where the section doesn't exist at all. Actually, let me keep it simpler and just test with the section existing but the option missing, since that's what the task asks for ("missing cross-section reference").
+
+Actually, let me re-read the task: "including a missing cross-section reference in the latter". So I need a cross-section reference where either the section or the option (or both) is missing. Let me test with the section existing but option missing (more realistic).
+
+Wait, actually I should also consider: what if the section doesn't exist? That also triggers `InterpolationMissingOptionError` per the code. Let me test both cases to be thorough.
+
+Actually, to keep things focused and within my action budget, let me just test with the section existing but option missing. That's the "missing cross-section reference" case.
+
+Now, one issue: in my `_make_extended_cross_section_error`, I do:
+```python
+cf.add_section('Other')
+```
+after `read_string`. But `read_string` with the config `[Other]` not present means section 'Other' doesn't exist yet. Then I add it. But wait, I'm doing `cf.add_section('Other')` - this creates an empty section. Then `parser.get('Other', 'missing', raw=True)` will raise `NoOptionError` (since the option doesn't exist in the section), which gets caught and re-raised as `InterpolationMissingOptionError`. Good.
+
+Actually wait, let me re-read the ExtendedInterpolation code more carefully:
+
+```python
+elif len(path) == 2:
+    sect = path[0]
+    opt = parser.optionxform(path[1])
+    v = parser.get(sect, opt, raw=True)
+```
+
+This calls `parser.get(sect, opt, raw=True)` which will raise `NoOptionError` if the option doesn't exist (or `NoSectionError` if the section doesn't exist). Both are caught by the `except (KeyError, NoSectionError, NoOptionError)` clause.
+
+So my test is correct.
+
+Let me also double-check: for the basic interpolation case, the `map` is the section's values dict. When looking up `nonexistent` in the map, it raises `KeyError`, which is caught:
+```python
+try:
+    v = map[var]
+except KeyError:
+    raise InterpolationMissingOptionError(
+        option, section, rawval, var) from None
+```
+
+Good.
+
+Now let me also think about whether the `rawval` in the exception is correct. In `before_get`, the value passed is the raw stored value. So for `my_dir: %(missing)s/lumberjack`, the raw value is `%(missing)s/lumberjack`. In the `_interpolate_some` method:
+```python
+rawval = parser.get(section, option, raw=True, fallback=rest)
+```
+
+This gets the raw value from the parser. Since we're interpolating `my_dir` in section `Paths`, `rawval` will be `%(missing)s/lumberjack`. Correct.
+
+For the extended case, similarly: `rawval = parser.get(section, option, raw=True, fallback=rest)` gives `${nonexistent}/lumberjack` or `${Other:missing}/lumberjack`. Correct.
+
+Now let me finalize my plan and write the patches.
+
+One more consideration: the task says "Keep the existing documentation and all saved tests, including the continuation-error regression and copying/serialization coverage." I'm only adding, not modifying existing content, so this is satisfied.
+
+Let me also make sure I'm not breaking anything. The `test_interpolation_missing_value` test in `ConfigParserTestCase` already exists and tests the basic case. My new tests are in a separate class and don't conflict.
+
+OK let me write the final patches now. I'll do them in this response.
+
+For the test file, my old text:
+```
+class MiscTestCase(unittest.TestCase):
+    def test__all__(self):
+        support.check__all__(self, configparser, not_exported={"Error"})
+
+
+if __name__ == '__main__':
+    unittest.main()
+```
+
+For the doc file, my old text:
+```
+      python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}
+
+Mapping Protocol Access
+```
+
+Let me now write out the full new text for both patches. I need to be careful about the exact formatting.
+
+Actually, I realize I should double-check one thing about the doc. The `.. code-block:: python` directives - are they used in this file? Let me check the existing doc. From the working set, I see `.. code-block:: ini` used. The file likely supports `.. code-block:: python` as well since it's standard Sphinx. Let me use it.
+
+Also, I want to make sure my examples are truly runnable and accurate. Let me trace through:
+
+Basic:
+```python
+cp = configparser.ConfigParser()
+cp.read_string("""
+[Paths]
+home_dir = /Users
+my_dir = %(missing)s/lumberjack
+""")
+```
+`cp.get('Paths', 'my_dir')` → tries to interpolate `%(missing)s` → `map['missing']` → KeyError → raises `InterpolationMissingOptionError('my_dir', 'Paths', '%(missing)s/lumberjack', 'missing')`
+
+`e.option` = 'my_dir'
+`e.section` = 'Paths'
+`e.reference` = 'missing'
+`e.args` = ('my_dir', 'Paths', '%(missing)s/lumberjack', 'missing')
+`e.message` = "Bad value substitution: option 'my_dir' in section 'Paths' contains an interpolation key 'missing' which is not a valid option name. Raw value: '%(missing)s/lumberjack'"
+
+Extended (same section):
+```python
+cp2 = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
+cp2.read_string("""
+[Paths]
+home_dir = /Users
+my_dir = ${missing}/lumberjack
+""")
+```
+`cp2.get('Paths', 'my_dir')` → tries to interpolate `${missing}` → path=['missing'] → `map['missing']` → KeyError → raises `InterpolationMissingOptionError('my_dir', 'Paths', '${missing}/lumberjack', 'missing')`
+
+Extended (cross-section):
+```python
+cp2.read_string("""
+[Common]
+home_dir = /Users
+[Paths]
+my_dir = ${Common:nonexistent}/lumberjack
+""")
+```
+`cp2.get('Paths', 'my_dir')` → tries to interpolate `${Common:nonexistent}` → path=['Common', 'nonexistent'] → `parser.get('Common', 'nonexistent', raw=True)` → NoOptionError → caught → raises `InterpolationMissingOptionError('my_dir', 'Paths', '${Common:nonexistent}/lumberjack', 'Common:nonexistent')`
+
+All correct.
+
+Now, one subtle point: in the cross-section case, the `map` variable in the `_interpolate_some` method is the current section's dict, but the cross-section lookup uses `parser.get(sect, opt, raw=True)` directly. So the `map` variable isn't used for cross-section references. This is correct.
+
+Let me finalize. I'll do two patches in this response, then check and submit in subsequent responses.
+
+Wait, actually, can I do two patches in one response? Looking at the action format, each response is one JSON object with one operation. So I can only do one operation per response. But I have 5 requests remaining (this is one), so I can do 4 more responses.
+
+Plan:
+- This response: patch test file (1 action)
+- Next response: patch doc file (1 action)  
+- Next response: check (1 action)
+- Next response: submit (1 action)
+
+Total: 4 more actions, 4 more responses. I have 9 actions and 5 requests left. This fits.
+
+Wait, actually re-reading: "actions_remaining": 9 means I have 9 actions left to use. Each operation in a response consumes one action. And "requests_remaining": 5 means I have 5 responses left (including this one).
+
+So: this response (1 action) + 3 more responses (3 actions) = 4 actions, 4 responses. Within budget.
+
+Let me write the test file patch now.
+
+Actually, I want to make sure my test class is well-structured and follows the patterns in the existing test file. Looking at the existing tests:
+- They use `self._make_mcline_error(with_newline)` pattern for creating exceptions
+- They use `copy.copy`, `copy.deepcopy`, `pickle.dumps`/`pickle.loads`
+- They check `args`, individual attributes, and `message`
+
+My plan looks good. Let me write it out.
+
+One more thing: I need to make sure the `InterpolationMissingOptionError` is properly picklable. Looking at the class hierarchy:
+- `Error(Exception)` with `self.message`
+- `InterpolationError(Error)` with `self.option`, `self.section`, `self.args`
+- `InterpolationMissingOptionError(InterpolationError)` with `self.reference`, `self.args`
+
+Since it's a regular Exception subclass with standard attributes, pickle should work via `__reduce__` or the default Exception pickling mechanism. Python 3's Exception pickling preserves `args` and other attributes. Actually, for Exception subclasses, pickle uses `__reduce__` which by default pickles `self.args` and `self.__dict__`. Since we set `self.args` in `__init__`, and the other attributes (`option`, `section`, `reference`, `message`) are instance attributes, they should all be preserved through `__dict__`.
+
+Let me verify: after `pickle.loads(pickle.dumps(e))`, the reconstructed object should have all attributes restored because:
+1. `args` is restored from the Exception mechanism
+2. `option`, `section`, `reference`, `message` are in `__dict__` and restored by the default `__reduce__`
+
+Actually, I need to be careful. Python's Exception pickling: `Exception.__reduce__` returns `(type(self), self.args, self.__dict__)` or similar. The `__dict__` contains all instance attributes. So yes, all attributes should be preserved.
+
+Wait, but `InterpolationError.__init__` sets `self.args = (option, section, msg)`, and `InterpolationMissingOptionError.__init__` sets `self.args = (option, section, rawval, reference)`. So after unpickling, `args` will be the 4-tuple. And `__dict__` will have `option`, `section`, `reference`, `message`, and `args` (since `args` is also set as an instance attribute).
+
+Hmm, actually there's a subtlety. `Exception.args` is a special attribute. When you do `self.args = (option, section, rawval, reference)`, this sets the Exception's args. But `self.option = option` etc. are regular instance attributes in `__dict__`. When pickling an Exception, Python's `BaseException.__reduce__` returns something like `(type(exc), exc.args)`. Then on unpickling, the constructor is called with those args, and `__dict__` is restored separately.
+
+Wait, let me think more carefully. For `BaseException`:
+- `__reduce__` returns `(type(self), self.args, self.__dict__)` in some implementations, or just `(type(self), self.args)` in others.
+
+Actually, in CPython, `BaseException.__reduce__` returns `(type(self), self.args)` for the basic case. But if there's a `__dict__`, it might be handled differently.
+
+Let me look at how Python handles Exception pickling. In CPython:
+```python
+class BaseException:
+    def __reduce__(self):
+        return (type(self), self.args, self.__dict__)  # simplified
+```
+
+Actually no, the real implementation is:
+```python
+def __reduce__(self):
+    return (type(self), self.args)
+```
+
+And then `__getstate__` / `__setstate__` handle the `__dict__`. Or in newer Python, `__reduce__` includes the state.
+
+Actually, I think for Python 3.11+, `BaseException.__reduce__` is:
+```python
+def __reduce__(self):
+    return (type(self), self.args)
+```
+
+And the `__dict__` is handled by the default object pickling. So after unpickling:
+- `type(e)` is restored (e.g., `InterpolationMissingOptionError`)
+- `e.args` is restored from the reduce tuple
+- `e.__dict__` is restored (containing `option`, `section`, `reference`, `message`, and also `args` since we set it)
+
+Wait, but `args` in `__dict__` might conflict with `args` from the reduce tuple. Let me think...
+
+When `__reduce__` returns `(cls, args_tuple)`, the unpickler calls `cls(*args_tuple)`. But `InterpolationMissingOptionError.__init__` signature is `(self, option, section, rawval, reference)`, and `args_tuple` is `(option, section, rawval, reference)` (4 elements). So `cls(option, section, rawval, reference)` is called, which is exactly `__init__`'s parameters. 
+
+Then `__setstate__` or the default state restoration sets `__dict__` which includes `option`, `section`, `reference`, `message`, and `args`.
+
+So after unpickling, all attributes should be correct. Let me verify my test assertions:
+- `e2.args` should equal `e1.args` → both are the 4-tuple ✓
+- `e2.option` should equal `e1.option` → from `__dict__` ✓
+- `e2.section` should equal `e1.section` → from `__dict__` ✓
+- `e2.reference` should equal `e1.reference` → from `__dict__` ✓
+- `e2.message` should equal `e1.message` → from `__dict__` ✓
+
+Great, my tests should pass.
+
+Now let me also verify: `str(e)` calls `__str__` which is `__repr__` which returns `self.message`. So `str(e2) == str(e1)` should hold. ✓
+
+OK, I'm confident in my test code. Let me write the final patch.
+
+One last thought: I should make sure the new test class name doesn't conflict with anything. `InterpolationMissingOptionErrorTestCase` is unique. ✓
+
+Let me write the response now.

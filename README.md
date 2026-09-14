@@ -2,6 +2,22 @@
 
 ## Project status
 
+The [evidence-assembly pair is closed](development/evidence_assembly/review/RESULTS.md).
+Both conditions save partial tests but neither completes the tests/docs contribution.
+The assembled condition saves eighteen passing tests, while broad saves thirteen
+with three errors; diagnostic coverage and documentation remain incomplete. Assembly
+uses 70,796 generated tokens and 73.730 loop minutes versus 37,570 and 42.898 for broad.
+Both initial groups are researcher-supplied; all later decisions are uncoached.
+
+The most concrete finding concerns information across turns: after a correct capacity
+rejection, Qwen narrows its group and releases the base-class formatter. It later
+assumes that absent implementation does not exist and deletes correct diagnostic
+assertions. Its earlier rejected proposal passes a separately labeled offline test
+assessment. Exact storage and input sizing hold, but usable pending work does not
+survive the transition intact. All sixteen full responses are reviewed and replayed;
+the pair and unused allowance are closed. The next target is maintaining the proposed
+contribution and its supporting interfaces through a working-set change.
+
 The [turn-specific evidence consultation is closed](development/working_set_continuation/interpretation-dialogue/RESULTS.md).
 Qwen correctly identifies visible current source and separates it from missing
 implementation/diagnostic evidence under focused questions. One response costs
@@ -20,7 +36,8 @@ productivity improvement. A separate native probe finds a page-search defect:
 deduplication makes input cost non-monotonic, and binary search rejects a page
 that actually fits. The [prospective correction](development/working_set_continuation/review/PAGE_SEARCH_CORRECTION.md)
 now passes the actual saved-state qualification and 80 selected tests. The frozen
-model outcome remains unchanged; the corrected host has no new task exposure.
+model outcome remains unchanged. The later evidence-assembly pair above is the
+corrected host's separately qualified task exposure.
 That task allowance remains closed; the separate consultation above also closes.
 
 The owner-approved [reasoning-effort comparison is complete](development/reasoning_allocation/RESULTS.md).

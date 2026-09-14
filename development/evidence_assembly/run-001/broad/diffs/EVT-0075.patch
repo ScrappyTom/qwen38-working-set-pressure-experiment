@@ -1,0 +1,199 @@
+--- a/Lib/test/test_configparser.py
++++ b/Lib/test/test_configparser.py
+@@ -2203,6 +2203,196 @@
+             self.assertEqual(cfg['two'].getlen('one'), 5)
+ 
+ 
++class InterpolationMissingOptionRealLookupTestCase(unittest.TestCase):
++    """Test InterpolationMissingOptionError obtained through real ConfigParser.get
++    calls under BasicInterpolation and ExtendedInterpolation.
++
++    Covers shallow copy, deep copy, and every available pickle protocol.
++    Also exercises raw=True retrieval and successful lookup after the
++    referenced setting is supplied.
++    """
++
++    def _basic_missing(self):
++        parser = configparser.ConfigParser()
++        parser.read_string("\n".join([
++            "[Paths]",
++            "home_dir = /Users",
++            "my_dir = %(home_dir_missing)s/lumberjack",
++        ]))
++        try:
++            parser.get("Paths", "my_dir")
++        except configparser.InterpolationMissingOptionError as e:
++            return e, parser
++        self.fail("Expected InterpolationMissingOptionError (basic)")
++
++    def _extended_missing(self):
++        parser = configparser.ConfigParser(
++            interpolation=configparser.ExtendedInterpolation())
++        parser.read_string("\n".join([
++            "[Paths]",
++            "home_dir = /Users",
++            "my_dir = ${home_dir_missing}/lumberjack",
++        ]))
++        try:
++            parser.get("Paths", "my_dir")
++        except configparser.InterpolationMissingOptionError as e:
++            return e, parser
++        self.fail("Expected InterpolationMissingOptionError (extended)")
++
++    def _extended_cross_section_missing(self):
++        parser = configparser.ConfigParser(
++            interpolation=configparser.ExtendedInterpolation())
++        parser.read_string("\n".join([
++            "[SectionA]",
++            "target = ${SectionB:missing_option}",
++            "",
++            "[SectionB]",
++            "other = value",
++        ]))
++        try:
++            parser.get("SectionA", "target")
++        except configparser.InterpolationMissingOptionError as e:
++            return e, parser
++        self.fail("Expected InterpolationMissingOptionError (cross-section)")
++
++    def test_basic_exception_attributes(self):
++        e, parser = self._basic_missing()
++        self.assertIs(type(e), configparser.InterpolationMissingOptionError)
++        self.assertEqual(e.option, "my_dir")
++        self.assertEqual(e.section, "Paths")
++        self.assertEqual(e.reference, "home_dir_missing")
++        self.assertEqual(e.rawval, "%(home_dir_missing)s/lumberjack")
++        # diagnostic text includes the failing reference
++        self.assertIn("home_dir_missing", str(e))
++
++    def test_extended_exception_attributes(self):
++        e, parser = self._extended_missing()
++        self.assertIs(type(e), configparser.InterpolationMissingOptionError)
++        self.assertEqual(e.option, "my_dir")
++        self.assertEqual(e.section, "Paths")
++        self.assertEqual(e.reference, "home_dir_missing")
++        self.assertEqual(e.rawval, "${home_dir_missing}/lumberjack")
++        self.assertIn("home_dir_missing", str(e))
++
++    def test_extended_cross_section_attributes(self):
++        e, parser = self._extended_cross_section_missing()
++        self.assertIs(type(e), configparser.InterpolationMissingOptionError)
++        self.assertEqual(e.option, "target")
++        self.assertEqual(e.section, "SectionA")
++        self.assertEqual(e.reference, "SectionB:missing_option")
++        self.assertEqual(e.rawval, "${SectionB:missing_option}")
++        self.assertIn("missing_option", str(e))
++
++    def test_raw_retrieval_basic(self):
++        parser = configparser.ConfigParser()
++        parser.read_string("\n".join([
++            "[Paths]",
++            "home_dir = /Users",
++            "my_dir = %(home_dir_missing)s/lumberjack",
++        ]))
++        raw_val = parser.get("Paths", "my_dir", raw=True)
++        self.assertEqual(raw_val, "%(home_dir_missing)s/lumberjack")
++
++    def test_raw_retrieval_extended(self):
++        parser = configparser.ConfigParser(
++            interpolation=configparser.ExtendedInterpolation())
++        parser.read_string("\n".join([
++            "[Paths]",
++            "home_dir = /Users",
++            "my_dir = ${home_dir_missing}/lumberjack",
++        ]))
++        raw_val = parser.get("Paths", "my_dir", raw=True)
++        self.assertEqual(raw_val, "${home_dir_missing}/lumberjack")
++
++    def test_successful_after_adding_basic(self):
++        parser = configparser.ConfigParser()
++        parser.read_string("\n".join([
++            "[Paths]",
++            "home_dir = /Users",
++            "my_dir = %(home_dir_missing)s/lumberjack",
++        ]))
++        with self.assertRaises(configparser.InterpolationMissingOptionError):
++            parser.get("Paths", "my_dir")
++        parser.set("Paths", "home_dir_missing", "/Missing")
++        self.assertEqual(
++            parser.get("Paths", "my_dir"), "/Missing/lumberjack")
++
++    def test_successful_after_adding_extended(self):
++        parser = configparser.ConfigParser(
++            interpolation=configparser.ExtendedInterpolation())
++        parser.read_string("\n".join([
++            "[Paths]",
++            "home_dir = /Users",
++            "my_dir = ${home_dir_missing}/lumberjack",
++        ]))
++        with self.assertRaises(configparser.InterpolationMissingOptionError):
++            parser.get("Paths", "my_dir")
++        parser.set("Paths", "home_dir_missing", "/Missing")
++        self.assertEqual(
++            parser.get("Paths", "my_dir"), "/Missing/lumberjack")
++
++    def _check_copy(self, e):
++        import copy
++        e2 = copy.copy(e)
++        self.assertIs(type(e2), configparser.InterpolationMissingOptionError)
++        self.assertEqual(e2.args, e.args)
++        self.assertEqual(e2.option, e.option)
++        self.assertEqual(e2.section, e.section)
++        self.assertEqual(e2.reference, e.reference)
++        self.assertEqual(e2.message, e.message)
++        self.assertEqual(repr(e2), repr(e))
++
++    def _check_deepcopy(self, e):
++        import copy
++        e2 = copy.deepcopy(e)
++        self.assertIs(type(e2), configparser.InterpolationMissingOptionError)
++        self.assertEqual(e2.args, e.args)
++        self.assertEqual(e2.option, e.option)
++        self.assertEqual(e2.section, e.section)
++        self.assertEqual(e2.reference, e.reference)
++        self.assertEqual(e2.message, e.message)
++        self.assertEqual(repr(e2), repr(e))
++
++    def _check_pickle(self, e):
++        import pickle
++        for proto in range(pickle.HIGHEST_PROTOCOL + 1):
++            with self.subTest(proto=proto):
++                pickled = pickle.dumps(e, proto)
++                e2 = pickle.loads(pickled)
++                self.assertIs(
++                    type(e2), configparser.InterpolationMissingOptionError)
++                self.assertEqual(e2.args, e.args)
++                self.assertEqual(e2.option, e.option)
++                self.assertEqual(e2.section, e.section)
++                self.assertEqual(e2.reference, e.reference)
++                self.assertEqual(e2.message, e.message)
++                self.assertEqual(repr(e2), repr(e))
++
++    def test_copy_basic(self):
++        e, _ = self._basic_missing()
++        self._check_copy(e)
++
++    def test_deepcopy_basic(self):
++        e, _ = self._basic_missing()
++        self._check_deepcopy(e)
++
++    def test_pickle_basic(self):
++        e, _ = self._basic_missing()
++        self._check_pickle(e)
++
++    def test_copy_extended(self):
++        e, _ = self._extended_missing()
++        self._check_copy(e)
++
++    def test_deepcopy_extended(self):
++        e, _ = self._extended_missing()
++        self._check_deepcopy(e)
++
++    def test_pickle_extended(self):
++        e, _ = self._extended_missing()
++        self._check_pickle(e)
++
++
+ class MiscTestCase(unittest.TestCase):
+     def test__all__(self):
+         support.check__all__(self, configparser, not_exported={"Error"})

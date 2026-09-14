@@ -1,0 +1,723 @@
+Let me understand the situation. I need to:
+
+1. Extend tests in `Lib/test/test_configparser.py` to cover `InterpolationMissingOptionError` through real `ConfigParser.get` calls under both `BasicInterpolation` and `ExtendedInterpolation`.
+2. Extend `Doc/library/configparser.rst` with runnable examples explaining the missing-reference error.
+
+The task requires:
+- Tests that obtain `InterpolationMissingOptionError` through real `ConfigParser.get` calls under both `BasicInterpolation` and `ExtendedInterpolation`
+- Including a missing cross-section reference in `ExtendedInterpolation`
+- For each mode: shallow copying, deep copying, and every available pickle protocol
+- Check the exact exception class, arguments, option, section, reference, and diagnostic text against the actual failing lookup
+- Include `raw=True` retrieval of the unresolved value
+- A successful lookup once the referenced setting exists
+- Directly constructing an exception is NOT a substitute
+- Documentation with runnable examples
+- Keep existing documentation and all saved tests
+- The library behavior is already implemented
+
+I have 6 actions remaining (and 2 requests remaining). Let me be strategic.
+
+Let me first look at the current state of the test file to understand what's there, and the doc file. I already have some context from the working set. Let me look at the end of the test file (lines 2198-2212) which shows `MiscTestCase` and the `if __name__` block.
+
+I need to see more of the test file to understand where to insert tests. Let me also check the configparser.py source to understand the exact error behavior.
+
+Actually, looking at my constraints:
+- 6 actions remaining
+- 2 requests remaining
+
+I need to be very efficient. Let me think about what I need:
+1. Read the relevant parts of the test file to find where to insert (I already have the end)
+2. Read configparser.py to understand the exact error message format
+3. Make the patch to the test file
+4. Make the patch to the doc file
+5. Run the public check
+6. Submit
+
+That's 6 operations minimum. But I need to be careful. Let me look at what I already have.
+
+From the working set, I can see:
+- `Lib/configparser.py` lines 256-275 showing `InterpolationError` and `InterpolationMissingOptionError` classes
+- `Lib/test/test_configparser.py` lines 2198-2212 showing the end of the file
+- `Doc/library/configparser.rst` lines 420-427
+
+The `InterpolationMissingOptionError` has:
+- `__init__(self, option, section, rawval, reference)`
+- `msg = "Bad value substitution: option {!r} in section {!r} contains an interpolation key {!r} which is not a valid option name. Raw value: {!r}".format(option, section, reference, rawval)`
+- `self.reference = reference`
+- `self.args = (option, section, rawval, reference)`
+- Inherits from `InterpolationError` which has `self.args = (option, section, msg)` but then `InterpolationMissingOptionError` overrides `self.args`
+
+Wait, let me re-read. `InterpolationError.__init__` sets `self.args = (option, section, msg)`. Then `InterpolationMissingOptionError.__init__` calls `InterpolationError.__init__(self, option, section, msg)` which sets `self.args = (option, section, msg)`, then overrides with `self.args = (option, section, rawval, reference)`.
+
+Now, I need to understand where in configparser.py the error is raised. Let me think about what I need to read.
+
+Actually, I need to be very strategic with my 6 remaining actions. Let me plan:
+
+1. Read configparser.py to see where `InterpolationMissingOptionError` is raised (to understand the exact behavior)
+2. Read more of the test file to find good insertion points
+3. Patch the test file
+4. Patch the doc file
+5. Check
+6. Submit
+
+Wait, that's exactly 6 actions. But I need to be careful - if a patch fails, I lose an action and can't recover.
+
+Let me think more carefully. I already have:
+- The end of test_configparser.py (lines 2198-2212)
+- The exception classes (lines 256-275 of configparser.py)
+
+I need to know:
+- Where to insert in the test file (I'll insert before `class MiscTestCase`)
+- The exact text to match for the patch
+
+Let me look at what I have. The end of the test file shows:
+```
+        # If a getter impl is assigned straight to the instance, it won't
+        # be available on the section proxies.
+        with self.assertRaises(AttributeError):
+            self.assertEqual(cfg['one'].getlen('one'), 5)
+        with self.assertRaises(AttributeError):
+            self.assertEqual(cfg['two'].getlen('one'), 5)
+
+
+class MiscTestCase(unittest.TestCase):
+    def test__all__(self):
+        support.check__all__(self, configparser, not_exported={"Error"})
+
+
+if __name__ == '__main__':
+    unittest.main()
+```
+
+I need to insert my new test class before `class MiscTestCase`. Let me use the text `class MiscTestCase(unittest.TestCase):` as part of my old string.
+
+But wait - I need the exact bytes of the old text. I have the content from the working set. Let me check if it's exact enough.
+
+The content shows:
+```
+class MiscTestCase(unittest.TestCase):
+    def test__all__(self):
+        support.check__all__(self, configparser, not_exported={"Error"})
+
+
+if __name__ == '__main__':
+    unittest.main()
+```
+
+This is the end of the file. I'll replace `class MiscTestCase(unittest.TestCase):` with my new test class followed by `class MiscTestCase(unittest.TestCase):`.
+
+But wait, I need to be more careful. Let me think about what the tests should look like.
+
+For `BasicInterpolation`:
+- Create a config with a value that references another option
+- Call `get()` which should raise `InterpolationMissingOptionError`
+- The reference is like `%(missing)s`
+
+For `ExtendedInterpolation`:
+- Create a config with a value that references another option
+- Call `get()` which should raise `InterpolationMissingOptionError`
+- The reference is like `${missing}` or `%(section:option)s` for cross-section
+
+Let me think about the exact behavior. In `configparser.py`:
+
+For `BasicInterpolation`:
+- Values use `%(name)s` syntax
+- If the referenced option doesn't exist in the same section, it raises `InterpolationMissingOptionError`
+
+For `ExtendedInterpolation`:
+- Values use `${name}` syntax for same-section and `${section:name}` for cross-section
+- If the referenced option doesn't exist, it raises `InterpolationMissingOptionError`
+
+Now let me think about the tests I need to write:
+
+```python
+class InterpolationMissingOptionErrorTestCase(CfgParserTestCaseClass, unittest.TestCase):
+    """Tests for InterpolationMissingOptionError raised by real get() calls."""
+
+    def _check_exception(self, exc, option, section, rawval, reference):
+        self.assertIsInstance(exc, configparser.InterpolationMissingOptionError)
+        self.assertIs(exc.option, option)
+        self.assertIs(exc.section, section)
+        self.assertEqual(exc.args, (option, section, rawval, reference))
+        self.assertEqual(exc.reference, reference)
+        expected_msg = (
+            "Bad value substitution: option {!r} in section {!r} contains "
+            "an interpolation key {!r} which is not a valid option name. "
+            "Raw value: {!r}".format(option, section, reference, rawval)
+        )
+        self.assertIn(expected_msg, str(exc))
+        # Also verify it's an InterpolationError and an Error
+        self.assertIsInstance(exc, configparser.InterpolationError)
+        self.assertIsInstance(exc, configparser.Error)
+
+    def _check_copy_and_pickle(self, exc):
+        import copy
+        import pickle
+        # Shallow copy
+        shallow = copy.copy(exc)
+        self.assertIsInstance(shallow, configparser.InterpolationMissingOptionError)
+        self.assertEqual(shallow.args, exc.args)
+        self.assertEqual(shallow.option, exc.option)
+        self.assertEqual(shallow.section, exc.section)
+        self.assertEqual(shallow.reference, exc.reference)
+        # Deep copy
+        deep = copy.deepcopy(exc)
+        self.assertIsInstance(deep, configparser.InterpolationMissingOptionError)
+        self.assertEqual(deep.args, exc.args)
+        self.assertEqual(deep.option, exc.option)
+        self.assertEqual(deep.section, exc.section)
+        self.assertEqual(deep.reference, exc.reference)
+        # Pickle all protocols
+        for protocol in range(pickle.HIGHEST_PROTOCOL + 1):
+            data = pickle.dumps(exc, protocol)
+            restored = pickle.loads(data)
+            self.assertIsInstance(restored, configparser.InterpolationMissingOptionError)
+            self.assertEqual(restored.args, exc.args)
+            self.assertEqual(restored.option, exc.option)
+            self.assertEqual(restored.section, exc.section)
+            self.assertEqual(restored.reference, exc.reference)
+```
+
+Wait, but the task says "Directly constructing an exception is not a substitute for exercising these paths." So I need to actually trigger the error via `get()` calls.
+
+Let me redesign:
+
+For BasicInterpolation:
+```python
+def test_basic_interpolation_missing_option(self):
+    cf = configparser.ConfigParser(interpolation=configparser.BasicInterpolation())
+    cf.add_section('sec')
+    cf.set('sec', 'a', 'value %(missing)s')
+    with self.assertRaises(configparser.InterpolationMissingOptionError) as cm:
+        cf.get('sec', 'a')
+    exc = cm.exception
+    # Check the exception details
+    self.assertIsInstance(exc, configparser.InterpolationMissingOptionError)
+    self.assertEqual(exc.option, 'a')
+    self.assertEqual(exc.section, 'sec')
+    self.assertEqual(exc.reference, 'missing')
+    self.assertEqual(exc.args, ('a', 'sec', 'value %(missing)s', 'missing'))
+    # raw=True should work
+    self.assertEqual(cf.get('sec', 'a', raw=True), 'value %(missing)s')
+    # Add the missing option and verify successful lookup
+    cf.set('sec', 'missing', 'filled')
+    self.assertEqual(cf.get('sec', 'a'), 'value filled')
+```
+
+Wait, but I need to be careful. The `raw=True` - does `ConfigParser.get` support `raw=True`? Let me think...
+
+Actually, looking at the configparser API:
+- `ConfigParser.get(section, option, raw=False, vars=None, fallback=UNSET)`
+
+Wait, does `get` have a `raw` parameter? Let me check. In Python 3, `ConfigParser.get` does have a `raw` parameter:
+```python
+def get(self, section, option, *, raw=False, vars=None, fallback=_UNSET):
+```
+
+Yes! So `cf.get('sec', 'a', raw=True)` should return the raw value without interpolation.
+
+Now for ExtendedInterpolation, the syntax is `${name}` for same section and `${section:name}` for cross-section.
+
+Let me think about what the reference would look like. In `ExtendedInterpolation`, the `_interpolate` method uses a regex to find `${...}` patterns. If the reference is not found, it raises `InterpolationMissingOptionError`.
+
+Actually, let me look at how the error is raised in configparser.py. I need to see the actual code. Let me check if I have enough information.
+
+From what I know about CPython's configparser:
+
+In `BasicInterpolation._interpolate`:
+```python
+def _interpolate(self, section, option, value, d, _localvars, raw, loop):
+    for ...:
+        ...
+    # If option not found:
+    raise InterpolationMissingOptionError(option, section, rawval, reference)
+```
+
+In `ExtendedInterpolation._interpolate`:
+```python
+def _interpolate(self, section, option, value, d, _localvars, raw, loop):
+    # Uses regex to find ${...} patterns
+    # If reference not found:
+    raise InterpolationMissingOptionError(option, section, rawval, reference)
+```
+
+The `rawval` is the raw string value of the option, and `reference` is the name of the missing reference.
+
+Now, I need to be careful about what `rawval` and `reference` will be. Let me think...
+
+For `BasicInterpolation`:
+- If value is `'value %(missing)s'`, then:
+  - `option` = `'a'` (the option being retrieved)
+  - `section` = `'sec'`
+  - `rawval` = `'value %(missing)s'` (the raw value)
+  - `reference` = `'missing'` (the missing reference name)
+
+For `ExtendedInterpolation`:
+- If value is `'value ${missing}'`, then:
+  - `option` = `'a'`
+  - `section` = `'sec'`
+  - `rawval` = `'value ${missing}'`
+  - `reference` = `'missing'`
+
+For cross-section in ExtendedInterpolation:
+- If value is `'value ${other_sec:other_opt}'`, then:
+  - `option` = `'a'`
+  - `section` = `'sec'`
+  - `rawval` = `'value ${other_sec:other_opt}'`
+  - `reference` = `'other_sec:other_opt'` (I think)
+
+Actually wait, I need to be more careful. Let me look at the ExtendedInterpolation code. The regex pattern for extended interpolation is typically something like:
+
+```python
+varprog = re.compile(r"\$\{(?P<boost>\[[^[]*?]|[^{}]*?)\}")
+```
+
+Hmm, actually I'm not sure of the exact regex. Let me look at what I know.
+
+In CPython's configparser.py, `ExtendedInterpolation._interpolate` looks something like:
+
+```python
+def _interpolate(self, section, option, value, d, _localvars, raw, loop):
+    if self._is_raw_section(section):
+        return [value]
+    ...
+    for depth in range(loop):
+        if not self._varprog:
+            ...
+        ...
+    # The actual interpolation loop
+```
+
+I'm not 100% sure of the exact implementation details. Let me think about what I can safely write.
+
+Actually, I think the safest approach is to write the tests, and if the check fails, I can look at the error output and fix. But I only have 6 actions left, and I need 2 for check+submit. So I have 4 for reading and patching.
+
+Let me be very strategic:
+1. Read configparser.py around the interpolation code to understand exact behavior (1 action)
+2. Patch test file (1 action)
+3. Patch doc file (1 action)
+4. Check (1 action)
+5. Submit (1 action)
+
+That's 5 actions. I have 6, so I have 1 spare.
+
+Actually wait, let me reconsider. Let me re-read what I have from configparser.py:
+
+```python
+class InterpolationError(Error):
+    """Base class for interpolation-related exceptions."""
+
+    def __init__(self, option, section, msg):
+        Error.__init__(self, msg)
+        self.option = option
+        self.section = section
+        self.args = (option, section, msg)
+
+
+class InterpolationMissingOptionError(InterpolationError):
+    """A string substitution required a setting which was not available."""
+
+    def __init__(self, option, section, rawval, reference):
+        msg = ("Bad value substitution: option {!r} in section {!r} contains "
+               "an interpolation key {!r} which is not a valid option name. "
+               "Raw value: {!r}".format(option, section, reference, rawval))
+        InterpolationError.__init__(self, option, section, msg)
+        self.reference = reference
+        self.args = (option, section, rawval, reference)
+```
+
+So the args are `(option, section, rawval, reference)`. The message format is:
+`"Bad value substitution: option {!r} in section {!r} contains an interpolation key {!r} which is not a valid option name. Raw value: {!r}".format(option, section, reference, rawval)`
+
+Note: the order in format is `option, section, reference, rawval` but in args it's `option, section, rawval, reference`.
+
+Now I need to understand where this is raised. I need to see the `_interpolate` methods. Let me read configparser.py to find them.
+
+Actually, let me think about what I need to know:
+1. The exact `reference` value for BasicInterpolation - it should be the option name from `%(name)s`
+2. The exact `reference` value for ExtendedInterpolation - it should be the content inside `${...}`
+3. For cross-section in ExtendedInterpolation - is it `section:option` format?
+
+I think I should read the relevant parts of configparser.py. Let me look at the ExtendedInterpolation class.
+
+Let me plan my actions:
+1. Read configparser.py to see the interpolation implementations (I need to find the right line range)
+2. Read the test file more to understand existing test patterns (I already have the end)
+3. Patch test file
+4. Patch doc file  
+5. Check
+6. Submit
+
+Actually, I already have the end of the test file and the exception classes. Let me just read configparser.py to see the interpolation code.
+
+Wait, I need to think about this more carefully. Let me look at what I know:
+
+For BasicInterpolation, the interpolation pattern is `%(name)s`. The `_interpolate` method extracts `name` from the pattern. If `name` is not in the dict `d` (which maps option names to values in the section), it raises `InterpolationMissingOptionError(option, section, value, name)`.
+
+Wait, actually I need to be more careful. In BasicInterpolation, the `_interpolate` method is:
+
+```python
+def _interpolate(self, section, option, value, d, _localvars, raw, loop):
+    if self._is_raw_section(section):
+        return [value]
+    L = []
+    start = 0
+    key = re.compile(r"%\((?P<boost>\[[^[]*?]|[^()]*?)\)s")
+    while True:
+        match = key.finditer(value, start)
+        ...
+```
+
+Hmm, I'm not sure of the exact implementation. Let me just read it.
+
+Actually, let me reconsider my approach. I have limited actions. Let me think about what I'm confident about:
+
+1. `configparser.InterpolationMissingOptionError` is raised when interpolation can't find a reference
+2. The exception has `option`, `section`, `reference`, and `args = (option, section, rawval, reference)`
+3. `raw=True` in `get()` bypasses interpolation
+4. For BasicInterpolation, references are `%(name)s`
+5. For ExtendedInterpolation, references are `${name}` (same section) or `${section:name}` (cross-section)
+
+I'm fairly confident about these. The main uncertainty is:
+- The exact `rawval` parameter - is it the full raw value string?
+- The exact `reference` for extended interpolation cross-section references
+
+Let me look at the CPython source I know:
+
+In BasicInterpolation._interpolate:
+```python
+def _interpolate(self, section, option, value, d, _localvars, raw, loop):
+    if self._is_raw_section(section):
+        return [value]
+    L = []
+    start = 0
+    key = re.compile(r"%\((?P<boost>\[[^[]*?]|[^()]*?)\)s")
+    ...
+    for match in key.finditer(value, start):
+        option2 = match.group('boost')
+        ...
+        if option2 not in d:
+            raise InterpolationMissingOptionError(option, section, value, option2)
+```
+
+Wait, I think `rawval` is the value being interpolated (which is the raw string value of the option). Let me just go with that.
+
+For ExtendedInterpolation._interpolate, the pattern is something like:
+```python
+varprog = re.compile(r"\$\{(?P<boost>\[[^[]*?]|[^{}]*?)\}")
+```
+
+And for cross-section references like `${section:option}`, the reference would be `section:option`.
+
+OK let me just go with my understanding and write the tests. If the check fails, I'll need to debug.
+
+Actually, wait. Let me reconsider. I have 6 actions and need to be very careful. Let me read the actual interpolation code first to make sure I get the details right.
+
+Let me read configparser.py around the ExtendedInterpolation class. I know the file has the exception classes around lines 256-275. The interpolation classes should be after that. Let me try reading from around line 276 onwards.
+
+Actually, I realize I should use `work_on` to set up my working set with the right ranges, then do my edits. But I only have 6 actions total.
+
+Let me think about this differently. I'll:
+1. Read configparser.py lines 276-350 or so to see the interpolation implementations
+2. Patch the test file
+3. Patch the doc file
+4. Check
+5. Submit
+
+That's 5 actions, leaving 1 spare.
+
+Actually, wait. I should also check: does `ConfigParser.get()` actually have a `raw` parameter? Let me think...
+
+In Python 3.2+, `ConfigParser.get` signature is:
+```python
+def get(self, section, option, *, raw=False, vars=None, fallback=_UNSET):
+```
+
+Yes, it does. So `cf.get('sec', 'a', raw=True)` will work.
+
+But wait - for SectionProxy, `get` might be different. Let me think... Actually, I'll just use `cf.get(section, option, raw=True)` which is the ConfigParser method.
+
+OK, let me also think about the documentation part. The task says:
+"Extend Doc/library/configparser.rst with runnable examples explaining when the missing-reference error arises, how raw=True differs from resolving a reference, and how to supply a missing setting. Cover both interpolation modes accurately."
+
+I need to find where in the doc to add this. I have lines 420-427 of the doc in my working set, which shows the "Mapping Protocol Access" section. I need to find a good place to add the missing-reference documentation. It should probably go near the interpolation documentation.
+
+Let me think about what I need to read for the doc. I need to find where interpolation is discussed. Let me search or read around the interpolation section.
+
+Actually, this is getting complex. Let me be pragmatic:
+1. Read configparser.py to understand the exact interpolation behavior (1 action)
+2. Read the doc file to find where to add documentation (1 action)  
+3. Patch test file (1 action)
+4. Patch doc file (1 action)
+5. Check (1 action)
+6. Submit (1 action)
+
+That's exactly 6. No spare. If any patch fails, I'm stuck.
+
+Hmm, let me think if there's a way to be more efficient. Can I combine reads? No, each read is one action.
+
+Actually, wait - can I use `work_on` to set up my working set and then patch? The working set already has some content. Let me check what I have:
+
+Current working set:
+- Doc/library/configparser.rst lines 420-427
+- Lib/configparser.py lines 256-275
+- Lib/test/test_configparser.py lines 2198-2212
+
+I need more from configparser.py (the interpolation implementation) and from the doc (where to insert). And I need to see more of the test file to understand the existing test structure.
+
+Let me just read configparser.py to find the interpolation code. I'll guess the ExtendedInterpolation class is somewhere around line 300-400.
+
+Actually, you know what, let me just be bold and write the tests based on my understanding. I'm quite confident about the behavior. Let me write the test code:
+
+For BasicInterpolation:
+- Create config with `BasicInterpolation()`
+- Add a section with an option whose value contains `%(missing)s`
+- Call `get()` - should raise `InterpolationMissingOptionError`
+- The exception's `reference` should be `'missing'`
+- The exception's `rawval` should be the raw value string
+- `raw=True` should return the raw value
+- Adding the missing option and calling `get()` again should succeed
+
+For ExtendedInterpolation:
+- Create config with `ExtendedInterpolation()`
+- Add a section with an option whose value contains `${missing}`
+- Call `get()` - should raise `InterpolationMissingOptionError`
+- For cross-section: value contains `${other:opt}` - the reference should be `'other:opt'`
+- Same copying/pickling checks
+
+Let me write this out:
+
+```python
+class InterpolationMissingOptionErrorTests(unittest.TestCase):
+    """Exercise InterpolationMissingOptionError via real get() calls."""
+
+    def _verify_exception(self, exc, option, section, rawval, reference):
+        self.assertIsInstance(exc, configparser.InterpolationMissingOptionError)
+        self.assertIsInstance(exc, configparser.InterpolationError)
+        self.assertIsInstance(exc, configparser.Error)
+        self.assertEqual(exc.option, option)
+        self.assertEqual(exc.section, section)
+        self.assertEqual(exc.reference, reference)
+        self.assertEqual(exc.args, (option, section, rawval, reference))
+        expected_msg = (
+            "Bad value substitution: option {!r} in section {!r} contains "
+            "an interpolation key {!r} which is not a valid option name. "
+            "Raw value: {!r}".format(option, section, reference, rawval)
+        )
+        self.assertIn(expected_msg, str(exc))
+
+    def _verify_copy_and_pickle(self, exc):
+        import copy
+        import pickle
+        shallow = copy.copy(exc)
+        self.assertEqual(shallow.args, exc.args)
+        self.assertEqual(shallow.option, exc.option)
+        self.assertEqual(shallow.section, exc.section)
+        self.assertEqual(shallow.reference, exc.reference)
+        deep = copy.deepcopy(exc)
+        self.assertEqual(deep.args, exc.args)
+        self.assertEqual(deep.option, exc.option)
+        self.assertEqual(deep.section, exc.section)
+        self.assertEqual(deep.reference, exc.reference)
+        for protocol in range(pickle.HIGHEST_PROTOCOL + 1):
+            data = pickle.dumps(exc, protocol)
+            restored = pickle.loads(data)
+            self.assertIsInstance(restored, configparser.InterpolationMissingOptionError)
+            self.assertEqual(restored.args, exc.args)
+            self.assertEqual(restored.option, exc.option)
+            self.assertEqual(restored.section, exc.section)
+            self.assertEqual(restored.reference, exc.reference)
+
+    def test_basic_interpolation_missing(self):
+        cf = configparser.ConfigParser(interpolation=configparser.BasicInterpolation())
+        cf.add_section('sec')
+        rawval = 'value %(missing)s'
+        cf.set('sec', 'opt', rawval)
+        with self.assertRaises(configparser.InterpolationMissingOptionError) as cm:
+            cf.get('sec', 'opt')
+        exc = cm.exception
+        self._verify_exception(exc, 'opt', 'sec', rawval, 'missing')
+        # raw=True retrieves the unresolved value
+        self.assertEqual(cf.get('sec', 'opt', raw=True), rawval)
+        # Supply the missing setting; lookup now succeeds
+        cf.set('sec', 'missing', 'the_answer')
+        self.assertEqual(cf.get('sec', 'opt'), 'value the_answer')
+        # Copy/pickle of the raised exception
+        self._verify_copy_and_pickle(exc)
+
+    def test_extended_interpolation_missing(self):
+        cf = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
+        cf.add_section('sec')
+        rawval = 'value ${missing}'
+        cf.set('sec', 'opt', rawval)
+        with self.assertRaises(configparser.InterpolationMissingOptionError) as cm:
+            cf.get('sec', 'opt')
+        exc = cm.exception
+        self._verify_exception(exc, 'opt', 'sec', rawval, 'missing')
+        self.assertEqual(cf.get('sec', 'opt', raw=True), rawval)
+        cf.set('sec', 'missing', 'the_answer')
+        self.assertEqual(cf.get('sec', 'opt'), 'value the_answer')
+        self._verify_copy_and_pickle(exc)
+
+    def test_extended_interpolation_cross_section_missing(self):
+        cf = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
+        cf.add_section('sec')
+        rawval = 'value ${other:opt}'
+        cf.set('sec', 'opt', rawval)
+        with self.assertRaises(configparser.InterpolationMissingOptionError) as cm:
+            cf.get('sec', 'opt')
+        exc = cm.exception
+        self._verify_exception(exc, 'opt', 'sec', rawval, 'other:opt')
+        self.assertEqual(cf.get('sec', 'opt', raw=True), rawval)
+        cf.add_section('other')
+        cf.set('other', 'opt', 'the_answer')
+        self.assertEqual(cf.get('sec', 'opt'), 'value the_answer')
+        self._verify_copy_and_pickle(exc)
+```
+
+Wait, I need to double-check: for ExtendedInterpolation with `${missing}`, what is the `reference`? Is it `'missing'`? And for `${other:opt}`, is it `'other:opt'`?
+
+Looking at the ExtendedInterpolation source (from my knowledge of CPython):
+
+```python
+class ExtendedInterpolation(Interpolation):
+    _varprog = re.compile(r"\$\{(?P<boost>\[[^[]*?]|[^{}]*?)\}")
+    
+    def _interpolate_before_get(self, section, option, vars, loop):
+        ...
+    
+    def before_get(self, section, option, vars, raw):
+        ...
+    
+    def _interpolate(self, section, option, value, d, _localvars, raw, loop):
+        if self._is_raw_section(section):
+            return [value]
+        L = []
+        start = 0
+        while True:
+            match = self._varprog.search(value, start)
+            if match:
+                L.append(value[start:match.start()])
+                content = match.group('boost')
+                # content is like 'missing' or 'other:opt'
+                ...
+```
+
+I believe the reference is the content inside the `${...}`, so:
+- `${missing}` → reference is `'missing'`
+- `${other:opt}` → reference is `'other:opt'`
+
+OK, I'm fairly confident. Let me also think about the `rawval`. In the CPython source, when the error is raised:
+
+For BasicInterpolation:
+```python
+raise InterpolationMissingOptionError(option, section, value, option2)
+```
+where `value` is the raw string value being interpolated.
+
+For ExtendedInterpolation:
+```python
+raise InterpolationMissingOptionError(option, section, value, ref)
+```
+where `value` is again the raw string value.
+
+So `rawval` is the full raw value string of the option. Good.
+
+Now, one concern: the `get` method. When you call `cf.get('sec', 'opt')`, does it pass the raw value to `_interpolate`? Let me think...
+
+The `get` method in ConfigParser:
+```python
+def get(self, section, option, *, raw=False, vars=None, fallback=_UNSET):
+    ...
+    if raw:
+        return value
+    value = self._interpolation.before_get(self, section, option, vars, raw)
+    ...
+```
+
+Wait, no. Let me think more carefully. The `get` method:
+1. Gets the raw value
+2. If `raw=True`, returns it
+3. Otherwise, calls `self._interpolation.before_get(self, section, option, vars, raw)`
+4. In `before_get`, the interpolation is performed
+5. If the reference is missing, `InterpolationMissingOptionError` is raised
+
+So yes, the `rawval` in the exception is the raw string value of the option.
+
+Now, one more thing: I need to make sure the `set` method stores the raw value correctly. When you do `cf.set('sec', 'opt', 'value %(missing)s')`, the value stored is `'value %(missing)s'` (it's stored raw, interpolation only happens on get).
+
+OK, I'm confident. Let me also think about the documentation.
+
+For the documentation, I need to add a section explaining:
+1. When the missing-reference error arises
+2. How raw=True differs from resolving a reference
+3. How to supply a missing setting
+4. Cover both interpolation modes
+
+I need to find where to add this in the doc. Let me look at what I have. I have lines 420-427 of the doc showing "Mapping Protocol Access" section. I need to find the interpolation section.
+
+Actually, I think I should add the documentation right after the interpolation discussion, or maybe in a section about exceptions. Let me read the doc to find the right place.
+
+Hmm, but I'm running out of actions. Let me think about whether I can get away without reading the doc.
+
+The doc file is `Doc/library/configparser.rst`. I have lines 420-427 in my working set. I need to find where interpolation is discussed. Based on typical CPython doc structure, the interpolation section would be somewhere in the middle of the file.
+
+Actually, let me look at the doc structure. The file is 52927 bytes. Let me think about where to add the documentation.
+
+You know what, let me just read the doc file to find the right insertion point. I'll read a range that should contain the interpolation discussion.
+
+OK here's my final plan:
+1. Read configparser.py lines 276-380 to see the interpolation implementations (verify my understanding)
+2. Read Doc/library/configparser.rst to find where to add documentation
+3. Patch test file
+4. Patch doc file
+5. Check
+6. Submit
+
+That's 6 actions. Let me go.
+
+Actually wait - I should be even more careful. Let me re-examine what "rawval" actually is. 
+
+Looking at the exception class again:
+```python
+class InterpolationMissingOptionError(InterpolationError):
+    def __init__(self, option, section, rawval, reference):
+        msg = ("Bad value substitution: option {!r} in section {!r} contains "
+               "an interpolation key {!r} which is not a valid option name. "
+               "Raw value: {!r}".format(option, section, reference, rawval))
+        InterpolationError.__init__(self, option, section, msg)
+        self.reference = reference
+        self.args = (option, section, rawval, reference)
+```
+
+The parameter is called `rawval` and it's the 4th parameter (after option, section). The args tuple is `(option, section, rawval, reference)`.
+
+In the message, the order is `option, section, reference, rawval` - note that reference comes before rawval in the format string, but in args it's rawval before reference. This is a bit confusing but I'll go with the source.
+
+Let me now think about whether I need to verify the exact behavior by reading the source. I'm quite confident but let me make sure about one thing: for BasicInterpolation, the regex is `%(name)s` and the reference is `name`. For the value `'value %(missing)s'`, the reference would be `'missing'`.
+
+Yes, I'm confident. Let me proceed.
+
+For the doc, I need to find a good insertion point. Let me read the doc file around where interpolation is discussed. In typical CPython docs, the interpolation section comes after the basic usage. Let me try reading around lines 100-200 or so.
+
+Actually, let me just read the whole relevant section. The file is 52927 bytes. With the typical structure, interpolation might be discussed around lines 50-150 or so.
+
+Let me just go ahead and do the reads. I'll read:
+1. configparser.py lines 276-380 (interpolation implementations)
+2. Doc/library/configparser.rst lines 1-80 (to see the beginning and find interpolation section)
+
+Then I'll patch both files.
+
+Wait, actually, I realize I should be smarter. Let me check: do I actually need to read configparser.py? I'm very confident about the behavior. The main risk is if I get the `reference` value wrong for extended interpolation. Let me just go with my understanding and if the check fails, I'll know what to fix.
+
+Actually, you know what, let me be safe and read the interpolation code. It's one action and it removes uncertainty.
+
+Let me finalize my plan:
+1. Read Lib/configparser.py lines 276-370 (to see BasicInterpolation._interpolate and ExtendedInterpolation._interpolate)
+2. Read Doc/library/configparser.rst lines 1-60 (to find the structure and where to add doc)
+3. Patch Lib/test/test_configparser.py (add tests before MiscTestCase)
+4. Patch Doc/library/configparser.rst (add documentation)
+5. Check
+6. Submit
+
+Let's go with this plan.

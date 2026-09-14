@@ -6,6 +6,23 @@ state and actual tool feedback without reviewer coaching. The completed sessions
 below remain assisted development evidence. Their factual reminders, supplied
 source and prose endorsements are not a template for future run-time behavior.
 
+The latest [evidence-assembly pair is closed](../evidence_assembly/review/RESULTS.md).
+Both conditions save partial tests, neither completes the tests/docs contract.
+The assembled condition improves some test assertions but takes 73.730 loop minutes
+versus 42.898 for broad. After a correct admission rejection, the actor narrows the
+group, releases the real base-class formatter and later deletes correct diagnostic
+assertions under an unsupported assumption about that missing code. Its stronger
+earlier proposal remains archived and passes a separate offline test assessment;
+it was never accepted or supplied back as reviewer assistance. All sixteen complete
+responses and actual operations are reviewed and replayed. Both attempts are closed.
+
+The next development target is keeping a pending contribution and its supporting
+interfaces usable through a source-group change. Qualify the existing exact-source
+and saved-proposal route offline before another live task. Consult Qwen separately
+on the actual interpretation before settling a changed presentation or retention
+behavior. The finding is about information and work across decisions, not a mandate
+for another prompt micro-test, a larger budget or a new memory architecture.
+
 The owner-approved [reasoning-effort comparison is closed](../reasoning_allocation/RESULTS.md).
 The first seed stops under both settings; the second produces checked work under
 both, with medium taking half the loop time but more operations and input. Retain
@@ -22,15 +39,16 @@ an interaction missed by qualification: binary page search overlooks a fitting
 interval when deduplication changes fragment count. The prospective correction
 now passes the actual C03 qualification and 80 selected checks; see its
 PAGE_SEARCH_CORRECTION.md. Preserve the run, adverse cost and separate model
-findings. No corrected-host model exposure has occurred.
+findings. The evidence-assembly pair above is the later corrected-host exposure.
 The original package and eight unused operations remain closed. The subsequent
 owner-approved [interpretation consultation](../working_set_continuation/interpretation-dialogue/RESULTS.md)
 is also closed after one response: under focused questions Qwen distinguishes
 current displayed source from absent implementation evidence, while still naming
 an unsupported helper. Retain the interface and close the second response unused.
-The next useful comparison should assess evidence assembled for a contribution,
-with supplied selection explicitly identified as assistance and success measured
-by saved, checked work. A correct explanatory answer does not establish that loop.
+That consultation motivated the evidence-assembly pair above, with supplied selection
+explicitly identified as assistance and success measured by saved, checked work.
+A correct explanatory answer did not establish that loop; the actual pair now
+shows partial work and a more specific retention/interpretation failure.
 
 The two earned host corrections address repeated source bytes
 across selection and feedback, and expose the actual request allowance alongside

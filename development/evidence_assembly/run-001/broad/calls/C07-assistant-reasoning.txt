@@ -1,0 +1,737 @@
+Let me understand the current state:
+
+1. The task is to extend saved configparser exception coverage to missing interpolation references - adding tests in `Lib/test/test_configparser.py` and extending `Doc/library/configparser.rst`.
+
+2. Current state:
+   - The working set has the test file (`Lib/test/test_configparser.py`) fully loaded (lines 1-100 and 1117-2212)
+   - The doc file (`Doc/library/configparser.rst`) has lines 710-1000 loaded
+   - I have an earlier patch that added `import copy` and `import pickle` to the test file
+   - The current candidate ID is `da233419db36b8dd9e943765a37b2d4fdfab6c17b7e9018ab239a0710eec9577`
+   - The current check doesn't apply to the current candidate (it's for a different candidate)
+   - I have 6 actions remaining and 2 requests remaining
+
+3. Looking at the test file, I can see that `ExceptionPicklingTestCase` already has:
+   - `test_interpolationmissingoptionerror` - which directly constructs the exception and tests pickling
+   - `test_multilinecontinuationerror_copy`, `test_multilinecontinuationerror_deepcopy`, `test_multilinecontinuationerror_pickle` - which use real parser runs to create exceptions and test copy/deepcopy/pickle
+
+4. The task requires:
+   - Add tests that obtain `InterpolationMissingOptionError` through real `ConfigParser.get` calls under both `BasicInterpolation` and `ExtendedInterpolation`
+   - Including a missing cross-section reference in ExtendedInterpolation
+   - Cover shallow copying, deep copying and every available pickle protocol
+   - Check exact exception class, arguments, option, section, reference and diagnostic text
+   - Include raw=True retrieval of the unresolved value
+   - Include a successful lookup once the referenced setting exists
+   - Directly constructing an exception is NOT a substitute
+
+5. Looking at the existing code, I can see the `ExceptionPicklingTestCase` class already has `test_interpolationmissingoptionerror` which directly constructs the exception. The task says this is NOT sufficient - we need tests that exercise real paths.
+
+6. The test file already has `import copy` and `import pickle` (from the earlier patch that was already applied).
+
+Now, I need to:
+- Add new test methods to `ExceptionPicklingTestCase` that use real ConfigParser.get calls to trigger `InterpolationMissingOptionError`
+- For both BasicInterpolation (default ConfigParser) and ExtendedInterpolation
+- Cover copy, deepcopy, and pickle protocols
+- Check exception attributes
+- Include raw=True retrieval
+- Include successful lookup after adding the missing reference
+
+- Also extend the documentation
+
+Let me look at what I need to add. I'll add tests to the `ExceptionPicklingTestCase` class.
+
+Looking at the file structure, the `ExceptionPicklingTestCase` class ends before `InlineCommentStrippingTestCase`. Let me find where to insert.
+
+The file content from lines 1117-2212 shows the full rest of the file. The `ExceptionPicklingTestCase` class is visible. I need to add methods to this class.
+
+Let me think about what tests to add:
+
+For BasicInterpolation (default ConfigParser):
+```python
+def test_interpolationmissing_basic_interpolation(self):
+    """InterpolationMissingOptionError via real BasicInterpolation.get."""
+    parser = configparser.ConfigParser()
+    parser.read_string("""
+    [section]
+    foo = %(missing)s bar
+    """)
+    with self.assertRaises(configparser.InterpolationMissingOptionError) as cm:
+        parser.get('section', 'foo')
+    exc = cm.exception
+    self.assertIsInstance(exc, configparser.InterpolationMissingOptionError)
+    self.assertEqual(exc.option, 'foo')
+    self.assertEqual(exc.section, 'section')
+    self.assertEqual(exc.reference, 'missing')
+    self.assertEqual(exc.args, ('foo', 'section', '%(missing)s bar', 'missing'))
+    self.assertIn('missing', str(exc))
+    # raw=True returns the unresolved value
+    self.assertEqual(parser.get('section', 'foo', raw=True), '%(missing)s bar')
+    # Successful lookup after adding the reference
+    parser.set('section', 'missing', 'VALUE')
+    self.assertEqual(parser.get('section', 'foo'), 'VALUE bar')
+    # copy
+    e2 = copy.copy(exc)
+    self.assertIs(type(e2), configparser.InterpolationMissingOptionError)
+    self.assertEqual(e2.args, exc.args)
+    self.assertEqual(e2.option, exc.option)
+    self.assertEqual(e2.section, exc.section)
+    self.assertEqual(e2.reference, exc.reference)
+    # deepcopy
+    e3 = copy.deepcopy(exc)
+    self.assertIs(type(e3), configparser.InterpolationMissingOptionError)
+    self.assertEqual(e3.args, exc.args)
+    self.assertEqual(e3.option, exc.option)
+    self.assertEqual(e3.section, exc.section)
+    self.assertEqual(e3.reference, exc.reference)
+    # pickle
+    for proto in range(pickle.HIGHEST_PROTOCOL + 1):
+        pickled = pickle.dumps(exc, proto)
+        e4 = pickle.loads(pickled)
+        self.assertIs(type(e4), configparser.InterpolationMissingOptionError)
+        self.assertEqual(e4.args, exc.args)
+        self.assertEqual(e4.option, exc.option)
+        self.assertEqual(e4.section, exc.section)
+        self.assertEqual(e4.reference, exc.reference)
+        self.assertEqual(e4.message, exc.message)
+```
+
+For ExtendedInterpolation:
+```python
+def test_interpolationmissing_extended_interpolation(self):
+    """InterpolationMissingOptionError via real ExtendedInterpolation.get."""
+    parser = configparser.ConfigParser(
+        interpolation=configparser.ExtendedInterpolation())
+    parser.read_string("""
+    [section]
+    foo = ${missing} bar
+    """)
+    with self.assertRaises(configparser.InterpolationMissingOptionError) as cm:
+        parser.get('section', 'foo')
+    exc = cm.exception
+    self.assertIsInstance(exc, configparser.InterpolationMissingOptionError)
+    self.assertEqual(exc.option, 'foo')
+    self.assertEqual(exc.section, 'section')
+    self.assertEqual(exc.reference, 'missing')
+    self.assertEqual(exc.args, ('foo', 'section', '${missing} bar', 'missing'))
+    # raw=True returns the unresolved value
+    self.assertEqual(parser.get('section', 'foo', raw=True), '${missing} bar')
+    # Successful lookup after adding the reference
+    parser.set('section', 'missing', 'VALUE')
+    self.assertEqual(parser.get('section', 'foo'), 'VALUE bar')
+    # copy
+    e2 = copy.copy(exc)
+    self.assertIs(type(e2), configparser.InterpolationMissingOptionError)
+    self.assertEqual(e2.args, exc.args)
+    self.assertEqual(e2.option, exc.option)
+    self.assertEqual(e2.section, exc.section)
+    self.assertEqual(e2.reference, exc.reference)
+    # deepcopy
+    e3 = copy.deepcopy(exc)
+    self.assertIs(type(e3), configparser.InterpolationMissingOptionError)
+    self.assertEqual(e3.args, exc.args)
+    self.assertEqual(e3.option, exc.option)
+    self.assertEqual(e3.section, exc.section)
+    self.assertEqual(e3.reference, exc.reference)
+    # pickle
+    for proto in range(pickle.HIGHEST_PROTOCOL + 1):
+        pickled = pickle.dumps(exc, proto)
+        e4 = pickle.loads(pickled)
+        self.assertIs(type(e4), configparser.InterpolationMissingOptionError)
+        self.assertEqual(e4.args, exc.args)
+        self.assertEqual(e4.option, exc.option)
+        self.assertEqual(e4.section, exc.section)
+        self.assertEqual(e4.reference, exc.reference)
+        self.assertEqual(e4.message, exc.message)
+```
+
+And a cross-section reference test:
+```python
+def test_interpolationmissing_extended_cross_section(self):
+    """InterpolationMissingOptionError for missing cross-section reference."""
+    parser = configparser.ConfigParser(
+        interpolation=configparser.ExtendedInterpolation())
+    parser.read_string("""
+    [other]
+    value = data
+
+    [section]
+    foo = ${other:${nonexistent}} bar
+    """)
+    # Hmm, that's a nested reference. Let me think of a simpler cross-section one.
+```
+
+Actually, let me think more carefully. A cross-section reference that's missing would be something like:
+```
+[section]
+foo = ${other:missing_option} bar
+```
+where `[other]` exists but `missing_option` doesn't, OR where `[other]` doesn't exist at all.
+
+Wait, let me check what happens with ExtendedInterpolation when a cross-section reference is missing. Looking at the existing test `test_other_errors`:
+```
+case3 = ${wrong_section:wrong_value}
+```
+This raises `InterpolationMissingOptionError`.
+
+So for a cross-section reference:
+```python
+parser = configparser.ConfigParser(
+    interpolation=configparser.ExtendedInterpolation())
+parser.read_string("""
+[other]
+known = data
+
+[section]
+foo = ${other:missing_opt} bar
+""")
+```
+
+The reference would be `other:missing_opt`. Let me check what the `reference` attribute would be...
+
+Looking at the existing test:
+```python
+self.assertEqual(cm.exception.reference, 'dollars:${sick')
+```
+
+So for `${other:missing_opt}`, the reference would be `other:missing_opt`.
+
+And the args would be `('foo', 'section', '${other:missing_opt} bar', 'other:missing_opt')`.
+
+Wait, let me look at how InterpolationMissingOptionError is constructed. Looking at the existing test:
+```python
+def test_interpolationmissingoptionerror(self):
+    e1 = configparser.InterpolationMissingOptionError('option', 'section',
+        'rawval', 'reference')
+```
+
+So the constructor is `InterpolationMissingOptionError(option, section, rawval, reference)`.
+
+And from the existing test:
+```python
+self.assertEqual(cm.exception.reference, 'dollars:${sick')
+self.assertEqual(cm.exception.args[2], '${dollars:${sick}}') #rawval
+```
+
+So for my cross-section test:
+- option: 'foo'
+- section: 'section'
+- rawval: '${other:missing_opt} bar'
+- reference: 'other:missing_opt'
+- args: ('foo', 'section', '${other:missing_opt} bar', 'other:missing_opt')
+
+Now let me also think about the "diagnostic text" - that's `str(exc)` or `exc.message`. For InterpolationMissingOptionError, the message is typically something like "there is no option 'missing' in section 'section'". Let me check...
+
+Actually, looking at the configparser source, `InterpolationMissingOptionError` inherits from `InterpolationError` which has a `message` property. The message format would be something like "there is no option 'missing' in section 'section'" or similar.
+
+Actually, I should be careful about the exact diagnostic text. Let me look at what the exception's `__str__` returns. From the existing test:
+```python
+def test_interpolationmissingoptionerror(self):
+    e1 = configparser.InterpolationMissingOptionError('option', 'section',
+        'rawval', 'reference')
+```
+
+And it checks `e1.message`. The `message` property of `Error` returns `self.args[0]` if it's a string, otherwise... Actually, looking at the configparser source:
+
+```python
+class Error(Exception):
+    def __init__(self, message=''):
+        self.message = message
+    def __str__(self):
+        return self.message
+```
+
+Wait, but `InterpolationMissingOptionError` takes different args. Let me look at the class hierarchy:
+
+```python
+class InterpolationError(Error):
+    def __init__(self, option, section, message):
+        super().__init__(message)
+        self.section = section
+        self.option = option
+
+class InterpolationMissingOptionError(InterpolationError):
+    def __init__(self, option, section, rawval, reference):
+        super().__init__(option, section, 'no option')  # or something?
+        self.rawval = rawval
+        self.reference = reference
+```
+
+Hmm, I'm not sure of the exact message format. Let me look at what the existing tests check. The `test_interpolationmissingoptionerror` in `ExceptionPicklingTestCase` checks:
+- `e1.message`
+- `e1.args`
+- `e1.section`
+- `e1.option`
+- `e1.reference`
+
+And `e1.args` would be `('option', 'section', 'rawval', 'reference')`.
+
+For the message, it's likely something like "there is no option 'reference' in section 'section'" or similar. But I'm not 100% sure of the exact text. Let me be safe and check `str(exc)` contains the reference and section names, rather than checking the exact text.
+
+Actually wait - I need to be more careful. Let me re-read the task requirements:
+"Check the exact exception class, arguments, option, section, reference and diagnostic text against the actual failing lookup."
+
+So I need to check the diagnostic text. But I don't know the exact text without running the code. Let me be conservative and check that `str(exc)` contains the option name and section name, and the reference.
+
+Actually, looking at the configparser source code (which I know from CPython):
+
+```python
+class InterpolationMissingOptionError(InterpolationError):
+    def __init__(self, option, section, rawval, reference):
+        super().__init__(option, section,
+            'no option %r in section %r' % (reference, section))
+        self.rawval = rawval
+        self.reference = reference
+```
+
+Wait, no. Let me think about this more carefully. The `InterpolationError.__init__` signature is:
+```python
+def __init__(self, option, section, message):
+```
+
+So `InterpolationMissingOptionError('option', 'section', 'rawval', 'reference')` would call:
+```python
+super().__init__('option', 'section', 'rawval')  # No, that's wrong
+```
+
+Actually, looking at the CPython source for configparser:
+
+```python
+class InterpolationMissingOptionError(InterpolationError):
+    def __init__(self, option, section, rawval, reference):
+        super(InterpolationMissingOptionError, self).__init__(
+            option, section, 'no option %r in section %r' % (reference, section))
+        self.rawval = rawval
+        self.reference = reference
+```
+
+Hmm, but the existing test checks:
+```python
+self.assertEqual(e1.args, e2.args)
+```
+where `e1 = configparser.InterpolationMissingOptionError('option', 'section', 'rawval', 'reference')`
+
+And `e1.args` would be `('option', 'section', 'rawval', 'reference')` because that's what's passed to `Exception.__init__` (not to the custom `__init__`).
+
+Wait, I need to think about this more carefully. In Python, when you define a custom `__init__` that doesn't call `Exception.__init__`, `args` might not be set. But if it does call `super().__init__`, then...
+
+Actually, in Python 3, `Exception` uses `__new__` to set `args`. So `Exception.__new__(cls, *args)` sets `self.args = args`. The `__init__` is then called with the same args. So even if `__init__` doesn't explicitly set `self.args`, it's set by `__new__`.
+
+So `configparser.InterpolationMissingOptionError('option', 'section', 'rawval', 'reference')` would have:
+- `args = ('option', 'section', 'rawval', 'reference')`
+- `option = 'option'`
+- `section = 'section'`
+- `rawval = 'rawval'`
+- `reference = 'reference'`
+- `message = 'no option 'reference' in section 'section''` (or similar)
+
+OK so for my test, the args from a real get call would be:
+- For basic: `('foo', 'section', '%(missing)s bar', 'missing')`
+- For extended: `('foo', 'section', '${missing} bar', 'missing')`
+- For cross-section: `('foo', 'section', '${other:missing_opt} bar', 'other:missing_opt')`
+
+And the message would be something like `'no option 'missing' in section 'section'``.
+
+But wait, I should double-check. Let me look at the actual CPython source. In `Lib/configparser.py`:
+
+```python
+class InterpolationMissingOptionError(InterpolationError):
+
+    def __init__(self, option, section, rawval, reference):
+        super().__init__(option, section,
+            "no option %r in section %r" % (reference, section))
+        self.rawval = rawval
+        self.reference = reference
+```
+
+And `InterpolationError`:
+```python
+class InterpolationError(Error):
+
+    def __init__(self, option, section, message):
+        super().__init__(message)
+        self.section = section
+        self.option = option
+```
+
+And `Error`:
+```python
+class Error(Exception):
+
+    def __init__(self, message=''):
+        self.message = message
+
+    def __str__(self):
+        return self.message
+```
+
+So for `InterpolationMissingOptionError('option', 'section', 'rawval', 'reference')`:
+- `Exception.__new__` is called with `('option', 'section', 'rawval', 'reference')` → `args = ('option', 'section', 'rawval', 'reference')`
+- `InterpolationMissingOptionError.__init__` calls `super().__init__('option', 'section', "no option 'reference' in section 'section'")`
+- `InterpolationError.__init__` calls `super().__init__("no option 'reference' in section 'section'")`
+- `Error.__init__` sets `self.message = "no option 'reference' in section 'section'"`
+
+So `str(exc)` would be `"no option 'missing' in section 'section'"`.
+
+Great, so I can check `str(exc)` for the diagnostic text.
+
+Now, let me plan my patches. I have 6 actions remaining. I need to:
+1. Add tests to `Lib/test/test_configparser.py`
+2. Add documentation to `Doc/library/configparser.rst`
+3. Run a public check
+4. Submit
+
+That's at minimum 4 actions (2 patches + 1 check + 1 submit = 4), leaving 2 for corrections.
+
+But wait - I also need to be careful. The test file is large. Let me find the right insertion point.
+
+Looking at the working set, the test file content from lines 1117-2212 shows the end of the file. The `ExceptionPicklingTestCase` class has methods that end with `test_multilinecontinuationerror_pickle`. After that comes `InlineCommentStrippingTestCase`.
+
+I need to insert new test methods into `ExceptionPicklingTestCase`, before the class ends (i.e., before `class InlineCommentStrippingTestCase`).
+
+Looking at the visible content, the `test_multilinecontinuationerror_pickle` method ends with:
+```python
+                    self.assertEqual(e2.errors, e1.errors)
+                    self.assertEqual(e2.message, e1.message)
+
+
+class InlineCommentStrippingTestCase(unittest.TestCase):
+```
+
+So I'll insert before `class InlineCommentStrippingTestCase`.
+
+Now for the documentation, I need to find the "Interpolation of values" section. The search found it at line 334. Let me check what's around there.
+
+Actually, I have lines 710-1000 of the doc file loaded. The "Interpolation of values" section is at line 334, which is NOT in my loaded range. I need to read that section first to know where to insert.
+
+But wait - I'm running low on actions. Let me think about what I can do:
+
+Actions remaining: 6
+- I need to read the doc section (1 action) - actually, I can use `work_on` to load what I need
+- I need to patch the test file (1 action)
+- I need to patch the doc file (1 action)
+- I need to run a check (1 action)
+- I need to submit (1 action)
+
+That's 5 actions minimum, leaving 1 for corrections.
+
+Actually wait - let me reconsider. Can I use `work_on` to load the doc section? That's 1 action. Then I need 2 patches + 1 check + 1 submit = 4 more. Total = 5. That fits in 6.
+
+But actually, I realize I should check if I can do the doc patch without reading the exact section first. The task says "Extend Doc/library/configparser.rst with runnable examples explaining when the missing-reference error arises..." I need to know the exact current content to do a patch.
+
+Let me use `work_on` to load the relevant section of the doc file. The "Interpolation of values" section starts around line 334. Let me load a reasonable range.
+
+Actually, let me reconsider my approach. I have 6 actions. Let me be strategic:
+
+1. `work_on` to load the doc section around line 334 (1 action)
+2. Patch the test file (1 action)
+3. Patch the doc file (1 action)
+4. Run public check (1 action)
+5. Submit (1 action)
+
+That's 5 actions, leaving 1 spare.
+
+But wait - I need to be careful. The `work_on` action replaces the working set. I currently have the test file loaded. If I do `work_on` for the doc, I lose the test file. But I already know the exact content I need to patch (I can see it in the working set).
+
+Actually, looking more carefully at the rules: "A complete retrieved read/group result also qualifies when its source bytes and file fingerprint still match the current file". So the working set sources qualify for patches as long as the fingerprint matches. The file_sha256 for the test file is `c79c1f5513a1baf6b1e4ebd3b3660f9747679c47716af058d0435140b038ab04`.
+
+But if I do `work_on` to load the doc section, it will replace my working set. Then I won't have the test file loaded anymore for the patch.
+
+Hmm, let me think differently. Can I do both patches from the current working set? I have the test file loaded (lines 1117-2212) which shows the insertion point. For the doc file, I have lines 710-1000, but the "Interpolation of values" section is at line 334, which is NOT in my loaded range.
+
+So I need to either:
+a) Read the doc section first (1 action), then do both patches
+b) Or find another way
+
+Let me go with:
+1. `read` the doc section (1 action) - this adds to working set
+2. Patch test file (1 action)
+3. Patch doc file (1 action)
+4. Check (1 action)
+5. Submit (1 action)
+
+Total: 5 actions, fits in 6.
+
+Actually wait, I should use `work_on` instead of `read` if I want to keep both files. But `work_on` replaces the working set. If I use `read`, it "Opens exact current source and adds it to the working set." - so it adds to the existing working set. That's what I want.
+
+Let me plan the exact patches:
+
+**Test file patch:**
+Insert before `class InlineCommentStrippingTestCase(unittest.TestCase):`
+
+The old text would be:
+```
+class InlineCommentStrippingTestCase(unittest.TestCase):
+```
+
+And the new text would be the new test methods followed by that line.
+
+Wait, but I need to make sure the old text is unique. Let me check - is `class InlineCommentStrippingTestCase(unittest.TestCase):` unique in the file? Looking at the loaded content, I see it appears once. Good.
+
+Actually, I should be more careful. Let me use a bit more context to ensure uniqueness. The text before it is:
+```
+                    self.assertEqual(e2.errors, e1.errors)
+                    self.assertEqual(e2.message, e1.message)
+
+
+class InlineCommentStrippingTestCase(unittest.TestCase):
+```
+
+Let me use that as the old text.
+
+**Doc file patch:**
+I need to add documentation about `InterpolationMissingOptionError` in the "Interpolation of values" section. Let me first read that section to see what's there.
+
+Let me proceed with reading the doc section first.
+
+Actually, let me reconsider. I have the test file lines 1117-2212 loaded. That shows the `ExceptionPicklingTestCase` class and where it ends. The last method before `InlineCommentStrippingTestCase` is `test_multilinecontinuationerror_pickle`.
+
+Looking at the content more carefully:
+
+```
+    def test_multilinecontinuationerror_pickle(self):
+        import pickle
+        for with_newline in (True, False):
+            with self.subTest(with_newline=with_newline):
+                e1 = self._make_mcline_error(with_newline)
+                for proto in range(pickle.HIGHEST_PROTOCOL + 1):
+                    pickled = pickle.dumps(e1, proto)
+                    e2 = pickle.loads(pickled)
+                    self.assertIs(type(e2), type(e1))
+                    self.assertEqual(e2.args, e1.args)
+                    self.assertEqual(e2.source, e1.source)
+                    self.assertEqual(e2.lineno, e1.lineno)
+                    self.assertEqual(e2.line, e1.line)
+                    self.assertEqual(e2.errors, e1.errors)
+                    self.assertEqual(e2.message, e1.message)
+
+
+class InlineCommentStrippingTestCase(unittest.TestCase):
+```
+
+So I'll insert my new methods between the end of `test_multilinecontinuationerror_pickle` and `class InlineCommentStrippingTestCase`.
+
+Now let me draft the test methods:
+
+```python
+    def _make_interp_missing_error(self, config_text, section, option):
+        """Create an InterpolationMissingOptionError via a real parser get."""
+        parser = configparser.ConfigParser()
+        parser.read_string(config_text)
+        try:
+            parser.get(section, option)
+        except configparser.InterpolationMissingOptionError as e:
+            return e, parser
+        self.fail("expected InterpolationMissingOptionError")
+
+    def test_interpolationmissing_basic_interpolation(self):
+        """InterpolationMissingOptionError via real BasicInterpolation get."""
+        text = textwrap.dedent("""
+            [section]
+            foo = %(missing)s bar
+            known = value
+        """)
+        parser = configparser.ConfigParser()
+        parser.read_string(text)
+        with self.assertRaises(
+                configparser.InterpolationMissingOptionError) as cm:
+            parser.get('section', 'foo')
+        exc = cm.exception
+        self.assertIsInstance(
+            exc, configparser.InterpolationMissingOptionError)
+        self.assertEqual(exc.option, 'foo')
+        self.assertEqual(exc.section, 'section')
+        self.assertEqual(exc.reference, 'missing')
+        self.assertEqual(
+            exc.args, ('foo', 'section', '%(missing)s bar', 'missing'))
+        self.assertEqual(
+            str(exc), "no option 'missing' in section 'section'")
+        # raw=True returns the unresolved value
+        self.assertEqual(
+            parser.get('section', 'foo', raw=True), '%(missing)s bar')
+        # successful lookup once the referenced setting exists
+        parser.set('section', 'missing', 'VALUE')
+        self.assertEqual(parser.get('section', 'foo'), 'VALUE bar')
+        # shallow copy
+        e2 = copy.copy(exc)
+        self.assertIs(type(e2), configparser.InterpolationMissingOptionError)
+        self.assertEqual(e2.args, exc.args)
+        self.assertEqual(e2.option, exc.option)
+        self.assertEqual(e2.section, exc.section)
+        self.assertEqual(e2.reference, exc.reference)
+        self.assertEqual(e2.message, exc.message)
+        # deep copy
+        e3 = copy.deepcopy(exc)
+        self.assertIs(type(e3), configparser.InterpolationMissingOptionError)
+        self.assertEqual(e3.args, exc.args)
+        self.assertEqual(e3.option, exc.option)
+        self.assertEqual(e3.section, exc.section)
+        self.assertEqual(e3.reference, exc.reference)
+        self.assertEqual(e3.message, exc.message)
+        # pickle every protocol
+        for proto in range(pickle.HIGHEST_PROTOCOL + 1):
+            with self.subTest(proto=proto):
+                pickled = pickle.dumps(exc, proto)
+                e4 = pickle.loads(pickled)
+                self.assertIs(
+                    type(e4), configparser.InterpolationMissingOptionError)
+                self.assertEqual(e4.args, exc.args)
+                self.assertEqual(e4.option, exc.option)
+                self.assertEqual(e4.section, exc.section)
+                self.assertEqual(e4.reference, exc.reference)
+                self.assertEqual(e4.message, exc.message)
+                self.assertEqual(repr(e4), repr(exc))
+
+    def test_interpolationmissing_extended_interpolation(self):
+        """InterpolationMissingOptionError via real ExtendedInterpolation get."""
+        text = textwrap.dedent("""
+            [section]
+            foo = ${missing} bar
+            known = value
+        """)
+        parser = configparser.ConfigParser(
+            interpolation=configparser.ExtendedInterpolation())
+        parser.read_string(text)
+        with self.assertRaises(
+                configparser.InterpolationMissingOptionError) as cm:
+            parser.get('section', 'foo')
+        exc = cm.exception
+        self.assertIsInstance(
+            exc, configparser.InterpolationMissingOptionError)
+        self.assertEqual(exc.option, 'foo')
+        self.assertEqual(exc.section, 'section')
+        self.assertEqual(exc.reference, 'missing')
+        self.assertEqual(
+            exc.args, ('foo', 'section', '${missing} bar', 'missing'))
+        self.assertEqual(
+            str(exc), "no option 'missing' in section 'section'")
+        # raw=True returns the unresolved value
+        self.assertEqual(
+            parser.get('section', 'foo', raw=True), '${missing} bar')
+        # successful lookup once the referenced setting exists
+        parser.set('section', 'missing', 'VALUE')
+        self.assertEqual(parser.get('section', 'foo'), 'VALUE bar')
+        # shallow copy
+        e2 = copy.copy(exc)
+        self.assertIs(type(e2), configparser.InterpolationMissingOptionError)
+        self.assertEqual(e2.args, exc.args)
+        self.assertEqual(e2.option, exc.option)
+        self.assertEqual(e2.section, exc.section)
+        self.assertEqual(e2.reference, exc.reference)
+        self.assertEqual(e2.message, exc.message)
+        # deep copy
+        e3 = copy.deepcopy(exc)
+        self.assertIs(type(e3), configparser.InterpolationMissingOptionError)
+        self.assertEqual(e3.args, exc.args)
+        self.assertEqual(e3.option, exc.option)
+        self.assertEqual(e3.section, exc.section)
+        self.assertEqual(e3.reference, exc.reference)
+        self.assertEqual(e3.message, exc.message)
+        # pickle every protocol
+        for proto in range(pickle.HIGHEST_PROTOCOL + 1):
+            with self.subTest(proto=proto):
+                pickled = pickle.dumps(exc, proto)
+                e4 = pickle.loads(pickled)
+                self.assertIs(
+                    type(e4), configparser.InterpolationMissingOptionError)
+                self.assertEqual(e4.args, exc.args)
+                self.assertEqual(e4.option, exc.option)
+                self.assertEqual(e4.section, e4.section)
+                self.assertEqual(e4.reference, exc.reference)
+                self.assertEqual(e4.message, exc.message)
+                self.assertEqual(repr(e4), repr(exc))
+
+    def test_interpolationmissing_extended_cross_section(self):
+        """InterpolationMissingOptionError for a missing cross-section reference."""
+        text = textwrap.dedent("""
+            [other]
+            known = data
+
+            [section]
+            foo = ${other:missing_opt} bar
+        """)
+        parser = configparser.ConfigParser(
+            interpolation=configparser.ExtendedInterpolation())
+        parser.read_string(text)
+        with self.assertRaises(
+                configparser.InterpolationMissingOptionError) as cm:
+            parser.get('section', 'foo')
+        exc = cm.exception
+        self.assertIsInstance(
+            exc, configparser.InterpolationMissingOptionError)
+        self.assertEqual(exc.option, 'foo')
+        self.assertEqual(exc.section, 'section')
+        self.assertEqual(exc.reference, 'other:missing_opt')
+        self.assertEqual(
+            exc.args, ('foo', 'section', '${other:missing_opt} bar',
+                       'other:missing_opt'))
+        self.assertEqual(
+            str(exc),
+            "no option 'other:missing_opt' in section 'section'")
+        # raw=True returns the unresolved value
+        self.assertEqual(
+            parser.get('section', 'foo', raw=True),
+            '${other:missing_opt} bar')
+        # successful lookup once the referenced setting exists
+        parser.set('other', 'missing_opt', 'VALUE')
+        self.assertEqual(parser.get('section', 'foo'), 'VALUE bar')
+        # shallow copy
+        e2 = copy.copy(exc)
+        self.assertIs(type(e2), configparser.InterpolationMissingOptionError)
+        self.assertEqual(e2.args, exc.args)
+        self.assertEqual(e2.option, exc.option)
+        self.assertEqual(e2.section, exc.section)
+        self.assertEqual(e2.reference, exc.reference)
+        self.assertEqual(e2.message, exc.message)
+        # deep copy
+        e3 = copy.deepcopy(exc)
+        self.assertIs(type(e3), configparser.InterpolationMissingOptionError)
+        self.assertEqual(e3.args, exc.args)
+        self.assertEqual(e3.option, exc.option)
+        self.assertEqual(e3.section, exc.section)
+        self.assertEqual(e3.reference, exc.reference)
+        self.assertEqual(e3.message, exc.message)
+        # pickle every protocol
+        for proto in range(pickle.HIGHEST_PROTOCOL + 1):
+            with self.subTest(proto=proto):
+                pickled = pickle.dumps(exc, proto)
+                e4 = pickle.loads(pickled)
+                self.assertIs(
+                    type(e4), configparser.InterpolationMissingOptionError)
+                self.assertEqual(e4.args, exc.args)
+                self.assertEqual(e4.option, exc.option)
+                self.assertEqual(e4.section, exc.section)
+                self.assertEqual(e4.reference, exc.reference)
+                self.assertEqual(e4.message, exc.message)
+                self.assertEqual(repr(e4), repr(exc))
+```
+
+Wait, I made a typo in the extended interpolation test: `self.assertEqual(e4.section, e4.section)` should be `self.assertEqual(e4.section, exc.section)`. Let me fix that.
+
+Now for the documentation. I need to read the "Interpolation of values" section to see where to add the new content. Let me do that first.
+
+Actually, let me reconsider my action plan:
+1. Read doc section (1 action)
+2. Patch test file (1 action)
+3. Patch doc file (1 action)
+4. Check (1 action)
+5. Submit (1 action)
+
+Total: 5 actions. I have 6 remaining. Good.
+
+Let me start by reading the doc section. The search showed "Interpolation of values" at line 334. I'll read from around line 330 to maybe line 500 to see the full section and find a good insertion point.
+
+Wait, actually I should also think about whether the `textwrap` import is available in the test file. Looking at the imports:
+```python
+import collections
+import copy
+import configparser
+import io
+import os
+import pickle
+import textwrap
+import unittest
+import warnings
+```
+
+Yes, `textwrap`, `copy`, and `pickle` are all imported. Good.
+
+Let me proceed with reading the doc section.
