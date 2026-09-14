@@ -1,0 +1,384 @@
+Let me start by understanding the current state. The task is:
+
+Extend the saved configuration parser backport with regression tests for copy and serialize of parser-raised MultilineContinuationError. Only Lib/test/test_configparser.py needs to change; add independently discoverable unittest test methods.
+
+Requirements:
+- Verify parser input that actually raises the exception, including the offending continuation line with trailing newline and without.
+- For each case, verify round-trip of copy.copy, copy.deepcopy, pickle.dumps/loads across all protocols supported by the Python running the test.
+- Restored exception must retain: exact class, constructor arguments, source, 1-based line number, raw offending line, errors list, diagnostic message.
+- Follow existing exception test conventions.
+- Use implementation, configuration, and existing tests to identify how to reach the behavior.
+- Public check: run saved suite and edited suite, verify preservation of existing work, observe required transport case, and run only the added tests against deliberately faulty exception restore variants. The added tests must pass on the saved implementation and detect faulty variants.
+
+Let's start by looking at related files first:
+- Lib/configparser.py (implementation)
+- Lib/test/test_configparser.py (existing tests)
+
+First, let's read the test file to understand conventions, and also read the implementation.
+
+Start with work_on, read relevant ranges: configparser.py around MultilineContinuationError (lines ~320-360, and around lines ~1040-1060 where it's raised), and test file. First let me search within the test file for existing exception test conventions.
+
+First let me look at test file structure with search/tree.
+
+First let me read the test file. But I don't know its size. First let me search for "class" and "MultilineContinuationError" within test file.
+
+Plan:
+1. work_on with sources: Lib/configparser.py (ranges near exception definition and raise site) and Lib/test/test_configparser.py (whole file? need size). First let me search the test file for exception tests.
+
+First let me search within test file for existing exception test conventions.
+
+Actually, let's do this efficiently with the tools. Actions remaining: 23. Used: 1 (search). Let's proceed.
+
+Step 1: search within Lib/test/test_configparser.py for "def test_" to see conventions, and search "ParsingError". Also search "copy" or "pickle" within test file to see if transport tests exist for other exceptions.
+
+Let me run parallel searches:
+- search path=Lib/test/test_configparser.py query="pickle"
+- search path=Lib/test/test_configparser.py query="MultilineContinuationError"
+
+Actually, search is one action each. Let me be mindful. Total actions: 23. Plan roughly:
+- 2-3 searches
+- 1-2 reads (or work_on)
+- 1 patch (add tests)
+- 1 check
+- possibly fix + re-check
+- submit
+
+That's fine.
+
+Let me first read the test file around line 1852 to see test_multilinecontinuationerror and nearby conventions. Read the whole file? Size unknown. Let me search for "class " to see structure. Actually, let me just read lines 1800-1900 first.
+
+Better: use work_on to bring in:
+- Lib/configparser.py lines 320-380 (exception class definition)
+- Lib/configparser.py lines 1000-1100 (raise site)
+- Lib/test/test_configparser.py lines 1-100 (header/imports) and around 1840-1900.
+
+But work_on replaces the previous working set; the host sizes the pages. Multiple ranges allowed (max 16 sources). Let's do that.
+
+Actually, simpler: first read the test file to understand structure, then patch.
+
+Also, "deliberately faulty exception restore variants" — check runs added tests against faulty variants. That means tests need to verify all properties: class, args, source, lineno, line (raw offending line), errors list, message. If faulty variants restore any of those incorrectly, tests should fail. So tests must assert:
+- type(ex) is MultilineContinuationError
+- ex.source == expected source
+- ex.lineno == expected 1-based line number
+- ex.line == raw offending line? Hmm, what does the exception hold?
+
+Let me read implementation: MultilineContinuationError(ParsingError) around line 327. Let me read.
+
+ParsingError in configparser:
+
+```python
+class ParsingError(Error):
+    """
+    ParsingError is raised a section has a malformed line or a
+    continuation line is malformed.
+    """
+    def __init__(self, fpname, lineno, line):
+        self.source = fpname
+        self.lineno = lineno
+        self.line = line
+    def __str__(self):
+        if self.source:
+            source = '%s' % self.source
+        else:
+            source = stringio
+        return ('line %d of "%s": %s' % (self.lineno, source, self.line))
+```
+
+And MultilineContinuationError:
+
+```python
+class MultilineContinuationError(ParsingError):
+    """
+    Raised when a continuation line occurs in a file position
+    where it is not allowed, such as at the end of a file or after
+    a blank line.
+    """
+    def __init__(self, fpname, lineno, line, errors=tuple()):
+        super().__init__(fpname, lineno, line)
+        self.errors = errors
+```
+
+Wait — need exact code in this backport (might be older Python style). Let me read the file.
+
+Test file convention: test_multilinecontinuationerror at line 1852:
+
+```python
+    def test_multilinecontinuationerror(self):
+        data = '''
+[foo]
+a = b
+  c = d
+'''
+        parser = RawConfigParser(strict=True)
+        with self.assertRaises(configparser.MultilineContinuationError) as cm:
+            parser.read_string(data)
+        exc = cm.exception
+        self.assertIsInstance(exc, configparser.MultilineContinuationError)
+```
+
+Something like that. Let me read the actual code.
+
+"source" — when reading from string, source is None? In Python 3.x, read_string uses filename=None so exc.source is None. Hmm, "source" must be retained; for string input it might be None. Task says "source, 1-based line number, raw offending line, errors list, diagnostic message". "Diagnostic message" = str(ex)? The message is constructed in ParsingError.__str__.
+
+Also "constructor arguments": ex.args — Error extends Exception; ParsingError doesn't call super().__init__? In CPython configparser:
+
+```python
+class ParsingError(Error):
+    def __init__(self, fpname, lineno, line):
+        self.source = fpname
+        self.lineno = lineno
+        self.line = line
+```
+
+Doesn't call super().__init__(), so args stays (). Hmm, but MultilineContinuationError in Python 3.10+? Let me check the actual backport code. Need to read.
+
+Let me now do the reads. Plan actions:
+
+1. work_on sources: Lib/configparser.py lines 300-360 and 1030-1070; Lib/test/test_configparser.py lines 1-80 (imports, class def) and 1830-1880.
+
+Actually work_on sizes pages; multiple sources in a single action. Good.
+
+But I might want the entire test file to follow conventions and know where to add tests (end of class?). Let me search "def test_" within test file with limit 16 to see list of tests, or use p0_page to get file outline. p0_page returns a scoped directory or file outline page with source positions. Let me use p0_page on the test file to see outline (class/method boundaries) without full source.
+
+Let me run p0_page path=Lib/test/test_configparser.py offset=0. And work_on with configparser.py ranges in parallel? I can only put one operation object per reply... actually the reply format is {"discussion":..., "operation": ACTION}. Single operation per reply. Hmm, "the two operations consume 2 actions" refers to patch+check_after. So one operation per reply. Let me count action cost: I think each operation is 1 action. 23 remaining. Let me proceed step-by-step.
+
+Step 1: work_on with:
+- Lib/configparser.py lines 1-100? No — I need exception class (320-380), raise site (1030-1070), and possibly ParsingError/Error def (~300-340).
+- Lib/test/test_configparser.py: imports/first 60 lines; and 1840-1880.
+
+work_on sources: list of {path,start_line,end_line}. Let's do:
+1. Lib/configparser.py 290-380
+2. Lib/configparser.py 1020-1080
+3. Lib/test/test_configparser.py 1-60
+4. Lib/test/test_configparser.py 1820-1900
+
+This gives me exception definition, raise site, test file header, existing test.
+
+Then read more of test file if needed (e.g. where class ends, whether pickle/copy tests for other exceptions exist — search for "pickle" within test file first? that's another action).
+
+Alternatively, read whole test file? Size unknown. Let me first search "class" and "MultilineContinuationError" in test file to see structure.
+
+Actually, better to read entire test file in chunks. Let me p0_page the test file first to see size/outline. p0_page returns outline with source positions (not exact source). Let me run:
+
+Action 1: p0_page Lib/test/test_configparser.py offset 0.
+
+Then decide.
+
+Let me also think about what the tests need to look like.
+
+Typical CPython test for this (Python 3.12 added MultilineContinuationError in bpo/gh-102881? actually added in 3.12 for strict parsing when continuation line is at illegal position... hmm, was MultilineContinuationError added in Python 3.12? Let me recall: gh-67155? Actually I recall MultilineContinuationError was added in Python 3.12 (bpo-46386?). It's in 3.12: "configparser: MultilineContinuationError raised when a continuation line is invalid".
+
+Existing test at line 1852 in test file: test_multilinecontinuationerror.
+
+For copy/deepcopy/pickle: ParsingError — pickling an exception: Exception pickling uses __reduce__ via copyreg? Exception pickling: exception objects pickle via standard mechanism: for Exception subclasses, pickle uses reduce with exception class and args (exception.__reduce__ returns (type(self), self.args) by default for Exception). But if the class defines custom __init__ with more args... For MultilineContinuationError, args might be (fpname, lineno, line, errors)? Need to check the implementation's __init__ — if it calls super().__init__(fpname, lineno, line, errors=tuple()) then args will be (fpname, lineno, line, errors). In CPython 3.12:
+
+```python
+class MultilineContinuationError(ParsingError):
+    """
+    Raised when a continuation line occurs in a file position
+    where it is not allowed, such as at the end of a file or after
+    a blank line.
+    """
+    def __init__(self, fpname, lineno, line, errors=()):
+        super().__init__(fpname, lineno, line)
+        self.errors = errors
+```
+
+And ParsingError:
+
+```python
+class ParsingError(Error):
+    """
+    ParsingError is raised a section has a malformed line or a
+    continuation line is malformed.
+    """
+    def __init__(self, fpname, lineno, line):
+        self.source = fpname
+        self.lineno = lineno
+        self.line = line
+```
+
+Hmm, does ParsingError call Error.__init__? In CPython:
+
+```python
+class Error(Exception):
+    def __init__(self, msg=''):
+        self.message = msg
+```
+
+ParsingError.__init__ doesn't call super().__init__? Let me check CPython 3.12 configparser.py:
+
+```python
+class Error(Exception):
+    def __init__(self, msg=''):
+        self.message = msg
+
+class NoSectionError(Error):
+    ...
+
+class DuplicateSectionError(Error): ...
+class DuplicateOptionError(Error): ...
+class NoOptionError(Error): ...
+class InterpolationError(Error): ...
+class InterpolationMissingOptionError(InterpolationError): ...
+class InterpolationSyntaxError(InterpolationError): ...
+class ParsingError(Error):
+    """
+    ParsingError is raised a section has a malformed line or a
+    continuation line is malformed.
+    """
+    def __init__(self, fpname, lineno, line):
+        self.source = fpname
+        self.lineno = lineno
+        self.line = line
+
+class MultilineContinuationError(ParsingError):
+    """
+    Raised when a continuation line occurs in a file position
+    where it is not allowed, such as at the end of a file or after
+    a blank line.
+    """
+    def __init__(self, fpname, lineno, line, errors=tuple()):
+        super(MultilineContinuationError, self).__init__(fpname, lineno, line)
+        self.errors = errors
+```
+
+So args: ParsingError.__init__ doesn't call super().__init__, so args remains whatever Exception default... Exception.__new__ sets args from the args passed to Exception.__new__ — since MultilineContinuationError(fpname, lineno, line, errors) passes 4 args to constructor, __new__ stores args=(fpname, lineno, line, errors) unless __init__ resets them. ParsingError.__init__ doesn't modify self.args. So ex.args == (fpname, lineno, line, errors).
+
+Unpickling: Exception.__reduce__ returns (type(self), self.args) typically (Exception.__reduce__ exists in Python 3.11+? actually Exception defines __reduce__ via C code, exception pickling: "Exception pickling via reduce" — in Python 3, Exception objects pickle fine, using (type, args) plus __dict__ preserved via standard instance pickling? Hmm.
+
+Instance state of pickled exception: standard object pickling saves __dict__. For Exception, __reduce__ from C code returns (cls, self.args) — no state — but then pickle also saves instance dict? No: if __reduce__ returns 2-tuple (callable, args), the instance dict is saved via save_reduce's 5-arg form? Let me recall: pickler.save_reduce uses reduce 2-tuple; then "save_state" saves __dict__ if any. Actually for new-style classes, pickler saves __dict__ state by default. In save_reduce, after calling func(*args), pickler checks getattr(obj, "__dict__", None) and if not None, pickles it as state. For exceptions, __dict__ contains source, lineno, line, errors (for MultilineContinuationError). Exception also has __dict__ with args? In CPython, Exception stores args in C-level tuple; exception's __dict__ contains other attributes.
+
+Hmm — but wait, Exception.__reduce__ in Python 3: Exception implements __reduce__ that returns (type(self), self.args). So unpickle: cls(*args) → MultilineContinuationError(fpname, lineno, line, errors) → sets attributes in __init__ → then pickled __dict__ state applied (overwriting with same values). Fine.
+
+But the "deliberately faulty exception restore variants" in the public check — the check framework presumably swaps out a faulty variant of the implementation (e.g., an exception class that drops errors, or doesn't save line correctly) and runs the added tests expecting failure. So my tests must verify everything the task enumerates: exact class, constructor args, source, 1-based line number, raw offending line, errors list, diagnostic message (str(ex)).
+
+So for each case (with/without trailing newline) I need:
+- Trigger exception with real parser input.
+- Expected: source (for read_string it's None? Hmm "source" — task says retain source. For string reading, source is None. Maybe better to read from file-like object with name? E.g., io.StringIO? For read_string, filename=None → source None. Hmm.
+
+Wait — "raw offending line": the `line` attribute is the raw offending line as read (including newline? "including offending continuation line with trailing newline and without" — that's about parser input; the offending line is e.g. "\n" or trailing whitespace line).
+
+Let me think about how MultilineContinuationError is raised (CPython 3.12, _read_line / _uniform): In _uniform, when parsing continuation lines (line starts with whitespace), it reads lines until non-continuation line; errors are collected. Then after loop, if not first_element_is_continuation? Actually the error occurs in `_uniform` when `first_element_is_continuation`? Let me recall exact code (CPython 3.12 Lib/configparser.py, _uniform method):
+
+```python
+    def _uniform(self, lines, fpname, lineno, section_name=None):
+        continuelines = []
+        result = []
+        continuations = 0
+        first_element_is_continuation = ...
+```
+
+Hmm, I don't remember exactly; the backport code in the workspace is the source of truth. Let me read lines ~1020-1080.
+
+CPython 3.12 _uniform (from memory):
+
+```python
+    def _uniform(self, lines, fpname, lineno, section_name=None):
+        continuelines = []
+        result = []
+        continuations = 0
+        first_element_is_continuation = ...
+```
+
+Hmm, I don't remember exactly; the backport code in the workspace is the source of truth. Let me read lines ~1020-1080.
+
+From the CPython git (3.12):
+
+```python
+    def _uniform(self, lines, fpname, lineno, section_name=None):
+        continuelines = []
+        result = []
+        continuations = 0
+        first_element_is_continuation = ...
+```
+
+I really don't remember; I'll read from the workspace.
+
+Existing test at line 1852 will show how it's triggered. The new tests probably use same data but with/without trailing newline.
+
+Now the test file conventions: class RawConfigParserTest? There are classes: ConfigParserTestCase, RawConfigParserTest, etc. test_multilinecontinuationerror at line 1852 — within which class? Let me read surrounding.
+
+For the transport tests, I'll add methods after test_multilinecontinuationerror, e.g.:
+
+```python
+    def test_multilinecontinuationerror_copy(self):
+        ...
+```
+
+But the task says "add independently discoverable unittest test methods" and "for each case, verify round-trip of copy.copy, copy.deepcopy, pickle.dumps/loads across all protocols supported by the Python running the test". So maybe 2 methods (one per case: with-trailing-newline, without-trailing-newline) each testing copy/deepcopy/pickle all protocols; or one method per transport × case. "Independently discoverable unittest test methods" probably means each test method should be discoverable individually (i.e., methods named test_*), and the check will "run only the added tests" — the check framework knows which methods were added (by diff?). Probably by name diff. To be safe, add methods with names clearly related to multilinecontinuationerror transport.
+
+Structure: write a helper? "Follow existing exception test conventions." Let me look at the existing test first.
+
+Possible approach in test file:
+
+```python
+    def _multiline_continuation_error_cases(self):
+        for data in (
+            "[a]\nb = c\n\n\nd = e\n",
+            "[a]\nb = c\n\n\nd = e",
+        ):
+            yield data
+```
+
+Hmm wait — "offending continuation line with trailing newline and without". The offending line is the continuation line itself. E.g.:
+
+```
+[section]
+key = value
+  continuation line
+```
+
+Wait, MultilineContinuationError is raised when continuation line occurs in a position where it is not allowed: at EOF or after blank line, or as first line of file? Example from CPython docs:
+
+```
+>>> config = """
+... [section]
+... key = value
+...
+... continuation = bad
+... """
+```
+
+Hmm no. Let me think: in 3.12, MultilineContinuationError is raised when a continuation line appears where it's invalid: as first line, after a blank line, at EOF. Example from docs:
+
+```
+[SECTION]
+key = value
+
+  continued = invalid
+```
+
+Wait, a blank line terminates a section; a continuation line after that is illegal → error. Also first line of file being continuation → error. And continuation line at EOF → error.
+
+Existing test at line 1852 will show. Let me just read it.
+
+Plan for action (1 operation per reply):
+
+1. work_on sources:
+   - Lib/test/test_configparser.py 1830-1900 (existing test + surroundings)
+   - Lib/configparser.py 300-360 (exception class)
+   - Lib/configparser.py 1020-1080 (raise site)
+   results: []
+
+2. p0_page test file for outline (to know class boundaries and where to add tests, and file size) — or read test file end to see last test and EOF. Actually I need to know exact insertion point. I'll read the end of the test file later with read.
+
+3. Search for existing use of "pickle" or "deepcopy" in test file to follow convention: search path=Lib/test/test_configparser.py query="pickle" (1 action).
+
+Also search for "protocol". Let me budget: 23 actions left. Estimated usage: work_on(1) + search pickle(1) + p0_page or read end of test file(1-2) + maybe read of more implementation context(0-1) + patch(1-2) + check(1) + fix(0-2) + submit(1). About 8-10. Fine.
+
+Let me begin.
+
+Actually, the first work_on is to set up working set; then reads will be cheap? Read opens exact current source and adds to working set; "A complete fetched read/group result also qualifies when its source bytes and file fingerprint still match" — for patch, I need exact old source visible and file sha. Expected_file_sha256: need current file fingerprint. Where do I get it? The patch operation requires expected_file_sha256 = current file's pre-edit fingerprint. Probably search/read results include file sha? The result of read probably includes fingerprint. Let me look at tool outputs when they come in.
+
+Let me start: work_on with 4 ranges.
+
+Actually wait — maybe I should first read the entire existing test at 1852 and surroundings before deciding ranges. work_on is cheap; I'll do:
+
+sources:
+- Lib/configparser.py 300-400
+- Lib/configparser.py 1000-1100
+- Lib/test/test_configparser.py 1-80
+- Lib/test/test_configparser.py 1820-1900
+
+Then follow-up based on what I see.

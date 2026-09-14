@@ -14,17 +14,28 @@ the coached execution approach below; completed assisted records keep their
 original labels and evidence. The current plan is
 `development/bounded_working_set/SYMBIOTIC_PLAN.md`.
 
-The uncoached runner and a useful next coverage task are now prepared under
-`development/uncoached_contribution/`; read PREPARATION_REVIEW.md and SPEC.md.
-There have been no new Qwen completion requests. Fifty-eight selected tests and
-two native scripted contribution paths pass and replay; broad acquisition peaks
-at 23,450 of 23,808 input tokens. These are host qualifications, not model outcomes.
-The opt-in session also fixes a reproduced contract-scope defect: an old passing
-check applies only when both candidate and checker definition match. Preserve
-historical unbound results. The proposed new task extends copying/serialization
-coverage from the completed backport with an empty initial source group. Its
-16-request / 24-operation package is prepared, not executed; do not reuse prior
-allowances or insert reviewer coaching during its eventual run.
+The uncoached coverage contribution is now closed and checked; read
+`development/uncoached_contribution/review/RESULTS.md` and its complete transcript
+and host-path audits. Under frozen c476ee9d, four Qwen requests select source,
+save three meaningful copying/serialization tests, request a successor check and
+submit in five actual operations. No coaching or host correction occurs in the
+run. All prior work is preserved; the edited suite runs 359 tests with five skips
+and no failures/errors, and the new tests detect all four restoration faults.
+Exact replay and custody verification pass. The unused 12 requests / 19 operations
+are closed. Historical preparations and assisted contributions retain their labels.
+
+The corrected combined reply is actually used, without a claimed causal speedup.
+The opt-in checker requires both candidate and checker-definition identity; an
+accepted submission partly reflects that host enforcement. Input peaks at 10,735
+tokens, so there is no working-set pressure outcome. The task costs 51,393 generated
+tokens and 52.863 loop minutes. C03 produces 44,852 tokens, including substantial
+repeated JSON/Python encoding attempts, and finishes with only 3,963 physical
+tokens free. Preserve the useful analysis and adverse cost; do not equate every
+thinking token with waste or diagnose a new host bug from length alone. Retain
+the host. A bounded reasoning-allocation comparison is the next recommendation,
+not an automatically executed successor or adopted lower setting. Consult Qwen
+outside a run before settling any new presentation intervention. The existing
+uncoached method and exact input/output review remain mandatory.
 
 The documentation contribution is now closed and checked under c52f26fc; read
 `development/bounded_working_set/parser-documentation/review/RESULTS.md` and its

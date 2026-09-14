@@ -31,9 +31,10 @@ The four priorities now apply as follows:
    differences between effort conditions. The last session did not qualify an
    alternative effort policy.
 
-Host work before the next exposure is specific. The demonstrated reply-order
-defect is already corrected and qualified offline: 45 selected host tests and six
-native constraint cases pass. Actual combined use by Qwen remains untested.
+Host work before the latest exposure was specific. The demonstrated reply-order
+defect was corrected and qualified offline: 45 selected host tests and six native
+constraint cases pass. Qwen now actually uses the combined form in the closed
+uncoached contribution below, without a controlled speedup claim.
 The earlier constructor omission is a source-preparation failure; the constructor
 can be obtained through exact source reading. A supplied group is not proof of
 semantic sufficiency, and automatic prerequisite selection is not implemented.
@@ -42,22 +43,42 @@ without relying on facts a reviewer plans to supply later. Repeated deliberation
 and resolved wrapper uncertainty remain observations, not sufficient grounds for
 another field, memory mechanism or host patch.
 
-That integration is now prepared in
-[uncoached_contribution](../uncoached_contribution/PREPARATION_REVIEW.md), with
-58 selected checks and two native scripted full-loop paths passing. The broad
-route reaches 23,450 input tokens and then narrows to useful source, with complete
-actual feedback. A reproduced check-scope defect is fixed in the opt-in session:
-candidate identity alone cannot make an old task's check applicable to a new
-checker definition. The concrete next task adds missing copying/serialization
-regressions to the completed parser work; it starts with no selected source group.
-The package permits 16 requests / 24 operations but has sent no Qwen completion.
+That integration and task are now executed in
+[uncoached_contribution](../uncoached_contribution/review/RESULTS.md). Qwen starts
+with no selected group, searches, chooses four source regions, adds three transport
+regressions, requests the successor check and submits. Four requests execute five
+actual operations without coaching. All previous work is preserved; the edited
+suite runs 359 tests with five skips and no failures/errors. The source, actual
+check, artifact and all four complete responses are reviewed; replay passes.
 
-Do not reuse the closed assisted adapters as an active coached continuation or
-relabel their inputs. The automatic runner supplies only declared task/state and
-actual operation feedback. The native routes establish host feasibility, not
-Qwen's ability to select evidence or complete the contribution. The next execution
-is a separate identified attempt; review it before any subsequent consultation
-or reasoning comparison. The completed work and closed allowances are preserved.
+The reproduced check-scope defect remains fixed in the opt-in session: candidate
+identity alone cannot make an old task's check apply to a new checker definition.
+The earlier 58 selected preparation checks and broad scripted route at 23,450
+tokens remain host qualification, distinct from the actual run's compact source
+selection and 10,735-token peak input. No pressure boundary or failed actual
+check occurs. The unused 12 requests / 19 operations are closed.
+
+The run takes 51,393 generated tokens and 52.863 loop minutes. C03 supplies 87.273%
+of generation and repeatedly struggles to encode Python escapes inside JSON,
+eventually using a valid Unicode escape. Useful test design and unsupported
+exception speculation also occur; their exact causal shares are unmeasured.
+Its 44,852-token output exceeds the prospective reserve and leaves 3,963 physical
+tokens free. A fitting input and successful final action do not qualify reliable
+or efficient next-action completion near the input ceiling.
+
+Retain the host and completed work. Next prepare a bounded reasoning-allocation
+comparison with one explicit alternative effort policy and otherwise matched
+host, task, starting state, seeds and checks. Judge correct preserved contributions,
+termination and total cost, not output length alone. Track the specific encoding
+difficulty. If a presentation intervention is considered, consult Qwen on the
+actual difficult input/draft outside a run before selecting it; do not change
+effort and payload format together. No alternative setting, consultation or
+comparison has been executed by this recommendation.
+
+Do not reuse closed assisted adapters as active coaching or relabel their inputs.
+The automatic runner supplies only declared task/state and actual operation
+feedback. Each future exposure is a separate identified attempt. Historical work,
+full direct reviews and closed allowances are preserved.
 
 The following records the earlier implemented plan and its actual assisted result.
 
