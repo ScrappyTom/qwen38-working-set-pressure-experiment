@@ -14,17 +14,25 @@ the coached execution approach below; completed assisted records keep their
 original labels and evidence. The current plan is
 `development/bounded_working_set/SYMBIOTIC_PLAN.md`.
 
-The owner next approved the two earned host corrections and one medium-reasoning
-extension of saved work. Read `development/working_set_continuation/SPEC.md` and
-PREPARATION_REVIEW.md. Source deduplication preserves exact feedback and continuous
-edit eligibility; the runner now displays and checks both independent allowances.
-Actual saved inputs lose 8,239/9,167 duplicate native tokens without losing source.
-The prepared extension retains A03's actual work and selected ranges, then needs
-different evidence for interpolation coverage and documentation. One new run,
-16 requests / 24 operations, is authorized after qualification; do not ask again.
-Medium is explicit development policy, not a universal default. No coaching,
-retry, old-allowance reuse, or forced group change/pressure boundary is authorized.
-The failed duplicate-record preparation remains separate from the qualified route.
+The owner-approved saved-work continuation is now closed under frozen 112b70c5.
+Read `development/working_set_continuation/review/RESULTS.md` and both full audits.
+Sixteen uncoached medium requests execute sixteen operations and save only two
+imports; no new tests/docs, actor check or submission. Cost is 59,142 generated
+tokens and 75.798 loop minutes. All sixteen full responses are reviewed and
+123 native inputs / 1,030 custody records replay exactly. Eight unused operations
+are closed; no retry, rescue or automatic continuation is authorized.
+
+The initial deduplication and request-display corrections retain their qualified
+benefits, but the run exposes a new page-search defect: source fragmentation makes
+cost non-monotonic, and binary search misses a fitting C03 page. The post-run
+native probe proves 23,748/23,762-token pages fit despite the original rejection.
+Correct and qualify this mechanical interaction prospectively, preserving the run.
+Do not assign the false rejection to Qwen. Later current/partial-source misreading,
+unsupported implementation guesses and a correctly rejected 25,250-token edit
+remain separate findings. A smaller final group misses its intended doc heading.
+No new Qwen consultation or task exposure is included in this consumed package.
+Consult outside a run before settling a new presentation or selection remedy;
+truthful source and sizing fixes do not depend on a preference vote.
 
 The owner-approved reasoning-effort comparison is now closed under 9dc390d6.
 Read `development/reasoning_allocation/RESULTS.md` and its complete transcript and

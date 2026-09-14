@@ -13,13 +13,16 @@ that paired result and its limits. All 44 full responses and actual feedback are
 reviewed and exactly replayed; no coaching or changes occurred inside the runs.
 No global effort default or extra model exposure is adopted.
 
-The next owner-approved tranche is now qualified in
-`../working_set_continuation/PREPARATION_REVIEW.md`: both host corrections below
-pass the actual saved-state and complete scripted-work boundaries. Its one new
-medium run extends A03's saved tests into interpolation coverage/documentation,
-retaining the actual previous selection and requiring new supporting evidence.
-Keep it uncoached; evaluate real selection changes and saved-work preservation
-without manufacturing a capacity boundary. Its separate SPEC fixes the scope.
+The next owner-approved tranche is now closed in
+`../working_set_continuation/review/RESULTS.md`. Its one medium run preserves
+A03's actual work but adds only two imports; no new tests/docs or checked
+submission occur in sixteen requests and 75.798 loop minutes. Source/budget
+corrections retain their measured benefits. A native post-run probe also exposes
+an interaction missed by qualification: binary page search overlooks a fitting
+interval when deduplication changes fragment count. Correct that mechanical path
+prospectively; preserve the run, its adverse cost and the separate model findings.
+The original package and eight unused operations remain closed. A future narrow
+Qwen interpretation consultation is separate from this consumed authorization.
 
 The two earned host corrections address repeated source bytes
 across selection and feedback, and expose the actual request allowance alongside

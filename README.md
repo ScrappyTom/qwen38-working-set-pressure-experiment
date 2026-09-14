@@ -2,6 +2,16 @@
 
 ## Project status
 
+The [saved-work continuation is closed](development/working_set_continuation/review/RESULTS.md).
+Sixteen uncoached medium requests save only two imports, with no new tests or
+documentation, actor check or submission, in 75.798 loop minutes. All original
+work is preserved; full transcript review and exact replay are complete. The
+source/budget corrections have measured benefits, but this run establishes no
+productivity improvement. A separate native probe finds a page-search defect:
+deduplication makes input cost non-monotonic, and binary search rejects a page
+that actually fits. Preserve the frozen outcome while correcting that interaction.
+No additional Qwen exposure or reuse of the closed allowance is authorized.
+
 The owner-approved [reasoning-effort comparison is complete](development/reasoning_allocation/RESULTS.md).
 Neither xhigh nor medium completes the first seed; both complete the second with
 correct new tests and prior work preserved. In the successful pair, medium takes
@@ -14,8 +24,8 @@ All 44 full responses were reviewed; 46 operations and 123 native inputs replay
 exactly. The schedule and all owned runtimes are closed, with no coaching or retry.
 The [host audit](development/reasoning_allocation/HOST_PATH_AUDIT.md) identifies two
 prospective corrections: duplicated source presentation and an undisplayed request
-limit. Qualify those offline before further exposure. The current comparison and
-its original host remain preserved. Twenty requests / fifty operations close unused.
+limit. Those motivated the separately qualified host changes and continuation
+above. The comparison and its original host remain preserved. Twenty requests / fifty operations close unused.
 
 The [current operating direction](development/bounded_working_set/SYMBIOTIC_PLAN.md)
 uses Qwen as a test pilot: design consultation occurs outside active runs. During
