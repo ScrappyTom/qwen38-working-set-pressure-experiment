@@ -1,0 +1,79 @@
+## 1. Stated aim vs. material returned; what the checkpoint establishes; what is absent
+
+**Stated aim (C04 discussion):** "understand the current state of the files and what the previous failed patch attempts were trying to do. Let me reopen the failed patch events and read the relevant source areas to plan my edits."
+
+**What the selected saved handles actually contain:** RES-0071 and RES-0073 are both 176-byte rejection receipts. Each holds only the single error string:
+
+> "The complete edit and refreshed working material cannot fit the next input; no edit committed. Select a narrower relevant working set with work_on."
+
+They do **not** contain the original `old`/`new` patch text, the file path, the candidate ID, or the pre-edit SHA that the agent proposed. The `work_on` operation accepts "RES handles for exact saved RESULT bytes," and the result of a rejected patch is precisely that rejection envelope. To see the patch arguments the agent would have to `reopen_event` EVT-0071 or EVT-0073, which reads "exact saved ACTION bytes, including original patch arguments." C04 selected the wrong handle kind for its stated purpose.
+
+**What the source pages show:**
+
+- `Lib/test/test_configparser.py` lines 2180–2212: the file's tail — the end of a converter/boolean test method, then `class MiscTestCase(unittest.TestCase)` with `test__all__`, then `unittest.main()`. File SHA `c79c1f…ab04`.
+- `Doc/library/configparser.rst` lines 400–440: an INI code-block example, then the "Mapping Protocol Access" heading, a `.. versionadded:: 3.2` directive, and a paragraph describing the mapping proxy. File SHA `6418b0…823`.
+
+**What the checkpoint establishes:**
+
+- Two patches (EVT-0071 in prior work, EVT-0073 in this contribution) targeted `Lib/test/test_configparser.py` and were both rejected at the host's capacity-validation stage. No bytes were committed.
+- The current candidate is `da233419…c9577`; the current check (RES-0054) does **not** apply to this candidate (`candidate_matches: false`, `check_definition_matches: false`).
+- 75 archive actions exist; 4 actions and 4 requests remain.
+
+**What is absent from this entire input:**
+
+- The original patch arguments (`old`, `new`, `expected_file_sha256`, `expected_candidate_id`, `path`) for either rejected edit.
+- Any source beyond the two 33–41-line windows. In particular, no test class or method for `InterpolationMissingOptionError` is visible, no existing interpolation test patterns are shown, and no insertion point in either file is in the working set.
+- The rest of `configparser.rst` (the sections where the new missing-reference documentation would be placed).
+- The contents of `Doc/library/configparser.rst` beyond line 440 and `Lib/test/test_configparser.py` beyond line 2212 (or before line 2180 / line 400 respectively).
+
+**Source displayed in feedback vs. source absent:** The two `current_source` entries in `latest_feedback.result.sources` are the only source bytes present. Every other line in both files is absent. The task requires adding tests that "obtain InterpolationMissingOptionError through real ConfigParser.get calls under both BasicInterpolation and ExtendedInterpolation" plus "shallow copying, deep copying and every available pickle protocol" — none of that target area is visible.
+
+---
+
+## 2. What the saved capacity rejections establish; what would require a new host measurement
+
+**Established (known from the records):**
+
+- Both patches reached the host's capacity gate and were rejected before any commit. The host states explicitly: "no edit committed."
+- The failure mode is a combined-size overflow: the serialized edit plus the "refreshed working material" (the source pages and saved results that would be attached to the next input) exceeded the host's next-input capacity.
+- The host's remedy is procedural, not substantive: "Select a narrower relevant working set with work_on." This implies the edit content itself may be fine; the surrounding working set was too large.
+- The `candidate_limits` in the workspace (`max_file_utf8_bytes: 1048576`, `max_total_utf8_bytes: 8000000`, `max_line_utf8_bytes: 512`) are the static bounds. The dynamic constraint is the per-input budget the host enforces.
+
+**What is NOT established / would require a new host measurement:**
+
+- The exact byte size of the rejected `old` + `new` patch text. The rejection message does not report a numeric overflow or a size budget. The system prompt states the host "validates complete UTF-8 sizes … before committing; it never shortens an edit" and that "these are host limits, not a request to manually count or split text." The agent cannot compute whether a given patch will fit.
+- Whether a narrower `work_on` source selection (fewer lines, fewer saved results, or one file instead of two) would bring the same edit under the capacity. The host does not return a residual budget.
+- Whether the edit content is correct. The rejection is purely a size gate; it says nothing about whether `old` matches the current file or whether `new` is semantically right.
+
+In short: the rejections prove a sizing conflict at the host, not a content error. The only way to learn whether a revised working set + edit will fit is to attempt it and observe the host's response.
+
+---
+
+## 3. One next operation, its effect, and remaining unknowns
+
+**Operation:**
+
+```json
+{"action":"reopen_event","handle":"EVT-0073","offset":0}
+```
+
+**What its return would supply:**
+
+The exact serialized ACTION bytes of the most recent patch attempt in this contribution: the `path`, the `old` string, the `new` string, the `expected_candidate_id`, and the `expected_file_sha256` the agent proposed. Together with the current file SHA (`c79c1f…ab04`) visible in the source page, the agent can tell whether the pre-edit fingerprint has changed since the patch was attempted (it has not — the file was not committed) and can recover the exact insertion text without re-deriving it.
+
+**What it preserves / replaces:**
+
+- Preserves: the current working set (the two source pages and two rejection receipts from C04's `work_on`). `reopen_event` "reads exact saved ACTION bytes … without replay or mutation" and "does not return fresh source or a new check." It adds a page to the working material alongside existing selections.
+- Replaces: nothing. It does not alter the candidate, the file, or the working-set source pages.
+
+**Why this is the useful step through the current interface:**
+
+The task requires adding specific test methods and documentation. The previous agent already composed the edit (or at least the last iteration of it). Recovering those exact arguments is the minimum-information step before deciding whether the edit can be re-attempted with a narrower working set or whether the insertion point / content needs revision. Without the original `old` text, the agent has no way to know which lines it intended to anchor on, and the current 33-line source window may not contain the anchor at all.
+
+**Further source or observation needed before judging test expectations:**
+
+- The area of `Lib/test/test_configparser.py` immediately preceding `MiscTestCase` (roughly lines 2100–2180 or earlier) to see the existing interpolation test class and its methods, confirm the insertion point, and verify that the `old` anchor from the recovered event still matches the current file.
+- The section of `Doc/library/configparser.rst` where the new missing-reference documentation belongs (likely after or within the interpolation section, not in the Mapping Protocol Access area currently visible). The agent would need a `read` or `search` (e.g., for "interpolation" or "InterpolationMissingOptionError") to locate that area.
+- Confirmation that the `expected_file_sha256` in the recovered event matches `c79c1f…ab04` (the current file SHA from the source page). If it does, the `old` text is still valid; if not, a fresh `read` of the target region is required before constructing a new patch.
+
+No change to the interface is proposed; the `reopen_event` handle, the `read`/`search` operations, and a subsequent `work_on` + `patch` sequence are all within the supplied operation forms.
