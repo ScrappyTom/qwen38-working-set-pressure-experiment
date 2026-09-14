@@ -23,8 +23,14 @@ interval when deduplication changes fragment count. The prospective correction
 now passes the actual C03 qualification and 80 selected checks; see its
 PAGE_SEARCH_CORRECTION.md. Preserve the run, adverse cost and separate model
 findings. No corrected-host model exposure has occurred.
-The original package and eight unused operations remain closed. A future narrow
-Qwen interpretation consultation is separate from this consumed authorization.
+The original package and eight unused operations remain closed. The subsequent
+owner-approved [interpretation consultation](../working_set_continuation/interpretation-dialogue/RESULTS.md)
+is also closed after one response: under focused questions Qwen distinguishes
+current displayed source from absent implementation evidence, while still naming
+an unsupported helper. Retain the interface and close the second response unused.
+The next useful comparison should assess evidence assembled for a contribution,
+with supplied selection explicitly identified as assistance and success measured
+by saved, checked work. A correct explanatory answer does not establish that loop.
 
 The two earned host corrections address repeated source bytes
 across selection and feedback, and expose the actual request allowance alongside

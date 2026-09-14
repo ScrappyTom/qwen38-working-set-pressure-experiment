@@ -14,6 +14,17 @@ the coached execution approach below; completed assisted records keep their
 original labels and evidence. The current plan is
 `development/bounded_working_set/SYMBIOTIC_PLAN.md`.
 
+The subsequent owner-approved information-availability consultation is closed
+after one response. Read `development/working_set_continuation/interpretation-dialogue/`
+RESULTS.md, D1_REVIEW.md and TURN_INFORMATION.md. Qwen correctly identifies the
+current header and missing Extended/diagnostic evidence under focused questions,
+but invents a helper name. All thinking/final text and native custody are reviewed
+and verified. No task operation occurs; the second response is closed unused.
+Retain the interface. Any next evidence-sufficiency comparison must identify
+supplied selection as assistance and judge actual saved, checked work, not a
+correct consultation answer. Missing prior payloads/drafts, missing implementation
+and misread present source remain different findings.
+
 The owner-approved saved-work continuation is now closed under frozen 112b70c5.
 Read `development/working_set_continuation/review/RESULTS.md` and both full audits.
 Sixteen uncoached medium requests execute sixteen operations and save only two

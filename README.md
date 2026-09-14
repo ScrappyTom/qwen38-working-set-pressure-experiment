@@ -2,6 +2,15 @@
 
 ## Project status
 
+The [turn-specific evidence consultation is closed](development/working_set_continuation/interpretation-dialogue/RESULTS.md).
+Qwen correctly identifies visible current source and separates it from missing
+implementation/diagnostic evidence under focused questions. One response costs
+4,865 generated tokens and 5.721 request minutes; all input/output and custody
+verify. No task operation or interface change occurs. Retain the distinction
+between missing evidence and misreading present material; a proposed source
+location still required correction against the implementation. The second
+response is closed unused. This does not establish a completed contribution.
+
 The [saved-work continuation is closed](development/working_set_continuation/review/RESULTS.md).
 Sixteen uncoached medium requests save only two imports, with no new tests or
 documentation, actor check or submission, in 75.798 loop minutes. All original
@@ -11,8 +20,8 @@ productivity improvement. A separate native probe finds a page-search defect:
 deduplication makes input cost non-monotonic, and binary search rejects a page
 that actually fits. The [prospective correction](development/working_set_continuation/review/PAGE_SEARCH_CORRECTION.md)
 now passes the actual saved-state qualification and 80 selected tests. The frozen
-model outcome remains unchanged; the corrected host has no new model exposure.
-No additional Qwen exposure or reuse of the closed allowance is authorized.
+model outcome remains unchanged; the corrected host has no new task exposure.
+That task allowance remains closed; the separate consultation above also closes.
 
 The owner-approved [reasoning-effort comparison is complete](development/reasoning_allocation/RESULTS.md).
 Neither xhigh nor medium completes the first seed; both complete the second with
