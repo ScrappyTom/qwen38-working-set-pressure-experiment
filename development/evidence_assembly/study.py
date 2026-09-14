@@ -33,7 +33,7 @@ def starting_work():
 
 class Task:
     ROOT, AREA, SOURCE = ROOT, AREA, SOURCE
-    base, ACTOR, SEED = prior.base, dict(prior.ACTOR), 961211
+    base, pilot, ACTOR, SEED = prior.base, prior.pilot, dict(prior.ACTOR), 961211
     MAX_REQUESTS, MAX_OPERATIONS, STARTING_ID = 8, 12, STARTING_ID
     read, save, require = staticmethod(read), staticmethod(save), staticmethod(require)
     checker, snapshot = staticmethod(prior.checker), staticmethod(prior.snapshot)
@@ -43,7 +43,7 @@ class Task:
     def __init__(self, condition, scenario="complete"):
         require(condition in GROUPS and scenario in ("complete", "correction"), "undeclared cell")
         self.condition, self.scenario = condition, scenario
-        self.PACKAGE = AREA / "preparation-001" / condition / scenario
+        self.PACKAGE = AREA / "preparation-002" / condition / scenario
         self.RUN = AREA / "run-001" / condition
         self.MANIFEST = AREA / f"MANIFEST-{condition}.json"
 
