@@ -1,0 +1,79 @@
+import copy
+import unittest
+
+import study
+from manage import reference_reply
+import run_uncoached_contribution as runner
+from working_set_exp.contribution_reply import process_reply
+
+
+class EvidenceAssemblyTests(unittest.TestCase):
+    def test_pair_differs_only_in_selected_exact_source(self):
+        modules = [study.Task(c) for c in ("broad", "assembled")]
+        requests = [runner.Adapter(m).request_for(m.initial_session().view()) for m in modules]
+        self.assertEqual(requests[0]["messages"][0], requests[1]["messages"][0])
+        import json
+        views = [json.loads(r["messages"][1]["content"]) for r in requests]
+        for view in views:
+            sources = view["workspace"]["working_set"].pop("sources")
+            self.assertTrue(sources)
+            self.assertTrue(all(s["candidate_id"] == study.STARTING_ID for s in sources))
+        self.assertEqual(views[0], views[1])
+        for request in requests:
+            request.pop("messages")
+        self.assertEqual(requests[0], requests[1])
+
+    def test_new_allowance_and_actual_history_preserved(self):
+        candidate, state = study.starting_work()
+        for condition in study.GROUPS:
+            session = study.Task(condition).initial_session()
+            self.assertEqual(session.candidate, candidate)
+            self.assertEqual(session.pairs, state["pairs"])
+            self.assertEqual(session.last, state["last"])
+            self.assertEqual(session.calls_used, 0)
+            self.assertEqual(session.starting_archive_length, 67)
+            self.assertEqual(session.view()["allowance"]["requests_remaining"], 8)
+            self.assertFalse(session.check_state()["applies_to_current"])
+
+    def test_source_ranges_are_exact_and_proposals_are_excluded(self):
+        candidate, _ = study.starting_work()
+        for condition in study.GROUPS:
+            module = study.Task(condition)
+            view = module.initial_session().view()
+            for source in view["working_set"]["sources"]:
+                lines = candidate.get(source["path"]).decode().splitlines(keepends=True)
+                self.assertEqual(source["content"], ''.join(lines[source["returned_start_line"]-1:source["returned_end_line"]]))
+            native = module.expected_native(runner.Adapter(module).request_for(view)).decode()
+            self.assertNotIn("class MissingInterpolationTransportTests", native)
+            self.assertNotIn("class InterpolationMissingReferenceTest", native)
+            self.assertIn("import copy", native)
+            if condition == "assembled":
+                self.assertIn("class InterpolationMissingOptionError(InterpolationError):", native)
+                self.assertIn('rawval, ":".join(path)', native)
+                self.assertIn("self.message = msg", native)
+            else:
+                self.assertNotIn("class InterpolationMissingOptionError(InterpolationError):", native)
+
+    def test_complete_and_corrective_contributions_use_actual_checks(self):
+        for condition in study.GROUPS:
+            for scenario in ("complete", "correction"):
+                with self.subTest(condition=condition, scenario=scenario):
+                    module = study.Task(condition, scenario)
+                    session = module.initial_session()
+                    feedback = []
+                    for number in range(1, 9):
+                        session.mark_delivered(session.view())
+                        session.begin_request()
+                        reply = reference_reply(module, session, number)
+                        result = process_reply(session, reply, lambda view:500, feedback, lambda n,o:None)
+                        self.assertTrue(all(o["result"]["accepted"] for o in result["operations"]))
+                        if session.submitted:
+                            break
+                    self.assertTrue(session.submitted)
+                    checks = [p["result"]["passed"] for p in session.pairs[67:] if p["response"]["action"] == "check"]
+                    self.assertEqual(checks, [True] if scenario == "complete" else [False, True])
+                    self.assertLess(session.requests_used, 8)
+
+
+if __name__ == "__main__":
+    unittest.main()
