@@ -29,11 +29,14 @@ class CapacityError(ValueError):
 
 
 class WorkingSession:
-    def __init__(self, candidate: Candidate, checker: bytes, task: str, *, pairs=(), call_limit=24):
+    def __init__(self, candidate: Candidate, checker: bytes, task: str, *, pairs=(), call_limit=24, request_limit=None):
         self.candidate, self.checker, self.task = candidate, checker, task
         self.pairs = copy.deepcopy(list(pairs))
         self.starting_archive_length = len(self.pairs)
         self.call_limit = call_limit
+        if request_limit is not None and (type(request_limit) is not int or request_limit < 1):
+            raise ValueError("request limit must be a positive integer")
+        self.request_limit, self.requests_used = request_limit, 0
         self.ranges: list[dict] = []
         self.saved: dict[str, dict] = {}
         self.versions = {candidate.candidate_id: candidate}
@@ -47,6 +50,13 @@ class WorkingSession:
     @property
     def calls_used(self):
         return len(self.pairs) - self.starting_archive_length
+
+    def begin_request(self):
+        """Count dispatch once, independently of operations in its eventual reply."""
+        if self.request_limit is not None:
+            if self.requests_used >= self.request_limit or self.submitted or self.delivery_blocked:
+                raise ValueError("contribution request allowance is terminal")
+            self.requests_used += 1
 
     def clone(self):
         other = copy.copy(self)
@@ -122,14 +132,71 @@ class WorkingSession:
         result = feedback["result"]
         return ([result["source"]] if "source" in result else result.get("sources", []))
 
+    def _verified_source_ranges(self, sources):
+        """Union only exact, version-bound, displayed whole-line source fragments."""
+        spans = []
+        for source in sources:
+            path = source.get("path")
+            first, last = source.get("returned_start_line"), source.get("returned_end_line")
+            if (source.get("kind") != "current_source" or path not in self.candidate.file_map or
+                    source.get("candidate_id") != self.candidate.candidate_id or
+                    source.get("file_sha256") != self.candidate.file_sha256(path) or
+                    type(first) is not int or type(last) is not int):
+                continue
+            span = dict(path=path, start_line=first, end_line=last)
+            try:
+                exact = self.source(span)
+            except ValueError:
+                continue
+            if (exact["returned_start_line"] != first or exact["returned_end_line"] != last or
+                    exact["content"] != source.get("content")):
+                continue
+            spans.append(span)
+        merged = []
+        for span in sorted(spans, key=lambda s: (s["path"], s["start_line"])):
+            if (merged and span["path"] == merged[-1]["path"] and
+                    span["start_line"] <= merged[-1]["end_line"] + 1):
+                merged[-1]["end_line"] = max(merged[-1]["end_line"], span["end_line"])
+            else:
+                merged.append(dict(span))
+        return merged
+
+    def _sources_outside_feedback(self, latest_sources):
+        covered = self._verified_source_ranges(latest_sources)
+        remaining = []
+        for selected in self.ranges:
+            pieces = [dict(selected)]
+            for span in covered:
+                next_pieces = []
+                for piece in pieces:
+                    if piece["path"] != span["path"]:
+                        next_pieces.append(piece)
+                    elif piece["end_line"] == 0 and span["end_line"] == 0:
+                        pass  # The empty file is already fully displayed.
+                    elif span["end_line"] < piece["start_line"] or span["start_line"] > piece["end_line"]:
+                        next_pieces.append(piece)
+                    else:
+                        if piece["start_line"] < span["start_line"]:
+                            next_pieces.append({**piece, "end_line": span["start_line"] - 1})
+                        if piece["end_line"] > span["end_line"]:
+                            next_pieces.append({**piece, "start_line": span["end_line"] + 1})
+                pieces = next_pieces
+            remaining.extend(self.source(piece) for piece in pieces)
+        return remaining
+
     def view(self, *, recent_count=RECENT_COUNT):
         latest_sources = self.feedback_sources(self.last)
-        sources = [s for s in self.sources() if s not in latest_sources]
+        sources = self._sources_outside_feedback(latest_sources)
         latest_saved = [] if not self.last else self.last["result"].get("saved_results", [])
         if self.last and self.last["result"].get("kind") == "saved_bytes":
             latest_saved.append(self.last["result"])
         saved = [s for s in self.saved.values() if s not in latest_saved]
         n = len(self.pairs)
+        allowance = dict(actions_used=self.calls_used, actions_remaining=self.call_limit-self.calls_used)
+        if self.request_limit is not None:
+            allowance.update(request_limit=self.request_limit, requests_used=self.requests_used,
+                requests_remaining=self.request_limit-self.requests_used,
+                request_counting="Remaining requests include the response to this input. Each response consumes one request; its operations consume the separate action allowance.")
         return dict(schema_version="bounded-working-view-v1", task=self.task,
                     candidate_id=self.candidate.candidate_id, current_check=self.check_state(),
                     candidate_limits=dict(existing_files_only=True, max_files=MAX_FILES,
@@ -140,7 +207,7 @@ class WorkingSession:
                     recent_activity=[self.summary(i) for i in range(max(1, n-recent_count+1), n+1)] if recent_count else [],
                     archive=dict(action_count=n, prior_work_actions=self.starting_archive_length,
                                  access="history pages and exact result/action retrieval; older records are not all displayed"),
-                    allowance=dict(actions_used=self.calls_used, actions_remaining=self.call_limit-self.calls_used))
+                    allowance=allowance)
 
     def mark_delivered(self, view):
         if view["candidate_id"] != self.candidate.candidate_id:
@@ -306,8 +373,8 @@ class WorkingSession:
         text = before.file_map[path].decode()
         if old == new or text.count(old) != 1:
             raise ValueError("old must identify exactly one occurrence and the edit must change it")
-        if not any(s["path"] == path and s["file_sha256"] == before.file_sha256(path) and old in s["content"]
-                   for s in self.delivered_sources):
+        if not any(span["path"] == path and old in self.source(span)["content"]
+                   for span in self._verified_source_ranges(self.delivered_sources)):
             raise ValueError("exact current old source was not visible in the preceding input")
         start, end = text.index(old), text.index(old)+len(old)
         changed = text[:start]+new+text[end:]

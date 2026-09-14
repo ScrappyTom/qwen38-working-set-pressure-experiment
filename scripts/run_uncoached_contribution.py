@@ -31,6 +31,8 @@ class Adapter:
                 preceding_operation_feedback=[r for r in self.preceding_feedback
                     if not view["latest_feedback"] or r["sequence"] != view["latest_feedback"]["sequence"]])).decode())]
         request["response_format"] = reply_schema()
+        request["seed"] = self.SEED
+        request["chat_template_kwargs"] = dict(enable_thinking=True, reasoning_effort=self.ACTOR["effort"])
         return request
 
 
@@ -75,6 +77,10 @@ class Loop(LegacyLoop):
         if self.stop_requested():
             return None
         session.mark_delivered(session.view())
+        if session.request_limit is not None:
+            actor.require(session.request_limit == actor.MAX_REQUESTS and session.requests_used == self.sent,
+                          "displayed request allowance differs from runner")
+            session.begin_request()
         tag = f"C{self.sent + 1:02d}"
         self.log.append("invocation_started", dict(id=tag, input_stem=selected["stem"], prompt_tokens=count,
             wire_request_sha256=sha256_bytes(wire), completion_sent=True, **self.health()),
@@ -185,7 +191,7 @@ def run_once(args, module=task):
     manifest = verify_package(module)
     module.require(not module.RUN.exists(), "attempt exists; no retry")
     module.RUN.mkdir()
-    store, log = ArtifactStore(module.RUN), RunLog(module.RUN / "records.jsonl", "uncoached-contribution-001")
+    store, log = ArtifactStore(module.RUN), RunLog(module.RUN / "records.jsonl", "uncoached-contribution-001", task_module=module)
     log.append("attempt_reserved", dict(owner_direction=args.owner_direction, manifest_sha256=args.manifest_sha256),
         [store.put("EXECUTION_MANIFEST.json", module.MANIFEST.read_bytes()), store.put("SPEC.md", (module.AREA / "SPEC.md").read_bytes())])
     args.server, args.model, _ = module.runtime_paths()

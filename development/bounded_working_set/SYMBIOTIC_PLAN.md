@@ -13,7 +13,15 @@ that paired result and its limits. All 44 full responses and actual feedback are
 reviewed and exactly replayed; no coaching or changes occurred inside the runs.
 No global effort default or extra model exposure is adopted.
 
-Next qualify the two earned host corrections offline: avoid repeated source bytes
+The next owner-approved tranche is now qualified in
+`../working_set_continuation/PREPARATION_REVIEW.md`: both host corrections below
+pass the actual saved-state and complete scripted-work boundaries. Its one new
+medium run extends A03's saved tests into interpolation coverage/documentation,
+retaining the actual previous selection and requiring new supporting evidence.
+Keep it uncoached; evaluate real selection changes and saved-work preservation
+without manufacturing a capacity boundary. Its separate SPEC fixes the scope.
+
+The two earned host corrections address repeated source bytes
 across selection and feedback, and expose the actual request allowance alongside
 the operation allowance. Preserve exact feedback and practical edit eligibility
 across the resulting source fragments. Use the observed broad-reading states as

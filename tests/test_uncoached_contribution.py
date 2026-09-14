@@ -116,10 +116,20 @@ class UncoachedContributionTests(unittest.TestCase):
 
     def test_request_and_action_allowances_are_distinct(self):
         self.module.MAX_REQUESTS = 1
+        self.session.request_limit = 1
         self.session.add_source(self.session.source(dict(path="app.py", start_line=1, end_line=0)))
         outcome = self.loop(lambda s, n: self.edit(s, "value = 1\n", "value = 2\n")).execute(self.session)
         self.assertEqual(outcome["disposition"], "request_allowance_exhausted")
         self.assertEqual((outcome["sent_requests"], outcome["actual_operations"]), (1, 2))
+        shown = json.loads(self.sent[0]["messages"][1]["content"])["workspace"]["allowance"]
+        self.assertEqual((shown["requests_used"], shown["requests_remaining"]), (0, 1))
+        self.assertEqual(self.session.view()["allowance"]["requests_remaining"], 0)
+
+    def test_displayed_request_limit_must_match_runner(self):
+        self.session.request_limit = self.module.MAX_REQUESTS - 1
+        with self.assertRaisesRegex(ValueError, "displayed request allowance"):
+            self.loop(lambda s, n: dict(discussion="unused")).invoke(self.session)
+        self.assertEqual(self.sent, [])
 
     def test_combined_allowance_failure_happens_before_mutation(self):
         self.session.call_limit = 1

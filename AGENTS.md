@@ -14,6 +14,18 @@ the coached execution approach below; completed assisted records keep their
 original labels and evidence. The current plan is
 `development/bounded_working_set/SYMBIOTIC_PLAN.md`.
 
+The owner next approved the two earned host corrections and one medium-reasoning
+extension of saved work. Read `development/working_set_continuation/SPEC.md` and
+PREPARATION_REVIEW.md. Source deduplication preserves exact feedback and continuous
+edit eligibility; the runner now displays and checks both independent allowances.
+Actual saved inputs lose 8,239/9,167 duplicate native tokens without losing source.
+The prepared extension retains A03's actual work and selected ranges, then needs
+different evidence for interpolation coverage and documentation. One new run,
+16 requests / 24 operations, is authorized after qualification; do not ask again.
+Medium is explicit development policy, not a universal default. No coaching,
+retry, old-allowance reuse, or forced group change/pressure boundary is authorized.
+The failed duplicate-record preparation remains separate from the qualified route.
+
 The owner-approved reasoning-effort comparison is now closed under 9dc390d6.
 Read `development/reasoning_allocation/RESULTS.md` and its complete transcript and
 host-path audits. Neither effort completes seed 961208; both complete seed 961209.

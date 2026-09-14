@@ -11,10 +11,14 @@ from working_set_exp.working_session import INPUT_LIMIT, MAX_ACTION_BYTES
 
 
 class RunLog(RecordLog):
+    def __init__(self, *args, task_module=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.task = task_module or task
+
     def append(self, kind, payload, artifacts):
         if kind == "runtime_prepared":
-            payload = {**payload, "runtime_helper_actor": payload["actor"], "actor": task.ACTOR,
-                       "memory_policy": task.pilot.cont.POLICY}
+            payload = {**payload, "runtime_helper_actor": payload["actor"], "actor": self.task.ACTOR,
+                       "memory_policy": self.task.pilot.cont.POLICY}
         return super().append(kind, payload, artifacts)
 
 
