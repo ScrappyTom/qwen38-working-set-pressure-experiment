@@ -2,6 +2,21 @@
 
 ## Project status
 
+The [pending-work qualification and consultation are complete](development/evidence_assembly/pending-work/RESULTS.md).
+Existing operations recover the exact rejected proposal with its supporting source,
+save it, preserve it through documentation work and pass the actual check offline.
+The edited suite runs 377 tests with five skips and no failures/errors; thirteen
+documentation examples run correctly.
+The four remaining requests leave no submission request. This is researcher-selected
+feasibility, not another Qwen task completion.
+
+In two separate consultation responses, Qwen uses the supplied base class to resolve
+the diagnostic misunderstanding and recognizes the proposal's valid edit bindings.
+Its final request-count argument conflates review with task execution; that does not
+justify batch editing. The consultation costs 17.520 request minutes and is closed.
+The next narrow candidate is allowing source grouping to include saved action
+handles, removing the separate recovery step required by the present RES-only form.
+
 The [evidence-assembly pair is closed](development/evidence_assembly/review/RESULTS.md).
 Both conditions save partial tests but neither completes the tests/docs contribution.
 The assembled condition saves eighteen passing tests, while broad saves thirteen

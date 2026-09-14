@@ -16,12 +16,21 @@ earlier proposal remains archived and passes a separate offline test assessment;
 it was never accepted or supplied back as reviewer assistance. All sixteen complete
 responses and actual operations are reviewed and replayed. Both attempts are closed.
 
-The next development target is keeping a pending contribution and its supporting
-interfaces usable through a source-group change. Qualify the existing exact-source
-and saved-proposal route offline before another live task. Consult Qwen separately
-on the actual interpretation before settling a changed presentation or retention
-behavior. The finding is about information and work across decisions, not a mandate
-for another prompt micro-test, a larger budget or a new memory architecture.
+The [pending-work follow-up is now closed](../evidence_assembly/pending-work/RESULTS.md).
+The existing exact-source and saved-proposal route works offline: four scripted
+requests recover and save the actual proposal, add documentation and pass its
+current check. Submission needs a further request, which is not granted. The two
+separate Qwen responses resolve the inherited diagnostic behavior with supplied
+source, while exposing confusion between this review and task request accounting.
+Do not adopt batch editing from that mistaken argument or label this assisted
+interpretation as a completed model contribution.
+
+The next narrow candidate is allowing work_on to select saved action handles as
+well as results. Its present RES-only form forces a separate retrieval for the
+rejected proposal. Qualify the contract extension, exact payload/source applicability,
+stale guards and complete native admission before another live task. Evaluate a
+completed uncoached contribution afterward; neither a new vocabulary study nor a
+general memory architecture follows from this result.
 
 The owner-approved [reasoning-effort comparison is closed](../reasoning_allocation/RESULTS.md).
 The first seed stops under both settings; the second produces checked work under

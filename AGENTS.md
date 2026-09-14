@@ -14,7 +14,17 @@ the coached execution approach below; completed assisted records keep their
 original labels and evidence. The current plan is
 `development/bounded_working_set/SYMBIOTIC_PLAN.md`.
 
-The owner-approved evidence-assembly pair is now closed under ae563cf8; read
+The subsequent owner-directed pending-work qualification and consultation are
+closed; read `development/evidence_assembly/pending-work/RESULTS.md`. Existing
+operations recover the exact proposal and support into a checked artifact offline,
+but use the four remaining requests before submission. Both consultation responses
+are consumed, with no task actions. Supplied source resolves the diagnostic question;
+Qwen then conflates the separate review with task request accounting. Do not adopt
+batch editing from that false premise. Keep the core; the next narrow candidate is
+allowing work_on to select exact saved actions as well as results. Qualify that
+contract extension before exposure. No additional task run belongs to this package.
+
+The preceding owner-approved evidence-assembly pair is closed under ae563cf8; read
 `development/evidence_assembly/review/RESULTS.md` and its complete audits. Sixteen
 requests execute eighteen operations; both save partial tests, neither completes
 the test/documentation contract or submits. Both initial groups are supplied;
