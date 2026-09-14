@@ -14,13 +14,19 @@ the coached execution approach below; completed assisted records keep their
 original labels and evidence. The current plan is
 `development/bounded_working_set/SYMBIOTIC_PLAN.md`.
 
-The owner's subsequent Continue authorizes the separate selection consultation in
-`development/evidence_assembly/selection-dialogue/SPEC.md`. Its first input is qualified
-at 5,317 tokens and includes the actual C05 messages plus the separately labeled C04
-final reply. Read PREPARATION_REVIEW.md. Allow one interpretation and at most one
-justified clarification after full review; no task operation can execute. Preserve
-the initial answer before supplying new evidence, retain the interface when no remedy
-is earned, and close unused allowance. No duplicate approval or automatic task rerun.
+The owner-directed selection consultation is closed after two responses; read
+`development/evidence_assembly/selection-dialogue/RESULTS.md` and both direct reviews.
+Under focused questions Qwen selects the correct EVT recovery; after verified facts
+it explains feedback deduplication and separates edit eligibility from test correctness.
+It still invents source coordinates and falsely calls edit/check the only verification
+route. Do not adopt those claims or treat a newly supplied capacity result as something
+it should have known before clarification. All complete input/output and custody verify.
+Cost is 10,617 generated tokens / 9.689 request minutes, with no task operation.
+Retain the host. The two-sentence explanation candidate needs separate offline
+qualification before any exposure; it is not an installed or proven performance remedy.
+No third response, task retry, in-run coaching or automatic successor is authorized
+by the closed package. Further evaluation should concern a completed contribution,
+not another isolated wording comparison.
 
 The owner-directed pending-contribution attempt is closed under frozen 8f5be9d7;
 read `development/evidence_assembly/pending-contribution/review/RESULTS.md` and its

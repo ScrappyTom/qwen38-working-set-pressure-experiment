@@ -2,6 +2,15 @@
 
 ## Project status
 
+The [selection consultation is complete](development/evidence_assembly/selection-dialogue/RESULTS.md).
+Qwen correctly distinguishes saved edits from rejection results under focused review.
+After factual clarification it explains where selected content is displayed and
+separates an edit that fits from correct test expectations. Its answer still invents
+coordinates and overlooks source inspection as a verification route. Two responses
+cost 9.689 request minutes; no task action occurs, and all input/output custody verifies.
+A compact explanation candidate is recorded for offline qualification. The operating
+host is unchanged; no completion or efficiency benefit is claimed.
+
 The [uncoached pending contribution is closed without completion](development/evidence_assembly/pending-contribution/review/RESULTS.md).
 Eight requests save fourteen tests but no documentation, actor check or submission;
 independent review finds two failing tests. The attempt costs 71.591 loop minutes

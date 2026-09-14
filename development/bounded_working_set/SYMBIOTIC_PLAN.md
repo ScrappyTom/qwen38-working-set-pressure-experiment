@@ -6,7 +6,16 @@ state and actual tool feedback without reviewer coaching. The completed sessions
 below remain assisted development evidence. Their factual reminders, supplied
 source and prose endorsements are not a template for future run-time behavior.
 
-The latest [pending contribution is closed without completion](../evidence_assembly/pending-contribution/review/RESULTS.md).
+The latest [selection consultation is closed](../evidence_assembly/selection-dialogue/RESULTS.md).
+Both complete responses and exact custody are reviewed. Qwen correctly chooses EVT
+recovery in this separate conversation, and after facts explains feedback deduplication
+and historical capacity scope. It still invents source coordinates and falsely limits
+verification to edit/check. Retain the host and record the source-checked explanation
+candidate; qualify it against actual selected states and input bounds before exposure.
+The next model evaluation should judge completed work, not another isolated wording
+comparison. No task action or third response belongs to this consumed consultation.
+
+The preceding [pending contribution is closed without completion](../evidence_assembly/pending-contribution/review/RESULTS.md).
 Eight uncoached requests from the reused checkpoint save fourteen tests, with two
 independently verified failures, no docs, no actor check and no submission. All
 nonterminal feedback reaches the next decision, but Qwen selects saved rejection reasons when
@@ -16,12 +25,8 @@ proposal passes test assessment and fits at the actual C05 selection offline; it
 never becomes the actor's saved work. The attempt and four unused operations are
 closed. All full transcripts and exact replay are reviewed; no rescue follows.
 
-Keep the host's qualified mechanisms. Before another full task or presentation
-change, the next development question is the actual C04/C05 interpretation: what
-the selected handles contain, which pending work/support remains present, and what
-an earlier capacity rejection establishes after selection changes. A small separate
-Qwen consultation should preserve its answer before clarification and may conclude
-that the interface should stay unchanged. It is not included in the consumed run.
+That result motivated the separate C04/C05 consultation now closed above. Preserve
+the distinction between correct explanation under assistance and actual task use.
 Any later remedy must make a pending contribution usable through a transition,
 without in-run reviewer coaching or delegating sizing arithmetic back to the model.
 
