@@ -6,12 +6,20 @@ state and actual tool feedback without reviewer coaching. The completed sessions
 below remain assisted development evidence. Their factual reminders, supplied
 source and prose endorsements are not a template for future run-time behavior.
 
-The owner has approved proceeding with the bounded
-[reasoning-effort comparison](../reasoning_allocation/SPEC.md). Its native
-preparation-002 is qualified: xhigh versus medium, two matched seeds in reversed
-order, the same complete coverage task and host, no caps or runtime coaching.
-This comparison tests a policy; it does not adopt medium or change the edit
-representation. Historical runs and unused allowances remain closed.
+The owner-approved [reasoning-effort comparison is closed](../reasoning_allocation/RESULTS.md).
+The first seed stops under both settings; the second produces checked work under
+both, with medium taking half the loop time but more operations and input. Retain
+that paired result and its limits. All 44 full responses and actual feedback are
+reviewed and exactly replayed; no coaching or changes occurred inside the runs.
+No global effort default or extra model exposure is adopted.
+
+Next qualify the two earned host corrections offline: avoid repeated source bytes
+across selection and feedback, and expose the actual request allowance alongside
+the operation allowance. Preserve exact feedback and practical edit eligibility
+across the resulting source fragments. Use the observed broad-reading states as
+regressions. Neither correction should require the model to count characters,
+guess hidden budgets or accept a new memory architecture. The existing comparison
+and its unused allowance remain closed.
 
 The four priorities now apply as follows:
 
@@ -33,10 +41,10 @@ The four priorities now apply as follows:
    action. A host obstruction may justify a recorded stop; close the attempt
    before repair or consultation, and identify any later run separately.
 4. Qualify reasoning allocation on completed work with the same host and starting
-   conditions. The xhigh/uncapped baseline remains unchanged until an explicit
-   comparison is prepared. Host defects and coaching must not be uncontrolled
-   differences between effort conditions. The last session did not qualify an
-   alternative effort policy.
+   conditions. The completed comparison qualifies a local cost difference, not
+   a universal default. Host defects and coaching must not be uncontrolled
+   differences between effort conditions; changing the host before a later task
+   requires its own qualification and an explicit account of the changed baseline.
 
 Host work before the latest exposure was specific. The demonstrated reply-order
 defect was corrected and qualified offline: 45 selected host tests and six native
@@ -73,14 +81,14 @@ Its 44,852-token output exceeds the prospective reserve and leaves 3,963 physica
 tokens free. A fitting input and successful final action do not qualify reliable
 or efficient next-action completion near the input ceiling.
 
-Retain the host and completed work. Next prepare a bounded reasoning-allocation
-comparison with one explicit alternative effort policy and otherwise matched
-host, task, starting state, seeds and checks. Judge correct preserved contributions,
-termination and total cost, not output length alone. Track the specific encoding
-difficulty. If a presentation intervention is considered, consult Qwen on the
-actual difficult input/draft outside a run before selecting it; do not change
-effort and payload format together. No alternative setting, consultation or
-comparison has been executed by this recommendation.
+That observed cost motivated the now-closed reasoning comparison above. Judge
+correct preserved contributions, termination and total cost, not output length
+alone. The repeated encoding difficulty remains recorded, including in the new
+xhigh result. A fitting source group does not ensure affordable completion; nor
+does every long response imply missing information. Before selecting a payload
+presentation intervention, consult Qwen on the actual difficult input/draft outside
+a run. Do not change effort and payload format together and attribute the outcome
+to either alone. The current evidence does not justify another automatic run.
 
 Do not reuse closed assisted adapters as active coaching or relabel their inputs.
 The automatic runner supplies only declared task/state and actual operation

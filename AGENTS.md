@@ -14,20 +14,28 @@ the coached execution approach below; completed assisted records keep their
 original labels and evidence. The current plan is
 `development/bounded_working_set/SYMBIOTIC_PLAN.md`.
 
-The owner has now said "Proceed" to the recommended reasoning-effort comparison.
-Read `development/reasoning_allocation/SPEC.md` and PREPARATION_REVIEW.md. The
-qualified preparation-002 fixes four independent attempts: xhigh/medium at seed
-961208, then medium/xhigh at 961209. Each has at most 16 requests / 24 operations,
-with the same saved coverage task, host, input policy and q4/56,576/no-MTP runtime.
-Thinking remains enabled and uncapped. Medium omits the template's extra xhigh
-instruction; it is an explicitly tested intervention, not an adopted default.
-The complete task and reply format remain unchanged. Existing owner direction
-authorizes this frozen comparison after qualification, without another approval.
-Preserve the failed preparation-001 and its verifier correction; both qualification
-paths are scripted, with zero model inference. Keep all runs uncoached and inspect
-every actual input and full response before interpretation. Do not change effort
-and edit representation together or include the historical long run as a selected
-control. No extra seeds, retries, rescue or automatic successor are authorized.
+The owner-approved reasoning-effort comparison is now closed under 9dc390d6.
+Read `development/reasoning_allocation/RESULTS.md` and its complete transcript and
+host-path audits. Neither effort completes seed 961208; both complete seed 961209.
+Medium takes 27.710 loop minutes versus xhigh's 55.378 in the successful pair, but
+uses twice the operations and 4.60 times the input. Both preserve prior work and
+pass the requested contract. This is development evidence for further task-level
+qualification, not a universal effort default or a general completion advantage.
+All 44 full responses were reviewed; 46 operations / 123 native states replay
+exactly. Twenty unused requests and fifty operations are closed. No coaching,
+retry, rescue, source change or extra model exposure entered the comparison.
+
+Two host issues are now earned for prospective offline correction: contained
+source pages can be duplicated across merged selection and immediate feedback,
+and the displayed operation allowance omits the enforced request limit. Preserve
+exact feedback, the visible source union and edit eligibility across any new
+presentation boundary; qualify the actual broad states as well as compact paths.
+Show both allowances truthfully without silently changing them. The current host
+remains frozen in this comparison. Recurrent encoding deliberation is recorded,
+including a valid xhigh edit that leaves only 112 physical tokens; it does not
+by itself mandate a new payload format or justify a smaller generation reserve.
+Consult Qwen outside a run before settling a new presentation remedy, and retain
+the interface when no remedy is earned. Do not reuse the closed allowance.
 
 The uncoached coverage contribution is now closed and checked; read
 `development/uncoached_contribution/review/RESULTS.md` and its complete transcript
@@ -47,8 +55,8 @@ tokens and 52.863 loop minutes. C03 produces 44,852 tokens, including substantia
 repeated JSON/Python encoding attempts, and finishes with only 3,963 physical
 tokens free. Preserve the useful analysis and adverse cost; do not equate every
 thinking token with waste or diagnose a new host bug from length alone. Retain
-the host. A bounded reasoning-allocation comparison is the next recommendation,
-not an automatically executed successor or adopted lower setting. Consult Qwen
+the host. That result motivated the now-closed reasoning-allocation comparison
+above; no lower setting is adopted as a universal default. Consult Qwen
 outside a run before settling any new presentation intervention. The existing
 uncoached method and exact input/output review remain mandatory.
 

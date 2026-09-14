@@ -1,0 +1,76 @@
+Let me analyze the task carefully:
+
+1. I need to add regression tests for copying and serializing a parser-raised `MultilineContinuationError`
+2. The tests need to be in `Lib/test/test_configparser.py`
+3. I need to exercise a real parser input that raises the exception (one with final newline, one without)
+4. For each case, verify `copy.copy`, `copy.deepcopy`, and `pickle.dumps/loads` round trips at every supported protocol
+5. A restored exception must retain: exact class, constructor arguments, source, one-based line number, raw offending line, errors list, and diagnostic message
+6. Follow existing exception-test conventions
+7. Use independently discoverable unittest test methods
+
+Let me first understand what `MultilineContinuationError` is. From the source I've already read:
+
+```python
+class MultilineContinuationError(ParsingError):
+    """Raised when a valueless option is followed by an indented line."""
+
+    def __init__(self, source, lineno, line):
+        ParsingError.__init__(self, source)
+        self.append(lineno, line)
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+```
+
+And `ParsingError`:
+```python
+class ParsingError(Error):
+    """Raised when a configuration file does not follow legal syntax."""
+
+    def __init__(self, source):
+        super().__init__(f'Source contains parsing errors: {source!r}')
+        self.source = source
+        self.errors = []
+        self.args = (source, )
+
+    def append(self, lineno, line):
+        self.errors.append((lineno, line))
+        self.message += '\n\t[line %2d]: %s' % (lineno, line)
+```
+
+So `MultilineContinuationError` has:
+- `source` - the source name (e.g., '<???>' for string input)
+- `lineno` - one-based line number
+- `line` - the raw offending line
+- `args` = (source, lineno, line)
+- `errors` - list of (lineno, line) tuples (inherited from ParsingError)
+- `message` - the diagnostic message (inherited from Error)
+
+Now I need to understand how to trigger this exception. Let me look at what "MultilineContinuationError" means - "Raised when a valueless option is followed by an indented line."
+
+Looking at the existing test in `test_parse_errors`:
+```python
+if not self.allow_no_value:
+    e = self.parse_error(cf, configparser.ParsingError,
+                        "[Foo]\n  wrong-indent\n")
+    self.assertEqual(e.args, ('<???>',))
+```
+
+Wait, that's a `ParsingError`, not a `MultilineContinuationError`. Let me search for how `MultilineContinuationError` is raised.
+
+Let me look at the configparser source to find where `MultilineContinuationError` is raised. I need to search for it in the implementation.
+
+Let me think about what input would trigger this. "A valueless option is followed by an indented line." So in a config like:
+```
+[section]
+option
+  indented line
+```
+
+Wait, actually in non-strict mode with `allow_no_value=False` (which is the default for the strict configparser), a valueless option without an indented continuation would be a ParsingError. But if there IS an indented line after a valueless option, that's a MultilineContinuationError.
+
+Actually wait - let me re-read. The class doc says "Raised when a valueless option is followed by an indented line." This seems like it would be a valid multiline continuation for a valueless option, but in non-allow_no_value mode, this is actually an error because the option has no value to continue.
+
+Let me search for where this is raised in the implementation to understand the exact trigger.
+
+Actually, I need to look at the implementation more carefully. Let me search for where MultilineContinuationError is raised.

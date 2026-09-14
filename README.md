@@ -2,13 +2,20 @@
 
 ## Project status
 
-The owner-approved [reasoning-effort comparison is qualified](development/reasoning_allocation/PREPARATION_REVIEW.md).
-It compares xhigh and medium on two matched seeds with reversed order, keeping
-the complete coverage task, host, checks and uncapped thinking fixed. Actual
-native rendering shows medium removes the template's 38-token xhigh instruction;
-it does not disable thinking. Nine focused checks and two scripted contribution
-replays pass. The failed first preparation remains preserved as a verifier defect.
-The four declared model attempts are the next execution, with no runtime coaching.
+The owner-approved [reasoning-effort comparison is complete](development/reasoning_allocation/RESULTS.md).
+Neither xhigh nor medium completes the first seed; both complete the second with
+correct new tests and prior work preserved. In the successful pair, medium takes
+27.710 loop minutes versus 55.378 for xhigh, while using twice the operations and
+4.60 times the input processing. Xhigh's edit response uses 46,963 output tokens
+and finishes with 112 physical tokens left. This is a local cost result, not a
+universal setting decision or a reliable completion advantage.
+
+All 44 full responses were reviewed; 46 operations and 123 native inputs replay
+exactly. The schedule and all owned runtimes are closed, with no coaching or retry.
+The [host audit](development/reasoning_allocation/HOST_PATH_AUDIT.md) identifies two
+prospective corrections: duplicated source presentation and an undisplayed request
+limit. Qualify those offline before further exposure. The current comparison and
+its original host remain preserved. Twenty requests / fifty operations close unused.
 
 The [current operating direction](development/bounded_working_set/SYMBIOTIC_PLAN.md)
 uses Qwen as a test pilot: design consultation occurs outside active runs. During
@@ -28,9 +35,9 @@ complete responses are reviewed. No coaching or mid-run host change occurred.
 The cost remains substantial: 51,393 generated tokens and 52.863 task-loop minutes.
 The edit response produces 44,852 tokens, including repeated JSON/Python encoding
 attempts, and approaches physical context despite a modest input. Peak sent input
-is 10,735, so this is not pressure-continuity evidence. Retain the host and qualify
-reasoning allocation on complete work next; no alternative setting or new run is
-adopted here. The unused allowance is closed. The
+is 10,735, so this is not pressure-continuity evidence. That result motivated the
+completed reasoning comparison above; it is not used as a selected matched control.
+The unused allowance is closed. The
 [prior preparation](development/uncoached_contribution/PREPARATION_REVIEW.md)
 and its broad scripted paths remain separately identified host evidence.
 
