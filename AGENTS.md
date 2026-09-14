@@ -14,6 +14,14 @@ the coached execution approach below; completed assisted records keep their
 original labels and evidence. The current plan is
 `development/bounded_working_set/SYMBIOTIC_PLAN.md`.
 
+The owner's subsequent Continue authorizes the separate selection consultation in
+`development/evidence_assembly/selection-dialogue/SPEC.md`. Its first input is qualified
+at 5,317 tokens and includes the actual C05 messages plus the separately labeled C04
+final reply. Read PREPARATION_REVIEW.md. Allow one interpretation and at most one
+justified clarification after full review; no task operation can execute. Preserve
+the initial answer before supplying new evidence, retain the interface when no remedy
+is earned, and close unused allowance. No duplicate approval or automatic task rerun.
+
 The owner-directed pending-contribution attempt is closed under frozen 8f5be9d7;
 read `development/evidence_assembly/pending-contribution/review/RESULTS.md` and its
 complete transcript, host and artifact reviews. Eight requests/eight operations
