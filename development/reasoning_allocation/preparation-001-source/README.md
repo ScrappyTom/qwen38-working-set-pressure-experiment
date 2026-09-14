@@ -1,0 +1,1 @@
+Preserved sources of the failed preparation-001, before correcting replay comparisons of integer-keyed Python dictionaries with serialized JSON. These exact bytes match that preparation seal. Four scripted replies completed; replay then rejected the initial dictionary despite canonical equality. No Qwen inference occurred. The failed preparation remains sealed and unchanged.

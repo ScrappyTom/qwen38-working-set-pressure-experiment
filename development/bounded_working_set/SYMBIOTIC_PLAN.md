@@ -6,6 +6,13 @@ state and actual tool feedback without reviewer coaching. The completed sessions
 below remain assisted development evidence. Their factual reminders, supplied
 source and prose endorsements are not a template for future run-time behavior.
 
+The owner has approved proceeding with the bounded
+[reasoning-effort comparison](../reasoning_allocation/SPEC.md). Its native
+preparation-002 is qualified: xhigh versus medium, two matched seeds in reversed
+order, the same complete coverage task and host, no caps or runtime coaching.
+This comparison tests a policy; it does not adopt medium or change the edit
+representation. Historical runs and unused allowances remain closed.
+
 The four priorities now apply as follows:
 
 1. Keep a completed contribution as the unit: current work, objective, relevant

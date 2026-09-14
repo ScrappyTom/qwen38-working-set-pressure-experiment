@@ -2,6 +2,14 @@
 
 ## Project status
 
+The owner-approved [reasoning-effort comparison is qualified](development/reasoning_allocation/PREPARATION_REVIEW.md).
+It compares xhigh and medium on two matched seeds with reversed order, keeping
+the complete coverage task, host, checks and uncapped thinking fixed. Actual
+native rendering shows medium removes the template's 38-token xhigh instruction;
+it does not disable thinking. Nine focused checks and two scripted contribution
+replays pass. The failed first preparation remains preserved as a verifier defect.
+The four declared model attempts are the next execution, with no runtime coaching.
+
 The [current operating direction](development/bounded_working_set/SYMBIOTIC_PLAN.md)
 uses Qwen as a test pilot: design consultation occurs outside active runs. During
 a run, the actor receives the declared interface/state and actual tool feedback,

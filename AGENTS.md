@@ -14,6 +14,21 @@ the coached execution approach below; completed assisted records keep their
 original labels and evidence. The current plan is
 `development/bounded_working_set/SYMBIOTIC_PLAN.md`.
 
+The owner has now said "Proceed" to the recommended reasoning-effort comparison.
+Read `development/reasoning_allocation/SPEC.md` and PREPARATION_REVIEW.md. The
+qualified preparation-002 fixes four independent attempts: xhigh/medium at seed
+961208, then medium/xhigh at 961209. Each has at most 16 requests / 24 operations,
+with the same saved coverage task, host, input policy and q4/56,576/no-MTP runtime.
+Thinking remains enabled and uncapped. Medium omits the template's extra xhigh
+instruction; it is an explicitly tested intervention, not an adopted default.
+The complete task and reply format remain unchanged. Existing owner direction
+authorizes this frozen comparison after qualification, without another approval.
+Preserve the failed preparation-001 and its verifier correction; both qualification
+paths are scripted, with zero model inference. Keep all runs uncoached and inspect
+every actual input and full response before interpretation. Do not change effort
+and edit representation together or include the historical long run as a selected
+control. No extra seeds, retries, rescue or automatic successor are authorized.
+
 The uncoached coverage contribution is now closed and checked; read
 `development/uncoached_contribution/review/RESULTS.md` and its complete transcript
 and host-path audits. Under frozen c476ee9d, four Qwen requests select source,
