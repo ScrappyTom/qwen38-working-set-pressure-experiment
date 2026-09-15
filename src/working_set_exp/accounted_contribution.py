@@ -92,6 +92,9 @@ class AccountedSession(ContributionSession):
     def check_state(self):
         return self.scoped_check_state("public")
 
+    def edit_scope(self, action):
+        return self.edit_checks.get(action['path']) if action and action['action']=='patch' else None
+
     def view(self, **kwargs):
         if "recent_count" not in kwargs and self.last and "recent_activity_limit" in self.last:
             kwargs["recent_count"] = self.last["recent_activity_limit"]
@@ -182,8 +185,7 @@ class AccountedSession(ContributionSession):
 def process_reply(session, reply, measure, preceding_feedback, record_operation=None):
     working_view.validate(reply, session.reply_schema()["json_schema"]["schema"])
     action = reply.get("operation")
-    triggered = (session.edit_checks.get(action["path"])
-                 if action and action["action"] == "patch" else None)
+    triggered = session.edit_scope(action)
     needed = int("account" in reply) + int(action is not None) + int(triggered is not None)
     if needed > session.call_limit - session.calls_used:
         raise ValueError("insufficient operation allowance for the account, operation and declared check")

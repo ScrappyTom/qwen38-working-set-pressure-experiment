@@ -29,6 +29,7 @@ class CapacityError(ValueError):
 
 
 class WorkingSession:
+    mutation_actions = ('patch',)
     def __init__(self, candidate: Candidate, checker: bytes, task: str, *, pairs=(), call_limit=24, request_limit=None):
         self.candidate, self.checker, self.task = candidate, checker, task
         self.pairs = copy.deepcopy(list(pairs))
@@ -500,7 +501,7 @@ class WorkingSession:
                 proposed = self._reopen(action, measure)
             else:
                 proposed = self.clone()
-                result = proposed._patch(action) if name == "patch" else proposed._ordinary(action)
+                result = proposed._patch(action) if name in self.mutation_actions else proposed._ordinary(action)
                 proposed._record(action, result)
                 if not proposed._fits_feedback(measure):
                     rejection = self.commit_admission_error(action)

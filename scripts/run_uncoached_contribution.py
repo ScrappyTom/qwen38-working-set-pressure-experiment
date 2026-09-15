@@ -40,7 +40,11 @@ class Adapter:
         request["messages"] = [dict(role="system", content=(self.AREA / "SYSTEM.txt").read_text(encoding="utf-8") + "\n\n" + reference),
             dict(role="user", content=canonical_json_bytes(dict(workspace=view,
                 preceding_operation_feedback=receipts)).decode())]
-        request["response_format"] = self.reply_schema()
+        if hasattr(self.module, 'response_constraints'):
+            request.pop('response_format', None)
+            request.update(self.module.response_constraints())
+        else:
+            request["response_format"] = self.reply_schema()
         request["seed"] = self.SEED
         request["chat_template_kwargs"] = dict(enable_thinking=True, reasoning_effort=self.ACTOR["effort"])
         return request
@@ -124,7 +128,8 @@ class Loop(LegacyLoop):
                       response.get("timings", {}).get("cache_n") == 0, "unexpected cache reuse")
         self.source_check()
         self.log.append("post_response_runtime_check", dict(id=tag, **self.health()), [])
-        reply = load_json_strict(content.encode())
+        reply = (actor.module.decode_reply(content) if hasattr(actor.module, 'decode_reply')
+                 else load_json_strict(content.encode()))
         working_view.validate(reply, actor.reply_schema()["json_schema"]["schema"])
         self.log.append("reply_selected", dict(id=tag), [self.store.put(f"calls/{tag}-reply.json", canonical_json_bytes(reply))])
         actor.require("operation" not in reply or len(canonical_json_bytes(reply["operation"])) <= MAX_ACTION_BYTES,

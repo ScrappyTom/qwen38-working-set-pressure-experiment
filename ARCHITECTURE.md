@@ -30,11 +30,13 @@ and bounded model inputs. Exact recovery is a prerequisite, not the final outcom
   arrange, retain, replace, and present as the task develops.
 
 Compatibility names are not new architectural objects. The wire key `workspace`
-contains a current decision view. Its `working_set` lists contain selected source
-and saved records that are not already displayed in `latest_feedback`. Empty lists
-there do not imply an empty complete working set or an empty selection. Keep these
-existing keys while explaining their scope; no storage or schema migration follows
-from adopting the glossary.
+contains a current decision view. Historical configurations divide selected bodies
+between `working_set` and `latest_feedback`; an empty list can therefore accompany
+visible source in feedback. The opt-in [decision interface](development/decision_interface/IMPLEMENTATION.md)
+removes that location ambiguity: all visible current-source bodies occupy
+`working_set.sources`, and feedback carries references. `visibility` separately
+identifies retained and shown material. These are presentation contracts, without
+a storage migration or redefinition of the world.
 
 The opt-in [operable recovery configuration](development/operable_recovery/IMPLEMENTATION.md)
 also permits designated bodies to be temporarily absent from both lists and feedback.
@@ -44,6 +46,13 @@ presentation resumes after the replacement arrangement is admitted there. Select
 is a durable designation, not a promise to display every designated byte during every
 kind of decision. Exact region assembly differs from exploratory paging: a complete
 identified group fits or its replacement is rejected without silent shortening.
+
+The decision successor retains recovery inspections across reads and operations,
+refreshes their source after edits, and releases them on explicit selection replacement.
+A capacity fallback may omit retained bodies, with that omission stated explicitly.
+Accounts are displayed fully first; a measured capacity obstacle can require a labelled
+prefix. Exact stored text is unchanged. This replaces the older fixed 512-byte recovery
+prefix and temporary inspection lifetime; the historical inputs retain those policies.
 
 ## Information model
 
@@ -79,6 +88,15 @@ limits are observation limits, not evidence that omitted bytes remain recoverabl
 A reporting failure cannot reverse an executed check. This responsibility is distinct
 from whether the model notices a diagnostic or uses it correctly. The older capture
 adapter remains part of historical configurations, with its documented limitations.
+
+The decision interface derives criteria from preserved structured observations.
+Ordinary execution, ordinary path coverage and injected-fault detection have separate
+meanings. A failing mutation test can satisfy a detection criterion; its partial path
+coverage is not automatically a new obligation. Scoped applicability and unmet criteria
+remain visible after diagnostic retrieval. Coherent criterion records and bounded
+diagnostic excerpts provide exact raw access, while unknown/incomplete observations
+remain unassessed. This is a checker-specific interpretation contract, not a general
+semantic verifier or endorsement of an authored account.
 
 ## Metadata and relationships
 
@@ -168,6 +186,15 @@ preflights edits on a clone before committing. Once another operation has actual
 executed, a later presentation problem must not erase its outcome or imply it did
 not happen. Retrieval reads historical evidence; it does not execute it again.
 
+For a fully delivered current-source region, the decision interface also permits
+replacement by its exact reference and current candidate. The host resolves old bytes
+and applies existing visibility, version, size and successor-check protections. An
+optional literal SOURCE body avoids making the actor repeat old text or JSON-escape
+new code. The actual pinned grammar, final-reply parser and wire path are qualified.
+Only a complete public final reply executes; neither private thinking nor a response
+cut off during generation becomes an action. This removes transport work, without
+establishing a bound on deliberation or a model productivity improvement.
+
 Qwen is the test pilot and a design consultant outside active runs. Preserve and
 review the exact confusing input/output before a bounded consultation. Check its
 interpretation against source. During runs, provide only declared input and actual
@@ -246,9 +273,12 @@ recovery, saved work and new evidence now compose on this path; correct interpre
 through completed correction does not. The missing exact-class assertion remains
 in saved work, and documentation is unfinished.
 
-This outcome earns explicit criterion/detection reporting and capacity-sensitive
-display of small accounts, not a change to exact custody or a proven reasoning-policy
-remedy. Those presentation changes remain prospective. The latest account's pending
-text also outlives the acquisition it describes: account provenance and persistence
-do not establish that the model maintains useful current understanding. Keep these
-separate responsibilities visible when evaluating the next configuration.
+Direct host-focused review of the actual inputs identifies seven burdens, documented
+in the [decision-interface diagnosis](development/decision_interface/DIAGNOSIS.md).
+Their [implementation and engineering results](development/decision_interface/RESULTS.md)
+retain custody and guards while changing reporting, evidence lifetime/location and
+source transport. No new model inference occurs. A scripted correction and documentation
+contribution completes with real checks; model-selected completion under this package
+remains untested. The latest historical account's pending text also outlives the
+acquisition it describes: provenance and persistence do not establish that the model
+maintains useful current understanding. Keep these responsibilities separate.

@@ -1,11 +1,35 @@
 # Experiment operating rules
 
-The owner authorizes `development/decision_interface/PLAN.md`: fix all seven host
-presentation/transport failures documented in DIAGNOSIS.md and maintain NOTES.md
-through implementation. Publish the plan first. Qualify actual saved inputs,
-information paths, native decoder behavior and guarded source edits. No new Qwen
-completion or reopened historical allowance belongs to this engineering package.
-Update governance from observed implementation lessons, preserving the original runs.
+The owner-directed `development/decision_interface/PLAN.md` is implemented and
+qualified; read its RESULTS.md, IMPLEMENTATION.md and running NOTES.md. The plan
+was committed and pushed at 308c9cd8 before implementation. The opt-in DecisionSession
+addresses all seven documented host presentation/transport burdens. Historical
+configurations and evidence remain unchanged. 94 selected tests, twelve pinned
+native grammar cases, and a scripted eight-reply/ten-operation correction and
+documentation contribution pass. Nineteen native inputs, 229 custody records,
+304 source identities and two preserved observations replay exactly. This is
+engineering evidence, with no new Qwen completion or model-performance claim.
+
+Carry these implementation lessons into future work:
+
+- Inspect the actual input for a usable explanation of the outcome: identify the
+  unmet criterion and distinguish normal execution from expected injected-fault
+  failures. Do not ask the model to infer the checker's acceptance logic from traces.
+- Treat source location and lifetime as an operating contract. Review the combined
+  view for contradictory fields; distinguish stored, retained, shown and inspected.
+- Keep small accounts complete when they fit. Qualify truthful rejection and a
+  selection change after large acquisition, not only the preceding fitting state.
+- Let the host resolve exact source regions and transport encoding. Qualify the
+  visible reference, actual wire, pinned decoder, parser and guarded effects together.
+  Never execute private thinking or an incomplete final reply.
+- For scripted routes, identify what in the actual input supports each next choice.
+  Review the resulting artifact independently: a passing check missed a misplaced
+  documentation heading in qualification-002; qualification-003 corrects it.
+
+Failed qualifications and earlier artifacts remain preserved. Private runtime files
+are excluded from publication; verify staged bytes against sealed identities. No
+historical model allowance reopens. A future live evaluation requires its own frozen
+package; do not describe this implementation as demonstrated autonomous improvement.
 
 The owner-directed `development/operable_recovery/PLAN.md` is complete; read its
 `review/RESULTS.md`, full transcript review and host/artifact audits. Plan 5fe48c51

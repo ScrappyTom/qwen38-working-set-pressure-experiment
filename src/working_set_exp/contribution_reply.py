@@ -35,6 +35,10 @@ def completion_request_bytes(request):
     schemas and all other values keep their previous canonical representation.
     """
     ordered = load_json_strict(canonical_json_bytes(request))
+    if 'grammar' in ordered:
+        if 'response_format' in ordered or not isinstance(ordered['grammar'], str) or not ordered['grammar'].strip():
+            raise ValueError('explicit grammar must be nonempty and exclusive of response_format')
+        return canonical_json_bytes(ordered)
     for form in ordered["response_format"]["json_schema"]["schema"]["oneOf"]:
         properties, required = form["properties"], form["required"]
         if (not isinstance(properties, dict) or not isinstance(required, list)
