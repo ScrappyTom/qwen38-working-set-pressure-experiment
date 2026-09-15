@@ -1,0 +1,80 @@
+## What the saved test establishes and what it leaves unestablished
+
+**Established by the saved test (authored code, confirmed present in file):**
+
+The C04 patch introduced `MissingReferenceErrorTests` into `Lib/test/test_configparser.py`. The C08 working-set read (lines 2180–2279) confirms those exact bytes are in the current file at candidate `cedeafb…`. The test asserts, for each of three scenarios (basic same-section, extended same-section, extended cross-section), that:
+
+- the raised exception is an `InterpolationMissingOptionError`,
+- `exc.reference` equals `'gone'`,
+- `exc.option` and `exc.section` match the setup,
+- `copy.copy`, `copy.deepcopy`, and every pickle protocol preserve those attributes and `args`,
+- `raw=True` returns the unresolved template,
+- adding the missing key makes a subsequent `get` succeed.
+
+So the test **codes the expectation** that `reference` is the bare option name `'gone'` (not the full `'b:gone'` cross-section form, not the raw template string, not `None`).
+
+**Unestablished:**
+
+No check has been executed on this candidate. The C08 `current_check` block reports `applies_to_current: false`, `candidate_matches: false`, `check_definition_matches: false`—the lone passing check (RES-0054) was on a different candidate and a different checker. The `preceding_operation_feedback` is empty. Therefore:
+
+- The assertion `exc.reference == 'gone'` is an **authored expectation** in test code. It has not been confirmed by execution against the real `configparser` implementation.
+- Whether the implementation actually populates `reference` with the bare option name (as opposed to, say, the full qualified `'b:gone'` for cross-section references) is **open**.
+
+**The three categories distinguished:**
+
+| Category | What it is here | Evidence type |
+|---|---|---|
+| **Inspected source** | The C08 working-set read showing the test class at lines 2180–2279; the C04 patch's `new` field | Confirms the code *text* is in the file. Says nothing about runtime behavior. |
+| **Authored work** | The C04 patch itself; the specific choice of `self.assertEqual(exc.reference, 'gone')` | The model's *intended* assertion based on its reading of the implementation. Not independently confirmed. |
+| **Executed check** | *None exists* for this candidate. No `check` operation has run on `cedeafb…`. | Absent. The only check in the record (RES-0054) does not apply. |
+
+**Available next operation for independent evidence:**
+
+A `check` with `check_id: "tests"` (prospective contract scope: "Tests and their preservation, excluding unfinished documentation") on the current candidate would execute the suite including the new `MissingReferenceErrorTests` class and return a pass/fail with actual output. A pass on `test_basic_missing`, `test_extended_missing`, and `test_extended_cross_section_missing` would independently confirm that `reference` is `'gone'` in all three cases. In the historical C08 contract the only check ID was `"public"`, which would also run the tests but bundles in examples and documentation; the prospective contract's `"tests"` scope is narrower and sufficient for this specific question.
+
+---
+
+## Prospective contract: account-plus-test-edit reply
+
+**Configuration under consideration:**
+
+- An accepted edit to `Lib/test/test_configparser.py` → host automatically executes the `"tests"` check.
+- An accepted edit to `Doc/library/configparser.rst` → host automatically executes the `"public"` check.
+- A rejected edit skips the check. A failed check preserves the saved edit.
+- A reply with account + operation is one model request; account update, patch, and automatic check each consume one operation (three total in the test-edit case).
+
+**Records and feedback for a reply like `{"discussion":"…","account":"…","operation":{"action":"patch","path":"Lib/test/test_configparser.py",…}}`:**
+
+1. **Account record.** The host stores the account string, bound to the *input* candidate identity (the candidate at reply time, before any edit). This is a model-authored record. It is not a host certification. It is recoverable through EVT/RES history.
+
+2. **Patch receipt.** If accepted: the host returns the successor `candidate_id`, pre/post file SHA-256, and inclusive source-line intervals for the edit. If rejected (stale guard, capacity, etc.): the edit is not committed; no check follows.
+
+3. **Automatic check receipt (only if the patch was accepted).** The host executes `"tests"` on the successor candidate and returns: pass/fail, actual output (stdout/stderr of the test run), scope label, candidate identity, and checker identity. The edit and the check are two separate operations with no model turn between them.
+
+**If the check fails:**
+
+- The edit is **preserved** in the file. The successor candidate still contains the (failing) test.
+- The account text is **unchanged**—the host does not rewrite or annotate it. It still reads as the model last wrote it.
+- The failed check is an **accepted execution** (it ran; the result is a valid record). It does not roll back the edit or invalidate the candidate.
+- The unresolved question—whether `reference` is actually `'gone'`—**remains open** until a subsequent passing check confirms it. The failure output, however, tells the model what value `reference` actually held, which is the independent evidence the authored expectation lacked.
+
+**Is this a usable way to retain the unresolved question and act on feedback?**
+
+Yes. The mechanism works as a two-step loop:
+
+- **Step 1 (this reply):** The account states the question and the provisional expectation ("I assert `reference == 'gone'`; I have not yet confirmed by execution"). The patch commits the test. The automatic check runs.
+- **Step 2 (next input):** The model receives the check result. If pass, the expectation is confirmed; the model can proceed to the documentation edit and update or clear the account. If fail, the output shows the actual value; the model corrects the test (or the assertion) and edits again, which triggers another check. The account is updated to reflect the new understanding.
+
+The critical property is the **separation of roles**: the account is a persistent, model-controlled note of what is uncertain; the check is a host-executed verdict. Neither substitutes for the other. The model is responsible for connecting them, but it doesn't rely on its own memory across turns—the question is *in the record*, and the answer *arrives as feedback*. This is operationally sufficient.
+
+---
+
+## Operational ambiguity
+
+One point is not fully pinned down by the prospective contract text: **whether the automatic post-edit check's output is archived with a retrievable RES handle in the same way an explicitly issued `check` call is, or whether it is delivered only in the immediate next-input feedback.**
+
+The contract says the host "returns the real receipts before your next decision" for the automatic check, and the general system description says all operations produce archived records. The historical C08 system message describes the pattern (edit receipt in `preceding_operation_feedback`, check in `latest_feedback`), which implies archiving. But the prospective contract's description of `verification.after_accepted_edit` does not restate the guarantee that the check output receives a `RES-NNNN` handle retrievable via `reopen_result` after subsequent operations have changed the working set.
+
+In practice, the host almost certainly archives it identically (the automatic check is the same underlying `check` operation, just host-triggered rather than model-requested). But the contract text for the *automatic* path says "returns the real receipts" rather than "archives under a RES handle and makes it retrievable via `reopen_result`." If a model made a corrective edit (consuming the working set) and then needed to go back and re-read the original failure output in detail, the contract text doesn't explicitly guarantee that handle still exists and is paged.
+
+This is minor—it doesn't block the contract, and the immediate next-input feedback contains the full output anyway. But it is the one place where the automatic-check path's archival semantics are *implied* by analogy to explicit checks rather than *stated* for that specific trigger. Retaining the contract is fine; the ambiguity is cosmetic, not structural.
