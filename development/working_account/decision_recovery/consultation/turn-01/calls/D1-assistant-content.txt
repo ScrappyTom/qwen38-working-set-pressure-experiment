@@ -1,0 +1,94 @@
+## 1. What the visible excerpt establishes about edit eligibility
+
+The anchor fragment confirms three concrete facts:
+
+- The exact string `    def test_attributes_bad_port(self):\n        """Check handling of invalid ports."""\n` is present in `Lib/test/test_urlparse.py`.
+- The file's pre-edit fingerprint is `c8f4d478470cb5b3e9daa653a42d029be19aef842fd9577fd524415ce2f037d1` at candidate `2921cbc8…`.
+- The text falls within the current working-set selection (lines 1–800 of that file).
+
+What the excerpt does **not** by itself establish is whether the result that contains the text *qualifies* as a basis for the patch's `old` parameter. That qualification depends on the nature of the result (complete retrieved page vs. partial saved-result page) and on whether the file fingerprint still matches. The excerpt confirms text presence and identity; the eligibility status is a property of the result, not of the fragment alone.
+
+## 2. What the "partial saved-result pages" restriction applies to
+
+The clause in the patch description:
+
+> A complete retrieved read/group result also qualifies when its source bytes and file fingerprint still match the current file; **partial saved-result pages do not.**
+
+governs the **eligibility of the old-source bytes** for the patch's `old` field. It asks: *from where does the model claim to have seen the exact `old` text, and does that source of visibility satisfy the host's requirement?*
+
+- A **complete retrieved read/group result** (a page the host successfully returned in response to a `read` or `work_on` action, sized to fit the next input) qualifies, provided the source bytes and file sha-256 still match the current file.
+- A **partial saved-result page** (a page obtained via `reopen_result` from an archived `RES-…` handle — inherently a subset of a larger saved blob) does **not** qualify, even if the exact bytes are visible in that page.
+
+The restriction is about the *provenance and completeness of the result that carries the old text*. It is not about the correctness of the replacement, the semantic fit of the edit, or the total size of the serialized action.
+
+## 3. Distinguishing eligibility from edit-fit and task-adequacy
+
+These are three independent gates:
+
+| Gate | What it asks | Relevant limit / criterion |
+|---|---|---|
+| **Eligibility (old-source visibility)** | Does the host have a qualifying result that contains the exact `old` bytes, with a matching fingerprint? | "complete retrieved read/group result" vs. "partial saved-result page"; fingerprint match |
+| **Capacity (action size)** | Does the serialized `patch` action fit within the host's byte limits? | ≤ 65 536 UTF-8 bytes per fragment; ≤ 1 048 576 serialized bytes per action |
+| **Task adequacy (content correctness)** | Does the `new` text correctly implement the required regression coverage and documentation? | Task requirements, actual behaviour, check scopes |
+
+A patch can fail any gate independently of the others. The "partial saved-result pages do not" clause speaks only to the first gate. It says nothing about whether the proposed edit is too large, whether it meets the port-coverage spec, or whether it preserves existing tests.
+
+## 4. Useful next operation after the capacity rejection
+
+The actual rejection:
+
+> `read` lines 800–900 of `Lib/test/test_urlparse.py` →
+> *"The requested source cannot be placed beside the working set. Use work_on to select the material needed together, or inspect a narrower source location."*
+
+The working set currently holds three broad selections (urllib.parse.rst 1–39, test_urlparse.py 1–800, urllib/parse.py 1–648) plus archive overhead. There is no room to add another range.
+
+**Useful next operation: `work_on` to replace the working set with a tighter, task-focused selection.**
+
+The obstacle it addresses: the model needs to see (a) the remainder of the test file beyond line 800 (to know the file's structure, where new tests should be inserted, and what helpers exist) and (b) the specific port-handling code in `urllib/parse.py` (to get exact exception classes, argument tuples, and diagnostic strings). The current selections are too wide to accommodate any additional source.
+
+The uncertainty it resolves: *which exact line ranges are needed*, and *whether the test file's full content can fit alongside the other required source within the next-input capacity*.
+
+## 5. Obtaining the missing coordinates without inventing numbers
+
+The model does not yet know:
+
+- The total length of `test_urlparse.py` (it is ≥ 801 lines).
+- The line range of the port-handling functions in `Lib/urllib/parse.py`.
+- Where in the test file the new tests should be inserted (near the end? after `test_attributes_bad_port`? in a new class?).
+
+The existing interface provides discovery operations that do **not** add source to the working set in the same way `read` does:
+
+- **`search`** on `Lib/urllib/parse.py` with a query like `"port"` (or `"getport"`, `"IntPort"`, etc.) returns matching lines with their positions. The snippets give the model the line range of the port-handling code without needing to guess.
+- **`search`** on `Lib/test/test_urlparse.py` for a structural marker (e.g. the last class or method name visible in the current page, or `"if __name__"`) can reveal the file's end region.
+- **`p0_page`** on either path returns a file-outline page with source locations, giving a structural map and total extent without loading exact source bytes into the working set.
+
+Once the model has the line numbers from `search` snippets or a `p0_page` outline, it can construct the `work_on` with targeted ranges (e.g., the port-handling function in `parse.py`, the tail of the test file, and only the documentation section it must edit). No coordinate needs to be invented; it comes from the search or outline result.
+
+## 6. Is there a specific operational ambiguity, and what is the consequence?
+
+**The distinction is resolvable from the complete description, though it is not immediately obvious.**
+
+The key phrase is *"partial saved-result pages."* Two readings are possible:
+
+- **(a) Archival reading.** "Saved-result" = an archived `RES-…` handle. A "page" of it (obtained via `reopen_result`) is partial by construction. A `read` or `work_on` result is a *live, complete* page chosen by the host to fit the next input and is **not** a "saved-result page." Under this reading, the current test-file selection (lines 1–800, returned by the initial `work_on`) is a **complete retrieved group result** and **does qualify**.
+
+- **(b) Broad reading.** Any result that is a *page* of a longer file (i.e., `next_start_line` points past the returned end) is "partial" and does not qualify. Under this reading, the current selection is ineligible, and the model would need to re-read the entire file in one page (or the full file must fit in the next input) before patching.
+
+The complete description supports reading **(a)**:
+
+- `work_on` says the host "sizes source pages together" and "includes each requested saved record in full, or rejects the group." The result is a successfully assembled, host-verified page — a *complete retrieved group result*.
+- `read` says "The host chooses a whole-line page that fits the COMPLETE next input." Again, a complete, host-sized page.
+- `reopen_result` explicitly pages through a saved blob: "offset=0 starts; continue with returned next_offset. … A later page replaces the earlier page of the same handle." This is the only operation that produces *partial pages of a saved result*.
+- The phrase "saved-result pages" pairs "saved" (archival) with "result" (the `RES` handle) and "pages" (the pagination of that handle). It does not say "partial *source* pages" or "incomplete *file* views."
+
+Under reading (a), the `next_start_line: 801` in the working-set entry is a **navigation aid** ("if you want more, continue from line 801"), not a marker that the result is "partial" in the eligibility sense. The result is complete *as a result*: the host returned exactly what it sized to fit.
+
+**The consequence of the ambiguity (or the model's apparent uncertainty about it):**
+
+The model's thinking shows it leaning toward reading (b), concluding "partial saved-result pages do not qualify" for the current 1–800 selection, and considering an unnecessary re-read or re-selection to "be safe." If the model acts on reading (b), it will:
+
+1. Consume an action on a `work_on` or `read` to re-establish source visibility that it already has.
+2. Risk a second capacity rejection if the re-selection is too broad.
+3. Delay the actual `patch` by one or more operations, consuming from the 59-action allowance and the 19-request budget.
+
+The consequence is **not a wrong outcome** — the model will still arrive at a valid patch — but it is **inefficient**: it spends operations resolving an eligibility question that the complete description already answers in favour of the current selection. No change to the interface is needed; the description, read as a whole, distinguishes live `read`/`work_on` pages from `reopen_result` archival pages. The model's uncertainty is a reasoning step it can resolve by re-reading the three action descriptions side by side, which it can do without consuming an action.
