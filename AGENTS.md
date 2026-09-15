@@ -1,5 +1,12 @@
 # Experiment operating rules
 
+The owner authorizes `development/decision_interface/PLAN.md`: fix all seven host
+presentation/transport failures documented in DIAGNOSIS.md and maintain NOTES.md
+through implementation. Publish the plan first. Qualify actual saved inputs,
+information paths, native decoder behavior and guarded source edits. No new Qwen
+completion or reopened historical allowance belongs to this engineering package.
+Update governance from observed implementation lessons, preserving the original runs.
+
 The owner-directed `development/operable_recovery/PLAN.md` is complete; read its
 `review/RESULTS.md`, full transcript review and host/artifact audits. Plan 5fe48c51
 and concrete implementation/qualification freeze 70e6e21c were pushed before their
