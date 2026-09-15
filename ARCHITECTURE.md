@@ -46,7 +46,11 @@ A rejected action can preserve useful proposed code without becoming a saved edi
 The implementation preserves exact candidates, requests, responses, results,
 diffs, state snapshots, and custody records. Ordinary task operations expose exact
 source pages, navigation, saved action/result access, edits, checks, and submission.
-There is no general model-written working-account operation in the current loop.
+The historical ordinary loop has no working-account operation. The opt-in
+[accounted contribution](development/working_account/IMPLEMENTATION.md) accepts a
+model-written account with an operation or alone. Current account text and its
+producing request/event/input-candidate binding enter later inputs; earlier
+revisions remain exact archived material. Checks do not endorse or rewrite it.
 Thinking and discussion are archived but omitted from subsequent decision inputs.
 Their omission is a policy choice, not evidence that an explanation was lost at a
 later pressure boundary.
@@ -89,7 +93,7 @@ proposed input at that attempt, not to the patch or candidate alone.
 | Capability | Current implementation | Qualified boundary and remaining gap |
 |---|---|---|
 | Store | Content-addressed candidates; action/result archive; raw requests/responses and custody logs. | Exact preservation and replay have extensive local qualification. Preservation alone does not make pending work usable. |
-| Represent | Exact source pages, outlines, recent activity, selected saved records, current bindings. | Bounded mechanical representations exist. No general semantic account-maintenance policy is qualified. |
+| Represent | Exact source pages, outlines, recent activity, selected saved records, current bindings and an optional authored account. | Bounded mechanical representations exist. The opt-in account and scoped checks have offline qualification; their effect on task behavior requires evaluation. |
 | Discover and retrieve | Tree/outline/search, paged history, RES result and EVT action recovery. | Exact routes exist, including grouped proposals. Choosing a resolvable handle can still obtain the wrong kind of information. |
 | Assemble | Current view, selected source/result group, feedback deduplication, native input admission. | Host sizing and delivery have focused qualifications. Reliable selection of semantically sufficient supporting material remains unresolved. |
 
@@ -156,18 +160,17 @@ quality and preservation of saved artifacts; termination; total inference, elaps
 time, and review cost. A passing host gate partly reflects enforcement, not an
 independent demonstration of model judgment.
 
-The [latest task](development/evidence_assembly/pending-contribution/review/RESULTS.md)
-preserved a useful rejected proposal, but the actor recovered its rejection reasons,
-released implementation support, and saved weaker tests. The
-[subsequent consultation](development/evidence_assembly/selection-dialogue/RESULTS.md)
-clarified selected-versus-displayed material and historical capacity after verified
-facts were supplied. It did not demonstrate autonomous completion.
+The [closed recovery task](development/evidence_assembly/recovery-run/review/RESULTS.md)
+delivered source and feedback but preserved a guessed expectation in a test and
+then reused that test as confirmation in documentation. The determining
+implementation was not acquired and no applicable check was executed. Additional
+capacity would not itself supply that missing observation.
 
-The [implementation plan](development/evidence_assembly/decision-state/PLAN.md)
-carries those two earned distinctions into the shared operating reference and
-qualifies real states and a scripted complete contribution. This is the first
-implementation under this map. It does not solve semantic selection. The next
-model evaluation should concern recovering pending work and its support, saving
-and checking it, and preserving it through the next contribution. A working
-account remains a possible, separately evaluated policy rather than a prohibition
-or an automatic next feature.
+The [current plan](development/working_account/PLAN.md) consequently implements
+optional working understanding and a declared verification policy in the same
+host. Account, saved artifact and actual observation remain distinct. Only a
+current public pass authorizes submission; other scope passes do not. A fresh
+complete contribution will evaluate whether Qwen uses the account and feedback,
+preserves prior work and terminates usefully without coaching. The account may
+prove helpful, unused or misleading; it is not a semantic guarantee or a permanent
+requirement for all modes.

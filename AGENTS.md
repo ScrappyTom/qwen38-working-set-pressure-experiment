@@ -1,5 +1,16 @@
 # Experiment operating rules
 
+Current owner-directed development adds an opt-in working account and declared
+scoped verification; read `development/working_account/PLAN.md` and
+`development/working_account/IMPLEMENTATION.md`. The plan was published before
+implementation, and 9d8726c4 preserves the implementation and offline evidence.
+The historical ordinary contribution protocol remains the default. Accounts are
+authored before operations, not extracted from thinking or endorsed by checks.
+The declared policy checks test edits and documentation edits on their successors.
+Separate design consultation and one fresh, uncoached URL-port contribution are
+covered by the continuing owner direction. No live coaching or automatic retry.
+Judge the complete account-plus-check configuration, not accepted gates alone.
+
 The owner-directed recovery contribution is closed under frozen feb7b62b; read
 `development/evidence_assembly/recovery-run/review/RESULTS.md` and its complete
 transcript, host and artifact audits. Eight uncoached requests/eight operations

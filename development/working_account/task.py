@@ -77,10 +77,14 @@ def source_identities():
 
 
 class Task:
-    def __init__(self, scenario="complete", version="002"):
+    def __init__(self, scenario="complete", version="003"):
         self.scenario, self.condition = scenario, "fresh"
         self.PACKAGE = AREA / f"preparation-{scenario}-{version}"
         self.RUN, self.MANIFEST = AREA / "run-001", AREA / "EXECUTION_MANIFEST.json"
+        self.VERIFICATION_NAME = f"VERIFICATION-{scenario}-{version}.json"
 
     def __getattr__(self, name):
-        return globals()[name]
+        try:
+            return globals()[name]
+        except KeyError:
+            raise AttributeError(name) from None

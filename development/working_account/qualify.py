@@ -159,7 +159,7 @@ def grammar(folder):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("mode", choices=("checks", "grammar", "route", "publish", "run", "verify"))
-    parser.add_argument("--version", default="002")
+    parser.add_argument("--version", default="003")
     parser.add_argument("--scenario", default="complete", choices=("complete", "correction"))
     args = parser.parse_args()
     if args.mode == "checks":

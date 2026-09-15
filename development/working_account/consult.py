@@ -64,6 +64,9 @@ def native_for(request):
     first = copy.deepcopy(request)
     first["messages"] = first["messages"][:2]
     first["seed"] = candidate.prior.SEED
+    # The legacy renderer expects this non-text field. It is absent from the
+    # actual unconstrained consultation request and does not enter its prompt.
+    first["response_format"] = original()["response_format"]
     native = candidate.prior.expected_native(first)
     if len(request["messages"]) == 4:
         tail = b"<|im_start|>assistant\n<think>\n"

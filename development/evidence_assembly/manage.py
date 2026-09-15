@@ -140,7 +140,7 @@ def prepare_one(module, scripted_reply=None, expected_checks=None):
     if error:
         raise error
     checked = verify(module, folder)
-    study.save(folder.parent, f"VERIFICATION-{module.scenario}.json", checked)
+    study.save(folder.parent, getattr(module, "VERIFICATION_NAME", f"VERIFICATION-{module.scenario}.json"), checked)
     print(module.condition, module.scenario, initial["prompt_tokens"], peak, "qualified; zero completions", flush=True)
     return qualification
 
