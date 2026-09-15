@@ -467,13 +467,21 @@ class WorkingSession:
         self.submitted = state.submitted
         return result
 
+    def action_rule(self):
+        return working_view.schema()["json_schema"]["schema"]
+
+    def commit_admission_error(self, action):
+        if action["action"] == "patch":
+            return "The complete edit and refreshed working material cannot fit the next input; no edit committed. Select a narrower relevant working set with work_on."
+        return None
+
     def execute(self, action, measure):
         if self.submitted or self.delivery_blocked or self.calls_used >= self.call_limit:
             raise ValueError("contribution is terminal")
         try:
             if len(canonical_json_bytes(action)) > MAX_ACTION_BYTES:
                 raise ValueError("serialized action exceeds host allowance")
-            working_view.validate(action, working_view.schema()["json_schema"]["schema"])
+            working_view.validate(action, self.action_rule())
             name = action["action"]
             if name == "read":
                 spans = [{k: action[k] for k in ("path", "start_line", "end_line")}]
@@ -487,8 +495,9 @@ class WorkingSession:
                 result = proposed._patch(action) if name == "patch" else proposed._ordinary(action)
                 proposed._record(action, result)
                 if not proposed._fits(measure, margin=0):
-                    if name == "patch":
-                        raise CapacityError("The complete edit and refreshed working material cannot fit the next input; no edit committed. Select a narrower relevant working set with work_on.")
+                    rejection = self.commit_admission_error(action)
+                    if rejection:
+                        raise CapacityError(rejection)
                     # Read-only tools may produce long output. Preserve the exact
                     # result; deliver its actual status and an explicit page address.
                     keys = {"accepted", "candidate_id", "checked_candidate_id", "check_id", "passed", "returncode", "error", "submitted"}

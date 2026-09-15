@@ -23,14 +23,21 @@ class Adapter:
     def __getattr__(self, name):
         return getattr(self.module, name)
 
+    def reply_schema(self):
+        return getattr(self.module, "reply_schema", reply_schema)()
+
+    def process_reply(self, *args):
+        return getattr(self.module, "process_reply", process_reply)(*args)
+
     def request_for(self, view):
         request = self.module.base.request_for(view)
-        reference = working_view.system_prompt().split("\n\n", 1)[1]
+        reference = (self.module.operating_reference() if hasattr(self.module, "operating_reference")
+                     else working_view.system_prompt().split("\n\n", 1)[1])
         request["messages"] = [dict(role="system", content=(self.AREA / "SYSTEM.txt").read_text(encoding="utf-8") + "\n\n" + reference),
             dict(role="user", content=canonical_json_bytes(dict(workspace=view,
                 preceding_operation_feedback=[r for r in self.preceding_feedback
                     if not view["latest_feedback"] or r["sequence"] != view["latest_feedback"]["sequence"]])).decode())]
-        request["response_format"] = reply_schema()
+        request["response_format"] = self.reply_schema()
         request["seed"] = self.SEED
         request["chat_template_kwargs"] = dict(enable_thinking=True, reasoning_effort=self.ACTOR["effort"])
         return request
@@ -115,7 +122,7 @@ class Loop(LegacyLoop):
         self.source_check()
         self.log.append("post_response_runtime_check", dict(id=tag, **self.health()), [])
         reply = load_json_strict(content.encode())
-        working_view.validate(reply, reply_schema()["json_schema"]["schema"])
+        working_view.validate(reply, actor.reply_schema()["json_schema"]["schema"])
         self.log.append("reply_selected", dict(id=tag), [self.store.put(f"calls/{tag}-reply.json", canonical_json_bytes(reply))])
         actor.require("operation" not in reply or len(canonical_json_bytes(reply["operation"])) <= MAX_ACTION_BYTES,
                       "complete operation exceeds host allowance")
@@ -124,7 +131,7 @@ class Loop(LegacyLoop):
                 [self.store.put(f"calls/{tag}-operation-{number:02d}.json", canonical_json_bytes(operation))])
             self.snapshot(session, f"after/{tag}-O{number:02d}")
         processing = time.monotonic()
-        host = process_reply(session, reply, self.measure, actor.preceding_feedback, record)
+        host = actor.process_reply(session, reply, self.measure, actor.preceding_feedback, record)
         following = self.measure(session.view())
         self.no_operation = not host["executed"]
         self.log.append("reply_processed", dict(id=tag, processing_seconds=time.monotonic() - processing,

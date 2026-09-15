@@ -1,0 +1,31 @@
+class PortAccessContractTests(unittest.TestCase):
+    def test_port_boundaries_and_exact_errors(self):
+        for api in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for binary in (False, True):
+                for suffix, expected in (('', None), (':', None), (':0', 0), (':65535', 65535)):
+                    url = 'http://example.test' + suffix + '/resource'
+                    if binary:
+                        url = url.encode('ascii')
+                    with self.subTest(api=api.__name__, url=url):
+                        parsed = api(url)
+                        self.assertEqual(parsed.port, expected)
+                for port in ('65536', '-1', 'invalid'):
+                    url = 'http://example.test:' + port + '/resource'
+                    if binary:
+                        url = url.encode('ascii')
+                    message = ('Port out of range 0-65535' if port == '65536' else
+                               'Port could not be cast to integer value as ' + repr(port.encode('ascii') if binary else port))
+                    with self.subTest(api=api.__name__, url=url):
+                        parsed = api(url)
+                        with self.assertRaises(ValueError) as caught:
+                            parsed.port
+                        self.assertIs(type(caught.exception), ValueError)
+                        self.assertEqual(caught.exception.args, (message,))
+                        self.assertEqual(str(caught.exception), message)
+            parsed = api('http://example.test:\u0661\u0662/resource')
+            with self.assertRaises(ValueError) as caught:
+                parsed.port
+            message = "Port could not be cast to integer value as '\u0661\u0662'"
+            self.assertIs(type(caught.exception), ValueError)
+            self.assertEqual(caught.exception.args, (message,))
+            self.assertEqual(str(caught.exception), message)

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import interpolation_contribution as task
 import run_uncoached_contribution as runner
-from working_set_exp.contribution_reply import completion_request_bytes, process_reply
+from working_set_exp.contribution_reply import completion_request_bytes
 from working_set_exp.custody import verify_records
 from working_set_exp.jsonutil import canonical_json_bytes, sha256_bytes, sha256_file
 
@@ -59,7 +59,7 @@ def verify(folder):
             stem = f"after/{tag}-O{number:02d}"
             task.require(canonical_json_bytes(task.snapshot(session)) == (folder / (stem + "-state.json")).read_bytes(), "intermediate state differs")
             task.require(task.candidate_bytes(session.candidate) == (folder / (stem + "-candidate.json")).read_bytes(), "saved work differs")
-        actual = process_reply(session, reply, measure, adapter.preceding_feedback, intermediate)
+        actual = adapter.process_reply(session, reply, measure, adapter.preceding_feedback, intermediate)
         task.require(actual == task.read(folder / f"calls/{tag}-host-result.json"), "actual feedback differs")
         completed += 1
     final = "final" if (folder / "final-state.json").exists() else "stopped"

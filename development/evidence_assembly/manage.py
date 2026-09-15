@@ -97,7 +97,7 @@ def verify(module, folder):
     return {**result, "actual_completion_requests":len(sent), "owned_runtime_closed":True}
 
 
-def prepare_one(module):
+def prepare_one(module, scripted_reply=None, expected_checks=None):
     folder = module.PACKAGE
     study.require(not folder.exists(), "preserve existing preparation, including failures")
     folder.mkdir(parents=True)
@@ -113,7 +113,7 @@ def prepare_one(module):
                 study.require(route == "/v1/chat/completions", "unexpected intercepted route")
                 request = json.loads(wire)
                 count = loop.cache[sha256_bytes(canonical_json_bytes(request))]["prompt_tokens"]
-                reply = reference_reply(module, session, loop.sent)
+                reply = (scripted_reply or reference_reply)(module, session, loop.sent)
                 return canonical_json_bytes(dict(choices=[dict(finish_reason="stop", message=dict(reasoning_content="", content=json.dumps(reply)))],
                     usage=dict(prompt_tokens=count, completion_tokens=1, total_tokens=count+1, prompt_tokens_details=dict(cached_tokens=0)), timings=dict(cache_n=0)))
             loop = runner.Loop(folder, store, log, url=url, task_module=adapter, post=scripted,
@@ -124,7 +124,8 @@ def prepare_one(module):
             outcome = loop.execute(session)
             study.require(outcome["submitted"] and session.check_state()["applies_to_current"], "scripted contribution incomplete")
             checks = [p["result"]["passed"] for p in session.pairs[session.starting_archive_length:] if p["response"]["action"] == "check"]
-            study.require(checks == ([True] if module.scenario == "complete" else [False, True]), "correction feedback path differs")
+            expected = expected_checks if expected_checks is not None else ([True] if module.scenario == "complete" else [False, True])
+            study.require(checks == expected, "correction feedback path differs")
             peak = max(r["prompt_tokens"] for r in loop.cache.values())
             study.require(all(r["payload"].get("completion_sent") is not True for r in verify_records(folder / "records.jsonl", folder)), "qualification sent inference")
     except BaseException as problem:
