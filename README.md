@@ -2,6 +2,15 @@
 
 ## Project status
 
+The [architecture map](ARCHITECTURE.md) separates the information world, stored
+material, complete per-call working set, and selected evidence group. It maps
+Store, Represent, Discover/retrieve, and Assemble to the implemented host and
+its remaining capability gaps. The owner-directed
+[implementation plan](development/evidence_assembly/decision-state/PLAN.md)
+qualifies a shared selection/capacity explanation and a complete scripted
+contribution before any new model evaluation. Documentation and plan are published
+before implementation; historical evidence remains unchanged.
+
 The [selection consultation is complete](development/evidence_assembly/selection-dialogue/RESULTS.md).
 Qwen correctly distinguishes saved edits from rejection results under focused review.
 After factual clarification it explains where selected content is displayed and

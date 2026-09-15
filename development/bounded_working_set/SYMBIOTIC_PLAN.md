@@ -1,5 +1,12 @@
 # Complete contributions with host and model
 
+The owner-directed [architecture map](../../ARCHITECTURE.md) and
+[implementation plan](../evidence_assembly/decision-state/PLAN.md) now provide the
+stable vocabulary and next bounded tranche. Publish them before implementation.
+Qualify the shared input-scope/capacity explanation against actual selected states,
+native input cost, and a scripted complete contribution. Semantic selection and
+working-account policies remain open; this tranche adds no model inference.
+
 Current direction, following the owner's test-pilot clarification: develop the
 host with Qwen outside active runs. Active runs use the declared task, interface,
 state and actual tool feedback without reviewer coaching. The completed sessions

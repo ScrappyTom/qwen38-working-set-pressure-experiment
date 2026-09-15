@@ -1,5 +1,14 @@
 # Experiment operating rules
 
+The owner directed architecture documentation and a plan to be committed and pushed
+before implementation. Read `ARCHITECTURE.md` and
+`development/evidence_assembly/decision-state/PLAN.md`. World, stored material,
+the complete per-call working set, and selected evidence are distinct. Existing
+wire keys keep their compatibility meaning. Implement and qualify the earned
+selection/capacity explanation through the shared reference and actual contribution
+path; do not turn the architecture map into a new taxonomy, account policy, or
+automatic model run. This prospective tranche includes no Qwen completion requests.
+
 Current owner clarification: Qwen is the test pilot. Design collaboration and
 interpretation consultations take place outside active runs, in separate
 conversations after the relevant attempt is closed. During a run, supply only
