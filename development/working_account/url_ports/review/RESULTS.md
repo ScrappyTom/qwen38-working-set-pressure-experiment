@@ -54,4 +54,6 @@ The immediate development question is whether recovery feedback can use space
 currently occupied by recent activity summaries while retaining selected source,
 current state and the exact archive. That is a narrow presentation/admission
 question earned by this stop, not another instruction for Qwen to count tokens.
-No further model exposure belongs to this consumed attempt.
+No further model exposure belongs to this consumed attempt. The subsequent
+[feedback-priority repair and offline continuation](RECOVERY_REPAIR.md) address
+the demonstrated delivery boundary, without changing this run's outcome.

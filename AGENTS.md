@@ -7,8 +7,23 @@ implementation, and 9d8726c4 preserves the implementation and offline evidence.
 The historical ordinary contribution protocol remains the default. Accounts are
 authored before operations, not extracted from thinking or endorsed by checks.
 The declared policy checks test edits and documentation edits on their successors.
-Separate design consultation and one fresh, uncoached URL-port contribution are
-covered by the continuing owner direction. No live coaching or automatic retry.
+The separate two-response design consultation and one fresh URL-port attempt are
+closed. Read `development/working_account/consultation/RESULTS.md` and
+`development/working_account/url_ports/review/RESULTS.md`. Four complete responses
+commit three acquisitions, but no account, edit, check or submission. The final
+read and its rejection do not fit; the model never receives that recovery feedback.
+All original results remain preserved at 9e95a08d. No live coaching or retry occurs.
+
+The prospective feedback-priority repair is in the same review folder's
+`RECOVERY_REPAIR.md`. The opt-in host may reduce recent activity rows to deliver
+ordinary feedback while preserving selected evidence, account and exact archive.
+Historical default behavior remains unchanged. 100 selected tests and the actual
+stopped-state offline continuation pass; 21 native inputs and 150 custody records
+replay exactly. That researcher-scripted continuation is not Qwen completion.
+The consumed run's sixteen requests and fifty-seven operations remain closed.
+The next evaluation should test a complete uncoached contribution and model-selected
+recovery, with a separately declared package. Do not reopen the earlier design
+consultation merely because the account's behavioral benefit remains untested.
 Judge the complete account-plus-check configuration, not accepted gates alone.
 
 The owner-directed recovery contribution is closed under frozen feb7b62b; read

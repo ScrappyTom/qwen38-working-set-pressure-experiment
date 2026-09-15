@@ -12,6 +12,7 @@ from .contribution_session import ContributionSession
 from .jsonutil import canonical_json_bytes, sha256_bytes
 from .candidate import canonical_path
 from .tools import SessionState, ToolExecutor
+from .working_session import RECENT_COUNT
 
 
 def action_rule(check_ids):
@@ -87,6 +88,8 @@ class AccountedSession(ContributionSession):
         return self.scoped_check_state("public")
 
     def view(self, **kwargs):
+        if "recent_count" not in kwargs and self.last and "recent_activity_limit" in self.last:
+            kwargs["recent_count"] = self.last["recent_activity_limit"]
         result = super().view(**kwargs)
         result["working_account"] = self.working_account()
         result["verification"] = dict(
@@ -95,6 +98,19 @@ class AccountedSession(ContributionSession):
             scoped_checks={scope: self.scoped_check_state(scope) for scope in self.checkers if scope != "public"},
             submission_check="public")
         return result
+
+    def _fits_feedback(self, measure):
+        # Spend optional administrative context before losing actual feedback.
+        # Bulk source acquisitions retain their existing admission rule; they
+        # cannot grow their selection by consuming this recovery fallback.
+        self.last.pop("recent_activity_limit", None)
+        if self._fits(measure, margin=0):
+            return True
+        for count in range(min(RECENT_COUNT, len(self.pairs)) - 1, -1, -1):
+            self.last["recent_activity_limit"] = count
+            if self._fits(measure, margin=0):
+                return True
+        return False
 
     def mark_delivered(self, view):
         expected = self.view()

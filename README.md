@@ -2,6 +2,22 @@
 
 ## Project status
 
+The [working-account and declared-check configuration is implemented](development/working_account/IMPLEMENTATION.md).
+The separate Qwen design dialogue is closed. Its [fresh uncoached URL-port trial](development/working_account/url_ports/review/RESULTS.md)
+returned four responses and committed three acquisitions, but saved no contribution.
+The broad selected source left insufficient room for another page or its rejection.
+All original inputs, full responses and exact replay remain preserved at 9e95a08d.
+
+The [subsequent feedback-priority repair](development/working_account/url_ports/review/RECOVERY_REPAIR.md)
+lets actual feedback use space occupied by recent activity summaries, retaining
+selected evidence and the complete archive. 100 selected tests pass. From the exact
+stopped state, an offline scripted continuation delivers the rejection, narrows
+the group and reaches checked submission. That is feasible recovery, not rescued
+Qwen work. The account/check policy's contribution to autonomous productivity
+remains unestablished; no model retry or in-run coaching occurred.
+
+Earlier development records follow.
+
 The [uncoached recovery contribution is closed without completion](development/evidence_assembly/recovery-run/review/RESULTS.md).
 Eight requests save three tests and documentation, but request no check and make no
 submission. Independent review finds one failing test, two incorrect documentation

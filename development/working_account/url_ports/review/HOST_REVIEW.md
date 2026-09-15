@@ -2,7 +2,8 @@
 
 This review concerns the opt-in configuration frozen at bbaf1c7a. The historical
 ordinary protocol remains the default. Execution observations and final replay
-are recorded below when the live attempt closes.
+are recorded below. A subsequent prospective repair is documented separately in
+[RECOVERY_REPAIR.md](RECOVERY_REPAIR.md); it does not change the frozen run.
 
 ## Observed closure
 

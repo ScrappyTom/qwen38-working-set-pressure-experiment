@@ -113,6 +113,14 @@ Within Assemble:
    physical/input policy, preserve failures, and record actual dispatch. Enough
    input room does not guarantee adequate evidence or termination of generation.
 
+In the opt-in account/check configuration, ordinary feedback may reduce the
+recent-activity display before being withheld for capacity. The host records the
+display limit with latest feedback and retains the exact archive, selected source,
+account and current applicability. Bulk source acquisition cannot enlarge its
+selection by consuming that fallback. If required material still does not fit,
+the existing explicit stop remains. This is a declared composition/admission
+policy, not automatic semantic selection or a universal continuation guarantee.
+
 Relevant code: [working session](src/working_set_exp/working_session.py),
 [operating reference](src/working_set_exp/working_view.py),
 [contribution checks](src/working_set_exp/contribution_session.py),
@@ -169,8 +177,10 @@ capacity would not itself supply that missing observation.
 The [current plan](development/working_account/PLAN.md) consequently implements
 optional working understanding and a declared verification policy in the same
 host. Account, saved artifact and actual observation remain distinct. Only a
-current public pass authorizes submission; other scope passes do not. A fresh
-complete contribution will evaluate whether Qwen uses the account and feedback,
-preserves prior work and terminates usefully without coaching. The account may
-prove helpful, unused or misleading; it is not a semantic guarantee or a permanent
-requirement for all modes.
+current public pass authorizes submission; other scope passes do not. The
+[fresh attempt](development/working_account/url_ports/review/RESULTS.md) stopped
+during broad acquisition before using an account or saving work. Its feedback
+capacity failure earned the narrow repair described above, qualified through a
+separate offline continuation. This does not establish autonomous completion or
+an account benefit. The account may prove helpful, unused or misleading; it is not
+a semantic guarantee or a permanent requirement for all modes.

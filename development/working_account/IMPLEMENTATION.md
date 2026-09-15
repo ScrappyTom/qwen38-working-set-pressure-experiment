@@ -5,6 +5,17 @@ in the existing host; the historical ordinary contribution protocol remains the
 default. No archive migration, private-thinking extraction, in-run coaching or
 automatic semantic endorsement is introduced.
 
+The separate [Qwen consultation is closed](consultation/RESULTS.md). The
+[fresh URL attempt](url_ports/review/RESULTS.md) returned four responses and three
+acquisitions but stopped before any account or saved contribution: neither a new
+source page nor its rejection fit beside the broad selected group. The original
+attempt remains unchanged at 9e95a08d. The [prospective feedback repair](url_ports/review/RECOVERY_REPAIR.md)
+allows the opt-in host to reduce recent activity summaries before withholding
+feedback, while preserving selected evidence and the complete archive. A narrow
+third extension hook leaves historical default feedback admission unchanged.
+100 selected tests and exact actual-state offline recovery through checked
+submission pass. No additional Qwen task run has been made.
+
 `AccountedSession` derives the current working account from the latest accepted
 `record_account` event. Every revision and clear remains in the exact EVT/RES
 archive. The input contains one current account with author role, producing event,

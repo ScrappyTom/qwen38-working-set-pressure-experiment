@@ -286,6 +286,10 @@ class WorkingSession:
         self.admissions.append(dict(prompt_tokens=count, margin=margin, candidate_id=self.candidate.candidate_id))
         return count <= INPUT_LIMIT-margin
 
+    def _fits_feedback(self, measure):
+        """Default policy preserves the historical fixed recent-activity view."""
+        return self._fits(measure, margin=0)
+
     def _fit_pages(self, action, spans, handles, measure, replace):
         full = [self.source(s) for s in spans]
         lengths = [max(0, s["returned_end_line"]-s["returned_start_line"]+1) for s in full]
@@ -494,7 +498,7 @@ class WorkingSession:
                 proposed = self.clone()
                 result = proposed._patch(action) if name == "patch" else proposed._ordinary(action)
                 proposed._record(action, result)
-                if not proposed._fits(measure, margin=0):
+                if not proposed._fits_feedback(measure):
                     rejection = self.commit_admission_error(action)
                     if rejection:
                         raise CapacityError(rejection)
@@ -505,14 +509,14 @@ class WorkingSession:
                     proposed.last = {**proposed.last, "result": brief,
                                      "output_scope": "status_only_full_result_archived",
                                      "full_result_handle": f"RES-{len(proposed.pairs):04d}"}
-                    if not proposed._fits(measure, margin=0):
+                    if not proposed._fits_feedback(measure):
                         # The read-only operation did happen. Preserve its actual
                         # result and stop, rather than relabeling it a rejection.
                         proposed.delivery_blocked = True
         except (CandidateError, ValueError, KeyError, UnicodeError) as error:
             proposed = self.clone()
             proposed._record(action, dict(accepted=False, error=str(error)))
-            if not proposed._fits(measure, margin=0):
+            if not proposed._fits_feedback(measure):
                 raise CapacityError("Rejection cannot be delivered; no state transition committed") from error
         self.__dict__.update(proposed.__dict__)
         return self.pairs[-1]["result"]
