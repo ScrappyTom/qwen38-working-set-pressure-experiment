@@ -2,6 +2,15 @@
 
 ## Project status
 
+The [observation and recovery successor](development/operable_recovery/IMPLEMENTATION.md)
+is implemented under the [published plan](development/operable_recovery/PLAN.md).
+Checks preserve raw observations before reports; recovery keeps selected material
+designated while freeing its bulk bodies from the immediate input. Exact region
+assembly and temporary inspection let the model choose a usable next arrangement.
+Historical configurations remain unchanged. Native scripted complete/correction
+routes are qualified separately from the forthcoming uncoached attempt; no productivity
+claim follows from those engineering routes. See the package's preparation record.
+
 The [source-eligibility clarification and recovery consultation are complete](development/working_account/decision_recovery/review/RESULTS.md).
 Retain the clarified contract and ordinary framing. Qwen distinguishes current excerpts
 from historical recovery after correction; the proposed extra reminder did not earn

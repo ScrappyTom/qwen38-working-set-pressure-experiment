@@ -33,10 +33,13 @@ class Adapter:
         request = self.module.base.request_for(view)
         reference = (self.module.operating_reference() if hasattr(self.module, "operating_reference")
                      else working_view.system_prompt().split("\n\n", 1)[1])
+        receipts = (self.module.present_receipts(view, self.preceding_feedback)
+                    if hasattr(self.module, "present_receipts") else
+                    [r for r in self.preceding_feedback
+                     if not view["latest_feedback"] or r["sequence"] != view["latest_feedback"]["sequence"]])
         request["messages"] = [dict(role="system", content=(self.AREA / "SYSTEM.txt").read_text(encoding="utf-8") + "\n\n" + reference),
             dict(role="user", content=canonical_json_bytes(dict(workspace=view,
-                preceding_operation_feedback=[r for r in self.preceding_feedback
-                    if not view["latest_feedback"] or r["sequence"] != view["latest_feedback"]["sequence"]])).decode())]
+                preceding_operation_feedback=receipts)).decode())]
         request["response_format"] = self.reply_schema()
         request["seed"] = self.SEED
         request["chat_template_kwargs"] = dict(enable_thinking=True, reasoning_effort=self.ACTOR["effort"])
@@ -204,6 +207,8 @@ def run_once(args, module=task):
     args.server, args.model, _ = module.runtime_paths()
     args.output = module.RUN
     session, adapter = module.initial_session(), Adapter(module)
+    if hasattr(module, "attach_observations"):
+        module.attach_observations(session, module.RUN, log)
     error, outcome = None, None
     try:
         with module.base.base.owned_runtime(args, store, log) as url:

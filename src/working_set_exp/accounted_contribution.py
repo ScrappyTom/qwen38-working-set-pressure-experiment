@@ -40,6 +40,8 @@ def reply_schema(check_ids):
 
 
 class AccountedSession(ContributionSession):
+    joint_selection_actions = ("work_on",)
+
     def __init__(self, candidate, checkers, task, *, edit_checks, **kwargs):
         if (not checkers or "public" not in checkers or
                 any(not isinstance(k, str) or not k or not isinstance(v, bytes)
@@ -54,6 +56,9 @@ class AccountedSession(ContributionSession):
 
     def action_rule(self):
         return {"oneOf": [*action_rule(self.checkers)["oneOf"], account_rule()]}
+
+    def reply_schema(self):
+        return reply_schema(self.checkers)
 
     def commit_admission_error(self, action):
         if action["action"] == "record_account":
@@ -160,7 +165,7 @@ class AccountedSession(ContributionSession):
             staged._record(account, staged._ordinary(account))
             account_stage = staged.clone()
             preceding_feedback[:] = [copy.deepcopy(account_stage.last)]
-            selected = staged._fit_pages(action, action["sources"], action["results"], measure, True)
+            selected = staged._select(action, measure)
             return [account_stage, selected]
         except (CandidateError, ValueError, KeyError, UnicodeError) as error:
             preceding_feedback.clear()
@@ -175,7 +180,7 @@ class AccountedSession(ContributionSession):
 
 
 def process_reply(session, reply, measure, preceding_feedback, record_operation=None):
-    working_view.validate(reply, reply_schema(session.checkers)["json_schema"]["schema"])
+    working_view.validate(reply, session.reply_schema()["json_schema"]["schema"])
     action = reply.get("operation")
     triggered = (session.edit_checks.get(action["path"])
                  if action and action["action"] == "patch" else None)
@@ -198,7 +203,7 @@ def process_reply(session, reply, measure, preceding_feedback, record_operation=
             record_operation(len(operations), operation)
         return result
 
-    if "account" in reply and action and action["action"] == "work_on":
+    if "account" in reply and action and action["action"] in session.joint_selection_actions:
         stages = session.prepare_account_group(reply["account"], action, measure, preceding_feedback)
         for number, staged in enumerate(stages):
             if operations:
@@ -235,7 +240,7 @@ def process_reply(session, reply, measure, preceding_feedback, record_operation=
     return outcome
 
 
-def operating_reference(check_descriptions):
+def operating_reference(check_descriptions, *, forms=None, effect_overrides=None, extra_instructions=""):
     instructions = (
         'Reply with one JSON object. Supported forms, in displayed property order: '
         '{"discussion":string,"operation":operation}, '
@@ -279,8 +284,9 @@ def operating_reference(check_descriptions):
     effects["check"] = ("Executes check_id on expected_candidate_id, which must equal the current candidate. "
                         "Returns actual output with scope, candidate and checker identity. A failed check is "
                         "accepted execution. Check scopes: " + canonical_json_bytes(check_descriptions).decode())
+    effects.update(effect_overrides or {})
     reference = []
-    for form in action_rule(check_descriptions)["oneOf"]:
+    for form in forms if forms is not None else action_rule(check_descriptions)["oneOf"]:
         name = form["properties"]["action"]["const"]
         reference.append(name + ": " + effects[name] + "\nRequired argument forms: " + canonical_json_bytes(form).decode())
-    return working_view.INPUT_INTERPRETATION + "\n\n" + instructions + "\n\n" + "\n\n".join(reference)
+    return working_view.INPUT_INTERPRETATION + "\n\n" + instructions + ("\n\n" + extra_instructions if extra_instructions else "") + "\n\n" + "\n\n".join(reference)

@@ -247,7 +247,7 @@ class WorkingSession:
             return []
         if action == "read":
             sources = [result.get("source", result)]  # Includes legacy exact reads.
-        elif action == "work_on":
+        elif action in getattr(self, "joint_selection_actions", ("work_on",)):
             sources = result.get("sources", [])
         else:
             return []
@@ -479,9 +479,13 @@ class WorkingSession:
             return "The complete edit and refreshed working material cannot fit the next input; no edit committed. Select a narrower relevant working set with work_on."
         return None
 
+    def _select(self, action, measure):
+        return self._fit_pages(action, action["sources"], action["results"], measure, True)
+
     def execute(self, action, measure):
         if self.submitted or self.delivery_blocked or self.calls_used >= self.call_limit:
             raise ValueError("contribution is terminal")
+        proposed = None
         try:
             if len(canonical_json_bytes(action)) > MAX_ACTION_BYTES:
                 raise ValueError("serialized action exceeds host allowance")
@@ -490,8 +494,8 @@ class WorkingSession:
             if name == "read":
                 spans = [{k: action[k] for k in ("path", "start_line", "end_line")}]
                 proposed = self._fit_pages(action, spans, [], measure, False)
-            elif name == "work_on":
-                proposed = self._fit_pages(action, action["sources"], action["results"], measure, True)
+            elif name in getattr(self, "joint_selection_actions", ("work_on",)):
+                proposed = self._select(action, measure)
             elif name in {"reopen_result", "reopen_event"}:
                 proposed = self._reopen(action, measure)
             else:
@@ -514,6 +518,13 @@ class WorkingSession:
                         # result and stop, rather than relabeling it a rejection.
                         proposed.delivery_blocked = True
         except (CandidateError, ValueError, KeyError, UnicodeError) as error:
+            if (getattr(self, "preserve_executed_observations", False) and proposed is not None
+                    and len(proposed.pairs) > len(self.pairs)
+                    and proposed.pairs[-1]["result"].get("executed") is True):
+                # Execution already occurred and its observation is durable.
+                # Unexpected presentation failure must stop with that fact intact.
+                self.__dict__.update(proposed.__dict__)
+                raise RuntimeError("Executed observation preserved; subsequent presentation failed") from error
             proposed = self.clone()
             proposed._record(action, dict(accepted=False, error=str(error)))
             if not proposed._fits_feedback(measure):

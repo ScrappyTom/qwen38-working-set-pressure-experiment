@@ -73,6 +73,7 @@ class ToolExecutor:
         event_reopenable: dict[str, bytes] | None = None,
         read_mode: str = "actor_selected_count",
         hierarchical_p0: bool = False,
+        archive_result_policy: bool = False,
     ):
         self.state = state
         self.required_full_reads = required_full_reads
@@ -88,6 +89,7 @@ class ToolExecutor:
             raise ValueError("unknown read mode")
         self.read_mode = read_mode
         self.hierarchical_p0 = hierarchical_p0
+        self.archive_result_policy = archive_result_policy
         # Imported evidence must also be reachable before it can be advertised.
         for saved in (self.reopenable, self.result_reopenable):
             for handle, body in saved.items():
@@ -109,6 +111,10 @@ class ToolExecutor:
                 "action_payload_sha256": sha256_bytes(body), "size_bytes": len(body)}
 
     def _bounded(self, result: dict[str, Any], *, recoverable: bool = True) -> dict[str, Any]:
+        if self.archive_result_policy:
+            # The opt-in successor archives the result before its own bounded
+            # presentation and provides paged access. Legacy wrappers do not apply.
+            return result
         raw = canonical_json_bytes(result)
         if len(raw) > MAX_RESULT_BYTES:
             raise ToolError("tool result exceeds complete result bound")

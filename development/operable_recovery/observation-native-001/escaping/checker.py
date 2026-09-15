@@ -1,0 +1,1 @@
+import sys;sys.stdout.write(chr(34)*7500);sys.exit(1)

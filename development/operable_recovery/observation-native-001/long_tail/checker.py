@@ -1,0 +1,1 @@
+import sys;sys.stdout.write('A'*9000+'REAL FAILURE');sys.exit(1)

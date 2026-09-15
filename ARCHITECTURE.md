@@ -36,6 +36,15 @@ there do not imply an empty complete working set or an empty selection. Keep the
 existing keys while explaining their scope; no storage or schema migration follows
 from adopting the glossary.
 
+The opt-in [operable recovery configuration](development/operable_recovery/IMPLEMENTATION.md)
+also permits designated bodies to be temporarily absent from both lists and feedback.
+Its recovery presentation explicitly names that omission, exposes bounded inventory
+and exact inspection, and recomputes editing authority from actual delivery. Ordinary
+presentation resumes after the replacement arrangement is admitted there. Selection
+is a durable designation, not a promise to display every designated byte during every
+kind of decision. Exact region assembly differs from exploratory paging: a complete
+identified group fits or its replacement is rejected without silent shortening.
+
 ## Information model
 
 Material can have overlapping roles: task and amendments, source, interaction or
@@ -62,6 +71,14 @@ amendments, and abandonment of a proposal involve recorded decisions, not event
 order alone. A most-recent rejected edit is not automatically the intended next work.
 The host can establish which account or artifact is designated current, but not
 that its explanation or contents are correct.
+
+Observations must cross the preservation boundary before display reduction. The
+opt-in check path stores the outcome and bounded raw capture before deriving a small
+report; exact CHK inspection reaches those captured bytes. Explicit storage/capture
+limits are observation limits, not evidence that omitted bytes remain recoverable.
+A reporting failure cannot reverse an executed check. This responsibility is distinct
+from whether the model notices a diagnostic or uses it correctly. The older capture
+adapter remains part of historical configurations, with its documented limitations.
 
 ## Metadata and relationships
 
