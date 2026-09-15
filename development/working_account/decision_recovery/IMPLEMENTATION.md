@@ -1,5 +1,13 @@
 # Common clarification and prospective frame
 
+Final disposition: the clarification is retained, the frame comparison is cancelled,
+and the ordinary route is qualified offline. Read review/RESULTS.md and DECISION.json.
+The final compact, source-checked description passes 69 selected tests. Three final
+native qualifications replay 83 inputs and two complete scripted contributions, one
+with failed-check correction. They contain no Qwen task completion. Direct review
+also catches the script's incorrect attribution of a message omitted by the checker;
+that limits the correction-evidence claim. Earlier preparation history follows.
+
 The plan was published at 37b048d5 before implementation. The common reference now
 states the visible current-excerpt route separately from complete recovered read/group
 results. A whole file is not required for the current-source edit guard. Partial

@@ -1,14 +1,22 @@
 # Experiment operating rules
 
-The owner now authorizes `development/working_account/decision_recovery/PLAN.md`:
-clarify the evidenced current-source/historical-result distinction, qualify existing
-coordinate discovery at the actual crowded state, consult Qwen outside a run and
-conditionally compare one focused next-decision framing with ordinary framing. Publish
-the plan and concrete exposure packages before their respective work. At most two
-consultation responses and one matched pair of twelve requests/thirty-six operations
-per condition; no new reasoning cap, payload format, semantic answer or live coaching.
-Retaining ordinary framing and cancelling an unearned candidate is valid. Follow the
-plan's actual-result continuation and full direct review/publication requirements.
+The owner-directed `development/working_account/decision_recovery/PLAN.md` is closed;
+read its `review/RESULTS.md`, host/artifact audits and both full consultation reviews.
+The source-eligibility clarification is retained. The two outside-run responses are
+consumed and the proposed generic reminder comparison is cancelled; twenty-four
+conditional requests/seventy-two operations are closed unused. No task manifest or
+Qwen task continuation exists. Retaining ordinary framing is a development decision,
+not proof that focused decision organization cannot help.
+
+69 selected checks and native ordinary complete/correction routes pass. Their
+researcher-selected known-range replacement makes exact coordinate feedback usable;
+searching first still delivers only status. Do not call this autonomous recovery.
+Direct review catches a false scripted-account attribution: the checker removed the
+actual failure message, while the correct message remained in selected source.
+Preserve the sealed error. Before another failure-recovery evaluation, qualify
+primary failure diagnostics ahead of optional mutation traces and correct that
+reference account. No checker change or reasoning boundary was silently introduced.
+Reliable final-action generation and model-selected recovery remain unresolved.
 All historical authorizations and unused allowances below remain closed.
 
 The owner's latest Proceed is completed as one closed URL-port recovery package;

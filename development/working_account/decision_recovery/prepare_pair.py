@@ -44,28 +44,54 @@ def boundary(folder):
                     name = f"{'legacy' if legacy else condition}-recent-{recent}"
                     study.save(folder, name + "-input.json", adapter.request_for(session.view()))
                     rows.append(dict(name=name, input_tokens=count, admitted=count <= 23808))
-            for condition in ("ordinary", "focused"):
+            # The consultation closed the framing comparison. Qualify the
+            # retained ordinary route; candidate input costs remain above.
+            for condition in ("ordinary",):
                 session = study.initial_session(condition)
                 adapter = ReferenceAdapter(study.Task(condition))
                 loop.task = adapter
                 before = copy.deepcopy(session.ranges)
+                study.require(loop.measure(session.view()) <= 23808, "prospective initial input does not fit")
                 session.mark_delivered(session.view())
                 session.begin_request()
                 reply = dict(discussion="Researcher qualification of existing coordinate discovery.",
                     operation=dict(action="search", path=study.TEST,
                                    query="def test_attributes_bad_port", offset=0, limit=1))
                 host = process_reply(session, reply, loop.measure, adapter.preceding_feedback)
-                study.save(folder, condition + "-search-result.json", host)
-                study.save(folder, condition + "-search-state.json", study.snapshot(session))
+                study.save(folder, condition + "-immediate-search-result.json", host)
+                study.save(folder, condition + "-immediate-search-state.json", study.snapshot(session))
                 result = host["operations"][0]["result"]
                 study.require(result.get("accepted") and result.get("matches") and result["matches"][0]["line"] == 716,
                               "exact coordinate search was not returned")
-                study.require(session.ranges == before and session.last["result"] == result,
-                              "search displaced selection or lost its complete result")
+                study.require(session.ranges == before, "search changed selection")
                 count = loop.measure(session.view())
-                study.require(count <= 23808, "search feedback does not fit")
-                rows.append(dict(name=condition + "-coordinate-search", returned_line=716,
+                rows.append(dict(name=condition + "-immediate-coordinate-search", returned_line=716,
                                  input_tokens=count, selected_source_unchanged=True,
+                                 delivery_blocked=session.delivery_blocked,
+                                 complete_result_in_next_input=(session.last["result"] == result and count <= 23808)))
+                # Also qualify a useful route that does not assume search fits
+                # before selection changes. All coordinates for this first
+                # replacement already appear in the actual selected extents.
+                session = study.initial_session(condition)
+                adapter.preceding_feedback.clear()
+                session.mark_delivered(session.view())
+                session.begin_request()
+                release = process_reply(session, release_later_material(session), loop.measure, adapter.preceding_feedback)
+                study.require(all(op["result"].get("accepted") for op in release["operations"]), "known-range replacement failed")
+                study.save(folder, condition + "-release-result.json", release)
+                study.save(folder, condition + "-release-state.json", study.snapshot(session))
+                rows.append(dict(name=condition + "-known-range-replacement", input_tokens=loop.measure(session.view()),
+                                 author="researcher", future_documentation_released=True))
+                session.mark_delivered(session.view())
+                session.begin_request()
+                host = process_reply(session, reply, loop.measure, adapter.preceding_feedback)
+                result = host["operations"][0]["result"]
+                study.require(result.get("accepted") and result["matches"][0]["line"] == 716 and
+                              session.last["result"] == result and not session.delivery_blocked,
+                              "coordinate feedback unavailable after known-range replacement")
+                study.save(folder, condition + "-search-result.json", host)
+                study.save(folder, condition + "-search-state.json", study.snapshot(session))
+                rows.append(dict(name=condition + "-coordinate-search-after-replacement", input_tokens=loop.measure(session.view()),
                                  complete_result_in_next_input=True))
                 session.mark_delivered(session.view())
                 session.begin_request()
@@ -94,7 +120,16 @@ def boundary(folder):
     print(json.dumps(rows, indent=2), flush=True)
 
 
+def release_later_material(session):
+    return dict(discussion="Researcher qualification: make room using already known extents, before requesting coordinates.",
+        account="The implementation and tests support the current test contribution. Documentation remains unwritten and can be reacquired for its later edit.",
+        operation=dict(action="work_on", sources=[copy.deepcopy(s) for s in session.ranges if s["path"] != study.DOC], results=[]))
+
+
 def scripted_reply(module, session, number):
+    if number == 1:
+        return release_later_material(session)
+    number -= 1
     def reply(action, account=None):
         result = dict(discussion="Researcher-scripted qualification; not Qwen work.")
         if account is not None:
@@ -176,6 +211,8 @@ if __name__ == "__main__":
     elif args.mode == "publish":
         publish()
     elif args.mode == "run":
+        study.require(study.read(study.AREA / "DECISION.json")["compare_framing"] is True,
+                      "conditional comparison is closed")
         manifest = study.read(module.MANIFEST)
         study.require(sha256_file(study.AREA / "DECISION.json") == manifest["decision_sha256"], "decision changed")
         study.require(sha256_file(study.Task(args.condition, "correction").PACKAGE / "SEAL.json") == manifest["correction_seal_sha256"], "correction changed")

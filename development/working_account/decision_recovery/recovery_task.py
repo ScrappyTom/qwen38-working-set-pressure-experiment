@@ -65,7 +65,8 @@ def expected_native(request):
 
 def source_identities():
     files = [*AREA.glob("*.py"), AREA / "PLAN.md", AREA / "SPEC.md", AREA / "SYSTEM.txt", FRAME_PATH,
-             CHECKPOINT, SOURCE / "RESPONSE_SEAL.json", SOURCE / "calls/C02-wire-request.json"]
+             CHECKPOINT, SOURCE / "RESPONSE_SEAL.json", SOURCE / "calls/C02-wire-request.json",
+             ROOT / "tests/test_working_evidence.py"]
     return {**original.source_identities(),
             **{p.relative_to(ROOT).as_posix(): sha256_file(p) for p in files}}
 

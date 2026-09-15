@@ -2,6 +2,21 @@
 
 ## Project status
 
+The [source-eligibility clarification and recovery consultation are complete](development/working_account/decision_recovery/review/RESULTS.md).
+Retain the clarified contract and ordinary framing. Qwen distinguishes current excerpts
+from historical recovery after correction; the proposed extra reminder did not earn
+its conditional task comparison, which is cancelled. No task run follows the two
+consultation responses (12.018 model-request minutes).
+
+69 selected checks and native scripted complete/correction routes pass. A known-range
+replacement permits exact coordinate discovery and checked work; searching first
+still delivers only status. This is host feasibility, not autonomous recovery.
+Direct review also finds that the task checker drops the actual failure diagnostic
+when reducing its report, and the script misattributes the correction to that omitted
+feedback. Preserve useful primary failure evidence before another recovery evaluation;
+reliable final-action generation remains separately unresolved. All evidence and
+limitations are in the linked report.
+
 The [recorded-state recovery continuation is closed without saved work](development/working_account/url_continuation/review/RESULTS.md).
 The host delivers the actual capacity rejection, but Qwen repeats a read and then
 exhausts physical context during its second response without a final action. It

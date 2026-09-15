@@ -203,3 +203,18 @@ state, including joint account/group admission, but Qwen does not execute it. Th
 distinguishes transition feasibility, interpretation, action completion and durable
 work. It leaves the account's behavioral value and the current generation policy's
 reliable completion at crowded inputs unresolved.
+
+The [subsequent consultation and qualification](development/working_account/decision_recovery/review/RESULTS.md)
+retain a clearer current-source/historical-source contract but cancel an unearned
+generic reminder comparison. Ordinary excerpts can establish exact old-text eligibility;
+a complete historical result is a separate route. Neither eligibility nor input fit
+establishes that the next useful action will finish. A replacement using already-known
+extents can make later coordinate discovery usable without model byte counting, but
+that sequence is currently scripted feasibility.
+
+Feedback adequacy is distinct from complete delivery. The task checker can return
+an exact, fully delivered failure report after discarding its primary diagnostic.
+Likewise a model- or researcher-authored account can falsely attribute a conclusion
+to that report. Preserve producing inputs and actual output; do not infer evidential
+support from an account's asserted provenance. Prioritizing useful failure evidence
+is a task-checker policy to qualify, separate from the archive's custody guarantee.

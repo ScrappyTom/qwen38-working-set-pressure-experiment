@@ -21,12 +21,12 @@ def verify(folder):
             stem = row["payload"]["stem"]
             request = study.read(folder / (stem + "-endpoint-request.json"))
             counts[sha256_bytes(canonical_json_bytes(request))] = row["payload"]["prompt_tokens"]
-    for condition in ("ordinary", "focused"):
+    for condition in ("ordinary",):
         session = study.initial_session(condition)
         adapter = ReferenceAdapter(study.Task(condition))
         def measure(view):
             return counts[sha256_bytes(canonical_json_bytes(adapter.request_for(view)))]
-        for stage in ("search", "group"):
+        for stage in ("release", "search", "group"):
             expected = study.read(folder / f"{condition}-{stage}-result.json")
             actions = [r["action"] for r in expected["operations"]]
             reply = dict(discussion="Independent replay; no model call.")
@@ -39,7 +39,7 @@ def verify(folder):
             actual = process_reply(session, reply, measure, adapter.preceding_feedback)
             assert actual == expected
             assert study.snapshot(session) == study.read(folder / f"{condition}-{stage}-state.json")
-    return {**result, "actual_search_group_paths_replayed": 2}
+    return {**result, "actual_search_group_paths_replayed": 1}
 
 
 if __name__ == "__main__":

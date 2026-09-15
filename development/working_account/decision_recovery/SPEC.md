@@ -42,3 +42,11 @@ Its comparison concerns this framing under the common clarified contract and com
 initial history presentation. The original unclarified continuation remains preserved;
 it is not a matched control. No reviewer coaching, source answers, copied private
 draft, additional seed, changed reasoning policy or automatic continuation is allowed.
+# Closure of the conditional exposure
+
+The two-response consultation is complete. DECISION.json cancels this comparison:
+the proposed frame does not earn a task exposure beyond the corrected contract.
+No execution manifests are published and all twenty-four conditional requests and
+seventy-two operations are closed unused. The prospective design below is retained
+as development history, not active authorization. The ordinary host path continues
+through offline native qualification only. See consultation/RESULTS.md.
