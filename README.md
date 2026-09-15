@@ -2,6 +2,14 @@
 
 ## Project status
 
+The [identified recovery continuation](development/working_account/url_continuation/PLAN.md)
+is being qualified. A [native boundary probe and focused repair](development/working_account/url_continuation/HOST_REPAIR.md)
+address account updates being rejected beside sources that the same reply proposes
+to replace. The host now sizes that final account/group together, retaining separate
+provenance and receipts. 105 selected tests pass. The planned uncoached continuation
+starts with the actual broad selection and corrected rejection; behavioral recovery
+and useful account use remain to be demonstrated.
+
 The [working-account and declared-check configuration is implemented](development/working_account/IMPLEMENTATION.md).
 The separate Qwen design dialogue is closed. Its [fresh uncoached URL-port trial](development/working_account/url_ports/review/RESULTS.md)
 returned four responses and committed three acquisitions, but saved no contribution.

@@ -10,9 +10,9 @@ import copy
 from . import working_view
 from .contribution_session import ContributionSession
 from .jsonutil import canonical_json_bytes, sha256_bytes
-from .candidate import canonical_path
+from .candidate import CandidateError, canonical_path
 from .tools import SessionState, ToolExecutor
-from .working_session import RECENT_COUNT
+from .working_session import CapacityError, MAX_ACTION_BYTES, RECENT_COUNT
 
 
 def action_rule(check_ids):
@@ -141,6 +141,38 @@ class AccountedSession(ContributionSession):
         result = executor.execute({**action, "check_id": "public"})
         return {**result, "check_id": scope, "check_definition_sha256": sha256_bytes(checker)}
 
+    def prepare_account_group(self, text, action, measure, preceding_feedback):
+        """Admit the requested account and replacement as one presentation.
+
+        Both operations are pure staged state changes. The account still precedes
+        the acquisition in custody; its intermediate state is never a model input.
+        If either cannot be accepted, preserve the previous account and selection.
+        """
+        account = dict(action="record_account", text=text)
+        if self.submitted or self.delivery_blocked or self.calls_used + 2 > self.call_limit:
+            raise ValueError("contribution is terminal")
+        try:
+            for value in (account, action):
+                if len(canonical_json_bytes(value)) > MAX_ACTION_BYTES:
+                    raise ValueError("serialized action exceeds host allowance")
+                working_view.validate(value, self.action_rule())
+            staged = self.clone()
+            staged._record(account, staged._ordinary(account))
+            account_stage = staged.clone()
+            preceding_feedback[:] = [copy.deepcopy(account_stage.last)]
+            selected = staged._fit_pages(action, action["sources"], action["results"], measure, True)
+            return [account_stage, selected]
+        except (CandidateError, ValueError, KeyError, UnicodeError) as error:
+            preceding_feedback.clear()
+            rejected = self.clone()
+            rejected._record(account, dict(accepted=False,
+                error="Account and work_on not committed; previous account and selection retained. " + str(error)))
+            if not rejected._fits_feedback(measure):
+                raise CapacityError("Rejection cannot be delivered; no state transition committed") from error
+            return [rejected]
+        finally:
+            preceding_feedback.clear()
+
 
 def process_reply(session, reply, measure, preceding_feedback, record_operation=None):
     working_view.validate(reply, reply_schema(session.checkers)["json_schema"]["schema"])
@@ -165,6 +197,22 @@ def process_reply(session, reply, measure, preceding_feedback, record_operation=
         if record_operation:
             record_operation(len(operations), operation)
         return result
+
+    if "account" in reply and action and action["action"] == "work_on":
+        stages = session.prepare_account_group(reply["account"], action, measure, preceding_feedback)
+        for number, staged in enumerate(stages):
+            if operations:
+                preceding_feedback.append(copy.deepcopy(session.last))
+            session.__dict__.update(staged.__dict__)
+            pair = session.pairs[-1]
+            operation = dict(origin="model_authored_account" if number == 0 else "model",
+                             action=copy.deepcopy(pair["response"]), result=copy.deepcopy(pair["result"]))
+            operations.append(operation)
+            if record_operation:
+                record_operation(len(operations), operation)
+        if len(stages) == 1:
+            outcome["associated_operation_skipped"] = "account_group_not_admitted"
+        return outcome
 
     if "account" in reply:
         result = execute(dict(action="record_account", text=reply["account"]), "model_authored_account")
@@ -205,7 +253,10 @@ def operating_reference(check_descriptions):
         "do not automatically rewrite or endorse it. Earlier account updates are exactly recoverable "
         "through EVT action history. The host measures account size with the complete input; it does not "
         "truncate accounts or silently release selected evidence. A rejected account leaves the previous "
-        "account current and skips the accompanying operation.\n\n"
+        "account current and skips the accompanying operation. With work_on, account and replacement "
+        "selection are admitted together against the complete next input, including both receipts; "
+        "the account need not fit beside the sources being released. If that joint transition fails, "
+        "both prior account and selection remain, and the account rejection explains the failure.\n\n"
         "verification.after_accepted_edit declares which check the host executes after an accepted edit "
         "to each listed path. A rejected edit skips the check; a failing check preserves the saved edit. "
         "The host binds the check to the actual successor and returns the real receipts before your "

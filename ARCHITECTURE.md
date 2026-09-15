@@ -121,6 +121,15 @@ selection by consuming that fallback. If required material still does not fit,
 the existing explicit stop remains. This is a declared composition/admission
 policy, not automatic semantic selection or a universal continuation guarantee.
 
+An account accompanying `work_on` is admitted with its requested replacement
+selection and both receipts. Account authorship still precedes acquisition in the
+exact history; that intermediate state need not itself be a decision input. Failed
+joint admission retains the previous account and selection. This focused rule
+addresses [a measured blocked transition](development/working_account/url_continuation/HOST_REPAIR.md):
+even a short account could not fit beside the broad sources being released, while
+the requested final account/group fit comfortably. It does not select relevance
+for the model or establish that the account is accurate.
+
 Relevant code: [working session](src/working_set_exp/working_session.py),
 [operating reference](src/working_set_exp/working_view.py),
 [contribution checks](src/working_set_exp/contribution_session.py),

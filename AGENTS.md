@@ -1,5 +1,23 @@
 # Experiment operating rules
 
+The owner's latest Proceed authorizes the identified URL-port recovery in
+`development/working_account/url_continuation/PLAN.md` and `SPEC.md`: focused
+qualification, any demonstrated admission repair, one frozen uncoached continuation,
+full direct review and publication. The plan was pushed at e977d218. Native evidence
+at 7c254c1f establishes that an account could be rejected before its accompanying
+group replacement, despite a small admissible final input. The prospective joint
+admission repair and its limits are in `HOST_REPAIR.md`. This is not an observed
+Qwen account failure; the original run never used an account. Do not inflate it.
+
+The continuation starts from the same actual broad selection and empty account,
+with the corrected host's real rejection. Its additional 20 requests/60 operations
+are separately declared; the earlier unused budget remains closed. Do not supply
+the scripted narrow group, reference contribution, previous thinking or reviewer
+coaching. Prepare, seal and publish the concrete package before its sole attempt.
+Review input, full thinking, final actions, results, saved work and custody directly.
+Judge completed contributions, useful account use/revision and total cost; a correct
+account-free contribution is valid success without account-benefit evidence.
+
 Current owner-directed development adds an opt-in working account and declared
 scoped verification; read `development/working_account/PLAN.md` and
 `development/working_account/IMPLEMENTATION.md`. The plan was published before
