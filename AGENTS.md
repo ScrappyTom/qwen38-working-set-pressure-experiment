@@ -1,5 +1,16 @@
 # Experiment operating rules
 
+The owner now authorizes `development/working_account/decision_recovery/PLAN.md`:
+clarify the evidenced current-source/historical-result distinction, qualify existing
+coordinate discovery at the actual crowded state, consult Qwen outside a run and
+conditionally compare one focused next-decision framing with ordinary framing. Publish
+the plan and concrete exposure packages before their respective work. At most two
+consultation responses and one matched pair of twelve requests/thirty-six operations
+per condition; no new reasoning cap, payload format, semantic answer or live coaching.
+Retaining ordinary framing and cancelling an unearned candidate is valid. Follow the
+plan's actual-result continuation and full direct review/publication requirements.
+All historical authorizations and unused allowances below remain closed.
+
 The owner's latest Proceed is completed as one closed URL-port recovery package;
 read `development/working_account/url_continuation/review/RESULTS.md` and its full
 transcript, host and artifact reviews. The plan was pushed at e977d218. Native
