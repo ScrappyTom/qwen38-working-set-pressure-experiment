@@ -1,5 +1,14 @@
 # Experiment operating rules
 
+The owner now explicitly authorizes one same-task Qwen run with the revised host.
+Read `development/decision_interface/same_task/SPEC.md`. Use the original
+operable-recovery starting checkpoint, fixed actor/seed and 16-request/48-operation
+allowance, with all seven qualified host repairs. Freeze and publish the exact new
+package before dispatch, then execute under this instruction without another approval
+question. No in-run coaching, setting changes, reference repair, retry or private-draft
+rescue. Preserve full input/output and observations; review host clarity, actual
+delivery and saved contributions after closure. Historical allowances remain closed.
+
 The owner-directed `development/decision_interface/PLAN.md` is implemented and
 qualified; read its RESULTS.md, IMPLEMENTATION.md and running NOTES.md. The plan
 was committed and pushed at 308c9cd8 before implementation. The opt-in DecisionSession
