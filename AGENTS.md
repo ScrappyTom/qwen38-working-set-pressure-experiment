@@ -1,5 +1,15 @@
 # Experiment operating rules
 
+The owner now authorizes `development/operable_recovery/PLAN.md`: preserve observations
+before report reduction, implement a bounded recovery presentation with retained
+designations and exact region assembly, qualify actual information paths, then one
+separately frozen uncoached contribution. Publish the plan and concrete run package
+before their respective work. At most sixteen new requests/forty-eight operations,
+one attempt, unchanged medium/uncapped actor settings; no live coaching or new proposal
+format. Every scripted decision must be reviewed against the information actually
+available, without treating researcher knowledge as model evidence. Previous packages
+and unused allowances remain closed. Follow the plan's full review/publication duties.
+
 The owner-directed `development/working_account/decision_recovery/PLAN.md` is closed;
 read its `review/RESULTS.md`, host/artifact audits and both full consultation reviews.
 The source-eligibility clarification is retained. The two outside-run responses are
