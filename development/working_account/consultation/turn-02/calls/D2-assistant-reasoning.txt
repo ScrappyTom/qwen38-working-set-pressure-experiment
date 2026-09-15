@@ -1,0 +1,175 @@
+The user is asking me to examine the offline host result and explain:
+
+1. What the ordinary failure establishes about the cross-section reference.
+2. What remains unverified.
+3. A short example of an updated working account that preserves that distinction.
+4. The next kind of task operation it supports.
+
+Let me carefully parse the check output.
+
+The check was `public` on candidate `cedeafb…`. It failed. The stdout JSON contains several sections:
+
+**edited_suite:**
+- 362 tests, 1 failure, 0 errors, 5 skipped, successful: false
+- The single failure: `edited_tests.MissingReferenceErrorTests.test_extended_cross_section_missing`
+  - Trace: `self.assertEqual(exc.reference, ref)` → `AssertionError: 'b:gone' != 'gone'`
+  - So the actual value of `exc.reference` for a cross-section reference is `'b:gone'`, NOT `'gone'`.
+  - The same-section tests (`test_basic_missing`, `test_extended_missing`) passed (they're not in the failure list).
+
+**observed_paths:**
+- 3 tests, 1 failure — same cross-section test fails with same assertion.
+- `modes`: BasicInterpolation has copy, deepcopy, pickle:0-5. ExtendedInterpolation has an empty list `[]`.
+- `raw_bypass`: both BasicInterpolation and ExtendedInterpolation.
+- `resolved`: both modes.
+- `complete`: false.
+
+**restoration_faults:**
+- These are deliberately injected faults (the user says "deliberately injected restoration_faults" distinct from the ordinary observation).
+- Each of option, section, raw_value, reference has 3 tests, 3 failures.
+- These are NOT the ordinary test suite. They are the checker's own fault-injection probes.
+
+**saved_suite:** 359 tests, 0 failures, 0 errors, 5 skipped, successful: true. (The pre-edit suite passes.)
+
+**backport_contract:** 8 tests, 0 failures, successful: true.
+
+**Key distinction the user draws:** "The ordinary edited_suite observation is distinct from the deliberately injected restoration_faults."
+
+So:
+
+**What the ordinary failure establishes:**
+
+The `edited_suite` result shows that `test_basic_missing` and `test_extended_missing` PASSED (they are not in the failure list; the only failure is `test_extended_cross_section_missing`). The `test_extended_cross_section_missing` FAILED with:
+
+```
+AssertionError: 'b:gone' != 'gone'
+```
+
+This means: for a cross-section reference `${b:gone}`, the implementation sets `exc.reference` to `'b:gone'` (the full section:option form), NOT to `'gone'` (the bare option name). The authored test expected `'gone'` and was wrong for this case.
+
+For the same-section cases (`%(gone)s` under Basic, `${gone}` under Extended), the test expected `'gone'` and those tests passed. So for same-section references, `reference` is the bare option name.
+
+**What remains unverified:**
+
+- The `restoration_faults` section is deliberately injected corruption (appending `.wrong` to values). These failures are EXPECTED — they confirm the test's ability to detect corruption. They are NOT evidence about the actual implementation behavior. They confirm the test has teeth for detecting restoration faults on option, section, raw_value, and reference.
+
+- The `observed_paths` section shows `ExtendedInterpolation` modes list is empty `[]`. This is notable. What does this mean? The `modes` field seems to track which copy/deepcopy/pickle operations were actually exercised for each interpolation mode. For BasicInterpolation, all copy/deepcopy/pickle protocols are listed. For ExtendedInterpolation, the list is empty. This could mean the checker's observation harness didn't independently verify the copy/serialization paths for ExtendedInterpolation, OR it could mean something else. But the ordinary test suite DID pass for `test_extended_missing` (it's not in the failure list), so the test itself did exercise copy/deepcopy/pickle for the extended same-section case. The `observed_paths` is a separate observation mechanism.
+
+Wait, let me re-read. The `observed_paths` has its own test count: 3 tests, 1 failure. The 1 failure is the same cross-section test. The 2 that passed are presumably the basic and extended same-section ones. The `modes` field within `observed_paths` might be describing what the observation harness detected about the test's coverage. ExtendedInterpolation modes being empty might mean the observation harness didn't detect copy/deepcopy/pickle exercises in the extended path — but the test clearly does call copy/deepcopy/pickle in `_check_exc`. This is confusing.
+
+Actually, I think the `observed_paths` is a separate observation layer in the checker, not the test suite itself. It might be tracking something different. The key point is: the ordinary test suite (`edited_suite`) shows the cross-section test fails on the `reference` assertion, and the same-section tests pass.
+
+**What remains unverified:**
+
+1. The `reference` value for cross-section is now **confirmed by execution** to be `'b:gone'`. This is established.
+
+2. What remains unverified:
+   - The test needs correction: `test_extended_cross_section_missing` should expect `'b:gone'` instead of `'gone'` for `reference`. But the user says "Do not execute or write the repair."
+   - The documentation has not been written yet (`documentation_added_preserving_existing: false`).
+   - The `observed_paths.complete` is false — the observation harness reports the test coverage is incomplete in some dimension (possibly because ExtendedInterpolation modes list is empty in the observation, or because the cross-section test failed so its coverage path is incomplete).
+   - The restoration_faults confirm the test CAN detect corruption, but these are injected faults, not natural behavior. They don't tell us about the implementation beyond confirming the test's sensitivity.
+
+Wait, actually I need to re-read more carefully. The user says "The ordinary edited_suite observation is distinct from the deliberately injected restoration_faults." So the restoration_faults are a separate mechanism — the checker deliberately corrupts exception attributes and re-runs to see if the test catches it. The 3 failures in each restoration_faults category confirm the test has the right assertions to catch corruption. This is a meta-test of the test.
+
+So the key findings:
+
+**Established by the ordinary failure:**
+- For cross-section references (`${b:gone}`), `exc.reference` is `'b:gone'`, not `'gone'`. The authored expectation was wrong for this case.
+- For same-section references, `exc.reference` is the bare option name (`'gone'`), confirmed by the passing same-section tests.
+- The implementation populates `reference` with the section-qualified name for cross-section lookups.
+
+**What remains unverified / open:**
+- The test needs to be corrected for the cross-section case (expect `'b:gone'` not `'gone'`).
+- The documentation has not been added.
+- The `observed_paths.complete: false` — the checker's own observation of coverage is incomplete. This might be because the cross-section test failed, so the observation of copy/deepcopy/pickle for that path didn't complete. Or it might be the ExtendedInterpolation modes being empty.
+- The restoration_faults confirm test sensitivity but are injected, not natural.
+
+**Updated working account example:**
+
+The account should:
+- Record that the cross-section `reference` is `'b:gone'` (confirmed by execution).
+- Record that same-section `reference` is the bare option name (confirmed by passing tests).
+- Note that the test needs correction for the cross-section case.
+- Note that documentation is not yet written.
+- Distinguish the executed check result from the authored expectation.
+- Note the restoration_faults as a separate confirmation of test sensitivity.
+
+**Next kind of task operation:**
+
+The account supports a corrective patch to `Lib/test/test_configparser.py` changing the cross-section test's expected reference from `'gone'` to `'b:gone'`. This is a test-file edit, which under the prospective contract triggers the `tests` check automatically. The next operation is a `patch` to fix the assertion, followed by the automatic check.
+
+Actually wait — the user says "Do not execute or write the repair." So I should identify the operation type but not write the actual patch. The next operation is a corrective `patch` to the test file.
+
+Let me also address the two host facts:
+
+1. "preceding_operation_feedback contains additional receipts from the immediately preceding model request; its being empty does not mean no earlier operations occurred." — In the C08 input, `preceding_operation_feedback` was empty, but the `recent_activity` showed 6 operations (EVT-0077 through EVT-0082). The empty `preceding_operation_feedback` meant there were no operations between the previous model turn and this input, NOT that no operations had ever occurred. The archive had 82 actions.
+
+2. "Account, edit and automatic check use the same exact EVT/RES archive as explicit operations; the account/edit receipts precede the latest check feedback, and their handles remain recoverable after selection changes." — This means the account (EVT-0079), the patch (EVT-0080), and the check all get archived handles. In the offline result, the account got handle EVT-0079, the patch got EVT-0080. The check result is in the stdout of the operation. These handles remain retrievable even after subsequent `work_on` calls change the working set.
+
+Now let me structure my response.
+
+The user wants:
+1. What the ordinary failure establishes about the cross-section reference.
+2. What remains unverified.
+3. A short example of an updated working account.
+4. The next kind of task operation it supports.
+
+Let me be precise and concise.
+
+For the "what remains unverified" — I need to be careful. The cross-section reference value IS now verified (it's `'b:gone'`). What's NOT verified:
+- The corrected test hasn't been written or run (the repair hasn't happened).
+- The documentation hasn't been added.
+- The `observed_paths.complete: false` is unresolved — the observation layer reports incomplete coverage.
+- The ExtendedInterpolation modes list being empty in `observed_paths` — this is an observation-layer finding, not a test failure. It doesn't mean the copy/deepcopy/pickle tests for ExtendedInterpolation didn't run (they did, as part of the passing `test_extended_missing`), but the observation harness may track them differently.
+
+Actually, I should be more careful. Let me re-read the `observed_paths` structure:
+
+```json
+"observed_paths":{
+  "tests":3,
+  "failures":1,
+  "errors":0,
+  "skipped":0,
+  "successful":false,
+  "details":[...cross-section failure...],
+  "modes":{
+    "BasicInterpolation":["copy","deepcopy","pickle:0","pickle:1","pickle:2","pickle:3","pickle:4","pickle:5"],
+    "ExtendedInterpolation":[]
+  },
+  "raw_bypass":["BasicInterpolation","ExtendedInterpolation"],
+  "resolved":["BasicInterpolation","ExtendedInterpolation"],
+  "complete":false,
+  "detail_entries_omitted":0
+}
+```
+
+The `modes` for ExtendedInterpolation is empty. But `raw_bypass` and `resolved` both include ExtendedInterpolation. And the `test_extended_missing` passed in the `edited_suite`. So the ExtendedInterpolation copy/deepcopy/pickle DID run in the test. Why is `modes.ExtendedInterpolation` empty in `observed_paths`?
+
+I think `observed_paths` is a separate observation mechanism in the checker that tracks what it independently observed, separate from the test suite's own assertions. The empty ExtendedInterpolation modes might mean the observation harness couldn't independently confirm those paths for the extended case, perhaps because the cross-section test failure interrupted the observation sequence, or because the observation harness works differently.
+
+But this is speculative. The user asked what remains unverified. I should note:
+- `observed_paths.complete: false` — the checker's own observation reports incompleteness.
+- `modes.ExtendedInterpolation` is empty in the observation, while `BasicInterpolation` has all 8 entries. This is an observation-layer finding that the extended-interpolation copy/serialization paths were not independently confirmed by the observation harness (even though the test itself passed for the same-section extended case).
+
+Actually, I should be more careful. The `observed_paths` has 3 tests and 1 failure (the cross-section one). The 2 that passed would be basic and extended same-section. For the basic one, the observation tracked all copy/deepcopy/pickle protocols. For the extended same-section one, the modes list is empty. This could mean the observation harness tracks modes per-interpolation-type across all tests for that type, and since the extended cross-section test FAILED, the observation of the extended interpolation's copy/serialization paths is incomplete (the test failed before reaching the copy/serialization assertions for that specific scenario, or the observation harness attributes the failure to the whole ExtendedInterpolation path).
+
+Hmm, but the `test_extended_missing` (same-section) passed, and it does exercise copy/deepcopy/pickle. So why would ExtendedInterpolation modes be empty?
+
+I think I'm overanalyzing the observation layer. The key point for the user's question is:
+
+**Established:** The cross-section `reference` is `'b:gone'`. The same-section `reference` is the bare option name. The authored expectation was wrong for cross-section.
+
+**Not yet verified / still open:**
+- The test in the file still has the wrong expectation (`'gone'` instead of `'b:gone'`). It needs a corrective edit.
+- Documentation has not been written.
+- `observed_paths.complete: false` — the checker's observation layer reports the coverage is incomplete.
+- The restoration_faults are a separate confirmation of test sensitivity (they confirm the test catches corruption), not evidence about natural implementation behavior.
+
+**Next operation:** A corrective `patch` to `Lib/test/test_configparser.py` to fix the cross-section test's expected `reference` value. Under the prospective contract, this triggers the `tests` check automatically.
+
+Let me now write the response. The user wants:
+1. What the ordinary failure establishes.
+2. What remains unverified.
+3. A short example of an updated working account.
+4. The next kind of task operation.
+
+Keep it focused. Don't execute or write the repair. Don't redesign.
