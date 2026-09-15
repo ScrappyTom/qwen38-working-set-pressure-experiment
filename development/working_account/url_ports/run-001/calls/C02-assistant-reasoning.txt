@@ -1,0 +1,185 @@
+Let me understand the task:
+
+1. In `Lib/test/test_urlparse.py`, add regression coverage for port access on `urlsplit` and `urlparse` results with:
+   - Text URLs and ASCII byte URLs
+   - No port, empty port, 0, 65535, 65536, negative port, noninteger port
+   - Non-ASCII decimal digits in text URLs
+   - Assert when invalid-port errors occur
+   - Assert exact exception class, complete argument tuple, and diagnostic text
+   - Assert concrete results for accepted boundary cases
+   - Keep all existing tests intact
+
+2. In `Doc/library/urllib.parse.rst`, add explanation and executable examples of the boundary/error behavior, including the distinction between constructing the parsed result and accessing its port.
+   - Self-contained examples with imports, `>>>` prompts, real outputs/exceptions
+   - Preserve existing documentation
+
+Let me first look at the current implementation to understand port behavior, then check the doc file.
+
+From the source I already have:
+
+In `Lib/urllib/parse.py`, the `port` property is:
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+And `_hostinfo` for str:
+```python
+@property
+def _hostinfo(self):
+    netloc = self.netloc
+    _, _, hostinfo = netloc.rpartition('@')
+    _, have_open_br, bracketed = hostinfo.partition('[')
+    if have_open_br:
+        hostname, _, port = bracketed.partition(']')
+        _, _, port = port.partition(':')
+    else:
+        hostname, _, port = hostinfo.partition(':')
+    if not port:
+        port = None
+    return hostname, port
+```
+
+And for bytes:
+```python
+@property
+def _hostinfo(self):
+    netloc = self.netloc
+    _, _, hostinfo = netloc.rpartition(b'@')
+    _, have_open_br, bracketed = hostinfo.partition(b'[')
+    if have_open_br:
+        hostname, _, port = bracketed.partition(b']')
+        _, _, port = port.partition(b':')
+    else:
+        hostname, _, port = hostinfo.partition(b':')
+    if not port:
+        port = None
+    return hostname, port
+```
+
+So key behaviors:
+- No port (no `:` after hostname): `port` returns `None`
+- Empty port (`:` with nothing after): `partition(':')` gives empty string, `not port` → `port = None`, so returns `None`
+- Port `0`: `isdigit()` and `isascii()` → `int('0')` = 0, `0 <= 0 <= 65535` → returns 0
+- Port `65535`: returns 65535
+- Port `65536`: `isdigit()` and `isascii()` → `int('65536')` = 65536, `not (0 <= 65536 <= 65535)` → raises `ValueError("Port out of range 0-65535")`
+- Negative port: e.g., `-1` → `'-1'.isdigit()` is `False` → raises `ValueError(f"Port could not be cast to integer value as '{port}'")`
+- Noninteger port: e.g., `abc` → `'abc'.isdigit()` is `False` → raises `ValueError(...)`
+- Non-ASCII decimal digits in text URLs: e.g., `'६'` (Devanagari digit 6) → `'६'.isdigit()` is `True` (it's a Unicode digit), but `'६'.isascii()` is `False` → raises `ValueError(f"Port could not be cast to integer value as '{port}'")`
+
+Wait, let me reconsider. For a negative port like `-1`: `port.isdigit()` on `'-1'` → `False` because `-` is not a digit. So it raises the "could not be cast" error.
+
+For `0`: `port.isdigit()` → `True`, `port.isascii()` → `True`, `int('0')` = 0, `0 <= 0 <= 65535` → True, returns 0.
+
+For `65535`: returns 65535.
+
+For `65536`: `int('65536')` = 65536, not in range → ValueError("Port out of range 0-65535").
+
+For bytes: `b'0'.isdigit()` → `True`, `b'0'.isascii()` → `True`, `int(b'0')` = 0.
+
+Wait, for bytes, `int(b'0')` works in Python? Let me think... Actually `int()` can accept bytes. Yes, `int(b'0')` returns 0.
+
+Actually wait - let me look at the port property again more carefully:
+
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+For bytes: `b'0'.isdigit()` → True, `b'0'.isascii()` → True, `int(b'0')` → 0. Good.
+
+For `b'65536'`: `int(b'65536')` → 65536, range check fails → ValueError.
+
+For bytes with non-ASCII: `b'\xe0\xa6\xb6'.isdigit()` → True (Devanagari), but `.isascii()` → False → raises ValueError.
+
+Now I need to:
+1. Read the existing test file to see what's already there (I can see the full file in the working set)
+2. Read the Doc file
+3. Add tests to the test file
+4. Add documentation to the doc file
+
+Let me look at the existing tests. I see there's already:
+- `test_attributes_bad_port` which tests various invalid ports
+- `test_attributes_bad_scheme`
+- `test_attributes_without_netloc`
+
+The existing `test_attributes_bad_port` tests:
+```python
+def test_attributes_bad_port(self):
+    """Check handling of invalid ports."""
+    for bytes in (False, True):
+        for parse in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for port in ("foo", "1.5", "-1", "0x10", "-0", "1_1", " 1", "1 ", "६"):
+                with self.subTest(bytes=bytes, parse=parse, port=port):
+                    netloc = "www.example.net:" + port
+                    url = "http://" + netloc + "/"
+                    if bytes:
+                        if netloc.isascii() and port.isascii():
+                            netloc = netloc.encode("ascii")
+                            url = url.encode("ascii")
+                        else:
+                            continue
+                    p = parse(url)
+                    self.assertEqual(p.netloc, netloc)
+                    with self.assertRaises(ValueError):
+                        p.port
+```
+
+This test covers invalid ports but doesn't assert the exact exception message or check boundary valid ports (0, 65535). It also doesn't check the "out of range" case (65536) separately from the "could not be cast" case.
+
+So I need to add:
+1. Tests for valid boundary ports: no port, empty port, 0, 65535
+2. Tests for invalid ports: 65536 (out of range), negative port, noninteger port, non-ASCII digits
+3. For invalid ports: assert exact exception class (ValueError), argument tuple, and diagnostic text
+4. Both str and bytes URLs
+5. Both urlsplit and urlparse
+
+Let me also check what the existing test already covers vs what I need to add. The existing `test_attributes_bad_port` covers:
+- "foo", "1.5", "-1", "0x10", "-0", "1_1", " 1", "1 ", "६"
+
+But it doesn't:
+- Assert the exact message
+- Test 65536 (out of range)
+- Test 0 and 65535 (valid boundaries)
+- Test no port / empty port
+- Use assertRaisesRegex or check the exact message
+
+Let me now look at the Doc file. I need to read it.
+
+Let me plan my approach:
+1. First, read the Doc file to see what's there
+2. Then add tests to the test file
+3. Then add documentation
+4. Run checks
+
+Let me start by reading the Doc file and the rest of the test file (I already have lines 1-765 of the test file).
+
+Actually, looking at the working set, I have:
+- `Lib/test/test_urlparse.py` lines 1-765 (next_start_line: 766)
+- `Lib/urllib/parse.py` lines 1-648 (next_start_line: 649)
+
+I need to:
+1. See the rest of the test file (from line 766)
+2. Read the Doc file
+3. Add tests
+4. Add documentation
+
+Let me read the rest of the test file and the doc file.

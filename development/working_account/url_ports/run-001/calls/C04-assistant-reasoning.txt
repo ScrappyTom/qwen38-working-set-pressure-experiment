@@ -1,0 +1,139 @@
+Let me understand the task. I need to:
+
+1. In `Lib/test/test_urlparse.py`, add regression coverage for port access on `urlsplit` and `urlparse` results with:
+   - Text URLs and ASCII byte URLs
+   - No port, empty port, 0, 65535, 65536, negative port, noninteger port
+   - Non-ASCII decimal digits in text URLs
+   - Establish when invalid-port errors occur (at access time, not construction)
+   - Assert exact exception class, complete argument tuple, diagnostic text
+   - Assert concrete results for accepted boundary cases
+   - Keep all existing tests intact
+
+2. In `Doc/library/urllib.parse.rst`, add focused explanation and executable examples of boundary/error behavior, including distinction between constructing parsed result and accessing its port.
+
+Let me first look at the source implementation to understand the port validation logic. From the source I already have:
+
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+So:
+- `port` is `None` (from `_hostinfo[1]`) when there's no port delimiter or empty port → returns `None`
+- If `port.isdigit() and port.isascii()` → cast to int, then check 0-65535
+- If not digit/ascii → `ValueError(f"Port could not be cast to integer value as {port!r}")`
+- If in range check fails → `ValueError("Port out of range 0-65535")`
+
+Key behaviors:
+- No port: `p.port` → `None`
+- Empty port (e.g., `host:/`): port string is `''` → wait, let me check. In `_hostinfo`, `hostname, _, port = hostinfo.partition(':')` → if url is `http://host:`, then `hostinfo` is `host:`, partition gives `hostname='host'`, separator=':', port=`''`. Then `if not port: port = None`. So empty port → `None`.
+- Port `0`: `isdigit()` and `isascii()` → `int('0') = 0`, `0 <= 0 <= 65535` → returns `0`
+- Port `65535`: → `65535`, in range → returns `65535`
+- Port `65536`: → `65536`, not in range → `ValueError("Port out of range 0-65535")`
+- Negative port like `-1`: `'-1'.isdigit()` → False → `ValueError(f"Port could not be cast to integer value as '-1'")`
+- Noninteger like `foo`: `foo.isdigit()` → False → `ValueError(f"Port could not be cast to integer value as 'foo'")`
+- Non-ASCII digits like `६` (Devanagari digit 6): `isascii()` → False → `ValueError(f"Port could not be cast to integer value as '६'")`
+
+Wait, let me re-check. For `-1`:
+- `'-1'.isdigit()` → True (minus sign is not a digit in Python... actually let me think)
+- Actually `'-'.isdigit()` → False, `'-1'.isdigit()` → False (because `-` is not a digit)
+- So it goes to else: `ValueError(f"Port could not be cast to integer value as '-1'")`
+
+For `0x10`: `isascii()` → True, `isdigit()` → False (x is not a digit) → `ValueError(...)`
+
+For `1_1`: `isdigit()` → False → `ValueError(...)`
+
+For ` 1` (space followed by 1): `isascii()` → True, `isdigit()` → False (space is not a digit) → `ValueError(...)`
+
+For `1 ` (1 followed by space): same → `ValueError(...)`
+
+For `६` (U+096C, Devanagari DIGIT SIX): `isascii()` → False → `ValueError(...)`
+
+Now let me look at what's already in the test file. I see there's already a `test_attributes_bad_port` test that tests some of these cases but only asserts `ValueError` is raised (not the exact message). And in `test_urlsplit_attributes`, there's a check for port 65536 that uses `assertRaisesRegex`.
+
+The task says to add coverage for: no port, empty port, 0, 65535, 65536, negative port, noninteger port, and non-ASCII decimal digits. For both `urlsplit` and `urlparse`, with text and ASCII byte URLs.
+
+I need to:
+1. Assert exact exception class (`ValueError`)
+2. Complete argument tuple
+3. Diagnostic text
+4. Establish when invalid-port errors occur (at `.port` access, not at construction)
+5. Assert concrete results for accepted boundary cases
+
+Let me now plan the test additions. I'll add a new test method or extend existing ones. Let me think about what's needed:
+
+For valid cases (no exception):
+- No port: `http://www.example.com/` → `p.port is None`
+- Empty port: `http://www.example.com:/` → `p.port is None`
+- Port 0: `http://www.example.com:0/` → `p.port == 0`
+- Port 65535: `http://www.example.com:65535/` → `p.port == 65535`
+
+For invalid cases (ValueError at access):
+- Port 65536: `ValueError("Port out of range 0-65535")`
+- Negative: `-1` → `ValueError("Port could not be cast to integer value as '-1'")`
+- Noninteger: `foo` → `ValueError("Port could not be cast to integer value as 'foo'")`
+- Non-ASCII: `६` → `ValueError("Port could not be cast to integer value as '६'")`
+
+For bytes:
+- Same tests with bytes URLs
+
+Now, for the "establish when invalid-port errors occur" requirement - I need to show that constructing the result doesn't raise, only accessing `.port` does. The existing test `test_attributes_bad_port` already does this implicitly by constructing `p = parse(url)` and then asserting in the `with self.assertRaises(ValueError): p.port` block. But I should be more explicit.
+
+Let me write the test additions. I'll add a comprehensive test method.
+
+Let me also look at what the existing `test_attributes_bad_port` covers:
+- ports: "foo", "1.5", "-1", "0x10", "-0", "1_1", " 1", "1 ", "६"
+- It tests both bytes and str, both urlsplit and urlparse
+- But it only asserts `ValueError` is raised, not the exact message
+- It doesn't test valid boundary cases (0, 65535)
+- It doesn't test "no port" or "empty port" explicitly in this test
+- It doesn't test 65536 (out of range)
+
+So I need to add:
+1. Valid boundary cases with concrete port values
+2. Out-of-range (65536) with exact message
+3. Invalid ports with exact exception class, argument tuple, and message
+4. Non-ASCII digits with exact behavior
+5. Explicit timing (construction doesn't raise, access does)
+
+Let me write the test. I'll add it after `test_attributes_bad_port` or as a new method.
+
+Actually, looking more carefully at the existing test, I see it already has some of this but with just `assertRaises(ValueError)`. I should add a new comprehensive test that:
+- Tests both valid and invalid cases
+- Asserts exact exception details
+- Tests both urlsplit and urlparse
+- Tests both str and bytes
+
+Let me write this now. I'll also need to see the rest of the test file to know where to add things.
+
+The test file ends at line 800 (the read returned lines 1-800, and `next_start_line` is 801). Let me read the rest.
+
+Actually wait - the file content shown ends with:
+```python
+    def test_noslash(self):
+        # Issue 1637: http://foo.com?query is legal
+        self.assertEqual(urllib.parse.urlparse("http://example.com?blahblah=/foo"),
+                         ('http', 'example.com', '', '', 'blahblah=/foo', ''))
+        self.assertEqual(urllib.parse.urlparse(b"http://example.com?blahblah=/foo"),
+                         (b'http', b'example.com', b'', b'', b'blahblah=/foo', b''))
+```
+
+And there's no more shown. Let me check if there's more to the file. The read said `returned_end_line: 800` and `next_start_line: 801`. Let me read from 801 to see what's left.
+
+Actually, I should read the rest of the test file to see the full content, and also look at the documentation file more carefully. Let me do that first.
+
+Let me plan my operations:
+1. Read the rest of test_urlparse.py (from line 801)
+2. Read more of the documentation file
+3. Then make the edits
+
+Let me start by reading the remaining content.

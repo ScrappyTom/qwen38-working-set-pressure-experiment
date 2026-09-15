@@ -1,0 +1,527 @@
+Let me understand the task. I need to:
+
+1. In `Lib/test/test_urlparse.py`, add regression coverage for port access on both `urlsplit` and `urlparse` with text URLs and ASCII byte URLs: no port, an empty port, 0, 65535, 65536, a negative port, and a noninteger port. Also cover non-ASCII decimal digits in text URLs. Establish when invalid-port errors occur, and assert the exact exception class, complete argument tuple and diagnostic text. Assert the concrete results for accepted boundary cases.
+
+2. In `Doc/library/urllib.parse.rst`, add a focused explanation and executable examples of the observed boundary/error behavior, including the distinction between constructing the parsed result and accessing its port.
+
+Let me first understand the port behavior from the source code I can see.
+
+From `Lib/urllib/parse.py`, the `port` property in `_NetlocResultMixinBase`:
+
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+So:
+- `_hostinfo[1]` is the port string (or None if no port)
+- If port is None → return None (no port)
+- If port is not None:
+  - If port.isdigit() and port.isascii() → cast to int
+  - Otherwise → raise ValueError with message `f"Port could not be cast to integer value as {port!r}"`
+  - If not (0 <= port <= 65535) → raise ValueError("Port out of range 0-65535")
+
+Key observations:
+- The `port` property is evaluated lazily - when you access `p.port`, not when you construct the result
+- For empty port string: `port = self._hostinfo[1]` - looking at `_hostinfo`, if port is empty string after partition, `if not port: port = None`. So an empty port string (like `http://host:/`) becomes `None`, meaning `p.port` returns `None`.
+
+Wait, let me re-read `_hostinfo`:
+
+```python
+@property
+def _hostinfo(self):
+    netloc = self.netloc
+    _, _, hostinfo = netloc.rpartition('@')
+    _, have_open_br, bracketed = hostinfo.partition('[')
+    if have_open_br:
+        hostname, _, port = bracketed.partition(']')
+        _, _, port = port.partition(':')
+    else:
+        hostname, _, port = hostinfo.partition(':')
+    if not port:
+        port = None
+    return hostname, port
+```
+
+So for `http://host:/`, netloc = `host:`, partition(':') gives hostname=`host`, port=`''`. Since `not port` is True, port = None. So `p.port` returns None.
+
+For `http://host:0/`, port = `'0'`, isdigit()=True, isascii()=True, int('0')=0, 0<=0<=65535, returns 0.
+
+For `http://host:65535/`, returns 65535.
+
+For `http://host:65536/`, int('65536')=65536, not (0<=65536<=65535), raises ValueError("Port out of range 0-65535").
+
+For `http://host:-1/`, port = `'-1'`, isdigit()=False → raises ValueError(f"Port could not be cast to integer value as '-1'").
+
+Wait, `'-1'.isdigit()` is False. So it would go to the else branch and raise "Port could not be cast to integer value as '-1'".
+
+For noninteger port like `http://host:foo/`, port = `'foo'`, isdigit()=False → raises ValueError(f"Port could not be cast to integer value as 'foo'").
+
+For non-ASCII decimal digits like `http://host:١٢٣/` (Arabic-Indic digits) or `http://host:६/` (Devanagari digit 6):
+- `'६'.isdigit()` is True (it's a Unicode digit)
+- `'६'.isascii()` is False
+- So it raises ValueError(f"Port could not be cast to integer value as '६'")
+
+Wait, let me check: `str.isdigit()` returns True for any Unicode decimal digit. `str.isascii()` returns True only for ASCII characters (code points 0-127).
+
+So for `'६'` (U+0966, DEVANAGARI DIGIT SIX):
+- `isdigit()` → True
+- `isascii()` → False
+- So `port.isdigit() and port.isascii()` is False
+- Raises ValueError(f"Port could not be cast to integer value as '६'")
+
+Now for bytes URLs:
+- The bytes version of `_hostinfo` uses `b':'` for partition
+- The port would be a bytes object like `b'0'`, `b'65536'`, etc.
+- `b'0'.isdigit()` → True, `b'0'.isascii()` → True
+- For `b'65536'`: int(b'65536')=65536, out of range → ValueError("Port out of range 0-65535")
+- For `b'foo'`: `b'foo'.isdigit()` → False → ValueError(f"Port could not be cast to integer value as b'foo'")
+
+Wait, for bytes: `port.isdigit()` where port is bytes. Let me check: `b'0'.isdigit()` is True, `b'0'.isascii()` is True. `b'foo'.isdigit()` is False.
+
+Now, the existing test `test_attributes_bad_port` already covers some invalid ports. Let me look at what's there:
+
+```python
+def test_attributes_bad_port(self):
+    """Check handling of invalid ports."""
+    for bytes in (False, True):
+        for parse in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for port in ("foo", "1.5", "-1", "0x10", "-0", "1_1", " 1", "1 ", "६"):
+                with self.subTest(bytes=bytes, parse=parse, port=port):
+                    netloc = "www.example.net:" + port
+                    url = "http://" + netloc + "/"
+                    if bytes:
+                        if netloc.isascii() and port.isascii():
+                            netloc = netloc.encode("ascii")
+                            url = url.encode("ascii")
+                        else:
+                            continue
+                    p = parse(url)
+                    self.assertEqual(p.netloc, netloc)
+                    with self.assertRaises(ValueError):
+                        p.port
+```
+
+So this already tests invalid ports but only checks that ValueError is raised. The task asks me to:
+1. Test no port, empty port, 0, 65535, 65536, negative port, noninteger port
+2. Cover non-ASCII decimal digits in text URLs
+3. Assert exact exception class, complete argument tuple AND diagnostic text
+4. Assert concrete results for accepted boundary cases
+5. Cover both urlsplit and urlparse
+6. Cover text and ASCII byte URLs
+7. Establish when invalid-port errors occur (at access time, not construction time)
+
+Now I need to also look at what's already there to make sure I don't duplicate too much. The existing test `test_attributes_bad_port` checks that ValueError is raised for various bad ports. I need to add more specific tests.
+
+Let me also check what the existing `test_urlsplit_attributes` test covers - it has:
+- No port (port is None)
+- Port 080 → 80
+
+And `test_urlsplit_scoped_IPv6` has port 1234.
+
+Now let me plan my new tests. I'll add a method to `UrlParseTestCase` that covers:
+
+1. **No port** (e.g., `http://host/`): port is None
+2. **Empty port** (e.g., `http://host:/`): port is None (empty string → None)
+3. **Port 0** (e.g., `http://host:0/`): port is 0
+4. **Port 65535** (e.g., `http://host:65535/`): port is 65535
+5. **Port 65536** (e.g., `http://host:65536/`): ValueError("Port out of range 0-65535")
+6. **Negative port** (e.g., `http://host:-1/`): ValueError("Port could not be cast to integer value as '-1'")
+7. **Noninteger port** (e.g., `http://host:foo/`): ValueError("Port could not be cast to integer value as 'foo'")
+8. **Non-ASCII decimal digits** (e.g., `http://host:६/`): ValueError("Port could not be cast to integer value as '६'")
+
+For each, I need both urlsplit and urlparse, and both str and bytes (for ASCII cases).
+
+The key distinction: the error occurs when accessing `.port`, not when constructing the result. I should assert that the result can be constructed (urlsplit/urlparse succeeds) and that the port is stored in netloc, but that accessing `.port` raises the error.
+
+Let me also think about the exact exception message format. From the source:
+- `raise ValueError(f"Port could not be cast to integer value as {port!r}")` 
+- `raise ValueError("Port out of range 0-65535")`
+
+For str ports: `{port!r}` gives `"'-1'"`, `"'foo'"`, `"'६'"`
+For bytes ports: `{port!r}` gives `"b'foo'"`, etc.
+
+Wait, but for the bytes case with non-ASCII, the existing test skips it (`continue`). The task says "ASCII byte URLs" for the main cases, and "non-ASCII decimal digits in text URLs" - so non-ASCII only needs to be tested with text (str) URLs.
+
+Let me now look at what I need for the Doc file. Let me first check what's in the Doc directory.
+
+Let me start by reading the Doc file and understanding its structure, then I'll plan my edits.
+
+Actually, let me first look at what I need. I have:
+- `Lib/test/test_urlparse.py` (full content visible, lines 1-800)
+- `Lib/urllib/parse.py` (lines 1-648 visible)
+- I need to see `Doc/library/urllib.parse.rst`
+
+Let me first check the Doc file structure.
+
+Actually wait - I need to be careful about the working set. Let me check what's selected:
+- Sources: `Lib/test/test_urlparse.py` (lines 1-765) and `Lib/urllib/parse.py` (lines 1-648)
+- The latest read is lines 766-800 of the test file
+
+I need to:
+1. Read the Doc file
+2. Understand the exact port behavior from the source (which I can see)
+3. Write new tests
+4. Write new documentation
+
+Let me start by reading the Doc file. But first, let me check what's in the Doc directory.
+
+Actually, I can see from the p0 that `Doc` is a directory with 1 file. Let me read it.
+
+Let me plan my approach:
+1. Read the Doc file to understand its structure
+2. Write the tests in test_urlparse.py
+3. Write the documentation in Doc/library/urllib.parse.rst
+4. Run checks
+
+Let me start by reading the Doc file. I need to find its path first.
+
+From the p0: `{"file_count":1,"kind":"directory","path":"Doc","total_bytes":33991}` - so Doc is a directory. Let me look at it.
+
+Wait, I should use the actions I have available. Let me read the Doc file. First let me check the tree to find the exact path.
+
+Actually, the task says "In Doc/library/urllib.parse.rst" - so the path should be `Doc/library/urllib.parse.rst`. Let me read it.
+
+Let me also think about what tests I need to add. Let me carefully analyze the port behavior:
+
+From `_NetlocResultMixinBase.port`:
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+And from `_hostinfo` (str version):
+```python
+@property
+def _hostinfo(self):
+    netloc = self.netloc
+    _, _, hostinfo = netloc.rpartition('@')
+    _, have_open_br, bracketed = hostinfo.partition('[')
+    if have_open_br:
+        hostname, _, port = bracketed.partition(']')
+        _, _, port = port.partition(':')
+    else:
+        hostname, _, port = hostinfo.partition(':')
+    if not port:
+        port = None
+    return hostname, port
+```
+
+So for `http://host:/`:
+- netloc = `host:`
+- partition(':') → hostname=`host`, port=`''`
+- `not port` → True, so port = None
+- `p.port` returns None
+
+For `http://host:0/`:
+- port = `'0'`
+- `'0'.isdigit()` → True, `'0'.isascii()` → True
+- int('0') = 0
+- 0 <= 0 <= 65535 → True
+- Returns 0
+
+For `http://host:65535/`:
+- port = `'65535'`
+- isdigit → True, isascii → True
+- int('65535') = 65535
+- 0 <= 65535 <= 65535 → True
+- Returns 65535
+
+For `http://host:65536/`:
+- port = `'65536'`
+- isdigit → True, isascii → True
+- int('65536') = 65536
+- 0 <= 65536 <= 65535 → False
+- Raises ValueError("Port out of range 0-65535")
+
+For `http://host:-1/`:
+- port = `'-1'`
+- `'-1'.isdigit()` → False
+- Raises ValueError(f"Port could not be cast to integer value as '-1'")
+
+Wait, actually `'-1'.isdigit()` - let me think. The `-` character is not a digit, so `'-1'.isdigit()` is False. Yes.
+
+For `http://host:foo/`:
+- port = `'foo'`
+- `'foo'.isdigit()` → False
+- Raises ValueError(f"Port could not be cast to integer value as 'foo'")
+
+For `http://host:६/` (Devanagari digit 6):
+- port = `'६'`
+- `'६'.isdigit()` → True (Unicode digit)
+- `'६'.isascii()` → False
+- Raises ValueError(f"Port could not be cast to integer value as '६'")
+
+For bytes:
+- `b'0'`: isdigit → True, isascii → True, int(b'0') = 0
+- `b'65535'`: int = 65535, in range
+- `b'65536'`: int = 65536, out of range → ValueError("Port out of range 0-65535")
+- `b'-1'`: isdigit → False → ValueError(f"Port could not be cast to integer value as b'-1'")
+- `b'foo'`: isdigit → False → ValueError(f"Port could not be cast to integer value as b'foo'")
+
+Now let me think about what "complete argument tuple" means for the exception. A ValueError raised as `raise ValueError("some message")` has `args = ("some message",)`. So the complete argument tuple is just the message string as a 1-tuple.
+
+Let me now plan the test method. I'll add a new test method after the existing tests. Let me think about what to include:
+
+```python
+def test_port_boundary_values(self):
+    """Regression tests for port access boundary cases."""
+    parse_funcs = (urllib.parse.urlsplit, urllib.parse.urlparse)
+    
+    # Cases: (port_str, expected_port_or_exception)
+    # For text URLs
+    str_cases = [
+        # (port_string_in_url, expected)
+        # expected is either a value (None, int) or (ExceptionClass, args_tuple, msg)
+        ("", None),           # no port → None (http://host/)
+        (":", None),          # empty port → None (http://host:/)
+        ("0", 0),             # port 0
+        ("65535", 65535),     # max port
+        ("65536", (ValueError, ("Port out of range 0-65535",))),  # too large
+        ("-1", (ValueError, (None,))),  # negative - message check needed
+        ("foo", (ValueError, (None,))), # non-integer
+        ("६", (ValueError, (None,))),  # non-ASCII digit
+    ]
+```
+
+Hmm, let me think more carefully. The task says "assert the exact exception class, complete argument tuple and diagnostic text."
+
+For `ValueError(f"Port could not be cast to integer value as {port!r}")`:
+- str port `-1`: args = `("Port could not be cast to integer value as '-1'",)`
+- str port `foo`: args = `("Port could not be cast to integer value as 'foo'",)`
+- str port `६`: args = `("Port could not be cast to integer value as '६'",)`
+- bytes port `b'-1'`: args = `("Port could not be cast to integer value as b'-1'",)`
+- bytes port `b'foo'`: args = `("Port could not be cast to integer value as b'foo'",)`
+
+For `ValueError("Port out of range 0-65535")`:
+- args = `("Port out of range 0-65535",)`
+
+And the "diagnostic text" is `str(e)` which is the same as `e.args[0]` for single-arg exceptions.
+
+Now let me think about the test structure. I want to:
+1. Test that constructing the parsed result succeeds (no exception at construction time)
+2. Test that accessing `.port` either returns the expected value or raises the expected exception
+3. Do this for both urlsplit and urlparse
+4. Do this for str and bytes (for ASCII cases)
+5. For non-ASCII, only str
+
+Let me write the test:
+
+```python
+def test_port_boundary_values(self):
+    """Regression tests for port access on urlsplit and urlparse results."""
+    for parse in (urllib.parse.urlsplit, urllib.parse.urlparse):
+        for bytes_input in (False, True):
+            # (netloc_port_part, expected_port, expected_error)
+            # expected_error is None or (exc_class, exc_args_tuple)
+            cases = [
+                # No port: http://host/
+                # (no colon in netloc, port is None)
+                None,  # no port at all
+                # Empty port: http://host:/
+                # (colon present but empty, port is None)
+                "",  # empty port
+                # Valid boundary: 0
+                "0",
+                # Valid boundary: 65535
+                "65535",
+                # Out of range: 65536
+                "65536",
+                # Negative: -1
+                "-1",
+                # Non-integer: foo
+                "foo",
+            ]
+            if not bytes_input:
+                # Non-ASCII decimal digit (text only)
+                cases.append("६")
+```
+
+Hmm, this is getting complex. Let me think of a cleaner structure.
+
+Actually, let me look at this differently. The URL format is `http://host<port_part>/` where:
+- No port: `http://host/` (netloc = `host`)
+- Empty port: `http://host:/` (netloc = `host:`)
+- Port N: `http://host:N/` (netloc = `host:N`)
+
+For the "no port" case, the URL is `http://host/` and netloc is `host`.
+For the "empty port" case, the URL is `http://host:/` and netloc is `host:`.
+
+Let me structure the test as a table:
+
+```python
+def test_port_boundary_values(self):
+    """Test port access boundary and error cases."""
+    for parse in (urllib.parse.urlsplit, urllib.parse.urlparse):
+        for is_bytes in (False, True):
+            for netloc, expected in [
+                # No port
+                ("host", None),
+                # Empty port
+                ("host:", None),
+                # Port 0
+                ("host:0", 0),
+                # Port 65535
+                ("host:65535", 65535),
+                # Port 65536 - out of range
+                ("host:65536", _raise_valueerror("Port out of range 0-65535")),
+                # Negative port
+                ("host:-1", _raise_valueerror("Port could not be cast to integer value as '-1'")),
+                # Non-integer port
+                ("host:foo", _raise_valueerror("Port could not be cast to integer value as 'foo'")),
+            ]:
+                ...
+```
+
+Wait, I can't use a helper like `_raise_valueerror` in the test easily. Let me use a different structure. Let me use None for expected value, and a tuple for expected exception.
+
+Actually, let me just write it out clearly. Here's my plan:
+
+```python
+def test_port_boundary_values(self):
+    """Regression tests for port access boundary and error behavior."""
+    parse_funcs = (urllib.parse.urlsplit, urllib.parse.urlparse)
+    # (netloc, expected_port, expected_error_msg)
+    # expected_port is the value if no error; expected_error_msg is None or the exact message
+    str_cases = [
+        ("host", None, None),           # no port
+        ("host:", None, None),          # empty port
+        ("host:0", 0, None),           # minimum
+        ("host:65535", 65535, None),   # maximum
+        ("host:65536", None, "Port out of range 0-65535"),
+        ("host:-1", None, "Port could not be cast to integer value as '-1'"),
+        ("host:foo", None, "Port could not be cast to integer value as 'foo'"),
+        ("host:६", None, "Port could not be cast to integer value as '६'"),
+    ]
+    bytes_cases = [
+        (b"host", None, None),
+        (b"host:", None, None),
+        (b"host:0", 0, None),
+        (b"host:65535", 65535, None),
+        (b"host:65536", None, "Port out of range 0-65535"),
+        (b"host:-1", None, "Port could not be cast to integer value as b'-1'"),
+        (b"host:foo", None, "Port could not be cast to integer value as b'foo'"),
+    ]
+    for parse in parse_funcs:
+        for netloc, expected_port, expected_msg in str_cases:
+            url = "http://" + netloc + "/"
+            p = parse(url)  # construction succeeds
+            self.assertEqual(p.netloc, netloc)
+            if expected_msg is None:
+                self.assertEqual(p.port, expected_port)
+            else:
+                with self.assertRaises(ValueError) as ctx:
+                    p.port
+                self.assertEqual(ctx.exception.args, (expected_msg,))
+                self.assertEqual(str(ctx.exception), expected_msg)
+        for netloc, expected_port, expected_msg in bytes_cases:
+            url = b"http://" + netloc + b"/"
+            p = parse(url)
+            self.assertEqual(p.netloc, netloc)
+            if expected_msg is None:
+                self.assertEqual(p.port, expected_port)
+            else:
+                with self.assertRaises(ValueError) as ctx:
+                    p.port
+                self.assertEqual(ctx.exception.args, (expected_msg,))
+                self.assertEqual(str(ctx.exception), expected_msg)
+```
+
+Wait, but the task says "Establish when invalid-port errors occur" - meaning I should show that the error happens at `.port` access, not at construction time. The fact that `p = parse(url)` succeeds and then `p.port` raises demonstrates this. I should make this explicit.
+
+Also, the task says "assert the exact exception class, complete argument tuple and diagnostic text." So I need:
+- Exception class: ValueError
+- Complete argument tuple: `("Port out of range 0-65535",)` or `("Port could not be cast to integer value as 'foo'",)`
+- Diagnostic text: `str(e)` which is the same as the message
+
+Let me also verify: does the existing test already test some of these? Looking at `test_attributes_bad_port`:
+- It tests "foo", "1.5", "-1", "0x10", "-0", "1_1", " 1", "1 ", "६"
+- It only checks `assertRaises(ValueError)` without checking the message
+
+So I need to add tests that:
+1. Test the valid boundary cases (0, 65535) and no-port/empty-port cases with concrete return values
+2. Test the error cases with exact exception details
+3. Test both urlsplit and urlparse
+4. Test both str and bytes
+
+The existing test already covers some error cases but without exact messages. My new test should be complementary - testing the specific boundary values and the exact error behavior.
+
+Now let me think about where to add the test. I'll add it after `test_attributes_bad_port` or near it. Let me add it after `test_attributes_bad_scheme` to keep related tests together. Actually, let me add it after `test_attributes_bad_port` since they're related.
+
+Wait, I need to see the full file to know where to insert. The file is 800 lines. I've seen lines 1-765 and 766-800. Let me look at the end of the file.
+
+From the latest read (lines 766-800):
+```
+        self.assertEqual(p.geturl(), uri)
+
+        p = urllib.parse.urlparse(uri)
+        self.assertEqual(p.netloc, "")
+        self.assertEqual(p.username, None)
+        self.assertEqual(p.password, None)
+        self.assertEqual(p.hostname, None)
+        self.assertEqual(p.port, None)
+        self.assertEqual(p.geturl(), uri)
+
+        # You guessed it, repeating the test with bytes input
+        uri = b"sip:alice@atlanta.com;maddr=239.255.255.1;ttl=15"
+        ...
+    def test_noslash(self):
+        ...
+```
+
+So the file ends around line 800. Let me check if there's more after line 800. The file sha is the same, and the read returned lines 766-800 with next_start_line=801. Let me check if the file has more lines.
+
+Actually, looking at the initial work_on, it selected `Lib/test/test_urlparse.py` without line limits (meaning the whole file), and the read returned lines 1-765 with next_start_line=766. Then the latest read got lines 766-800 with next_start_line=801. So the file might have exactly 800 lines or a few more.
+
+Let me check: the file_sha256 is the same in both reads, so it's the same file. The working_set shows the first source as lines 1-765 (returned_end_line=765) and the latest_feedback shows lines 766-800 (returned_end_line=800). 
+
+Let me read the rest of the file to see if there's more after line 800. Actually, I'll read from line 795 to the end.
+
+Wait, actually I should be efficient. Let me read the end of the test file and the Doc file in one work_on, or just read them separately.
+
+Actually, let me first read the end of the test file to see if there's more, and also the Doc file. Let me do a work_on to select what I need.
+
+Hmm, but I need to be careful. The working set currently has:
+- `Lib/test/test_urlparse.py` (lines 1-765 from the initial work_on, plus lines 766-800 from the latest read)
+- `Lib/urllib/parse.py` (lines 1-648)
+
+I need to:
+1. See the end of the test file (if there's more after line 800)
+2. See the Doc file
+
+Let me read the end of the test file first, and the Doc file.
+
+Actually, I realize I should just read the Doc file and check if the test file has more content. Let me do both reads.
+
+Wait, I can only do one operation per response. Let me think about what's most useful.
+
+Actually, I can do a work_on to set up my working set for the next phase. But first, let me just read the Doc file to understand its structure. Then I'll read the end of the test file.
+
+Actually, let me be strategic. I'll:
+1. First, read the Doc file (I need to know its content to add documentation)
+2. Then, check if the test file has more after line 800
+3. Then, write my edits
+
+Let me read the Doc file first. I know from the p0 that Doc is a directory with 1 file. Let me use tree to find it.
+
+Actually, let me just read it directly at `Doc/library/urllib.parse.rst` since the task tells me the path.
+
+Let me do that.
