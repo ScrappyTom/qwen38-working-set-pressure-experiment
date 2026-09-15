@@ -8,6 +8,15 @@ under the unchanged task, actor and sixteen-request/forty-eight-operation limits
 This instruction authorizes that work without another approval question. Preserve
 the failed attempt below, and never execute a private reasoning draft as a repair.
 
+The repair is qualified in that folder's QUALIFICATION.md: 23 focused checks,
+nineteen native delimiter/final cases, and real endpoint transport. Four smoke
+requests cost 59.592 seconds; two extra controls resolve an ambiguous newline
+fixture and distinguish literal-copying output from transport preservation. Both
+failed assertions remain. No smoke response executes an operation. The task's
+native input remains byte-identical at 4,947 tokens; only grammar changes. Use
+`run_ready.py` and the sealed manifest for the single rerun. All task/model/check
+settings and final-only authority remain. Review behavior before claiming benefit.
+
 The owner-authorized same-task run is closed under published freeze fac264cc.
 Read `development/decision_interface/same_task/review/RESULTS.md`. The sole request
 uses 4,947 input and 184 generated tokens in 20.282 seconds, with no task operation.
