@@ -1,5 +1,17 @@
 # Experiment operating rules
 
+The next uncoached contribution is prepared but not started; read
+`development/evidence_assembly/recovery-run/SPEC.md` and PREPARATION_REVIEW.md.
+Its actual C05 checkpoint preserves the recoverable proposal and missing support,
+with 75 prior actions and an explicitly new eight-request/twelve-operation allowance,
+seed 961213. The initial native input is 4,829 tokens. Two researcher-scripted routes
+complete and correct a real failed check while preserving saved tests through
+selection changes. Three focused tests and exact replay pass; zero Qwen completion
+requests occur. This is reused development with inherited selection assistance,
+not a matched wording comparison. Host and reasoning settings remain unchanged.
+Record the execution direction when starting the prepared package. Do not reuse
+closed allowances or supply coaching during the run.
+
 The architecture and plan were published at 3c143bae before implementation. Read
 `ARCHITECTURE.md` and `development/evidence_assembly/decision-state/RESULTS.md`.
 World, stored material, complete per-call working set, and selected evidence are

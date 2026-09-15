@@ -1,5 +1,15 @@
 # Complete contributions with host and model
 
+The next [uncoached contribution is prepared, not started](../evidence_assembly/recovery-run/PREPARATION_REVIEW.md).
+It begins at the actual prior C05 selection, where the intended proposal and
+implementation support must be recovered through existing operations. The new
+allowance is eight requests/twelve operations, seed 961213; the initial input is
+4,829 tokens. Two offline routes qualify saved work through source replacement,
+actual feedback and checked submission, including a failed check and correction.
+No model generation occurs. Judge whether Qwen can select and use the needed
+material to finish, without coaching; do not treat this changed checkpoint and
+allowance as a causal wording comparison or an autonomous end-to-end backport.
+
 The owner-directed [architecture map](../../ARCHITECTURE.md) and
 [implementation plan](../evidence_assembly/decision-state/PLAN.md) now provide the
 stable vocabulary. They were published at 3c143bae before
@@ -19,8 +29,8 @@ The latest [selection consultation is closed](../evidence_assembly/selection-dia
 Both complete responses and exact custody are reviewed. Qwen correctly chooses EVT
 recovery in this separate conversation, and after facts explains feedback deduplication
 and historical capacity scope. It still invents source coordinates and falsely limits
-verification to edit/check. Retain the host and record the source-checked explanation
-candidate; qualify it against actual selected states and input bounds before exposure.
+verification to edit/check. Its source-checked explanation candidate was subsequently
+implemented and qualified against actual states and input bounds as recorded above.
 The next model evaluation should judge completed work, not another isolated wording
 comparison. No task action or third response belongs to this consumed consultation.
 

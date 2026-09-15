@@ -2,6 +2,15 @@
 
 ## Project status
 
+The next [uncoached contribution is prepared](development/evidence_assembly/recovery-run/PREPARATION_REVIEW.md)
+from the actual C05 selection, with the proposed tests still in the archive and
+implementation support to acquire. It freezes eight new requests/twelve operations,
+seed 961213, and an initial 4,829-token input. Offline routes complete the contribution
+and recover from a real failed check while preserving saved work through a change
+of evidence. Both finish with 371 tests passing; exact replay and three focused
+preparation tests pass. Qwen has not started. This is reused development with
+inherited selection assistance; no behavioral improvement is yet established.
+
 The [architecture map](ARCHITECTURE.md) separates the information world, stored
 material, complete per-call working set, and selected evidence group. It maps
 Store, Represent, Discover/retrieve, and Assemble to the implemented host and
@@ -21,8 +30,9 @@ After factual clarification it explains where selected content is displayed and
 separates an edit that fits from correct test expectations. Its answer still invents
 coordinates and overlooks source inspection as a verification route. Two responses
 cost 9.689 request minutes; no task action occurs, and all input/output custody verifies.
-A compact explanation candidate is recorded for offline qualification. The operating
-host is unchanged; no completion or efficiency benefit is claimed.
+At consultation closure a compact explanation candidate was recorded for offline
+qualification. Its later implementation is reported above; the consultation itself
+did not change the host or establish a completion or efficiency benefit.
 
 The [uncoached pending contribution is closed without completion](development/evidence_assembly/pending-contribution/review/RESULTS.md).
 Eight requests save fourteen tests but no documentation, actor check or submission;
