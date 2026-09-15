@@ -2,10 +2,12 @@
 
 The owner-directed [architecture map](../../ARCHITECTURE.md) and
 [implementation plan](../evidence_assembly/decision-state/PLAN.md) now provide the
-stable vocabulary and next bounded tranche. Publish them before implementation.
-Qualify the shared input-scope/capacity explanation against actual selected states,
-native input cost, and a scripted complete contribution. Semantic selection and
-working-account policies remain open; this tranche adds no model inference.
+stable vocabulary. They were published at 3c143bae before
+[implementation and qualification](../evidence_assembly/decision-state/RESULTS.md).
+The shared input-scope/capacity explanation costs 67 tokens. 88 selected tests and
+the complete scripted route pass; an older boundary input now exceeds the unchanged
+ceiling by 21 tokens. Preserve both findings. Semantic selection and working-account
+policies remain open; this tranche adds no model inference or performance claim.
 
 Current direction, following the owner's test-pilot clarification: develop the
 host with Qwen outside active runs. Active runs use the declared task, interface,

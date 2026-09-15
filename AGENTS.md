@@ -1,13 +1,17 @@
 # Experiment operating rules
 
-The owner directed architecture documentation and a plan to be committed and pushed
-before implementation. Read `ARCHITECTURE.md` and
-`development/evidence_assembly/decision-state/PLAN.md`. World, stored material,
-the complete per-call working set, and selected evidence are distinct. Existing
-wire keys keep their compatibility meaning. Implement and qualify the earned
-selection/capacity explanation through the shared reference and actual contribution
-path; do not turn the architecture map into a new taxonomy, account policy, or
-automatic model run. This prospective tranche includes no Qwen completion requests.
+The architecture and plan were published at 3c143bae before implementation. Read
+`ARCHITECTURE.md` and `development/evidence_assembly/decision-state/RESULTS.md`.
+World, stored material, complete per-call working set, and selected evidence are
+distinct; existing wire keys keep their compatibility meaning. The shared reference
+now explains selected material displayed in feedback and historical capacity scope.
+88 selected tests and a four-request/five-operation native-sized scripted contribution
+pass; six runtime inputs and 61 custody records replay exactly. No Qwen completion
+request occurs. The addition costs 67 tokens: one older 23,762-token input becomes
+23,829 and exceeds the unchanged ceiling. Preserve that cost and the older tool
+contract's qualification; do not claim universal delivery or behavioral improvement.
+Semantic selection and working accounts remain open choices. The next model evaluation
+should concern a complete contribution without coaching, not an isolated wording test.
 
 Current owner clarification: Qwen is the test pilot. Design collaboration and
 interpretation consultations take place outside active runs, in separate
@@ -31,8 +35,9 @@ It still invents source coordinates and falsely calls edit/check the only verifi
 route. Do not adopt those claims or treat a newly supplied capacity result as something
 it should have known before clarification. All complete input/output and custody verify.
 Cost is 10,617 generated tokens / 9.689 request minutes, with no task operation.
-Retain the host. The two-sentence explanation candidate needs separate offline
-qualification before any exposure; it is not an installed or proven performance remedy.
+At consultation closure the two-sentence explanation was an uninstalled candidate;
+the prospective implementation and offline qualification are now recorded above.
+No task-performance improvement has been demonstrated for that explanation.
 No third response, task retry, in-run coaching or automatic successor is authorized
 by the closed package. Further evaluation should concern a completed contribution,
 not another isolated wording comparison.

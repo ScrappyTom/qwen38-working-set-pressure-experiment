@@ -6,10 +6,14 @@ The [architecture map](ARCHITECTURE.md) separates the information world, stored
 material, complete per-call working set, and selected evidence group. It maps
 Store, Represent, Discover/retrieve, and Assemble to the implemented host and
 its remaining capability gaps. The owner-directed
-[implementation plan](development/evidence_assembly/decision-state/PLAN.md)
-qualifies a shared selection/capacity explanation and a complete scripted
-contribution before any new model evaluation. Documentation and plan are published
-before implementation; historical evidence remains unchanged.
+[implementation plan](development/evidence_assembly/decision-state/PLAN.md) was
+published at 3c143bae before the
+[implemented qualification](development/evidence_assembly/decision-state/RESULTS.md).
+The shared reference now explains selected content in feedback and historical
+capacity outcomes. 88 selected tests and a complete scripted contribution pass;
+no Qwen inference occurs. The 67-token addition makes one older boundary input
+exceed the unchanged ceiling by 21 tokens. Historical evidence and that adverse
+cost remain preserved; behavioral improvement is untested.
 
 The [selection consultation is complete](development/evidence_assembly/selection-dialogue/RESULTS.md).
 Qwen correctly distinguishes saved edits from rejection results under focused review.

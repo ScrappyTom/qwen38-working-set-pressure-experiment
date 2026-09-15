@@ -97,6 +97,15 @@ EFFECTS = {
 }
 
 
+INPUT_INTERPRETATION = (
+    "The complete working set is all information presented in this call. "
+    "Selected current source and saved-record objects already displayed in latest_feedback "
+    "are omitted from the separate working_set lists, which contain the remaining selected material. "
+    "A saved capacity rejection describes the complete proposed next input at that earlier attempt, "
+    "not a fresh measurement after selection or other input changes."
+)
+
+
 def system_prompt():
     reference = []
     for form in schema()["json_schema"]["schema"]["oneOf"]:
@@ -113,7 +122,8 @@ def system_prompt():
             "Prior private thinking is not carried forward. Saved work is the actual current artifact; a saved check applies only to its version. "
             "A host-generated current source view is exact source, not a model-authored summary. Use work_on when changing "
             "which sources/saved records you need together; it is optional, not a prerequisite to every action. "
-            "The supplied task distinguishes the earlier saved work from this new contribution.\n\n" + "\n\n".join(reference))
+            "The supplied task distinguishes the earlier saved work from this new contribution.\n\n" +
+            INPUT_INTERPRETATION + "\n\n" + "\n\n".join(reference))
 
 
 def request(state, settings):
