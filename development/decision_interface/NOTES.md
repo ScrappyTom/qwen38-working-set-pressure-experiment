@@ -127,3 +127,23 @@ all six native/qualification inventories remain exact. No private-runtime path i
 staged. The three final private runtime files were verified locally by hash; the
 owned server is stopped and its port is free. Publish the implementation and these
 records without changing historical artifacts or claiming model execution.
+
+## N10 — First live use exposes a missed response lifecycle
+
+The same-task attempt at fac264cc stops on C01: 184 generated tokens form JSON in
+reasoning, the final field is empty, and nothing executes. The native prompt opens
+thinking while our explicit grammar begins with the final action. Exact-version
+runtime review and six native token-mask cases establish eager grammar application,
+rejection of the thinking-close delimiter and acceptance of JSON plus EOS. The
+one-response attempt is preserved unchanged; no private draft or retry is executed.
+
+This was our qualification gap. Twelve passing final-string grammar tests and the
+scripted contribution both started after the channel transition. They did not test
+whether the model could reach the final field under the actual template/constraint
+combination. Broaden the boundary being tested, not the test count as a proxy.
+
+Governance update applied: qualify native prefix, reasoning-to-final delimiter,
+constraint activation, returned channel fields, parsing and guarded execution as
+one interface. Do not fix a host constraint mistake by changing model effort or
+accepting private output. The next repair must earn an actual endpoint qualification;
+the seven presentation changes remain untested through task use in this attempt.

@@ -1,13 +1,26 @@
 # Experiment operating rules
 
-The owner now explicitly authorizes one same-task Qwen run with the revised host.
-Read `development/decision_interface/same_task/SPEC.md`. Use the original
-operable-recovery starting checkpoint, fixed actor/seed and 16-request/48-operation
-allowance, with all seven qualified host repairs. Freeze and publish the exact new
-package before dispatch, then execute under this instruction without another approval
-question. No in-run coaching, setting changes, reference repair, retry or private-draft
-rescue. Preserve full input/output and observations; review host clarity, actual
-delivery and saved contributions after closure. Historical allowances remain closed.
+The owner-authorized same-task run is closed under published freeze fac264cc.
+Read `development/decision_interface/same_task/review/RESULTS.md`. The sole request
+uses 4,947 input and 184 generated tokens in 20.282 seconds, with no task operation.
+The new user grammar constrains the already-open thinking channel: native masks
+reject the thinking-close token and admit final-shaped JSON plus EOS there. The
+endpoint returns an empty final field. This is a reproduced host integration defect,
+not model indecision or context exhaustion. The task and candidate remain unchanged.
+
+Exact replay verifies 314 source identities, seventeen custody records and runtime
+closure. Six native boundary cases use vocabulary/sampling only, with no added
+inference. Fifteen requests and forty-eight operations close unused. No retry,
+coaching or private-draft rescue occurred. The seven presentation repairs have no
+behavioral qualification from this failed attempt.
+
+Before further exposure, qualify the entire response lifecycle from actual native
+generation prefix through thinking closure, decoder constraints, endpoint channel
+extraction, host parsing and guarded effects. A final-only grammar probe or scripted
+reply does not establish that transition. Preserve enabled/separate thinking and
+final-only execution; never treat reasoning JSON as an authorized reply. A successor
+transport repair needs a separately frozen configuration. Historical allowances stay
+closed; do not repeat the broken request or silently disable thinking.
 
 The owner-directed `development/decision_interface/PLAN.md` is implemented and
 qualified; read its RESULTS.md, IMPLEMENTATION.md and running NOTES.md. The plan

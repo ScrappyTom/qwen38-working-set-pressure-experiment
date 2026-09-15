@@ -96,3 +96,15 @@ lessons. Historical evidence and consumed authorizations remain closed.
 The remaining question is whether this combined arrangement helps Qwen complete
 supported contributions. No new inference, reasoning-policy change, hidden coaching,
 private-draft rescue or performance claim is part of this engineering result.
+
+## Subsequent live boundary failure
+
+The separately authorized [same-task attempt](same_task/review/RESULTS.md) at
+fac264cc stops on its first response, before any task operation. The explicit
+grammar accepts the response as JSON while preventing the normal transition out
+of the template's open thinking channel; the endpoint consequently supplies no
+final reply. Exact runtime-source review and six native sampling cases reproduce
+the obstruction. This is a host integration error missed by the final-string
+grammar tests and scripted route above. It is not a Qwen performance result for
+the seven presentation changes. Preserve this implementation and evidence for
+diagnosis, but correct and qualify the response lifecycle before further exposure.

@@ -282,3 +282,12 @@ contribution completes with real checks; model-selected completion under this pa
 remains untested. The latest historical account's pending text also outlives the
 acquisition it describes: provenance and persistence do not establish that the model
 maintains useful current understanding. Keep these responsibilities separate.
+
+The [first live decision-interface attempt](development/decision_interface/same_task/review/RESULTS.md)
+then exposes a host transport obstruction before any operation: a grammar qualified
+only against final strings constrains the already-open thinking channel and prevents
+the normal final transition. A complete request contract includes the generation
+prefix, channel delimiters, constraint activation, endpoint extraction and guarded
+execution. Separately valid template, grammar and parser components do not establish
+that composition. Preserve final-only authority; action-shaped reasoning remains
+private output, even when the host itself caused the channel error.
