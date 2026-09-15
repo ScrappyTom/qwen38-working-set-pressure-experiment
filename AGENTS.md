@@ -1,5 +1,13 @@
 # Experiment operating rules
 
+The owner now directs completion of the response-boundary repair and a separate
+same-task rerun. Read `development/decision_interface/channel_repair/PLAN.md`.
+Implement and qualify the complete thinking-to-final transport, including two
+small endpoint smoke calls, then freeze/publish and execute one uncoached rerun
+under the unchanged task, actor and sixteen-request/forty-eight-operation limits.
+This instruction authorizes that work without another approval question. Preserve
+the failed attempt below, and never execute a private reasoning draft as a repair.
+
 The owner-authorized same-task run is closed under published freeze fac264cc.
 Read `development/decision_interface/same_task/review/RESULTS.md`. The sole request
 uses 4,947 input and 184 generated tokens in 20.282 seconds, with no task operation.
