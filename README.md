@@ -2,14 +2,20 @@
 
 ## Project status
 
-The next [uncoached contribution is prepared](development/evidence_assembly/recovery-run/PREPARATION_REVIEW.md)
-from the actual C05 selection, with the proposed tests still in the archive and
-implementation support to acquire. It freezes eight new requests/twelve operations,
-seed 961213, and an initial 4,829-token input. Offline routes complete the contribution
-and recover from a real failed check while preserving saved work through a change
-of evidence. Both finish with 371 tests passing; exact replay and three focused
-preparation tests pass. Qwen has not started. This is reused development with
-inherited selection assistance; no behavioral improvement is yet established.
+The [uncoached recovery contribution is closed without completion](development/evidence_assembly/recovery-run/review/RESULTS.md).
+Eight requests save three tests and documentation, but request no check and make no
+submission. Independent review finds one failing test, two incorrect documentation
+outputs and incomplete exact assertions. Earlier work remains intact. All seven
+nonterminal results arrive completely, and exact replay passes. The run costs
+28.359 loop minutes and 28,657 generated tokens; four unused operations are closed.
+
+Qwen never acquires the missing implementation or historical proposal. It guesses
+a cross-section expectation, then uses its own untested assertion as evidence for
+the documentation. No source eviction or capacity failure occurs. The host preserves
+the proposed work, but that does not establish its truth. Retain the host and examine
+this concrete interpretation outside a run before choosing another intervention.
+This reused checkpoint inherits selection assistance and is not a matched comparison
+or a demonstration of context-pressure continuity.
 
 The [architecture map](ARCHITECTURE.md) separates the information world, stored
 material, complete per-call working set, and selected evidence group. It maps
@@ -20,9 +26,9 @@ published at 3c143bae before the
 [implemented qualification](development/evidence_assembly/decision-state/RESULTS.md).
 The shared reference now explains selected content in feedback and historical
 capacity outcomes. 88 selected tests and a complete scripted contribution pass;
-no Qwen inference occurs. The 67-token addition makes one older boundary input
-exceed the unchanged ceiling by 21 tokens. Historical evidence and that adverse
-cost remain preserved; behavioral improvement is untested.
+that offline qualification makes no Qwen completion requests. The 67-token addition
+makes one older boundary input exceed the unchanged ceiling by 21 tokens. Historical evidence and that adverse
+cost remain preserved; the subsequent run above establishes no behavioral improvement.
 
 The [selection consultation is complete](development/evidence_assembly/selection-dialogue/RESULTS.md).
 Qwen correctly distinguishes saved edits from rejection results under focused review.

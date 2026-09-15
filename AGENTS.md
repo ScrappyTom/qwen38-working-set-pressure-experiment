@@ -1,16 +1,24 @@
 # Experiment operating rules
 
-The next uncoached contribution is prepared but not started; read
-`development/evidence_assembly/recovery-run/SPEC.md` and PREPARATION_REVIEW.md.
-Its actual C05 checkpoint preserves the recoverable proposal and missing support,
-with 75 prior actions and an explicitly new eight-request/twelve-operation allowance,
-seed 961213. The initial native input is 4,829 tokens. Two researcher-scripted routes
-complete and correct a real failed check while preserving saved tests through
-selection changes. Three focused tests and exact replay pass; zero Qwen completion
-requests occur. This is reused development with inherited selection assistance,
-not a matched wording comparison. Host and reasoning settings remain unchanged.
-Record the execution direction when starting the prepared package. Do not reuse
-closed allowances or supply coaching during the run.
+The owner-directed recovery contribution is closed under frozen feb7b62b; read
+`development/evidence_assembly/recovery-run/review/RESULTS.md` and its complete
+transcript, host and artifact audits. Eight uncoached requests/eight operations
+save three tests and documentation, but no check or submission. The unchanged saved
+candidate has one failing test and two failing documentation examples; earlier work
+is preserved. All seven nonterminal results arrive completely. Exact replay verifies
+nine native inputs, 152 custody records and 280 source identities. Cost is 28,657
+generated tokens / 28.359 loop minutes. Four unused operations are closed.
+
+No library implementation, grouped recovery or historical proposal is acquired;
+no source eviction or capacity rejection occurs. C04 guesses a cross-section value;
+C08 treats its own untested assertion as verification and repeats the error in docs.
+Request planning also conflates extra operations with extra model decisions despite
+the supplied forms/counting rule. Retain the host; no new mechanical defect is
+established. Before settling a further presentation or policy change, consult Qwen
+outside a run about this actual proposed-expectation/evidence distinction and the
+available next operation. No consultation, retry, rescue or successor belongs to
+the consumed package. Keep the reused-checkpoint and inherited-assistance labels;
+do not claim a matched wording benefit or pressure-continuity result.
 
 The architecture and plan were published at 3c143bae before implementation. Read
 `ARCHITECTURE.md` and `development/evidence_assembly/decision-state/RESULTS.md`.
@@ -18,8 +26,9 @@ World, stored material, complete per-call working set, and selected evidence are
 distinct; existing wire keys keep their compatibility meaning. The shared reference
 now explains selected material displayed in feedback and historical capacity scope.
 88 selected tests and a four-request/five-operation native-sized scripted contribution
-pass; six runtime inputs and 61 custody records replay exactly. No Qwen completion
-request occurs. The addition costs 67 tokens: one older 23,762-token input becomes
+pass; six runtime inputs and 61 custody records replay exactly. That qualification
+made no Qwen completion requests; subsequent task use is recorded above. The addition
+costs 67 tokens: one older 23,762-token input becomes
 23,829 and exceeds the unchanged ceiling. Preserve that cost and the older tool
 contract's qualification; do not claim universal delivery or behavioral improvement.
 Semantic selection and working accounts remain open choices. The next model evaluation

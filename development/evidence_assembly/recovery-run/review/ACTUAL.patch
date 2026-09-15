@@ -1,0 +1,138 @@
+--- saved-start/Doc/library/configparser.rst
++++ actual-final/Doc/library/configparser.rst
+@@ -1367,6 +1367,59 @@
+    Exception raised when an option referenced from a value does not exist.
+    Subclass of :exc:`InterpolationError`.
+ 
++   The ``args`` are ``(option, section, rawval, reference)``; the
++   attributes are ``option``, ``section``, ``rawval`` and
++   ``reference``.
++
++   This error arises when :meth:`~ConfigParser.get` attempts to resolve an
++   interpolation reference that does not name an existing option.  Passing
++   ``raw=True`` returns the unresolved value instead of raising.  Supplying
++   the missing option before calling :meth:`~ConfigParser.get` allows the
++   reference to resolve successfully.
++
++   .. doctest::
++
++      >>> import configparser
++      >>> cfg = configparser.ConfigParser(
++      ...     interpolation=configparser.BasicInterpolation())
++      >>> cfg.add_section('sec')
++      >>> cfg.set('sec', 'key', 'val %(missing)s')
++      >>> cfg.get('sec', 'key', raw=True)
++      'val %(missing)s'
++      >>> try:
++      ...     cfg.get('sec', 'key')
++      ... except configparser.InterpolationMissingOptionError as e:
++      ...     print(e.option, e.section, e.reference)
++      ...     print(e.message)
++      ...
++      key sec missing
++      There is no section named 'sec' or option named 'missing' in...  [reference: 'missing', option: 'key', section: 'sec']
++      >>> cfg.set('sec', 'missing', 'X')
++      >>> cfg.get('sec', 'key')
++      'val X'
++
++   The same applies under :class:`ExtendedInterpolation`, including
++   cross-section references of the form ``${section:option}``:
++
++   .. doctest::
++
++      >>> cfg2 = configparser.ConfigParser(
++      ...     interpolation=configparser.ExtendedInterpolation())
++      >>> cfg2.add_section('a')
++      >>> cfg2.add_section('b')
++      >>> cfg2.set('a', 'r', '${b:gone}')
++      >>> cfg2.get('a', 'r', raw=True)
++      '${b:gone}'
++      >>> try:
++      ...     cfg2.get('a', 'r')
++      ... except configparser.InterpolationMissingOptionError as e:
++      ...     print(e.option, e.section, e.reference)
++      ...
++      r a gone
++      >>> cfg2.set('b', 'gone', 'Yo')
++      >>> cfg2.get('a', 'r')
++      'Yo'
++
+ 
+ .. exception:: InterpolationSyntaxError
+ 
+--- saved-start/Lib/test/test_configparser.py
++++ actual-final/Lib/test/test_configparser.py
+@@ -2203,6 +2203,73 @@
+             self.assertEqual(cfg['two'].getlen('one'), 5)
+ 
+ 
++class MissingReferenceErrorTests(unittest.TestCase):
++    """InterpolationMissingOptionError via real ConfigParser.get."""
++
++    def _check_exc(self, exc, opt, sec, ref):
++        self.assertIsInstance(
++            exc, configparser.InterpolationMissingOptionError)
++        self.assertEqual(exc.option, opt)
++        self.assertEqual(exc.section, sec)
++        self.assertEqual(exc.reference, ref)
++        self.assertTrue(exc.message)
++        for fn in (copy.copy, copy.deepcopy):
++            e = fn(exc)
++            self.assertEqual(e.option, opt)
++            self.assertEqual(e.section, sec)
++            self.assertEqual(e.reference, ref)
++            self.assertEqual(e.args, exc.args)
++            self.assertEqual(e.message, exc.message)
++        for proto in range(pickle.HIGHEST_PROTOCOL + 1):
++            r = pickle.loads(pickle.dumps(exc, protocol=proto))
++            self.assertEqual(r.option, opt)
++            self.assertEqual(r.section, sec)
++            self.assertEqual(r.reference, ref)
++            self.assertEqual(r.args, exc.args)
++            self.assertEqual(r.message, exc.message)
++            self.assertEqual(repr(r), repr(exc))
++
++    def test_basic_missing(self):
++        cp = configparser.ConfigParser(
++            interpolation=configparser.BasicInterpolation())
++        cp.add_section('s')
++        cp.set('s', 'v', 'Hi %(gone)s')
++        with self.assertRaises(
++                configparser.InterpolationMissingOptionError) as cx:
++            cp.get('s', 'v')
++        self._check_exc(cx.exception, 'v', 's', 'gone')
++        self.assertEqual(cp.get('s', 'v', raw=True), 'Hi %(gone)s')
++        cp.set('s', 'gone', 'Yo')
++        self.assertEqual(cp.get('s', 'v'), 'Hi Yo')
++
++    def test_extended_missing(self):
++        cp = configparser.ConfigParser(
++            interpolation=configparser.ExtendedInterpolation())
++        cp.add_section('s')
++        cp.set('s', 'v', 'Hi ${gone}')
++        with self.assertRaises(
++                configparser.InterpolationMissingOptionError) as cx:
++            cp.get('s', 'v')
++        self._check_exc(cx.exception, 'v', 's', 'gone')
++        self.assertEqual(cp.get('s', 'v', raw=True), 'Hi ${gone}')
++        cp.set('s', 'gone', 'Yo')
++        self.assertEqual(cp.get('s', 'v'), 'Hi Yo')
++
++    def test_extended_cross_section_missing(self):
++        cp = configparser.ConfigParser(
++            interpolation=configparser.ExtendedInterpolation())
++        cp.add_section('a')
++        cp.set('a', 'r', '${b:gone}')
++        cp.add_section('b')
++        with self.assertRaises(
++                configparser.InterpolationMissingOptionError) as cx:
++            cp.get('a', 'r')
++        self._check_exc(cx.exception, 'r', 'a', 'gone')
++        self.assertEqual(cp.get('a', 'r', raw=True), '${b:gone}')
++        cp.set('b', 'gone', 'Yo')
++        self.assertEqual(cp.get('a', 'r'), 'Yo')
++
++
+ class MiscTestCase(unittest.TestCase):
+     def test__all__(self):
+         support.check__all__(self, configparser, not_exported={"Error"})

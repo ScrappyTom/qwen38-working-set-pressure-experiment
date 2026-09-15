@@ -1,14 +1,29 @@
 # Complete contributions with host and model
 
-The next [uncoached contribution is prepared, not started](../evidence_assembly/recovery-run/PREPARATION_REVIEW.md).
-It begins at the actual prior C05 selection, where the intended proposal and
-implementation support must be recovered through existing operations. The new
-allowance is eight requests/twelve operations, seed 961213; the initial input is
-4,829 tokens. Two offline routes qualify saved work through source replacement,
-actual feedback and checked submission, including a failed check and correction.
-No model generation occurs. Judge whether Qwen can select and use the needed
-material to finish, without coaching; do not treat this changed checkpoint and
-allowance as a causal wording comparison or an autonomous end-to-end backport.
+The [uncoached recovery contribution is closed without completion](../evidence_assembly/recovery-run/review/RESULTS.md).
+Eight requests/eight operations save three tests and documentation, but no check or
+submission. The unchanged saved artifact has one failing test, two incorrect doc
+outputs and incomplete exact assertions. All earlier work and acquired source remain
+available; all seven nonterminal results arrive. Exact replay passes. The attempt
+costs 28.359 loop minutes / 28,657 generated tokens; four unused operations are closed.
+
+The missing implementation was never acquired. C04 guesses a reference value, then
+C08 uses its own untested test assertion as evidence for the documentation. This is
+preservation of an unsupported expectation, without any source-eviction boundary.
+Late request planning also treats extra operations as extra model decisions. Retain
+the host; no new mechanical defect is established on this path. Before choosing a
+presentation or policy remedy, use a small separate consultation on the actual
+C04/C08 evidence and executable next operation. Do not presume another annotation
+or memory feature is needed, coach during a run, or silently request checks for Qwen.
+No new model call or artifact repair belongs to this consumed package.
+
+The next evaluation, if an intervention is earned, should show that a proposed
+expectation becomes supported by source or actual execution before it is reused in
+a later contribution, and that verification and closure fit the declared decisions.
+Consultation agreement alone is insufficient. Keep correctness, delivery, retained
+work, action planning and total cost separate. The present researcher-selected
+checkpoint inherits assembly assistance; it is not an autonomous end-to-end backport,
+a matched comparison or a context-pressure outcome.
 
 The owner-directed [architecture map](../../ARCHITECTURE.md) and
 [implementation plan](../evidence_assembly/decision-state/PLAN.md) now provide the
@@ -17,7 +32,8 @@ stable vocabulary. They were published at 3c143bae before
 The shared input-scope/capacity explanation costs 67 tokens. 88 selected tests and
 the complete scripted route pass; an older boundary input now exceeds the unchanged
 ceiling by 21 tokens. Preserve both findings. Semantic selection and working-account
-policies remain open; this tranche adds no model inference or performance claim.
+policies remain open; that offline tranche adds no model inference or performance
+claim. The subsequent task outcome is recorded above.
 
 Current direction, following the owner's test-pilot clarification: develop the
 host with Qwen outside active runs. Active runs use the declared task, interface,
