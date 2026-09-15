@@ -2,13 +2,22 @@
 
 ## Project status
 
-The [identified recovery continuation](development/working_account/url_continuation/PLAN.md)
-is being qualified. A [native boundary probe and focused repair](development/working_account/url_continuation/HOST_REPAIR.md)
-address account updates being rejected beside sources that the same reply proposes
-to replace. The host now sizes that final account/group together, retaining separate
-provenance and receipts. 105 selected tests pass. The planned uncoached continuation
-starts with the actual broad selection and corrected rejection; behavioral recovery
-and useful account use remain to be demonstrated.
+The [recorded-state recovery continuation is closed without saved work](development/working_account/url_continuation/review/RESULTS.md).
+The host delivers the actual capacity rejection, but Qwen repeats a read and then
+exhausts physical context during its second response without a final action. It
+uses 34,490 generated tokens and 40.140 model-request minutes. No account, edit,
+check or submission is saved; all original files and selected source remain intact.
+Both full responses, actual inputs, host path and artifacts are directly reviewed,
+and exact replay verifies. Eighteen requests/fifty-nine operations are closed unused.
+
+Before that sole uncoached attempt, a [native probe earned a focused admission repair](development/working_account/url_continuation/HOST_REPAIR.md).
+The host now sizes an account with the group it accompanies, avoiding rejection
+beside sources the same reply releases while preserving provenance and both receipts.
+105 selected tests and native scripted complete/correction/recovery routes pass.
+The repair and concrete freeze were pushed at 4a4e4a6f. Qwen does not exercise the
+joint operation in the live continuation, so autonomous recovery and account benefit
+remain unestablished. The report separates useful reasoning, interface misreading
+and repeated reconsideration without assigning the whole cost to one cause.
 
 The [working-account and declared-check configuration is implemented](development/working_account/IMPLEMENTATION.md).
 The separate Qwen design dialogue is closed. Its [fresh uncoached URL-port trial](development/working_account/url_ports/review/RESULTS.md)

@@ -33,11 +33,13 @@ def main():
     completed = [r["payload"] for r in rows if r["record_type"] == "response_received"]
     for r in completed:
         name = r["id"]
-        r = {**r, "usage": read(RUN / "calls" / (name + "-endpoint-response.json"))["usage"]}
+        response = read(RUN / "calls" / (name + "-endpoint-response.json"))
+        r = {**r, "usage": response["usage"]}
         wire = read(RUN / "calls" / (name + "-wire-request.json"))
         shown = json.loads(wire["messages"][1]["content"])
         inputs.append(shown)
-        reply = read(RUN / "calls" / (name + "-reply.json"))
+        reply_path = RUN / "calls" / (name + "-reply.json")
+        reply = read(reply_path) if reply_path.exists() else {}
         result_path = RUN / "calls" / (name + "-host-result.json")
         result = read(result_path) if result_path.exists() else dict(operations=[])
         calls.append(dict(id=name, input_tokens=r["usage"]["prompt_tokens"],
@@ -47,7 +49,8 @@ def main():
             seconds=r["elapsed_seconds"], actual_operations=len(result["operations"]),
             thinking_characters=len((RUN / "calls" / (name + "-assistant-reasoning.txt")).read_text(encoding="utf-8")),
             final_characters=len((RUN / "calls" / (name + "-assistant-content.txt")).read_text(encoding="utf-8")),
-            account_in_reply="account" in reply, host_processing_completed=result_path.exists()))
+            account_in_reply="account" in reply, host_processing_completed=result_path.exists(),
+            reply_selected=reply_path.exists(), finish_reason=response["choices"][0]["finish_reason"]))
         if "account" in reply:
             accounts.append(dict(id=name, input_candidate=shown["workspace"]["candidate_id"], text=reply["account"]))
         for i, op in enumerate(result["operations"], 1):
@@ -70,7 +73,7 @@ def main():
     first = next(r for r in rows if r["record_type"] == "invocation_started")
     end = next(r for r in rows if r["record_type"] in ("attempt_stopped", "task_loop_completed"))
     interval = (datetime.datetime.fromisoformat(end["created_at_utc"]) - datetime.datetime.fromisoformat(first["created_at_utc"])).total_seconds()
-    metrics = dict(classification="one uncoached development contribution, no matched causal comparison",
+    metrics = dict(classification="one uncoached recorded-state development continuation; no matched causal comparison",
         closure=(closed or stopped)[-1], first_dispatch_to_closure_seconds=interval,
         calls=calls, operations=actions, operation_counts=dict(collections.Counter(x["action"] for x in actions)),
         complete_next_input_delivery=deliveries, input_tokens=sum(x["input_tokens"] for x in calls),

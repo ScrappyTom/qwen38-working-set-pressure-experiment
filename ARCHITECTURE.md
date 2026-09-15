@@ -193,3 +193,13 @@ capacity failure earned the narrow repair described above, qualified through a
 separate offline continuation. This does not establish autonomous completion or
 an account benefit. The account may prove helpful, unused or misleading; it is not
 a semantic guarantee or a permanent requirement for all modes.
+
+The [subsequent recorded-state continuation](development/working_account/url_continuation/review/RESULTS.md)
+receives the corrected rejection, but saves no account or contribution. Its second
+response fills physical context while reconsidering acquisition, editing and tool
+semantics; no final action is emitted. The selected source and actual feedback remain
+available. Offline qualification establishes a usable control path from the broad
+state, including joint account/group admission, but Qwen does not execute it. This
+distinguishes transition feasibility, interpretation, action completion and durable
+work. It leaves the account's behavioral value and the current generation policy's
+reliable completion at crowded inputs unresolved.

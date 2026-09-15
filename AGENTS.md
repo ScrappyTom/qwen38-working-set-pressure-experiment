@@ -1,22 +1,33 @@
 # Experiment operating rules
 
-The owner's latest Proceed authorizes the identified URL-port recovery in
-`development/working_account/url_continuation/PLAN.md` and `SPEC.md`: focused
-qualification, any demonstrated admission repair, one frozen uncoached continuation,
-full direct review and publication. The plan was pushed at e977d218. Native evidence
-at 7c254c1f establishes that an account could be rejected before its accompanying
-group replacement, despite a small admissible final input. The prospective joint
-admission repair and its limits are in `HOST_REPAIR.md`. This is not an observed
-Qwen account failure; the original run never used an account. Do not inflate it.
+The owner's latest Proceed is completed as one closed URL-port recovery package;
+read `development/working_account/url_continuation/review/RESULTS.md` and its full
+transcript, host and artifact reviews. The plan was pushed at e977d218. Native
+evidence at 7c254c1f establishes that an account could be rejected before its
+accompanying group replacement despite an admissible final input. The focused
+joint-admission repair and 105 selected passing tests were published in the concrete
+freeze 4a4e4a6f. See `HOST_REPAIR.md` and `PREPARATION.md`. Scripted complete,
+correction and rejected-request recovery routes are offline qualification only.
 
-The continuation starts from the same actual broad selection and empty account,
-with the corrected host's real rejection. Its additional 20 requests/60 operations
-are separately declared; the earlier unused budget remains closed. Do not supply
-the scripted narrow group, reference contribution, previous thinking or reviewer
-coaching. Prepare, seal and publish the concrete package before its sole attempt.
-Review input, full thinking, final actions, results, saved work and custody directly.
-Judge completed contributions, useful account use/revision and total cost; a correct
-account-free contribution is valid success without account-benefit evidence.
+The sole uncoached continuation starts with the actual broad selection, empty
+account and corrected rejection. Two requests use one rejected read. The complete
+rejection reaches C02; no source is removed. C02 generates 32,794 tokens beside
+23,782 input tokens, fills physical context and emits no final action. No account,
+edit, check or submission is saved. Both full responses and actual inputs are
+directly reviewed; fourteen native inputs, 118 custody records and 295 source
+identities verify exactly. Cost is 40.140 model-request minutes / 34,490 generated
+tokens. Eighteen requests and fifty-nine operations are closed unused. No coaching,
+retry, rescue, consultation or automatic successor belongs to this package.
+
+Retain the earned host repair without claiming autonomous recovery or account
+benefit. The joint account/group operation and declared edit checks are unused
+live. Distinguish an account or patch drafted in private thinking from an emitted
+proposal or saved work; do not extract that draft into the task. Qwen understands
+much of the source but repeatedly misreads and recovers source-eligibility rules,
+guesses group coordinates and reconsiders its next action. No single causal remedy
+is established. Any further presentation consultation remains outside runs; no
+additional exposure is authorized by the consumed allowance. A correct account-free
+contribution remains valid success without account-benefit evidence.
 
 Current owner-directed development adds an opt-in working account and declared
 scoped verification; read `development/working_account/PLAN.md` and
