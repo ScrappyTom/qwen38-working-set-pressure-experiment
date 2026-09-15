@@ -1,0 +1,92 @@
+Let me analyze the current state:
+
+1. **Task**: Extend regression tests for port access on urlsplit/urlparse results, and add documentation with executable examples.
+
+2. **Current state**:
+   - I can see the `port` property in `Lib/urllib/parse.py` (lines 174-186) which handles port validation
+   - I can see the `_hostinfo` properties for both str and bytes versions
+   - I have a test file partially visible (lines 750-800)
+   - I have the doc file (lines 1-39)
+   - Working account notes the key behaviors
+
+3. **What I need to do**:
+   - Add tests in `Lib/test/test_urlparse.py` for:
+     - Both `urlsplit` and `urlparse`
+     - Text URLs and ASCII byte URLs
+     - Cases: no port, empty port, 0, 65535, 65536, negative port, noninteger port
+     - Non-ASCII decimal digits in text URLs
+     - Assert exact exception class, complete argument tuple, diagnostic text
+     - Assert concrete results for accepted boundary cases
+   - Add docs in `Doc/library/urllib.parse.rst` with executable examples
+
+4. **Key behaviors from the source**:
+   - `port` property: gets `self._hostinfo[1]`
+   - If port is None → return None
+   - If `port.isdigit() and port.isascii()` → `int(port)`
+   - Else → `ValueError(f"Port could not be cast to integer value as {port!r}")`
+   - If not `(0 <= port <= 65535)` → `ValueError("Port out of range 0-65535")`
+
+5. **For _hostinfo** (text version, from the read of lines 200-250):
+   - Splits netloc on '@', then on '['/']' for IPv6, then on ':'
+   - If no port string after ':', port is None
+
+   For bytes version:
+   - Same logic but with bytes delimiters
+
+6. **Test cases to write**:
+   - No port: `http://example.com/path` → port is None
+   - Empty port: `http://example.com:/path` → port is None (partition(':') gives empty string, which is falsy → port = None)
+   - Port 0: `http://example.com:0/` → port is 0
+   - Port 65535: `http://example.com:65535/` → port is 65535
+   - Port 65536: `http://example.com:65536/` → ValueError("Port out of range 0-65535")
+   - Negative port: Can't actually happen because partition(':') on a string won't produce a negative number from the URL syntax. Wait, actually `http://example.com:-1/` would give port string "-1". Let me think...
+     - `"example.com:-1".partition(':')` → `("example.com", ":", "-1")` → port = "-1"
+     - `"-1".isdigit()` → False → ValueError(f"Port could not be cast to integer value as '-1'")
+     Wait, actually `-1` has a minus sign. Let me check: `"-1".isdigit()` is False. And `"-1".isascii()` is True. So the check is `port.isdigit() and port.isascii()`. Since isdigit() is False, it goes to the else branch: `ValueError(f"Port could not be cast to integer value as '-1'")`.
+     
+   - Non-integer port: `http://example.com:abc/` → port string "abc" → "abc".isdigit() is True? No! "abc".isdigit() is False. So ValueError(f"Port could not be cast to integer value as 'abc'").
+   
+   Wait, let me reconsider. For "abc": `"abc".isdigit()` → False. So it raises ValueError with the repr message.
+   
+   For non-ASCII digits like "١٢٣" (Arabic-Indic digits): `"١٢٣".isdigit()` → True (in Python, isdigit() returns True for Unicode decimal digits). But `"١٢٣".isascii()` → False. So the condition `port.isdigit() and port.isascii()` is False, leading to ValueError.
+
+   Actually wait, let me re-examine. The condition is:
+   ```python
+   if port.isdigit() and port.isascii():
+       port = int(port)
+   else:
+       raise ValueError(f"Port could not be cast to integer value as {port!r}")
+   ```
+
+   So for non-ASCII digits like "٢" (Arabic-Indic digit 2):
+   - `"٢".isdigit()` → True
+   - `"٢".isascii()` → False
+   - So the combined condition is False → ValueError
+
+   For bytes: `b"٢".isdigit()` doesn't exist. Let me think about what bytes would do. Actually for bytes, `port` would be a bytes object. `b"443".isdigit()` → True. `b"443".isascii()` → True. But `b"٢"` (UTF-8 encoded) → `b"٢".isdigit()` → ? Actually bytes objects don't have isdigit() or isascii() methods... wait, actually they do in Python 3! `bytes.isdigit()` exists and checks if all bytes are ASCII digits. `bytes.isascii()` checks if all bytes are in 0-127.
+
+   Hmm wait, let me reconsider. For bytes input:
+   - `b"443".isdigit()` → True (all bytes are 0x30-0x39)
+   - `b"443".isascii()` → True
+   - `b"\xd9\xa2".isdigit()` → False (bytes 0xd9, 0xa2 are not ASCII digits)
+   - So for bytes, non-ASCII would also fail the isdigit() check.
+
+   Actually, for the bytes case, the URL would need to have non-ASCII bytes. Let me think about what a "non-ASCII decimal digit in text URL" means for the test. The task says "Also cover non-ASCII decimal digits in text URLs." So for text URLs, something like `http://example.com:٢/` where ٢ is a non-ASCII digit character.
+
+   Let me now plan the test structure. I need to see where in the test file to add tests. Let me look at what's already there. I can see lines 750-800 of the test file. I need to find a good insertion point - probably at the end of the file or near the end of a test class.
+
+   Let me first check what's at the end of the test file, and understand the class structure.
+
+   Actually, I should first look at more of the test file to understand the structure. Let me read the end of the file. But I also need to check: the file sha is `c8f4d478470cb5b3e9daa653a42d029be19aef842fd9577fd524415ce2f037d1`. The read shows lines 750-800 with next_start_line=801. Let me read further to find the end.
+
+   Actually, let me plan my actions more carefully. I have 36 actions remaining and 7 requests remaining. Let me be efficient.
+
+   I need to:
+   1. See the end of the test file to find insertion point
+   2. See more of the doc file to find insertion point
+   3. Write the tests
+   4. Write the docs
+   5. Run checks
+   6. Submit
+
+   Let me start by reading the end of the test file and the relevant part of the doc file.

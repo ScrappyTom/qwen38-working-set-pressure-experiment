@@ -2,14 +2,29 @@
 
 ## Project status
 
-The [observation and recovery successor](development/operable_recovery/IMPLEMENTATION.md)
-is implemented under the [published plan](development/operable_recovery/PLAN.md).
-Checks preserve raw observations before reports; recovery keeps selected material
-designated while freeing its bulk bodies from the immediate input. Exact region
-assembly and temporary inspection let the model choose a usable next arrangement.
-Historical configurations remain unchanged. Native scripted complete/correction
-routes are qualified separately from the forthcoming uncoached attempt; no productivity
-claim follows from those engineering routes. See the package's preparation record.
+The [observation/recovery implementation and sole uncoached attempt are complete](development/operable_recovery/review/RESULTS.md).
+Qwen selects a smaller group, returns from recovery to ordinary work, saves an
+additive regression method, receives its actual failed coverage check and retrieves
+the preserved diagnostic. All sixteen results reach the following input intact.
+It then misinterprets injected-fault results and exhausts physical context without
+emitting a correction. Documentation and submission remain unfinished.
+
+Thirteen requests use 65,537 generated tokens and 72.242 model-request minutes.
+The saved tests exercise the requested normal paths and detect six of seven faults;
+they miss the exact-exception-class requirement. Existing work is preserved.
+All full responses and actual inputs are reviewed; exact replay verifies twenty-two
+native inputs, 297 custody records and 294 source identities. Three requests and
+thirty-two operations are closed unused. No coaching or retry occurs.
+
+The [implemented boundary changes](development/operable_recovery/IMPLEMENTATION.md)
+are retained, with 94 selected passing checks and eleven native grammar cases.
+Observations are preserved before reduction; recovery retains designations while
+omitting bulk from its immediate input. Scripted complete/correction routes remain
+engineering qualification. The live result demonstrates model-selected recovery
+and partial saved work, not reliable completed contribution. The review identifies
+two prospective presentation corrections: avoid needlessly shortening small accounts,
+and name unmet check criteria separately from raw mutation-run success. Historical
+configurations and this frozen attempt remain unchanged.
 
 The [source-eligibility clarification and recovery consultation are complete](development/working_account/decision_recovery/review/RESULTS.md).
 Retain the clarified contract and ordinary framing. Qwen distinguishes current excerpts

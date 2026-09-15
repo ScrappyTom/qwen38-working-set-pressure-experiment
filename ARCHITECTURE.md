@@ -235,3 +235,20 @@ Likewise a model- or researcher-authored account can falsely attribute a conclus
 to that report. Preserve producing inputs and actual output; do not infer evidential
 support from an account's asserted provenance. Prioritizing useful failure evidence
 is a task-checker policy to qualify, separate from the archive's custody guarantee.
+
+The [observation/recovery successor](development/operable_recovery/review/RESULTS.md)
+implements preservation before report reduction and a genuinely different recovery
+presentation. Its sole uncoached attempt chooses a smaller group, saves partial tests
+and obtains a failed check with exact diagnostic inspection. All operation receipts
+arrive. The next response nevertheless confuses ordinary test-run success with
+injected-fault detection and exhausts context without a correction. Thus mechanical
+recovery, saved work and new evidence now compose on this path; correct interpretation
+through completed correction does not. The missing exact-class assertion remains
+in saved work, and documentation is unfinished.
+
+This outcome earns explicit criterion/detection reporting and capacity-sensitive
+display of small accounts, not a change to exact custody or a proven reasoning-policy
+remedy. Those presentation changes remain prospective. The latest account's pending
+text also outlives the acquisition it describes: account provenance and persistence
+do not establish that the model maintains useful current understanding. Keep these
+separate responsibilities visible when evaluating the next configuration.

@@ -1,0 +1,164 @@
+Let me analyze the current state:
+
+1. **Task**: Add regression tests for port access on urlsplit/urlparse results, and add documentation with executable examples. Don't change the implementation.
+
+2. **Current state**: 
+   - I have the `port` property implementation from `Lib/urllib/parse.py` (lines 174-186)
+   - I have part of `Lib/test/test_urlparse.py` (lines 750-800)
+   - I have the beginning of `Doc/library/urllib.parse.rst` (lines 1-39)
+   - Candidate ID: `2921cbc8a115c86871a11f8eaea929c3d48a8e4d2bb2ca03bf48971c36cf15cd`
+
+3. **What I know about the port property** (from the visible source):
+```python
+    @property
+    def port(self):
+        port = self._hostinfo[1]
+        if port is not None:
+            if port.isdigit() and port.isascii():
+                port = int(port)
+            else:
+                raise ValueError(f"Port could not be cast to integer value as {port!r}")
+            if not (0 <= port <= 65535):
+                raise ValueError("Port out of range 0-65535")
+        return port
+```
+
+Key observations:
+- `port` is `self._hostinfo[1]`
+- If `port is None` → returns None (no port)
+- If `port.isdigit() and port.isascii()` → tries `int(port)`
+- If not digit/ascii → raises `ValueError(f"Port could not be cast to integer value as {port!r}")`
+- If valid digit but out of range → raises `ValueError("Port out of range 0-65535")`
+- Valid range: 0 <= port <= 65535
+
+Wait, I need to understand the flow better. For a text URL, `port` would be a string. For a bytes URL, `port` would be bytes.
+
+Let me think about what happens:
+- `port.isdigit()` on a string: returns True only if all chars are digits AND the string is non-empty
+- `port.isascii()`: returns True if all chars are ASCII
+
+For bytes: `port.isdigit()` - bytes objects don't have `.isdigit()` in the same way... actually, bytes objects DO have `.isdigit()` in Python 3. Let me think...
+
+Actually wait, for bytes URLs, `_hostinfo[1]` would be bytes. Does bytes have `.isdigit()` and `.isascii()`?
+
+- `bytes.isdigit()` - Yes, bytes has `.isdigit()` method
+- `bytes.isascii()` - Yes, bytes has `.isascii()` method
+
+So for bytes:
+- `b"".isdigit()` → False (empty)
+- `b"0".isdigit()` → True
+- `b"0".isascii()` → True
+- `b"65535".isdigit()` → True
+- `b"65535".isascii()` → True
+- `b"65536".isdigit()` → True, `b"65536".isascii()` → True
+- `b"-1".isdigit()` → False (hyphen is not a digit)
+- `b"abc".isdigit()` → False
+- `b"\xff".isdigit()` → False
+- `b"\u00b2".isdigit()` → This would be for strings, not bytes
+
+For strings:
+- `"".isdigit()` → False (empty string)
+- `"0".isdigit()` → True, `"0".isascii()` → True
+- `"65535".isdigit()` → True, `"65535".isascii()` → True
+- `"65536".isdigit()` → True, `"65536".isascii()` → True
+- `"-1".isdigit()` → False (hyphen not a digit)
+- `"abc".isdigit()` → False
+- `"²".isdigit()` → True! (superscript 2 is a digit in Unicode)
+- `"²".isascii()` → False
+- `"٣".isdigit()` → True (Arabic-Indic digit 3)
+- `"٣".isascii()` → False
+
+So for non-ASCII decimal digits in text URLs like `"²"` (superscript two, U+00B2):
+- `"²".isdigit()` → True
+- `"²".isascii()` → False
+- So it would raise `ValueError(f"Port could not be cast to integer value as {port!r}")`
+
+Wait, but what about Arabic-Indic digits like `"٣"` (U+0663)?
+- `"٣".isdigit()` → True
+- `"٣".isascii()` → False
+- Same: raises ValueError
+
+And what about `"²"` specifically? Let me check: `int("²")` would fail with ValueError, but we never get to `int()` because `isascii()` is False first.
+
+Actually wait, I need to re-read the code:
+```python
+if port.isdigit() and port.isascii():
+    port = int(port)
+else:
+    raise ValueError(f"Port could not be cast to integer value as {port!r}")
+if not (0 <= port <= 65535):
+    raise ValueError("Port out of range 0-65535")
+```
+
+So the logic is:
+1. If port is None → return None
+2. If port.isdigit() AND port.isascii() → convert to int
+   - Then check range: if not 0 <= port <= 65535 → raise ValueError("Port out of range 0-65535")
+   - Otherwise return port (as int)
+3. Otherwise (not digit, or not ascii) → raise ValueError(f"Port could not be cast to integer value as {port!r}")
+
+So the cases:
+- **No port**: `port is None` → returns None
+- **Empty port** (`""` or `b""`): `"".isdigit()` is False → raises ValueError("Port could not be cast to integer value as ''")
+  Wait, actually for empty string: `"".isdigit()` → False. So it goes to the else branch.
+  For empty bytes: `b"".isdigit()` → False. Same.
+  
+  Hmm wait, but what does an "empty port" mean in a URL? Like `http://host:/path` or `http://host:0/`? Let me think...
+  
+  Actually `http://host:/path` would give netloc as `host:` and the port part would be empty string. Let me verify by thinking about how urlsplit works.
+
+  For `http://host:/`, the netloc is `host:` and splitting by `:` gives `['host', '']`. So port would be `""`.
+  
+  For bytes: `b"http://host:/"` → netloc is `b"host:"` → port would be `b""`.
+
+- **0**: `"0".isdigit()` → True, `"0".isascii()` → True → `int("0")` = 0 → 0 <= 0 <= 65535 → True → returns 0
+- **65535**: similar → returns 65535
+- **65536**: `"65536".isdigit()` → True, `"65536".isascii()` → True → `int("65536")` = 65536 → 0 <= 65536 <= 65535 → False → raises ValueError("Port out of range 0-65535")
+- **Negative port** (`"-1"`): `"-1".isdigit()` → False → raises ValueError("Port could not be cast to integer value as '-1'")
+- **Noninteger port** (`"abc"`): `"abc".isdigit()` → False → raises ValueError("Port could not be cast to integer value as 'abc'")
+- **Non-ASCII decimal digits** (e.g., `"²"` U+00B2): `"²".isdigit()` → True, `"²".isascii()` → False → raises ValueError("Port could not be cast to integer value as '²'")
+  Or Arabic-Indic `"٣"`: same pattern.
+
+Now, I need to:
+1. Read more of the test file to understand where to add tests
+2. Read the implementation file more carefully to understand `_hostinfo`
+3. Write the tests
+4. Write the documentation
+
+Let me first look at what I need to read. I have:
+- `Lib/urllib/parse.py` lines 174-186 (the port property)
+- `Lib/test/test_urlparse.py` lines 750-800
+- `Doc/library/urllib.parse.rst` lines 1-39
+
+I need to see more of the test file to find where to add tests, and I need to understand the structure better. Let me also check if there's a `_hostinfo` property or how it's set.
+
+Let me read more of the test file and the parse.py file. I should look at:
+1. The test file around where port tests might already exist (maybe near the test I can see)
+2. The beginning of the test file for imports and class structure
+3. The parse.py file to understand `_hostinfo`
+
+Let me read the test file to find existing port-related tests and understand the structure.
+
+Actually, looking at the visible test file content (lines 750-800), I can see there's a `test_attributes_without_netloc` method. I need to find where to add my new tests. Let me read more of the test file.
+
+Let me also check: for the bytes case, what does `repr(b"abc")` look like? It's `b'abc'`. And for the format string `f"Port could not be cast to integer value as {port!r}"`, if port is `b"abc"`, the output would be `Port could not be cast to integer value as b'abc'`.
+
+For string: `f"Port could not be cast to integer value as {port!r}"` with port = `"abc"` → `Port could not be cast to integer value as 'abc'`.
+
+Let me plan my reads:
+1. Read test_urlparse.py from the beginning to understand structure and imports
+2. Read test_urlparse.py around the area where I'll add tests (maybe after existing port-related tests)
+3. Read parse.py to understand _hostinfo
+
+Let me start by reading the test file from the beginning and also search for existing port tests.
+
+Actually, I have 41 actions remaining and 11 requests remaining. Let me be efficient. Let me read:
+1. Test file beginning (lines 1-30) for imports/class structure
+2. Search for "port" in the test file to find existing port tests
+3. Read parse.py around the _hostinfo area
+
+Let me do multiple reads in sequence. Actually I can only do one operation per response. Let me be strategic.
+
+Let me first search for "port" in the test file to see what's already there, and read the beginning of the test file.
+
+Actually, I'll search for port-related tests first.

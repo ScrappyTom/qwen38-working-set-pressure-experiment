@@ -1,0 +1,3056 @@
+Let me analyze the situation. I'm working on a task to add regression tests and documentation for port access behavior in urllib.parse. Let me understand the current state:
+
+1. I've already added a test `test_port_access_boundary_and_errors` to `Lib/test/test_urlparse.py` (visible in the source).
+2. The tests check failed. Let me look at the failure details from CHK-0020.
+
+Looking at the test output, I can see:
+- `saved_suite`: 72 tests, 0 failures, successful
+- `edited_suite`: 73 tests, 0 failures, successful (good - my new test passes in the suite)
+- `observed_paths`: 1 test, 0 failures, successful
+- `fault_sensitivity`: Multiple checks, some failing:
+  - `error_class`: 1 test, 0 failures, successful (good)
+  - `error_arguments`: 1 test, **1 failure** - the test `test_port_access_boundary_and_errors` is failing because the fault sensitivity check modified the exception to have an extra argument `'unexpected second argument'`, and my test asserts `cm.exception.args == ("Port out of range 0-65535",)` - but the fault-sensitivity check expects the test to detect that extra argument. The error shows:
+    ```
+    AssertionError: Tuples differ: ('Port out of range 0-65535', 'unexpected second argument') != ('Port out of range 0-65535',)
+    ```
+    Wait, actually this means the fault sensitivity check modified the code to add an extra argument to the exception, and my test correctly detected the difference (it failed). So this is actually the EXPECTED behavior for fault sensitivity - the test should fail when the implementation changes. Let me re-read...
+
+Actually wait. The fault sensitivity checks work like this: the check system modifies the implementation to introduce faults, and expects the tests to catch them. So:
+- `error_arguments`: The implementation was modified so that the exception has args `('Port out of range 0-65535', 'unexpected second argument')` instead of `('Port out of range 0-65535',)`. My test asserts `cm.exception.args == ("Port out of range 0-65535",)`. The test correctly fails (catches the fault). So this should be a PASSING fault sensitivity test (the test detected the fault). But the report shows `failures: 1, successful: false`. 
+
+Hmm, let me re-read the fault sensitivity semantics. Looking more carefully:
+
+```
+"fault_sensitivity":{
+  "error_class":{"tests":1,"failures":0,"errors":0,"skipped":0,"successful":true,...},
+  "error_arguments":{"tests":1,"failures":1,"errors":0,"skipped":0,"successful":false,"details":[{"test":"...","trace":"...AssertionError..."}],...},
+  "error_message":{"tests":1,"failures":1,"errors":0,"skipped":0,"successful":false,...},
+  "eager_validation":{"tests":1,"failures":0,"errors":1,"skipped":0,"successful":false,...},
+```
+
+Wait, I need to understand what "successful" means here. In the context of fault sensitivity:
+- The check modifies the implementation to introduce a specific fault
+- It runs the test
+- If the test FAILS (because it detected the fault), that's the DESIRED outcome for the fault sensitivity check
+- But "successful: false" might mean the fault sensitivity check itself failed
+
+Actually, looking at the overall structure, the test check has these sub-checks. Let me look at what the fault sensitivity is supposed to do:
+
+The task says: "checks that the new tests detect changes to exception class/arguments/message, validation timing and valid boundary values."
+
+So the fault sensitivity checks:
+1. `error_class`: Change the exception class → test should detect it. Result: successful (test detected the change). ✓
+2. `error_arguments`: Change the exception arguments → test should detect it. Result: NOT successful. The test's assertion caught the difference, but... why is it not successful?
+
+Wait, I think I'm misreading this. Let me look at the structure again:
+
+```
+"error_arguments":{"tests":1,"failures":1,"errors":0,"skipped":0,"successful":false,"details":[{"test":"observed_url_tests.UrlParseTestCase.test_port_access_boundary_and_errors","trace":"..."}]
+```
+
+The `successful: false` with `failures: 1` means the test run had a failure. But for fault sensitivity, a test failure IS the expected result (it means the test caught the fault). So maybe the issue is something else...
+
+Actually wait. Let me re-read the check semantics. Looking at the check output structure:
+
+```
+"fault_sensitivity":{
+  "error_class":{"tests":1,"failures":0,"errors":0,"skipped":0,"successful":true,...},
+  "error_arguments":{"tests":1,"failures":1,...,"successful":false,...},
+```
+
+Hmm, for `error_class`: `failures: 0, successful: true`. This is strange. If the exception class was changed, my test should fail (it asserts ValueError). Unless the fault was to change it to something else and my test catches it... but then failures should be 1.
+
+Wait, maybe I'm misunderstanding the direction. Maybe:
+- `successful: true` means the fault sensitivity check PASSED (the test correctly detected the fault)
+- `successful: false` means the fault sensitivity check FAILED (the test did NOT detect the fault, OR the test failed for the wrong reason)
+
+But that contradicts: `error_class` has `failures: 0, successful: true` - if the test ran and passed (0 failures), how did it detect the fault?
+
+Let me reconsider. Maybe the fault sensitivity works differently:
+- It modifies the implementation
+- Runs the test
+- The test is EXPECTED to fail
+- If the test fails (as expected), the fault sensitivity check passes
+- If the test passes (didn't catch the fault), the fault sensitivity check fails
+
+Under this interpretation:
+- `error_class`: `failures: 0, successful: true` → test passed (didn't catch the fault), but check is successful?? That doesn't make sense either.
+
+OR maybe the semantics are:
+- The fault sensitivity check itself is a test
+- `tests: 1` means one fault sensitivity test was run
+- `failures: 0, successful: true` means the fault sensitivity check passed (i.e., the test correctly detected the fault)
+- `failures: 1, successful: false` means the fault sensitivity check failed
+
+But then for `error_class`, the fault sensitivity check passed with 0 failures? That's confusing.
+
+Let me look at it differently. Maybe the structure is:
+- The fault sensitivity modifies the code and re-runs the test
+- The "tests" count is from running the modified test
+- "successful" indicates whether the overall fault sensitivity check passed
+
+For `error_class`:
+- The exception class was changed (e.g., to RuntimeError)
+- The test was run: 1 test, 0 failures → test passed??
+- successful: true
+
+That can't be right. If the exception class changed to RuntimeError, my test using `assertRaises(ValueError)` would fail... unless the test was also modified.
+
+Wait, I think I need to look at this more carefully. Let me re-read the fault_sensitivity structure:
+
+```json
+"fault_sensitivity": {
+  "error_class": {
+    "tests": 1, "failures": 0, "errors": 0, "skipped": 0, "successful": true,
+    "details": [], "missing_paths": [], "complete": true
+  },
+  "error_arguments": {
+    "tests": 1, "failures": 1, "errors": 0, "skipped": 0, "successful": false,
+    "details": [{"test": "...", "trace": "..."}],
+    "missing_paths": [...], "complete": false
+  },
+  ...
+}
+```
+
+OK so for `error_class`: successful, no details (no failures), complete.
+For `error_arguments`: NOT successful, 1 failure with a trace, NOT complete (has missing_paths).
+
+The `missing_paths` field is interesting - it lists paths that were supposed to be observed but weren't. And `complete: false`.
+
+I think what's happening is:
+- The fault sensitivity check observes certain code paths
+- For each fault type, it checks that the test exercises specific code paths
+- `missing_paths` indicates which paths the test didn't cover
+- `complete: false` means the test didn't cover all required paths
+
+So the issue is that my test doesn't cover ALL the required paths for the fault sensitivity checks to pass. The `missing_paths` lists things like:
+- `["urlparse", "bytes", "absent"]` - urlparse with bytes and absent port
+- `["urlparse", "bytes", "empty"]` - urlparse with bytes and empty port
+- etc.
+
+And `complete: false` means not all required paths were observed.
+
+Wait, but looking at my test, I DO cover both urlsplit and urlparse (via the `for func in (urllib.parse.urlsplit, urllib.parse.urlparse)` loop), and I cover both str and bytes. Let me look at what's in the missing_paths:
+
+```
+"urlparse","bytes","absent"
+"urlparse","bytes","empty"
+"urlparse","bytes","maximum"
+"urlparse","bytes","negative"
+"urlparse","bytes","noninteger"
+"urlparse","bytes","too_high"
+"urlparse","bytes","zero"
+"urlparse","str","absent"
+"urlparse","str","empty"
+"urlparse","str","maximum"
+"urlparse","str","negative"
+"urlparse","str","noninteger"
+"urlparse","str","too_high"
+"urlparse","str","unicode_digits"
+"urlparse","str","zero"
+"urlsplit","bytes","negative"
+"urlsplit","bytes","noninteger"
+"urlsplit","bytes","too_high"
+"urlsplit","str","negative"
+"urlsplit","str","noninteger"
+"urlsplit","str","unicode_digits"
+```
+
+So it seems like the observation system tracks which (function, encoding, port_case) combinations are actually hit. The missing paths suggest that many combinations weren't observed as distinct paths.
+
+Hmm, but my test does:
+```python
+for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+    # No port
+    p = func("http://example.com/")
+    ...
+    p = func(b"http://example.com/")
+    ...
+```
+
+So it should hit both functions with both str and bytes for each case. Why are these showing as missing?
+
+Wait, I think the issue is that the observation is about the `port` property access specifically, and the "path" refers to which specific code path in the port property is exercised. Let me think about what paths exist:
+
+For the port property:
+- `port is None` → return None (absent/empty cases)
+- `port.isdigit() and port.isascii()` → int(port)
+  - `0 <= port <= 65535` → return port (valid)
+  - else → raise ValueError("Port out of range 0-65535")
+- else → raise ValueError(f"Port could not be cast to integer value as {port!r}")
+
+The missing paths seem to indicate specific (function, type, case) combinations. But my test does iterate over both functions... 
+
+Oh wait! I think I see the issue. Looking at the missing paths more carefully:
+
+For `error_arguments`:
+- Missing: urlparse+bytes (all cases), urlparse+str (all cases), urlsplit+bytes (negative, noninteger, too_high), urlsplit+str (negative, noninteger, unicode_digits)
+
+But NOT missing: urlsplit+bytes (absent, empty, maximum, zero), urlsplit+str (absent, empty, maximum, zero, too_high)
+
+Hmm, that's a strange pattern. Wait, actually the missing_paths might be what's missing from the OBSERVED paths (i.e., what the test didn't hit). If the test only ran partially (maybe it stopped at the first failure?), then later cases wouldn't be observed.
+
+Actually, I think the issue is simpler. The fault sensitivity check modifies the implementation and re-runs the test. When the test fails (detects the fault), it stops at the first failure. So only the paths BEFORE the failure point are observed. The missing_paths are the paths that weren't reached because the test stopped.
+
+But that still doesn't fully explain it. Let me look at the actual failure for `error_arguments`:
+
+```
+AssertionError: Tuples differ: ('Port out of range 0-65535', 'unexpected second argument') != ('Port out of range 0-65535',)
+First tuple contains 1 additional elements.
+First extra element 1: 'unexpected second argument'
+```
+
+So the fault was to add an extra argument to the ValueError for out-of-range ports. My test asserts `cm.exception.args == ("Port out of range 0-65535",)`. The test correctly fails when it encounters the modified exception. But the check says `successful: false`.
+
+Wait, I think I need to reconsider. Maybe for fault sensitivity:
+- The check modifies the implementation
+- Runs the test
+- The test SHOULD fail (to prove it can detect the change)
+- BUT the check also verifies that the test covers all required paths
+- If the test fails early (before covering all paths), the check is incomplete
+
+So the `successful: false` might mean: "The test failed (good, it detected the fault), but it didn't cover all required observation paths (bad, incomplete coverage)."
+
+Under this interpretation:
+- `error_class`: successful because the class change was detected AND all paths were covered
+- `error_arguments`: NOT successful because while the test detected the argument change, it didn't cover all required paths before failing
+- `error_message`: NOT successful for similar reasons
+- `eager_validation`: NOT successful (1 error - the test didn't handle the eager validation fault correctly)
+
+For `eager_validation`:
+```
+"trace":"...
+ValueError: Port out of range 0-65535
+"
+```
+The fault was to make validation happen at construction time (eagerly) rather than at property access time. My test does:
+```python
+p = func("http://example.com:65536/")
+with self.assertRaises(ValueError) as cm:
+    p.port
+```
+If validation is eager, then `func("http://example.com:65536/")` itself would raise the ValueError, not `p.port`. My test would get an unexpected error at the construction line, which is an `error` (not a `failure`). The check reports `errors: 1, successful: false`.
+
+So the issues are:
+1. My test doesn't explicitly verify that construction succeeds (no exception at construction time) before testing that access raises the exception
+2. The test needs to cover all required observation paths
+
+Let me think about how to fix this. The key insight from `eager_validation` is that I need to explicitly assert that construction does NOT raise an exception. The current code:
+```python
+p = func("http://example.com:65536/")
+with self.assertRaises(ValueError) as cm:
+    p.port
+```
+If construction raises, the test errors out. I need to make it clear that construction succeeds. But actually, if construction raised, the test would error at `p = func(...)` which is outside the `assertRaises` context. The test framework would report it as an error, not a failure. The check seems to want it as a "failure" (assertion) rather than an "error" (unexpected exception).
+
+Actually wait, let me re-read the eager_validation result:
+```
+"eager_validation":{"tests":1,"failures":0,"errors":1,"skipped":0,"successful":false,
+"details":[{"test":"...","trace":"...ValueError: Port out of range 0-65535"}]
+```
+
+`errors: 1` - the test had an error (uncaught exception), not an assertion failure. This means the fault made construction raise, and the test didn't handle it gracefully.
+
+For the fault sensitivity to work correctly, I think my test needs to:
+1. Explicitly verify that construction does NOT raise (maybe by just doing the construction and then checking it's a valid object)
+2. Then verify that access raises the specific exception
+
+But actually, the construction `p = func("http://example.com:65536/")` already "verifies" it doesn't raise - if it did raise, the test would error. The problem is that the check system wants a FAILURE (assertion) not an ERROR (uncaught exception) for the eager_validation fault.
+
+Hmm, but that's a property of the fault sensitivity check implementation, not something I can easily control in my test. Unless... the check is designed so that if the test structure is right, the eager validation fault causes an assertion failure rather than an uncaught error.
+
+Wait, let me reconsider. If I write:
+```python
+p = func("http://example.com:65536/")
+```
+and construction raises, the test errors. But if I wrap it:
+```python
+try:
+    p = func("http://example.com:65536/")
+except ValueError:
+    self.fail("Construction should not raise")
+```
+Then if construction raises, it's a controlled failure (assertion), not an uncaught error.
+
+But that seems unusual for a test. Let me think about what the check actually needs...
+
+Actually, I think the real issue is different. Let me re-read the check structure:
+
+The check has:
+- `observed_paths`: tracks which (func, encoding, case) combinations the test exercises
+- `fault_sensitivity`: for each fault type, modifies the code and checks the test catches it
+
+For `observed_paths`, it says `successful: true, complete: true` with 1 test, 0 failures. So the observed paths check PASSES.
+
+For `fault_sensitivity`, the individual sub-checks have `complete: false` with `missing_paths`. This suggests the fault sensitivity check requires ALL paths to be observed for EACH fault type. But since the test fails early (at the first mismatch), later paths aren't observed.
+
+The solution might be to restructure the test so that each case is independent and can be observed even if others fail. But that's not how unittest works - once a test method fails, it stops.
+
+Wait, actually maybe I should use `subTest` to make each case independent? No, that still stops at the first failure.
+
+Or maybe the issue is that the fault sensitivity check runs the test in a way where it expects ALL paths to be hit before the assertion failure. If the first case (e.g., "no port") doesn't trigger the fault, the test continues to the next case. The fault only triggers at a specific case (e.g., out-of-range). So the test should pass through all valid cases and only fail at the fault-triggering case.
+
+But the missing_paths show many cases as missing, including valid ones like "absent" and "zero". If the test passes through them without failing, they should be observed.
+
+Unless... the observation is done at the `port` property access level, and the check is tracking which specific (function, type, property-access-path) combinations are hit. If my test accesses `p.port` for "no port" case and it returns None without going through the validation logic, maybe that path isn't tracked the same way.
+
+Actually, I wonder if the issue is that the check system patches the implementation to add observation hooks, and my test's structure causes some paths to not be observed. Let me look at what IS observed (not missing):
+
+From the missing_paths, what's NOT missing (i.e., was observed):
+- urlsplit+bytes: absent, empty, maximum, zero (but NOT negative, noninteger, too_high)
+- urlsplit+str: absent, empty, maximum, zero, too_high (but NOT negative, noninteger, unicode_digits)
+
+Wait that's inconsistent. Let me list what's missing:
+- urlparse+bytes: ALL (absent, empty, maximum, negative, noninteger, too_high, zero)
+- urlparse+str: ALL (absent, empty, maximum, negative, noninteger, too_high, unicode_digits, zero)
+- urlsplit+bytes: negative, noninteger, too_high
+- urlsplit+str: negative, noninteger, unicode_digits
+
+So for urlsplit, the "positive" cases (absent, empty, maximum, zero, too_high) are observed, but "error" cases (negative, noninteger) are missing. And too_high is observed for str but missing for bytes?
+
+Wait no: for urlsplit+str, the missing are: negative, noninteger, unicode_digits. The observed would be: absent, empty, maximum, zero, too_high.
+For urlsplit+bytes, the missing are: negative, noninteger, too_high. The observed would be: absent, empty, maximum, zero.
+
+Hmm, that's strange. Why would too_high be observed for str but not bytes?
+
+Oh wait! I think I understand now. The fault sensitivity for `error_arguments` modifies the "out of range" error to have extra arguments. So:
+- For the "too_high" case (port 65536), the modified code raises `ValueError("Port out of range 0-65535", "unexpected second argument")` instead of `ValueError("Port out of range 0-65535")`
+- My test does `with self.assertRaises(ValueError) as cm: p.port` and then `self.assertEqual(cm.exception.args, ("Port out of range 0-65535",))`
+- The assertRaises catches the ValueError, then the assertEqual fails
+- But the test STOPS at the first failure
+
+So the sequence for urlsplit would be:
+1. str "no port" → observed ✓
+2. bytes "no port" → observed ✓
+3. str "empty" → observed ✓
+4. bytes "empty" → observed ✓
+5. str "0" → observed ✓
+6. bytes "0" → observed ✓
+7. str "65535" → observed ✓
+8. bytes "65535" → observed ✓
+9. str "65536" → raises modified ValueError → assertEqual FAILS → test stops
+
+So after step 9, the test stops. Everything after (negative, noninteger, unicode_digits) is NOT observed. And urlparse is never reached.
+
+But wait, "too_high" for urlsplit+bytes should have been observed at step 10 (bytes 65536), which is after the failure at step 9. So it's missing because the test stopped before reaching it. That makes sense!
+
+And for urlsplit+str, "too_high" IS observed (step 9 is where it fails, but the path WAS hit - the port property was accessed). Hmm, but then why is it in the missing list for bytes?
+
+Oh wait, I misread. Let me re-check: the missing_paths for `error_arguments` are:
+```
+["urlparse","bytes","absent"],
+["urlparse","bytes","empty"],
+["urlparse","bytes","maximum"],
+["urlparse","bytes","negative"],
+["urlparse","bytes","noninteger"],
+["urlparse","bytes","too_high"],
+["urlparse","bytes","zero"],
+["urlparse","str","absent"],
+["urlparse","str","empty"],
+["urlparse","str","maximum"],
+["urlparse","str","negative"],
+["urlparse","str","noninteger"],
+["urlparse","str","too_high"],
+["urlparse","str","unicode_digits"],
+["urlparse","str","zero"],
+["urlsplit","bytes","negative"],
+["urlsplit","bytes","noninteger"],
+["urlsplit","bytes","too_high"],
+["urlsplit","str","negative"],
+["urlsplit","str","noninteger"],
+["urlsplit","str","unicode_digits"]
+```
+
+So for urlsplit+str: missing = negative, noninteger, unicode_digits (NOT too_high!)
+For urlsplit+bytes: missing = negative, noninteger, too_high
+
+This means:
+- urlsplit+str+too_high WAS observed (the test reached it and the path was recorded)
+- urlsplit+bytes+too_high was NOT observed (the test stopped before reaching it)
+
+This makes perfect sense! The test iterates:
+```
+for func in (urlsplit, urlparse):
+    # str cases...
+    # bytes cases...
+```
+
+Wait no, looking at my test more carefully:
+```python
+for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+    # No port
+    p = func("http://example.com/")       # str, absent
+    ...
+    p = func(b"http://example.com/")      # bytes, absent
+    ...
+    # Empty port
+    p = func("http://example.com:")       # str, empty
+    ...
+    p = func(b"http://example.com:")      # bytes, empty
+    ...
+    # Port 0
+    p = func("http://example.com:0/")     # str, zero
+    ...
+    p = func(b"http://example.com:0/")    # bytes, zero
+    ...
+    # Port 65535
+    p = func("http://example.com:65535/") # str, maximum
+    ...
+    p = func(b"http://example.com:65535/") # bytes, maximum
+    ...
+    # Port 65536
+    p = func("http://example.com:65536/") # str, too_high → FAILS HERE for urlsplit
+    ...
+    p = func(b"http://example.com:65536/") # bytes, too_high → never reached
+    ...
+```
+
+So for urlsplit:
+- str cases before too_high: observed (absent, empty, zero, maximum)
+- str too_high: the port property IS accessed (the ValueError is raised), so the path IS observed, but then the assertEqual fails
+- bytes too_high: never reached (test already failed)
+- everything after: never reached
+
+This matches! urlsplit+str+too_high is observed (not in missing list), urlsplit+bytes+too_high is NOT observed (in missing list).
+
+OK so the fundamental issue is: **the test fails at the first fault-triggering assertion, and all subsequent paths go unobserved.**
+
+To fix this, I need to restructure the test so that the fault sensitivity check can observe ALL required paths. The key insight is that for the fault sensitivity to pass, the test needs to reach ALL (function, encoding, case) combinations even when a fault is present.
+
+How can I do this? Options:
+1. Use `subTest` - but that still stops at the first failure in most implementations
+2. Make each case a separate test method
+3. Use `try/except` blocks to catch expected exceptions and continue
+4. Restructure so that the assertion that detects the fault is the LAST thing in each case, and use a pattern that allows continuation
+
+Actually, wait. Let me reconsider. The fault sensitivity check modifies the implementation. When it does so:
+- For `error_arguments`: it changes the args of the "out of range" ValueError
+- My test for "too_high" does:
+  ```python
+  p = func("http://example.com:65536/")
+  with self.assertRaises(ValueError) as cm:
+      p.port
+  self.assertEqual(cm.exception.args, ("Port out of range 0-65535",))
+  ```
+  The assertRaises catches the ValueError (so no uncaught exception), then assertEqual fails.
+
+The issue is that after assertEqual fails, the test method stops. I can't continue to the next case.
+
+One approach: separate each case into its own assertion that can "fail soft" using subTest or by restructuring.
+
+Actually, the simplest fix is to make each (func, encoding, case) combination a separate test method, or to use a structure where the observation happens before the assertion.
+
+Wait, but the observation is done by the check system patching the implementation. The observation happens when `p.port` is accessed. So as long as `p.port` is accessed, the path is observed, regardless of whether the subsequent assertion passes or fails.
+
+The problem is that once an assertion fails, the test method returns (raises AssertionError), and no further `p.port` accesses happen.
+
+So I need to ensure that ALL `p.port` accesses happen BEFORE any assertion that might fail. But that's hard because I need to access `p.port` to get the value, and then assert on it.
+
+Alternative: I could store all the results first, then assert on them:
+```python
+results = {}
+for func in (urlsplit, urlparse):
+    for url, encoding in [("http://example.com/", "str"), (b"http://example.com/", "bytes")]:
+        p = func(url)
+        try:
+            results[(func, encoding, "absent")] = p.port
+        except ValueError as e:
+            results[(func, encoding, "absent")] = e
+# ... repeat for all cases ...
+# Then assert on all results
+```
+
+But this is ugly and doesn't match the style of the existing tests.
+
+Actually, let me reconsider the problem. The check says `complete: false` and lists missing paths. But does the check REQUIRE `complete: true` to pass? Let me look at the overall check result:
+
+The check `tests` has `passed: false`. The detailed output shows the fault_sensitivity sub-checks. The overall check fails because some sub-checks are not successful.
+
+I think the key question is: what does the check require for the fault_sensitivity to pass? It seems to require:
+1. The test correctly detects the fault (fails when the fault is present)
+2. The test covers ALL required observation paths (complete: true)
+
+For (2), the test needs to access `p.port` for ALL (function, encoding, case) combinations before any assertion failure.
+
+One clean way to do this: use a helper that records the result/exception without asserting:
+
+```python
+def _check_port(self, func, url, case_name, encoding):
+    """Access port and return (value, exception) without asserting."""
+    p = func(url)
+    try:
+        value = p.port
+        return value, None
+    except ValueError as e:
+        return None, e
+```
+
+Then collect all results, and assert on them separately. But this changes the test structure significantly.
+
+Actually, a simpler approach: since the fault sensitivity modifies specific error messages/arguments, and my test asserts on them, the test will fail at the first mismatch. To ensure all paths are observed, I could:
+
+1. First, just access all ports (without asserting) to trigger all observations
+2. Then, assert on the expected values
+
+Like:
+```python
+for func in (urlsplit, urlparse):
+    # Just access all ports to trigger observations
+    for url in ["http://example.com/", "http://example.com:", "http://example.com:0/", ...]:
+        p = func(url)
+        try:
+            _ = p.port
+        except ValueError:
+            pass
+    # Then do the actual assertions
+```
+
+But this is redundant and ugly.
+
+Hmm, let me think differently. What if I just separate the test into multiple test methods, one per (func, encoding) or one per case? That way, each test method independently covers its paths, and a failure in one doesn't affect observation in another.
+
+Actually wait - even if I have multiple test methods, the fault sensitivity check runs the test and checks observations. If one test method fails, do the others still run? In unittest, yes! Each test method runs independently. A failure in one method doesn't prevent other methods from running.
+
+So if I split my test into multiple methods, each covering a subset of paths, then even if one method fails (detecting the fault), the others still run and their paths are still observed!
+
+That's the key insight! Let me restructure:
+- One test method per (case) that tests both urlsplit and urlparse with both str and bytes
+- Or better: one test method per case that covers all 4 combinations (urlsplit-str, urlsplit-bytes, urlparse-str, urlparse-bytes)
+
+Wait, but if I have one method per case, and the fault triggers in that method, the other case methods still run independently. So all paths get observed.
+
+Let me restructure:
+
+```python
+def test_port_no_port(self):
+    for func in (urlsplit, urlparse):
+        p = func("http://example.com/")
+        self.assertIs(p.port, None)
+        p = func(b"http://example.com/")
+        self.assertIs(p.port, None)
+
+def test_port_empty(self):
+    for func in (urlsplit, urlparse):
+        p = func("http://example.com:")
+        self.assertIs(p.port, None)
+        p = func(b"http://example.com:")
+        self.assertIs(p.port, None)
+
+def test_port_zero(self):
+    for func in (urlsplit, urlparse):
+        p = func("http://example.com:0/")
+        self.assertEqual(p.port, 0)
+        p = func(b"http://example.com:0/")
+        self.assertEqual(p.port, 0)
+
+def test_port_max(self):
+    for func in (urlsplit, urlparse):
+        p = func("http://example.com:65535/")
+        self.assertEqual(p.port, 65535)
+        p = func(b"http://example.com:65535/")
+        self.assertEqual(p.port, 65535)
+
+def test_port_too_high(self):
+    for func in (urlsplit, urlparse):
+        p = func("http://example.com:65536/")
+        with self.assertRaises(ValueError) as cm:
+            p.port
+        self.assertEqual(cm.exception.args, ("Port out of range 0-65535",))
+        p = func(b"http://example.com:65536/")
+        with self.assertRaises(ValueError) as cm:
+            p.port
+        self.assertEqual(cm.exception.args, ("Port out of range 0-65535",))
+
+def test_port_negative(self):
+    for func in (urlsplit, urlparse):
+        p = func("http://example.com:-1/")
+        with self.assertRaises(ValueError) as cm:
+            p.port
+        self.assertEqual(cm.exception.args, ("Port could not be cast to integer value as '-1'",))
+        p = func(b"http://example.com:-1/")
+        with self.assertRaises(ValueError) as cm:
+            p.port
+        self.assertEqual(cm.exception.args, ("Port could not be cast to integer value as b'-1'",))
+
+def test_port_noninteger(self):
+    for func in (urlsplit, urlparse):
+        p = func("http://example.com:abc/")
+        with self.assertRaises(ValueError) as cm:
+            p.port
+        self.assertEqual(cm.exception.args, ("Port could not be cast to integer value as 'abc'",))
+        p = func(b"http://example.com:abc/")
+        with self.assertRaises(ValueError) as cm:
+            p.port
+        self.assertEqual(cm.exception.args, ("Port could not be cast to integer value as b'abc'",))
+
+def test_port_unicode_digits(self):
+    for func in (urlsplit, urlparse):
+        p = func("http://example.com:\u0661/")
+        with self.assertRaises(ValueError) as cm:
+            p.port
+        self.assertEqual(cm.exception.args, ("Port could not be cast to integer value as '\u0661'",))
+```
+
+Now, if the `error_arguments` fault is active, `test_port_too_high` will fail, but `test_port_no_port`, `test_port_empty`, `test_port_zero`, `test_port_max`, `test_port_negative`, `test_port_noninteger`, and `test_port_unicode_digits` will all still run and their paths will be observed.
+
+Similarly, if the `eager_validation` fault is active, all the "valid" port tests will error (construction raises), but the "invalid" port tests will... hmm, actually with eager validation, ALL constructions with invalid ports would raise. So:
+- `test_port_too_high`: construction raises → error
+- `test_port_negative`: construction raises → error  
+- `test_port_noninteger`: construction raises → error
+- `test_port_unicode_digits`: construction raises → error
+
+But the valid ones (no port, empty, 0, 65535) would still pass. And the paths for the invalid ones would NOT be observed (because construction failed before port access).
+
+Hmm, so for `eager_validation`, the missing_paths would include the invalid port cases. But that might be OK if the check only requires the paths to be observed for the cases that are reachable.
+
+Actually, looking at the `eager_validation` result again:
+```
+"eager_validation":{"tests":1,"failures":0,"errors":1,"skipped":0,"successful":false,
+"details":[{"test":"...","trace":"...ValueError: Port out of range 0-65535"}]
+```
+
+It says `errors: 1` - only ONE error. But if I have multiple test methods, and the eager validation fault makes construction raise, then MULTIPLE test methods would error. The check might expect exactly 1 error (from a single test method that hits the fault first).
+
+Hmm, this is getting complicated. Let me think about what the check actually does for `eager_validation`:
+- It modifies the implementation so that port validation happens at construction time
+- It runs the test
+- It expects the test to FAIL (detect the fault)
+- It checks that the failure is a proper assertion failure, not an uncaught error
+
+Wait, `errors: 1` vs `failures: 0`. An "error" in unittest is an unexpected exception (not caught by an assertion). A "failure" is an assertion failure. The check seems to want a "failure" (assertion) not an "error" (uncaught exception).
+
+For the eager_validation fault to produce a "failure" rather than an "error", the test needs to catch the construction-time exception and turn it into an assertion failure. Like:
+
+```python
+try:
+    p = func("http://example.com:65536/")
+except ValueError as e:
+    self.fail(f"Construction should not raise: {e}")
+```
+
+But that's unusual. Alternatively, maybe the check is fine with errors, and the issue is something else.
+
+Let me re-read the check output. The overall check result is `passed: false`. The sub-checks that fail are in `fault_sensitivity`. Let me think about what would make them pass.
+
+Actually, you know what, let me step back and think about this more carefully. The check output I have is from the CURRENT state of the test (with the single monolithic `test_port_access_boundary_and_errors` method). The check is telling me exactly what's wrong:
+
+1. `error_arguments`: test fails at the first "too_high" case for urlsplit+str, so all subsequent paths are unobserved
+2. `error_message`: similar issue
+3. `eager_validation`: construction raises (uncaught error) instead of a controlled assertion failure
+4. The `complete: false` with `missing_paths` for error_arguments and error_message
+
+The fix for issues 1 and 2 is to split the test into multiple methods so that a failure in one doesn't prevent observation in others.
+
+The fix for issue 3 is to handle the construction-time exception gracefully. But actually, if I split into methods, the eager_validation fault would cause errors in multiple methods (too_high, negative, noninteger, unicode_digits). The check might be OK with that if it just needs to see that the test detects the fault.
+
+Wait, but the current result shows `errors: 1, successful: false`. If the check expects `errors: 0` and `failures >= 1`, then I need to convert the construction error into an assertion failure.
+
+Let me think about how to handle eager_validation. The fault makes `func("http://example.com:65536/")` raise ValueError. My test does:
+```python
+p = func("http://example.com:65536/")
+```
+This raises → uncaught → error.
+
+To make it a failure, I could do:
+```python
+with self.assertRaises(ValueError) as cm:
+    p = func("http://example.com:65536/")
+    p.port
+```
+Wait no, that changes the semantics. If construction succeeds (normal case), then `p.port` raises, and the whole thing is caught. If construction fails (eager validation), the ValueError from construction is caught by assertRaises, and then `p` is never assigned... actually `p` would be unbound.
+
+Hmm, that's tricky. Let me think of another approach:
+
+```python
+try:
+    p = func("http://example.com:65536/")
+except ValueError as e:
+    # Construction raised - this is the eager validation fault
+    self.assertIsInstance(e, ValueError)
+    # Don't assert specific message here since the fault changes behavior
+    continue  # Can't use continue in a non-loop context
+```
+
+Actually this doesn't work cleanly in a loop.
+
+Let me try a different structure. What if I use a helper method:
+
+```python
+def _assert_port_raises(self, func, url, expected_args):
+    """Assert that func(url).port raises ValueError with expected_args."""
+    try:
+        p = func(url)
+    except ValueError as e:
+        # Construction raised - treat as failure
+        self.fail(f"Construction should not raise ValueError: {e}")
+    try:
+        p.port
+        self.fail("Expected ValueError not raised")
+    except ValueError as e:
+        self.assertEqual(e.args, expected_args)
+```
+
+Wait, but if construction raises, `self.fail(...)` raises AssertionError, which is a "failure" not an "error". That's what the check wants!
+
+But this changes the test style significantly. And I'm not sure if the check specifically requires this pattern.
+
+Actually, let me reconsider. Maybe the simpler fix is:
+1. Split the test into multiple methods (fixes the path observation issue)
+2. For the eager_validation fault, the check might just need the test to fail (either error or failure). Let me check if `errors: 1` is actually the problem or if `complete: false` is.
+
+Looking at the eager_validation result:
+```
+"eager_validation":{"tests":1,"failures":0,"errors":1,"skipped":0,"successful":false,
+"details":[...],
+"missing_paths":["urlparse","bytes","absent"],...],
+"complete":false}
+```
+
+It has `complete: false` with missing_paths! So even for eager_validation, the check requires all paths to be observed. But with eager validation, the invalid-port constructions raise, so those paths are NEVER observed (port property is never accessed).
+
+This seems contradictory. If the implementation is modified to validate eagerly, the port property is never accessed for invalid ports, so those paths can't be observed. Unless the check expects the paths to be observed through the construction-time validation?
+
+Hmm, maybe the observation is at a different level. Maybe it's not just "port property was accessed" but "the validation logic was executed." If the validation is moved to construction time, the observation hook would be in the constructor, not the property.
+
+I think I'm overcomplicating this. Let me focus on what I can control:
+1. Split the test into multiple methods to ensure independent observation
+2. Handle construction errors as assertion failures (not uncaught errors)
+3. Make sure all paths are observed
+
+Let me look at the problem from the check's perspective. The check:
+- Runs the test suite
+- Observes which (function, encoding, case) paths are exercised
+- For each fault type, modifies the code and re-runs
+- Checks that the test detects the fault AND covers all required paths
+
+For the "normal" run (no fault), all paths should be observed. For fault runs, the test should still observe all paths AND fail.
+
+The way to ensure all paths are observed even when a fault is present:
+- Each path's `p.port` access must happen before any assertion that could fail
+- OR each path is in a separate test method (so a failure in one doesn't affect others)
+
+I'll go with separate test methods. That's the cleanest approach and matches the existing test style (the file already has many small test methods).
+
+Now for the eager_validation issue: if construction raises, I need to convert that to an assertion failure. The cleanest way:
+
+```python
+def test_port_too_high(self):
+    for func in (urlsplit, urlparse):
+        try:
+            p = func("http://example.com:65536/")
+        except ValueError as e:
+            self.fail(f"Construction of out-of-range port should not raise: {e}")
+        with self.assertRaises(ValueError) as cm:
+            p.port
+        self.assertEqual(cm.exception.args, ("Port out of range 0-65535",))
+```
+
+Wait, but if I'm in a loop and I call `self.fail()`, it raises AssertionError, which exits the test method. The next iteration (bytes) won't be reached. But since each (func, encoding) is in the same method, the bytes path won't be observed.
+
+Unless I separate str and bytes into different methods too? That's a lot of methods...
+
+Or I could use a subTest-like pattern where I collect errors and report them all:
+
+Actually, let me look at this differently. What if I use `self.subTest()` for each case? In Python's unittest, `subTest` records failures but continues executing:
+
+```python
+def test_port_too_high(self):
+    for func in (urlsplit, urlparse):
+        for url, enc in [("http://example.com:65536/", "str"), (b"http://example.com:65536/", "bytes")]:
+            with self.subTest(func=func.__name__, encoding=enc):
+                p = func(url)
+                with self.assertRaises(ValueError) as cm:
+                    p.port
+                self.assertEqual(cm.exception.args, ("Port out of range 0-65535",))
+```
+
+Wait, does `subTest` continue after a failure? Let me recall... In CPython's unittest, `subTest` is a context manager that records the subtest context. If an assertion fails inside it, the AssertionError is caught by the subTest context manager, recorded, and then RE-RAISED. So it does NOT continue.
+
+Hmm, actually let me double-check. Looking at CPython source for `subTest`:
+```python
+@contextlib.contextmanager
+def subTest(self, msg=None, **kwargs):
+    ...
+    try:
+        yield
+    except Exception:
+        ...
+        self._subTest(msg, kwargs, sys.exc_info())
+        # Actually in newer versions it might re-raise
+```
+
+In Python 3.11+, `subTest` does NOT suppress the exception - it re-raises after recording. So it doesn't help with continuing.
+
+OK so the cleanest solution is truly separate test methods. Let me count: I have 8 cases × 4 combos = 32 combinations. But I can group by case:
+- test_port_none (no port): 4 combos
+- test_port_empty: 4 combos
+- test_port_zero: 4 combos
+- test_port_max: 4 combos
+- test_port_too_high: 4 combos
+- test_port_negative: 4 combos
+- test_port_noninteger: 4 combos
+- test_port_unicode_digits: 2 combos (str only)
+
+That's 8 test methods. Each one tests both functions and both encodings. If the fault triggers in one method, the others still run.
+
+But within a single method, if the str case fails, the bytes case in the same method won't be reached. For example, in `test_port_too_high`:
+```python
+for func in (urlsplit, urlparse):
+    p = func("http://example.com:65536/")  # str
+    ...assert...  # FAILS HERE
+    p = func(b"http://example.com:65536/")  # bytes - never reached
+    ...
+```
+
+So urlsplit+bytes+too_high would still be unobserved. To fix this, I'd need separate methods per (case, encoding) or per (case, function, encoding).
+
+That's a lot of methods: 8 cases × 2 encodings × 2 functions = 32 methods (minus unicode_digits which is str-only: 32 - 4 = 28 methods). That's excessive.
+
+Alternative: what if within each method, I access ALL ports first (just accessing, no asserting), and THEN do the assertions?
+
+```python
+def test_port_too_high(self):
+    # Access all ports first to ensure observation
+    results = []
+    for func in (urlsplit, urlparse):
+        for url in ["http://example.com:65536/", b"http://example.com:65536/"]:
+            p = func(url)
+            try:
+                port = p.port
+            except ValueError as e:
+                port = e
+            results.append((func.__name__, url, port))
+    # Now assert
+    for func_name, url, result in results:
+        ...
+```
+
+But this is ugly and the observation happens through the try/except, which might not be what the check expects.
+
+Actually, wait. Let me re-think. The check observes paths by patching the implementation. The observation happens when the port property is accessed. If I do:
+```python
+try:
+    p.port
+except ValueError as e:
+    pass
+```
+The port property IS accessed (the observation fires), and then the exception is caught. The test continues. This should work!
+
+So the pattern would be:
+```python
+def test_port_too_high(self):
+    for func in (urlsplit, urlparse):
+        for url, encoding in [("http://example.com:65536/", "str"), (b"http://example.com:65536/", "bytes")]:
+            p = func(url)
+            try:
+                p.port
+            except ValueError:
+                pass
+            # Now assert
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args, ("Port out of range 0-65535",))
+```
+
+Wait, but this accesses `p.port` twice. The first access is just for observation, the second is for the actual assertion. And if the first access raises, we catch it and continue. The second access will also raise (in the fault case), and assertRaises catches it.
+
+But this is wasteful and ugly. And in the eager_validation case, `func(url)` would raise before we even get to `p.port`.
+
+Let me try yet another approach. What if I structure each test method to handle construction errors:
+
+```python
+def test_port_too_high(self):
+    for func in (urlsplit, urlparse):
+        # str
+        try:
+            p = func("http://example.com:65536/")
+        except ValueError as e:
+            self.fail(f"Construction should not raise: {e}")
+        try:
+            p.port
+            self.fail("Expected ValueError")
+        except ValueError as e:
+            self.assertEqual(e.args, ("Port out of range 0-65535",))
+        # bytes
+        try:
+            p = func(b"http://example.com:65536/")
+        except ValueError as e:
+            self.fail(f"Construction should not raise: {e}")
+        try:
+            p.port
+            self.fail("Expected ValueError")
+        except ValueError as e:
+            self.assertEqual(e.args, ("Port out of range 0-65535",))
+```
+
+Here, if construction raises (eager_validation fault), `self.fail()` raises AssertionError (a "failure", not an "error"). The test method stops at the first `self.fail()`, so bytes won't be observed. But since I have separate methods per case, the other case methods still run.
+
+But within this method, if str construction fails, bytes construction is never attempted. So bytes paths are unobserved.
+
+Hmm, I think the fundamental tension is: within a single test method, once something fails, the rest doesn't execute. To observe ALL paths, I either need:
+1. Separate methods per path (too many)
+2. Access all paths before any assertion (restructured)
+3. Some way to "fail soft" and continue
+
+For option 2, here's a cleaner version:
+
+```python
+def test_port_too_high(self):
+    # Phase 1: Access all ports (ensures observation)
+    ports = {}
+    for func in (urlsplit, urlparse):
+        for url, enc in [("http://example.com:65536/", "str"), (b"http://example.com:65536/", "bytes")]:
+            try:
+                p = func(url)
+            except ValueError as e:
+                # Construction raised (eager validation fault)
+                self.fail(f"Construction should not raise for {enc} port: {e}")
+            try:
+                ports[(func.__name__, enc)] = p.port
+            except ValueError as e:
+                ports[(func.__name__, enc)] = e
+    # Phase 2: Assert expected values
+    for key, value in ports.items():
+        if isinstance(value, ValueError):
+            self.assertEqual(value.args, ("Port out of range 0-65535",))
+        else:
+            self.fail(f"Expected ValueError for {key}, got {value!r}")
+```
+
+Wait, but `self.fail()` in phase 1 would stop the test before phase 2. And in the eager_validation fault case, the construction raises, and I call `self.fail()` which stops the method. The bytes path isn't observed.
+
+Ugh. The only way to truly observe ALL paths in the presence of a fault is to not fail at all during the observation phase, and only fail during the assertion phase. But if construction raises, I can't observe the port property (it's never accessed).
+
+I think the check might have a different expectation for the eager_validation fault. Let me re-read the eager_validation result:
+```
+"eager_validation":{"tests":1,"failures":0,"errors":1,"skipped":0,"successful":false,
+"details":[{"test":"...","trace":"...ValueError: Port out of range 0-65535"}],
+"missing_paths":[...],
+"complete":false}
+```
+
+It has `complete: false`. So the check DOES require all paths to be observed even for eager_validation. But with eager validation, the port property is never accessed for invalid ports (construction raises first). So how can those paths be observed?
+
+Unless... the observation is not on the `port` property specifically, but on some other hook. Maybe the check patches the `port` property AND the constructor, so that even if the constructor raises, the observation is recorded.
+
+Or maybe the check's observation is at the `urlsplit`/`urlparse` function level, not the `port` property level. The "path" might be "(function, encoding, port_case)" where port_case is determined by the URL, not by whether port was actually accessed.
+
+If the observation is at the function call level (i.e., calling `urlsplit("http://example.com:65536/")` is observed as the path `(urlsplit, str, too_high)` regardless of whether it raises), then my test just needs to CALL the function with the right URL, and the path is observed even if the call raises.
+
+Under this interpretation, my original test should work for path observation, because I do call `func("http://example.com:65536/")` which would be observed as the path even if it raises. The issue is just that the test ERRORS (uncaught exception) instead of FAILING (assertion).
+
+So the fix for eager_validation is: catch the construction exception and convert it to an assertion failure. And the fix for error_arguments/error_message is: ensure the test doesn't stop before observing all paths.
+
+If the observation is at the function-call level, then:
+- For error_arguments: the function call succeeds (construction is fine), but `p.port` raises with modified args. My test catches it with assertRaises, then assertEqual fails. The path WAS observed (the function call happened). So why is it in missing_paths?
+
+Unless the observation is more nuanced. Let me look at what's observed vs missing again:
+
+For error_arguments, observed (NOT in missing):
+- urlsplit+str: absent, empty, zero, maximum, too_high
+- urlsplit+bytes: absent, empty, zero, maximum
+
+Missing:
+- urlsplit+str: negative, noninteger, unicode_digits
+- urlsplit+bytes: negative, noninteger, too_high
+- urlparse+str: ALL
+- urlparse+bytes: ALL
+
+The observed set is exactly what the test reaches before failing. The test fails at urlsplit+str+too_high (the assertEqual after assertRaises). Everything before that was observed. Everything after (including urlsplit+bytes+too_high and all of urlparse) was not reached.
+
+This confirms: the observation is at the point where the test actually processes each case. Once the test method raises (AssertionError from assertEqual), subsequent code doesn't execute and those paths aren't observed.
+
+So the solution IS to split into separate test methods. And within each method, I need to handle the case where the first case (str) fails but the second case (bytes) still needs to be observed.
+
+The only way to do that within a single method is to not let the first case's failure prevent the second case's execution. I could:
+1. Use try/except around each assertion
+2. Collect all results first, then assert
+
+Let me go with option 2 - collect results, then assert:
+
+```python
+def test_port_too_high(self):
+    expected = ("Port out of range 0-65535",)
+    for func in (urlsplit, urlparse):
+        for url, enc in [("http://example.com:65536/", "str"), (b"http://example.com:65536/", "bytes")]:
+            p = func(url)
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args, expected)
+```
+
+Wait, this is what I already have (basically). The issue is that `self.assertEqual` raises and stops the loop.
+
+What if I use a different assertion style that doesn't stop?
+
+```python
+def test_port_too_high(self):
+    expected = ("Port out of range 0-65535",)
+    failures = []
+    for func in (urlsplit, urlparse):
+        for url, enc in [("http://example.com:65536/", "str"), (b"http://example.com:65536/", "bytes")]:
+            try:
+                p = func(url)
+            except ValueError as e:
+                failures.append(f"{func.__name__}/{enc}: construction raised {e}")
+                continue
+            try:
+                p.port
+                failures.append(f"{func.__name__}/{enc}: no exception raised")
+            except ValueError as e:
+                if e.args != expected:
+                    failures.append(f"{func.__name__}/{enc}: wrong args {e.args}")
+    if failures:
+        self.fail("\n".join(failures))
+```
+
+This way:
+- All paths are accessed (observed) before any assertion
+- If construction raises (eager_validation), it's caught and recorded
+- If the exception args are wrong (error_arguments fault), it's caught and recorded
+- All failures are reported at the end as a single assertion failure
+
+This should work! Let me verify:
+- Normal case: all paths observed, no failures, test passes
+- error_arguments fault: all paths observed (port accessed, exception caught), wrong args recorded, single failure at end
+- error_message fault: similar
+- eager_validation fault: construction raises, caught, recorded, single failure at end
+- Valid boundary values changed: port returns wrong value, recorded, single failure
+
+This is clean and handles all cases. Let me design the full test structure:
+
+```python
+def test_port_no_port(self):
+    for func in (urlsplit, urlparse):
+        for url, enc in [("http://example.com/", "str"), (b"http://example.com/", "bytes")]:
+            p = func(url)
+            self.assertIs(p.port, None)
+
+def test_port_empty(self):
+    for func in (urlsplit, urlparse):
+        for url, enc in [("http://example.com:", "str"), (b"http://example.com:", "bytes")]:
+            p = func(url)
+            self.assertIs(p.port, None)
+
+def test_port_zero(self):
+    for func in (urlsplit, urlparse):
+        for url, enc in [("http://example.com:0/", "str"), (b"http://example.com:0/", "bytes")]:
+            p = func(url)
+            self.assertEqual(p.port, 0)
+
+def test_port_max(self):
+    for func in (urlsplit, urlparse):
+        for url, enc in [("http://example.com:65535/", "str"), (b"http://example.com:65535/", "bytes")]:
+            p = func(url)
+            self.assertEqual(p.port, 65535)
+
+def test_port_too_high(self):
+    expected = ("Port out of range 0-65535",)
+    for func in (urlsplit, urlparse):
+        for url, enc in [("http://example.com:65536/", "str"), (b"http://example.com:65536/", "bytes")]:
+            p = func(url)
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args, expected)
+            self.assertEqual(str(cm.exception), "Port out of range 0-65535")
+
+def test_port_negative(self):
+    for func in (urlsplit, urlparse):
+        for url, enc, expected_msg in [
+            ("http://example.com:-1/", "str", "Port could not be cast to integer value as '-1'"),
+            (b"http://example.com:-1/", "bytes", "Port could not be cast to integer value as b'-1'"),
+        ]:
+            p = func(url)
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args, (expected_msg,))
+
+def test_port_noninteger(self):
+    for func in (urlsplit, urlparse):
+        for url, enc, expected_msg in [
+            ("http://example.com:abc/", "str", "Port could not be cast to integer value as 'abc'"),
+            (b"http://example.com:abc/", "bytes", "Port could not be cast to integer value as b'abc'"),
+        ]:
+            p = func(url)
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args, (expected_msg,))
+
+def test_port_unicode_digits(self):
+    for func in (urlsplit, urlparse):
+        p = func("http://example.com:\u0661/")
+        with self.assertRaises(ValueError) as cm:
+            p.port
+        self.assertEqual(cm.exception.args, ("Port could not be cast to integer value as '\u0661'",))
+```
+
+But wait, this still has the problem that within a single method, if the first `assertEqual` fails, the loop stops. For `test_port_too_high`, if urlsplit+str+too_high assertion fails, urlsplit+bytes+too_high is never reached.
+
+So I DO need the "collect and assert at end" pattern for the error cases. Let me use it for all error cases:
+
+```python
+def test_port_too_high(self):
+    expected = ("Port out of range 0-65535",)
+    for func in (urlsplit, urlparse):
+        for url, enc in [("http://example.com:65536/", "str"), (b"http://example.com:65536/", "bytes")]:
+            with self.subTest(func=func.__name__, encoding=enc):
+                p = func(url)
+                with self.assertRaises(ValueError) as cm:
+                    p.port
+                self.assertEqual(cm.exception.args, expected)
+```
+
+Wait, I keep going back to subTest. Let me actually check: in CPython 3.11+, does subTest suppress the exception?
+
+Looking at CPython source (Lib/unittest/case.py):
+```python
+@contextlib.contextmanager
+def subTest(self, msg=None, **kwargs):
+    if msg is None:
+        msg = next(self._subTest_msg_iter)
+    # Avoid mutating the dict if kwargs is empty, since subTest
+    # is always called with at least a 'msg' keyword argument
+    # and that would otherwise be left as-is.
+    ...
+    self._subTest(msg, dict(kwargs))
+```
+
+And `_subTest`:
+```python
+@contextlib.contextmanager
+def _subTest(self, msg, kwargs):
+    ...
+    try:
+        yield
+    except Exception:
+        exc_info = sys.exc_info()
+        self._formatMessage(msg, kwargs)
+        raise  # Re-raises!
+```
+
+Yes, it re-raises. So subTest doesn't help.
+
+OK, I'll go with the "collect errors" pattern for the error cases. Here's my plan:
+
+For valid cases (no port, empty, zero, max): simple assertions. If the valid boundary values are changed by a fault, the assertion fails, but that's fine - those paths were already observed (the port was accessed).
+
+For error cases (too_high, negative, noninteger, unicode): use the "try all, assert at end" pattern.
+
+Actually wait, for the valid cases, if a fault changes the boundary (e.g., max becomes 65534), then:
+- test_port_max: `self.assertEqual(p.port, 65535)` fails
+- But the port WAS accessed (observed) before the assertion
+- So the path IS observed
+
+For the valid cases, the assertion failure happens AFTER the port is accessed. So the path is observed. The only issue is that subsequent iterations in the loop don't happen. But since I have separate methods per case, and within each method the port access happens before the assertion, the current iteration's path is observed.
+
+Wait, but the NEXT iteration's path won't be observed. For example, in test_port_zero:
+```python
+for func in (urlsplit, urlparse):
+    for url, enc in [("http://example.com:0/", "str"), (b"http://example.com:0/", "bytes")]:
+        p = func(url)
+        self.assertEqual(p.port, 0)
+```
+If urlsplit+str+zero fails, urlsplit+bytes+zero is not observed.
+
+So I need the "collect and assert" pattern for ALL cases, not just error cases. Let me use it uniformly:
+
+```python
+def test_port_zero(self):
+    for func in (urlsplit, urlparse):
+        for url, enc in [("http://example.com:0/", "str"), (b"http://example.com:0/", "bytes")]:
+            p = func(url)
+            port = p.port  # This is observed
+            self.assertEqual(port, 0)  # This might fail, stopping the loop
+```
+
+Hmm, the port IS accessed (line `port = p.port`), so it's observed. Then the assertion might fail. The issue is only that the NEXT iteration isn't reached.
+
+So for the check to see all paths, I need all iterations to complete their port accesses before any assertion fails. The "collect all, assert all" pattern:
+
+```python
+def test_port_zero(self):
+    results = []
+    for func in (urlsplit, urlparse):
+        for url, enc in [("http://example.com:0/", "str"), (b"http://example.com:0/", "bytes")]:
+            p = func(url)
+            try:
+                results.append((func.__name__, enc, p.port))
+            except ValueError as e:
+                results.append((func.__name__, enc, e))
+    for func_name, enc, result in results:
+        self.assertIsInstance(result, int)
+        self.assertEqual(result, 0)
+```
+
+This ensures ALL port accesses happen before any assertion. But it's verbose.
+
+Alternatively, I could just use the simple pattern and accept that not all paths will be observed in the fault case. But the check says `complete: false` and fails...
+
+Actually, let me reconsider. Maybe I'm wrong about what the check requires. Let me look at the check output again:
+
+```
+"fault_sensitivity":{
+  "error_class":{"tests":1,"failures":0,"errors":0,"skipped":0,"successful":true,"details":[],"missing_paths":[],"complete":true},
+  ...
+}
+```
+
+For `error_class`: `successful: true, complete: true, missing_paths: []`.
+
+What fault was applied for error_class? Probably changing `ValueError` to something else (like `TypeError`). In that case:
+- My test does `with self.assertRaises(ValueError)` 
+- The exception is `TypeError` (or whatever the fault is)
+- `assertRaises(ValueError)` does NOT catch TypeError
+- TypeError propagates as an uncaught error
+
+But the result shows `errors: 0, failures: 0, successful: true`. So the test PASSED? That doesn't make sense if the exception class was changed.
+
+Unless... the `error_class` fault was something that my test still catches. Or the fault was applied in a way that my test handles.
+
+Wait, maybe I'm misreading the result. Let me look again:
+```
+"error_class":{"tests":1,"failures":0,"errors":0,"skipped":0,"successful":true,"details":[],"missing_paths":[],"complete":true}
+```
+
+All zeros for failures and errors, successful true, complete true, no missing paths. This means:
+- The test ran successfully (no failures, no errors)
+- All paths were observed
+- The fault sensitivity check passed
+
+But how can the fault sensitivity check pass if the fault was applied and the test didn't detect it? Unless "successful: true" means "the fault was correctly NOT detected" which would be wrong...
+
+OR, maybe the fault sensitivity works the other way:
+- Apply fault
+- Run test
+- If test FAILS: fault was detected → check PASSES
+- If test PASSES: fault was NOT detected → check FAILS
+
+Under this interpretation:
+- `error_class`: test passed (0 failures) → fault NOT detected → but `successful: true`??
+
+That's contradictory. Let me try another interpretation:
+- The check has its OWN test that verifies fault sensitivity
+- `tests: 1` is the check's own test
+- `failures: 0, successful: true` means the check's test passed
+- The check's test verifies that the user's test correctly handles the fault
+
+So maybe the check's test does something like:
+1. Apply fault
+2. Run user's test
+3. Verify user's test fails (for faults that should be caught)
+4. `successful: true` means step 3 passed (user's test did fail)
+
+But then `failures: 0` in the check's report means the CHECK's test had no failures. The user's test failure is the EXPECTED outcome, not a failure of the check.
+
+Under this interpretation:
+- `error_class`: check's test passed (user's test correctly failed when class changed) ✓
+- `error_arguments`: check's test FAILED (user's test didn't correctly fail? or didn't cover all paths?)
+- `error_message`: check's test FAILED
+- `eager_validation`: check's test FAILED
+
+And the `details` show the user's test trace (for reference), while `missing_paths` shows what paths weren't observed.
+
+For `error_arguments`, the check's test fails because `complete: false` (not all paths observed). The user's test DID fail (correctly detecting the fault), but not all paths were observed.
+
+For `eager_validation`, the check's test fails because `errors: 1` (uncaught exception) instead of a proper failure, AND `complete: false`.
+
+OK so my plan is correct: I need to ensure all paths are observed even when a fault is present. The "collect all, assert all" pattern is the way.
+
+Let me now write the actual test code. I'll replace the existing `test_port_access_boundary_and_errors` method with multiple methods using the "collect and assert" pattern.
+
+Actually, let me reconsider the structure. Instead of one method per case with a for loop, what if I have one method per case that handles all 4 (or 2) combinations inline, using the collect-and-assert pattern?
+
+Here's my plan for the replacement. I'll replace `test_port_access_boundary_and_errors` with these methods:
+
+```python
+    def test_port_none(self):
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com/", "str"), (b"http://example.com/", "bytes")]:
+                p = func(url)
+                self.assertIs(p.port, None)
+
+    def test_port_empty(self):
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com:", "str"), (b"http://example.com:", "bytes")]:
+                p = func(url)
+                self.assertIs(p.port, None)
+
+    def test_port_zero(self):
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com:0/", "str"), (b"http://example.com:0/", "bytes")]:
+                p = func(url)
+                self.assertEqual(p.port, 0)
+
+    def test_port_max(self):
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com:65535/", "str"), (b"http://example.com:65535/", "bytes")]:
+                p = func(url)
+                self.assertEqual(p.port, 65535)
+
+    def test_port_too_high(self):
+        expected = ("Port out of range 0-65535",)
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com:65536/", "str"), (b"http://example.com:65536/", "bytes")]:
+                p = func(url)
+                with self.assertRaises(ValueError) as cm:
+                    p.port
+                self.assertEqual(cm.exception.args, expected)
+                self.assertEqual(str(cm.exception), "Port out of range 0-65535")
+
+    def test_port_negative(self):
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc, expected in [
+                ("http://example.com:-1/", "str",
+                 "Port could not be cast to integer value as '-1'"),
+                (b"http://example.com:-1/", "bytes",
+                 "Port could not be cast to integer value as b'-1'"),
+            ]:
+                p = func(url)
+                with self.assertRaises(ValueError) as cm:
+                    p.port
+                self.assertEqual(cm.exception.args, (expected,))
+
+    def test_port_noninteger(self):
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc, expected in [
+                ("http://example.com:abc/", "str",
+                 "Port could not be cast to integer value as 'abc'"),
+                (b"http://example.com:abc/", "bytes",
+                 "Port could not be cast to integer value as b'abc'"),
+            ]:
+                p = func(url)
+                with self.assertRaises(ValueError) as cm:
+                    p.port
+                self.assertEqual(cm.exception.args, (expected,))
+
+    def test_port_unicode_digits(self):
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            p = func("http://example.com:\u0661/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as '\u0661'",))
+```
+
+Wait, but this still has the loop problem. If urlsplit+str fails in test_port_too_high, urlsplit+bytes won't be reached.
+
+Let me think about whether the check REALLY requires all paths for each fault type, or if it's OK to have some missing. The check output shows `complete: false` and the overall check fails. So yes, it requires `complete: true`.
+
+The ONLY way to ensure all paths are observed is to make sure no assertion fails before all paths are accessed. The "collect all, assert at end" pattern is necessary.
+
+But wait - for the "valid" cases (none, empty, zero, max), the port IS accessed before the assertion. So the path IS observed even if the assertion fails. The issue is only that the NEXT loop iteration isn't reached.
+
+So for the valid cases, I could do:
+```python
+def test_port_zero(self):
+    results = {}
+    for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+        for url, enc in [("http://example.com:0/", "str"), (b"http://example.com:0/", "bytes")]:
+            p = func(url)
+            results[(func.__name__, enc)] = p.port
+    for (fname, enc), port in results.items():
+        self.assertEqual(port, 0)
+```
+
+This accesses ALL ports first, then asserts. If a boundary value fault changes 0 to something else, all ports are still accessed (observed), and then the assertion fails.
+
+For the error cases:
+```python
+def test_port_too_high(self):
+    expected = ("Port out of range 0-65535",)
+    results = {}
+    for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+        for url, enc in [("http://example.com:65536/", "str"), (b"http://example.com:65536/", "bytes")]:
+            try:
+                p = func(url)
+            except ValueError as e:
+                results[(func.__name__, enc)] = ("construction", e)
+                continue
+            try:
+                p.port
+                results[(func.__name__, enc)] = ("no_error", None)
+            except ValueError as e:
+                results[(func.__name__, enc)] = ("value_error", e)
+    for (fname, enc), (kind, exc) in results.items():
+        self.assertEqual(kind, "value_error",
+                        f"{fname}/{enc}: expected ValueError on port access")
+        self.assertEqual(exc.args, expected)
+```
+
+This is getting complex. Let me simplify. Actually, you know what, let me just try a slightly different approach. What if I keep the simple structure but use separate test methods per (case, function)? That's 8 cases × 2 functions = 16 methods (minus unicode which is str-only per function = 16 methods). Each method handles both str and bytes.
+
+Wait, that still has the str-before-bytes issue within each method.
+
+OK, I think the cleanest approach that definitely works is:
+
+For each test method (one per case):
+1. First loop: access all ports, store results (this ensures observation)
+2. Second loop: assert on stored results (this is where failures happen)
+
+Let me write this out properly. Actually, let me look at the existing test style in the file to make sure my code fits. The existing tests use simple loops with assertions directly. They don't use the "collect and assert" pattern. But the fault sensitivity check requires it.
+
+Let me write the replacement. I'll replace the single `test_port_access_boundary_and_errors` method with multiple methods.
+
+Actually, wait. Let me re-examine whether I really need the "collect and assert" pattern. 
+
+The check observes paths. When does it observe them? It patches the implementation. The observation happens when the patched code runs. For the `port` property, the observation happens when the property is accessed.
+
+In my test:
+```python
+p = func("http://example.com:65536/")  # construction - no port access
+with self.assertRaises(ValueError) as cm:
+    p.port  # port access - OBSERVED HERE
+self.assertEqual(cm.exception.args, expected)  # might fail
+```
+
+The port IS accessed (observed) before the assertion. So for the CURRENT iteration, the path is observed. The issue is only that subsequent iterations don't happen.
+
+So if I have 4 iterations in a loop, and the first one fails, iterations 2-4 are not observed. To fix this, I need iterations 2-4 to still happen.
+
+The simplest fix: make each iteration a separate "unit" that can fail independently. In unittest, that means separate test methods.
+
+But 32 methods (8 cases × 4 combos) is too many. 16 methods (8 cases × 2 functions, each handling both encodings) still has the encoding issue.
+
+I think the "collect and assert" pattern is the right approach. Let me just write it cleanly.
+
+Actually, let me reconsider the problem from scratch. What if the check's `complete: false` is not actually a failure condition? What if the check only requires `successful: true` for the individual fault checks, and `complete` is just informational?
+
+Looking at the overall check result: `passed: false`. The check fails. Which sub-checks are failing?
+- `error_class`: successful → not a cause of failure
+- `error_arguments`: not successful → cause of failure
+- `error_message`: not successful → cause of failure
+- `eager_validation`: not successful → cause of failure
+- (there might be more that I can't see due to truncation)
+
+For `error_arguments` to be successful, what conditions must be met?
+1. The test must detect the fault (fail when fault is present)
+2. All required paths must be observed (complete: true)
+
+Both conditions must be met. So I do need all paths observed.
+
+OK, I'm going with the "collect and assert" pattern. Let me write the final test code.
+
+Here's my plan:
+- Remove `test_port_access_boundary_and_errors`
+- Add these methods (all in the same class, after `test_port_casting_failure_message`):
+
+```python
+    def test_port_none(self):
+        # No port: port is None
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com/", "str"),
+                             (b"http://example.com/", "bytes")]:
+                p = func(url)
+                self.assertIs(p.port, None)
+
+    def test_port_empty(self):
+        # Empty port (trailing colon): port is None
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com:", "str"),
+                             (b"http://example.com:", "bytes")]:
+                p = func(url)
+                self.assertIs(p.port, None)
+
+    def test_port_zero(self):
+        # Port 0: valid boundary
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com:0/", "str"),
+                             (b"http://example.com:0/", "bytes")]:
+                p = func(url)
+                self.assertEqual(p.port, 0)
+
+    def test_port_max(self):
+        # Port 65535: valid boundary
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com:65535/", "str"),
+                             (b"http://example.com:65535/", "bytes")]:
+                p = func(url)
+                self.assertEqual(p.port, 65535)
+
+    def test_port_too_high(self):
+        # Port 65536: out of range
+        expected = ("Port out of range 0-65535",)
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com:65536/", "str"),
+                             (b"http://example.com:65536/", "bytes")]:
+                p = func(url)
+                with self.assertRaises(ValueError) as cm:
+                    p.port
+                self.assertEqual(cm.exception.args, expected)
+
+    def test_port_negative(self):
+        # Negative port: not castable to integer
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc, expected in [
+                ("http://example.com:-1/", "str",
+                 "Port could not be cast to integer value as '-1'"),
+                (b"http://example.com:-1/", "bytes",
+                 "Port could not be cast to integer value as b'-1'"),
+            ]:
+                p = func(url)
+                with self.assertRaises(ValueError) as cm:
+                    p.port
+                self.assertEqual(cm.exception.args, (expected,))
+
+    def test_port_noninteger(self):
+        # Non-integer port: not castable to integer
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc, expected in [
+                ("http://example.com:abc/", "str",
+                 "Port could not be cast to integer value as 'abc'"),
+                (b"http://example.com:abc/", "bytes",
+                 "Port could not be cast to integer value as b'abc'"),
+            ]:
+                p = func(url)
+                with self.assertRaises(ValueError) as cm:
+                    p.port
+                self.assertEqual(cm.exception.args, (expected,))
+
+    def test_port_unicode_digits(self):
+        # Non-ASCII decimal digit in text URL
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            p = func("http://example.com:\u0661/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as '\u0661'",))
+```
+
+Wait, but this STILL has the loop problem! In `test_port_too_high`, if the first iteration (urlsplit, str) fails at `assertEqual`, the second iteration (urlsplit, bytes) is never reached.
+
+I NEED the collect-and-assert pattern. Let me write it properly:
+
+```python
+    def test_port_too_high(self):
+        # Port 65536: out of range; construction succeeds, access raises
+        expected = ("Port out of range 0-65535",)
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com:65536/", "str"),
+                             (b"http://example.com:65536/", "bytes")]:
+                p = func(url)
+                with self.assertRaises(ValueError) as cm:
+                    p.port
+                self.assertEqual(cm.exception.args, expected)
+```
+
+No wait, this is the same thing. The `self.assertEqual` will raise and stop the loop.
+
+Let me think about this differently. What if the check doesn't actually require ALL paths for each fault, but only requires that the test DETECTS the fault? Let me look at what "successful" means more carefully.
+
+For `error_class`: `successful: true, complete: true, missing_paths: []`
+For `error_arguments`: `successful: false, complete: false, missing_paths: [...]`
+
+The difference is `complete`. If I could make `complete: true` while keeping the test failing, would that work?
+
+I think the issue is clear: I need all paths observed. The "collect and assert" pattern is the way.
+
+Let me write it properly for all cases. Here's my final design:
+
+For valid cases (none, empty, zero, max), the port access is straightforward and the value is returned. I can access all ports first, then assert:
+
+```python
+    def test_port_none(self):
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com/", "str"),
+                             (b"http://example.com/", "bytes")]:
+                p = func(url)
+                port = p.port  # observed
+                self.assertIs(port, None)
+```
+
+Wait, `port = p.port` accesses the port (observed). Then `self.assertIs` might fail. But the port was already accessed. The issue is only the NEXT iteration.
+
+For 4 iterations in a loop, if iteration 1 fails, iterations 2-4 don't happen. So paths 2-4 are unobserved.
+
+The ONLY fix is to either:
+a) Not loop (write out all 4 cases explicitly in each method)
+b) Collect all results first, assert later
+c) Use separate methods per (case, function, encoding)
+
+Option (a) means 4 explicit cases per method, no loop. That's verbose but clear:
+
+```python
+    def test_port_none(self):
+        p = urllib.parse.urlsplit("http://example.com/")
+        self.assertIs(p.port, None)
+        p = urllib.parse.urlsplit(b"http://example.com/")
+        self.assertIs(p.port, None)
+        p = urllib.parse.urlparse("http://example.com/")
+        self.assertIs(p.port, None)
+        p = urllib.parse.urlparse(b"http://example.com/")
+        self.assertIs(p.port, None)
+```
+
+But this STILL has the problem: if the first assertion fails, the rest don't execute.
+
+So option (a) doesn't work either. I'm stuck.
+
+Let me try option (b) - collect and assert:
+
+```python
+    def test_port_none(self):
+        results = []
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com/", "str"),
+                             (b"http://example.com/", "bytes")]:
+                p = func(url)
+                results.append((func.__name__, enc, p.port))
+        for fname, enc, port in results:
+            self.assertIs(port, None)
+```
+
+This works! All ports are accessed (observed) in the first loop. Then assertions happen in the second loop. If an assertion fails in the second loop, all ports were already observed.
+
+But wait - what if `func(url)` itself raises? Then `p` is never assigned, and the port is never accessed. For the eager_validation fault, this is the case. I need to handle that:
+
+```python
+    def test_port_none(self):
+        results = []
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com/", "str"),
+                             (b"http://example.com/", "bytes")]:
+                try:
+                    p = func(url)
+                except ValueError as e:
+                    results.append((func.__name__, enc, e))
+                    continue
+                results.append((func.__name__, enc, p.port))
+        for fname, enc, result in results:
+            self.assertIs(result, None)
+```
+
+Hmm, but if construction raises, I store the exception. Then `self.assertIs(result, None)` would fail (exception is not None). That's a valid failure.
+
+But actually, for the "no port" case, construction should NEVER raise (there's no port to validate). So the eager_validation fault wouldn't affect this case. The try/except is just for safety.
+
+Actually, for the valid cases (none, empty, zero, max), construction should never raise even with the eager_validation fault (because the port is valid or absent). So I don't need the try/except for those.
+
+For the invalid cases (too_high, negative, noninteger, unicode), construction MIGHT raise with the eager_validation fault. So I need the try/except there.
+
+Let me finalize my design:
+
+Valid cases (no try/except needed for construction):
+```python
+    def test_port_none(self):
+        results = []
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com/", "str"),
+                             (b"http://example.com/", "bytes")]:
+                p = func(url)
+                results.append((func.__name__, enc, p.port))
+        for fname, enc, port in results:
+            self.assertIs(port, None)
+```
+
+Invalid cases (need try/except for construction):
+```python
+    def test_port_too_high(self):
+        expected = ("Port out of range 0-65535",)
+        results = []
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com:65536/", "str"),
+                             (b"http://example.com:65536/", "bytes")]:
+                try:
+                    p = func(url)
+                except ValueError as e:
+                    results.append((func.__name__, enc, e))
+                    continue
+                try:
+                    p.port
+                    results.append((func.__name__, enc, None))
+                except ValueError as e:
+                    results.append((func.__name__, enc, e))
+        for fname, enc, exc in results:
+            self.assertIsInstance(exc, ValueError)
+            self.assertEqual(exc.args, expected)
+```
+
+Wait, but if `p.port` returns a value (no exception), I store `None`. Then `self.assertIsInstance(None, ValueError)` fails. That's correct - it means the expected exception wasn't raised.
+
+But actually, in the normal case, `p.port` DOES raise ValueError for port 65536. So `results` will have ValueError objects. In the eager_validation fault case, construction raises, and I store the construction ValueError. The assertion `self.assertEqual(exc.args, expected)` would fail because the construction error might have different args.
+
+Hmm, actually for eager_validation, the construction ValueError would have the same message "Port out of range 0-65535" (since the validation logic is the same, just moved earlier). So `exc.args` would be `("Port out of range 0-65535",)` which matches `expected`. The test would PASS even with the eager_validation fault!
+
+That's a problem. The test should FAIL when the eager_validation fault is present (because the task says "Establish when invalid-port errors occur" - the error should occur at access time, not construction time).
+
+I need to explicitly verify that construction does NOT raise. Let me add that:
+
+```python
+    def test_port_too_high(self):
+        expected = ("Port out of range 0-65535",)
+        results = []
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com:65536/", "str"),
+                             (b"http://example.com:65536/", "bytes")]:
+                try:
+                    p = func(url)
+                except ValueError as e:
+                    # Construction should not raise; port validation is at access time
+                    self.fail(
+                        f"{func.__name__}({url!r}) should not raise at "
+                        f"construction, but raised ValueError: {e}"
+                    )
+```
+
+But `self.fail()` raises AssertionError and stops the method! I can't use it inside the collection loop.
+
+I need a different approach. What if I record the construction success/failure, and assert on it in the second loop?
+
+```python
+    def test_port_too_high(self):
+        expected = ("Port out of range 0-65535",)
+        results = []
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com:65536/", "str"),
+                             (b"http://example.com:65536/", "bytes")]:
+                try:
+                    p = func(url)
+                    construction_error = None
+                except ValueError as e:
+                    construction_error = e
+                try:
+                    if construction_error is None:
+                        p.port
+                    port_error = None
+                except ValueError as e:
+                    port_error = e
+                results.append((func.__name__, enc, construction_error, port_error))
+        for fname, enc, constr_err, port_err in results:
+            self.assertIsNone(
+                constr_err,
+                f"{fname}/{enc}: construction should not raise")
+            self.assertIsInstance(
+                port_err, ValueError,
+                f"{fname}/{enc}: expected ValueError on port access")
+            self.assertEqual(port_err.args, expected)
+```
+
+This is getting complex but should work. Let me trace through the scenarios:
+
+Normal case:
+- construction_error = None (construction succeeds)
+- port_error = ValueError("Port out of range 0-65535")
+- Assertions: constr_err is None ✓, port_err is ValueError ✓, port_err.args matches ✓
+
+Eager_validation fault:
+- construction_error = ValueError("Port out of range 0-65535")
+- port_error = None (port property never accessed)
+- Assertions: constr_err is None → FAILS ✓ (test correctly detects the fault)
+
+Error_arguments fault:
+- construction_error = None
+- port_error = ValueError("Port out of range 0-65535", "unexpected second argument")
+- Assertions: constr_err is None ✓, port_err is ValueError ✓, port_err.args == expected → FAILS ✓
+
+Error_message fault:
+- Similar to error_arguments but with different message
+- port_err.args doesn't match → FAILS ✓
+
+Boundary value fault (e.g., max changed to 65534):
+- For test_port_max: port returns 65534 instead of 65535
+- assertEqual(port, 65535) → FAILS ✓
+- But all ports were still accessed (observed) ✓
+
+This works! Let me finalize all the methods.
+
+Actually, I realize I should also check: does the check require the test to verify that construction succeeds for the VALID cases too? The task says "Establish when invalid-port errors occur, and assert the exact exception class, complete argument tuple and diagnostic text."
+
+For valid cases (none, empty, zero, max), no error occurs. The test just asserts the port value. Construction always succeeds for these. I don't need to explicitly verify construction success for these (it's implicit in the code running).
+
+But for the fault sensitivity check's `eager_validation` fault, only the INVALID cases would be affected (construction raises for invalid ports). Valid cases are unaffected. So my tests for valid cases don't need the try/except.
+
+However, the check might also have a "boundary_value" fault that changes what's considered valid (e.g., max becomes 65534). In that case:
+- test_port_max: port returns 65534, assertion fails
+- test_port_too_high: port 65536 is still out of range (65536 > 65534), still raises
+- But if the fault changes max to 65536, then port 65536 is now valid, and no exception is raised
+
+For the "boundary value" fault, my test_port_max would fail (65534 ≠ 65535) and test_port_too_high would... hmm, if max becomes 65536, then port 65536 is valid and `p.port` returns 65536 (no exception). My test would get `port_error = None`, and `self.assertIsInstance(None, ValueError)` would fail. Good.
+
+OK, I think my design is correct. Let me write the final code.
+
+One more consideration: the `unicode_digits` case only applies to str URLs (bytes URLs with non-ASCII digits don't make sense - bytes are always ASCII or non-ASCII in a different way). Actually, for bytes URLs, the port is extracted as a bytes object. `b"١".isdigit()` in Python... let me think. Actually, `bytes` objects don't have `isdigit()` in the same way. The port property code does:
+```python
+port = self._hostinfo[1]
+if port is not None:
+    if port.isdigit() and port.isascii():
+```
+
+For bytes, `port` would be `b"١"` which is `b'\xd9\xa1'` (UTF-8 encoding of ١). `b'\xd9\xa1'.isdigit()` - does bytes have isdigit()? Actually, `bytes.isdigit()` checks if all bytes are ASCII digits (0-9). `b'\xd9\xa1'` is not ASCII digits, so `isdigit()` returns False. Then `port.isascii()` would also be False. So it goes to the else branch: `raise ValueError(f"Port could not be cast to integer value as {port!r}")`.
+
+So for bytes URLs with non-ASCII digits, the error message would include the bytes repr. But the task says "Also cover non-ASCII decimal digits in text URLs" - so I only need to test the str case for unicode digits. My current test only tests str for unicode_digits, which is correct.
+
+But wait, should I also test bytes with a non-ASCII port? The task says "text URLs and ASCII byte URLs" for the main cases, and "Also cover non-ASCII decimal digits in text URLs" separately. So non-ASCII is only for text. My test is correct.
+
+Now let me also think about whether I need to test `str(cm.exception)` for the message. The task says "assert the exact exception class, complete argument tuple and diagnostic text." The "diagnostic text" is `str(exception)` which is the first arg of the tuple. Since I'm asserting the full args tuple, that covers the diagnostic text. But to be explicit, maybe I should also assert `str(cm.exception)` for at least one case.
+
+Actually, for ValueError, `str(e)` returns `e.args[0]` if there's only one arg. So asserting `e.args == ("message",)` is equivalent to asserting `str(e) == "message"`. I'll keep the args assertion as it's more complete.
+
+Let me now write the actual patch. I need to:
+1. Remove the existing `test_port_access_boundary_and_errors` method
+2. Add the new methods
+
+The existing method starts at some line and ends before `test_telurl_params`. Let me look at the source I have.
+
+From the working set, the test file content shows (starting from line 750):
+```
+    def test_port_access_boundary_and_errors(self):
+        # The port property validates on access, not at construction time.
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            ...
+```
+
+And it ends before:
+```
+    def test_telurl_params(self):
+```
+
+I need to find the exact text to replace. Let me look at what I have in the working set. The file content shows from line 750 onwards. I can see `test_port_casting_failure_message` and then `test_port_access_boundary_and_errors` and then `test_telurl_params`.
+
+Let me identify the exact old text. From the source:
+```
+    def test_port_access_boundary_and_errors(self):
+        # The port property validates on access, not at construction time.
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            # No port
+            p = func("http://example.com/")
+            self.assertIs(p.port, None)
+            p = func(b"http://example.com/")
+            self.assertIs(p.port, None)
+
+            # Empty port (trailing colon, no digits)
+            p = func("http://example.com:")
+            self.assertIs(p.port, None)
+            p = func(b"http://example.com:")
+            self.assertIs(p.port, None)
+
+            # Port 0
+            p = func("http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            p = func(b"http://example.com:0/")
+            self.assertEqual(p.port, 0)
+
+            # Port 65535 (max valid)
+            p = func("http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            p = func(b"http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+
+            # Port 65536 (out of range); construction succeeds
+            p = func("http://example.com:65536/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port out of range 0-65535",))
+            self.assertEqual(str(cm.exception),
+                             "Port out of range 0-65535")
+            p = func(b"http://example.com:65536/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port out of range 0-65535",))
+
+            # Negative port
+            p = func("http://example.com:-1/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as '-1'",))
+            p = func(b"http://example.com:-1/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as b'-1'",))
+
+            # Non-integer port
+            p = func("http://example.com:abc/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as 'abc'",))
+            p = func(b"http://example.com:abc/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as b'abc'",))
+
+            # Non-ASCII decimal digit (text URL)
+            p = func("http://example.com:\u0661/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as '\u0661'",))
+```
+
+Wait, I need to be careful about the exact text. The source I have in the working set is the full file content. Let me find the exact boundaries.
+
+Looking at the working set source for test_urlparse.py, I can see the method `test_port_access_boundary_and_errors` and the next method `test_telurl_params`. The old text should be from `    def test_port_access_boundary_and_errors(self):` to the line before `    def test_telurl_params(self):`.
+
+Let me construct the patch. The old text is the entire `test_port_access_boundary_and_errors` method. The new text will be the replacement methods.
+
+Actually, I realize I should double-check my understanding of the check by looking at what "observed_paths" expects. The check output shows:
+```
+"observed_paths":{"tests":1,"failures":0,"errors":0,"skipped":0,"successful":true,"details":[],"missing_paths":[],"complete":true}
+```
+
+This is for the NORMAL run (no fault). It says `complete: true, missing_paths: []`. So in the normal run, all paths are observed. Good.
+
+The issue is only in the fault runs, where the test fails early and doesn't observe all paths.
+
+OK let me write the patch now. I'll replace the single method with multiple methods using the collect-and-assert pattern.
+
+Let me also make sure I handle the `str` assertion. The task says "assert the exact exception class, complete argument tuple and diagnostic text." I'll assert:
+- Exception class: ValueError (via assertRaises or isinstance)
+- Complete argument tuple: e.args == (...)
+- Diagnostic text: str(e) == "..." (which is implied by args for single-arg exceptions)
+
+For completeness, I'll assert both args and str for at least the main cases.
+
+Actually, in my collect-and-assert pattern, I store the exception object and then assert on its attributes. Let me make sure I assert the class too:
+
+```python
+self.assertIsInstance(exc, ValueError)
+self.assertEqual(exc.args, expected)
+self.assertEqual(str(exc), expected[0])
+```
+
+The `str(exc)` assertion is redundant with `exc.args` for single-arg exceptions, but it makes the "diagnostic text" explicit.
+
+Now, let me think about the file structure. The existing method `test_port_access_boundary_and_errors` is between `test_port_casting_failure_message` and `test_telurl_params`. I'll replace it with my new methods.
+
+Let me write the exact old and new text for the patch.
+
+Old text (the method to remove):
+```
+    def test_port_access_boundary_and_errors(self):
+        # The port property validates on access, not at construction time.
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            # No port
+            p = func("http://example.com/")
+            self.assertIs(p.port, None)
+            p = func(b"http://example.com/")
+            self.assertIs(p.port, None)
+
+            # Empty port (trailing colon, no digits)
+            p = func("http://example.com:")
+            self.assertIs(p.port, None)
+            p = func(b"http://example.com:")
+            self.assertIs(p.port, None)
+
+            # Port 0
+            p = func("http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            p = func(b"http://example.com:0/")
+            self.assertEqual(p.port, 0)
+
+            # Port 65535 (max valid)
+            p = func("http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            p = func(b"http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+
+            # Port 65536 (out of range); construction succeeds
+            p = func("http://example.com:65536/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port out of range 0-65535",))
+            self.assertEqual(str(cm.exception),
+                             "Port out of range 0-65535")
+            p = func(b"http://example.com:65536/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port out of range 0-65535",))
+
+            # Negative port
+            p = func("http://example.com:-1/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as '-1'",))
+            p = func(b"http://example.com:-1/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as b'-1'",))
+
+            # Non-integer port
+            p = func("http://example.com:abc/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as 'abc'",))
+            p = func(b"http://example.com:abc/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as b'abc'",))
+
+            # Non-ASCII decimal digit (text URL)
+            p = func("http://example.com:\u0661/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as '\u0661'",))
+```
+
+New text (replacement methods):
+```
+    def test_port_none(self):
+        # No port in netloc: port is None
+        results = []
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com/", "str"),
+                             (b"http://example.com/", "bytes")]:
+                p = func(url)
+                results.append((func.__name__, enc, p.port))
+        for fname, enc, port in results:
+            self.assertIs(port, None)
+
+    def test_port_empty(self):
+        # Empty port (trailing colon, no digits): port is None
+        results = []
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com:", "str"),
+                             (b"http://example.com:", "bytes")]:
+                p = func(url)
+                results.append((func.__name__, enc, p.port))
+        for fname, enc, port in results:
+            self.assertIs(port, None)
+
+    def test_port_zero(self):
+        # Port 0: valid lower boundary
+        results = []
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com:0/", "str"),
+                             (b"http://example.com:0/", "bytes")]:
+                p = func(url)
+                results.append((func.__name__, enc, p.port))
+        for fname, enc, port in results:
+            self.assertEqual(port, 0)
+
+    def test_port_max(self):
+        # Port 65535: valid upper boundary
+        results = []
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com:65535/", "str"),
+                             (b"http://example.com:65535/", "bytes")]:
+                p = func(url)
+                results.append((func.__name__, enc, p.port))
+        for fname, enc, port in results:
+            self.assertEqual(port, 65535)
+
+    def test_port_too_high(self):
+        # Port 65536: out of range; construction succeeds, access raises
+        expected = ("Port out of range 0-65535",)
+        results = []
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com:65536/", "str"),
+                             (b"http://example.com:65536/", "bytes")]:
+                try:
+                    p = func(url)
+                except ValueError as e:
+                    results.append((func.__name__, enc, e, None))
+                    continue
+                try:
+                    p.port
+                    results.append((func.__name__, enc, None, None))
+                except ValueError as e:
+                    results.append((func.__name__, enc, None, e))
+        for fname, enc, constr_err, port_err in results:
+            self.assertIsNone(
+                constr_err,
+                f"{fname}/{enc}: construction should not raise")
+            self.assertIsInstance(
+                port_err, ValueError,
+                f"{fname}/{enc}: expected ValueError on port access")
+            self.assertEqual(port_err.args, expected)
+            self.assertEqual(str(port_err), "Port out of range 0-65535")
+
+    def test_port_negative(self):
+        # Negative port: not castable to integer
+        results = []
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc, expected in [
+                ("http://example.com:-1/", "str",
+                 "Port could not be cast to integer value as '-1'"),
+                (b"http://example.com:-1/", "bytes",
+                 "Port could not be cast to integer value as b'-1'"),
+            ]:
+                try:
+                    p = func(url)
+                except ValueError as e:
+                    results.append((func.__name__, enc, e, None, expected))
+                    continue
+                try:
+                    p.port
+                    results.append((func.__name__, enc, None, None, expected))
+                except ValueError as e:
+                    results.append((func.__name__, enc, None, e, expected))
+        for fname, enc, constr_err, port_err, expected in results:
+            self.assertIsNone(
+                constr_err,
+                f"{fname}/{enc}: construction should not raise")
+            self.assertIsInstance(
+                port_err, ValueError,
+                f"{fname}/{enc}: expected ValueError on port access")
+            self.assertEqual(port_err.args, (expected,))
+            self.assertEqual(str(port_err), expected)
+
+    def test_port_noninteger(self):
+        # Non-integer port: not castable to integer
+        results = []
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc, expected in [
+                ("http://example.com:abc/", "str",
+                 "Port could not be cast to integer value as 'abc'"),
+                (b"http://example.com:abc/", "bytes",
+                 "Port could not be cast to integer value as b'abc'"),
+            ]:
+                try:
+                    p = func(url)
+                except ValueError as e:
+                    results.append((func.__name__, enc, e, None, expected))
+                    continue
+                try:
+                    p.port
+                    results.append((func.__name__, enc, None, None, expected))
+                except ValueError as e:
+                    results.append((func.__name__, enc, None, e, expected))
+        for fname, enc, constr_err, port_err, expected in results:
+            self.assertIsNone(
+                constr_err,
+                f"{fname}/{enc}: construction should not raise")
+            self.assertIsInstance(
+                port_err, ValueError,
+                f"{fname}/{enc}: expected ValueError on port access")
+            self.assertEqual(port_err.args, (expected,))
+            self.assertEqual(str(port_err), expected)
+
+    def test_port_unicode_digits(self):
+        # Non-ASCII decimal digit in text URL
+        expected = ("Port could not be cast to integer value as '\u0661'",)
+        results = []
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            try:
+                p = func("http://example.com:\u0661/")
+            except ValueError as e:
+                results.append((func.__name__, e, None))
+                continue
+            try:
+                p.port
+                results.append((func.__name__, None, None))
+            except ValueError as e:
+                results.append((func.__name__, None, e))
+        for fname, constr_err, port_err in results:
+            self.assertIsNone(
+                constr_err,
+                f"{fname}: construction should not raise")
+            self.assertIsInstance(
+                port_err, ValueError,
+                f"{fname}: expected ValueError on port access")
+            self.assertEqual(port_err.args, expected)
+            self.assertEqual(str(port_err), expected[0])
+```
+
+Hmm wait, I'm storing `expected` in the results tuple for negative and noninteger. That's a bit odd. Let me simplify - I'll just use the same pattern as too_high but with the specific expected message.
+
+Actually, let me reconsider the structure. The issue with storing expected in the results tuple is that it's redundant. Let me simplify:
+
+For `test_port_negative` and `test_port_noninteger`, the expected message differs per (enc, url) combination. I could:
+1. Store the expected in the results tuple (what I have)
+2. Or re-derive it from the (fname, enc) in the assertion loop
+
+Option 2 is cleaner:
+```python
+    def test_port_negative(self):
+        results = []
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [
+                ("http://example.com:-1/", "str"),
+                (b"http://example.com:-1/", "bytes"),
+            ]:
+                try:
+                    p = func(url)
+                except ValueError as e:
+                    results.append((func.__name__, enc, e, None))
+                    continue
+                try:
+                    p.port
+                    results.append((func.__name__, enc, None, None))
+                except ValueError as e:
+                    results.append((func.__name__, enc, None, e))
+        for fname, enc, constr_err, port_err in results:
+            self.assertIsNone(constr_err, f"{fname}/{enc}: construction should not raise")
+            self.assertIsInstance(port_err, ValueError, f"{fname}/{enc}: expected ValueError")
+            if enc == "str":
+                expected = "Port could not be cast to integer value as '-1'"
+            else:
+                expected = "Port could not be cast to integer value as b'-1'"
+            self.assertEqual(port_err.args, (expected,))
+            self.assertEqual(str(port_err), expected)
+```
+
+This is cleaner. Let me finalize all methods with this pattern.
+
+Actually, I realize there might be an issue with my approach. When I do:
+```python
+try:
+    p = func(url)
+except ValueError as e:
+    results.append(...)
+    continue
+try:
+    p.port
+    ...
+except ValueError as e:
+    ...
+```
+
+If construction succeeds but `p.port` raises, I catch it. But what if construction succeeds and `p.port` does NOT raise (e.g., in a fault case where the boundary changed)? Then `p.port` returns a value, and I fall through to `results.append((..., None, None))`. In the assertion loop, `port_err` is None, and `self.assertIsInstance(None, ValueError)` fails. Good.
+
+But wait, there's a subtlety. If `p.port` returns a value (no exception), I do:
+```python
+results.append((func.__name__, enc, None, None))
+```
+The `None` for port_err means "no exception was raised." In the assertion:
+```python
+self.assertIsInstance(port_err, ValueError, ...)
+```
+This fails with a clear message. Good.
+
+OK, I'm confident in my design. Let me now write the actual patch.
+
+One more thing: I need to make sure the `old` text in my patch matches EXACTLY what's in the file. Let me look at the source carefully.
+
+From the working set, the file content includes (I need to find the exact method). The source shows the full file from line 750 onwards. I can see:
+
+```
+    def test_port_casting_failure_message(self):
+        message = "Port could not be cast to integer value as 'oracle'"
+        p1 = urllib.parse.urlparse('http://Server=sde; Service=sde:oracle')
+        with self.assertRaisesRegex(ValueError, message):
+            p1.port
+
+        p2 = urllib.parse.urlsplit('http://Server=sde; Service=sde:oracle')
+        with self.assertRaisesRegex(ValueError, message):
+            p2.port
+
+    def test_port_access_boundary_and_errors(self):
+        # The port property validates on access, not at construction time.
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            # No port
+            p = func("http://example.com/")
+            self.assertIs(p.port, None)
+            p = func(b"http://example.com/")
+            self.assertIs(p.port, None)
+
+            # Empty port (trailing colon, no digits)
+            p = func("http://example.com:")
+            self.assertIs(p.port, None)
+            p = func(b"http://example.com:")
+            self.assertIs(p.port, None)
+
+            # Port 0
+            p = func("http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            p = func(b"http://example.com:0/")
+            self.assertEqual(p.port, 0)
+
+            # Port 65535 (max valid)
+            p = func("http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            p = func(b"http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+
+            # Port 65536 (out of range); construction succeeds
+            p = func("http://example.com:65536/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port out of range 0-65535",))
+            self.assertEqual(str(cm.exception),
+                             "Port out of range 0-65535")
+            p = func(b"http://example.com:65536/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port out of range 0-65535",))
+
+            # Negative port
+            p = func("http://example.com:-1/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as '-1'",))
+            p = func(b"http://example.com:-1/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as b'-1'",))
+
+            # Non-integer port
+            p = func("http://example.com:abc/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as 'abc'",))
+            p = func(b"http://example.com:abc/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as b'abc'",))
+
+            # Non-ASCII decimal digit (text URL)
+            p = func("http://example.com:\u0661/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as '\u0661'",))
+
+    def test_telurl_params(self):
+```
+
+I need to replace from `    def test_port_access_boundary_and_errors(self):` to the blank line before `    def test_telurl_params(self):`.
+
+The old text should be:
+```
+    def test_port_access_boundary_and_errors(self):
+        # The port property validates on access, not at construction time.
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            # No port
+            p = func("http://example.com/")
+            self.assertIs(p.port, None)
+            p = func(b"http://example.com/")
+            self.assertIs(p.port, None)
+
+            # Empty port (trailing colon, no digits)
+            p = func("http://example.com:")
+            self.assertIs(p.port, None)
+            p = func(b"http://example.com:")
+            self.assertIs(p.port, None)
+
+            # Port 0
+            p = func("http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            p = func(b"http://example.com:0/")
+            self.assertEqual(p.port, 0)
+
+            # Port 65535 (max valid)
+            p = func("http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            p = func(b"http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+
+            # Port 65536 (out of range); construction succeeds
+            p = func("http://example.com:65536/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port out of range 0-65535",))
+            self.assertEqual(str(cm.exception),
+                             "Port out of range 0-65535")
+            p = func(b"http://example.com:65536/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port out of range 0-65535",))
+
+            # Negative port
+            p = func("http://example.com:-1/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as '-1'",))
+            p = func(b"http://example.com:-1/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as b'-1'",))
+
+            # Non-integer port
+            p = func("http://example.com:abc/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as 'abc'",))
+            p = func(b"http://example.com:abc/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as b'abc'",))
+
+            # Non-ASCII decimal digit (text URL)
+            p = func("http://example.com:\u0661/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as '\u0661'",))
+```
+
+Wait, I need to be careful about the exact whitespace and line endings. The source I have shows the content, but I need to make sure my `old` text matches exactly.
+
+Looking at the source, the method uses 4-space indentation (standard Python). The lines are as shown. Let me construct the patch carefully.
+
+Actually, I realize I should double-check one thing: the `\u0661` in the source. In the file, is it the literal Unicode character ١ or the escape sequence `\u0661`? Looking at the source:
+
+```
+            p = func("http://example.com:\u0661/")
+```
+
+In the source display, it shows `\u0661`. This could be either:
+1. The literal 4 characters `\`, `u`, `0`, `6`, `6`, `1` in the source (Python escape in a string literal)
+2. The actual Unicode character ١ (U+0661) displayed as the escape
+
+In Python source code, `"http://example.com:\u0661/"` contains the escape sequence `\u0661` which Python interprets as the character ١. In the source file, it would be stored as the literal characters `\u0661` (6 characters: backslash, u, 0, 6, 6, 1).
+
+Wait, actually in the working set display, it shows `\u0661`. This is the source code text. In a Python file, the string literal `"http://example.com:\u0661/"` contains the escape sequence. When I write the patch, I need to match the EXACT source text.
+
+Looking at the displayed source:
+```
+            p = func("http://example.com:\u0661/")
+```
+
+This is the source code. The `\u0661` here is the Python unicode escape in the source. In the actual file bytes, this would be the literal characters `\`, `u`, `0`, `6`, `6`, `1` (since it's a .py file with the escape in a string literal).
+
+But wait, in the working set content display, it shows `\u0661`. Is this the raw file content or a rendered version? The working set says `kind: "current_source"` and shows the content. I'll assume it's the raw file content, so `\u0661` is literally backslash-u-0-6-6-1 in the file.
+
+Similarly, in my new code, I'll use `\u0661` in the string literals.
+
+OK, let me also double-check: in the assertion
+```
+("Port could not be cast to integer value as '\u0661'",)
+```
+the `\u0661` is again the escape sequence in the source.
+
+Alright, I'm confident about the text. Let me write the patch.
+
+Actually, one more consideration. The `new` text I'm writing will be much longer than the `old` text. Let me make sure it fits within the 65,536 byte limit for a patch fragment. The old text is about 2KB. The new text will be about 4-5KB. Well within limits.
+
+Let me also update my working account to reflect the current understanding.
+
+Now, let me also think about whether I need to handle the case where `p.port` returns a value that's not an int (e.g., in a fault case where the boundary changes). For valid cases:
+- If max changes from 65535 to 65534, then port 65535 is now out of range and would raise. My `test_port_max` would get a ValueError instead of 65535. But I'm doing `p.port` directly in the collection loop, and if it raises, it's an uncaught exception!
+
+Wait, in my collection loop for valid cases:
+```python
+p = func(url)
+results.append((func.__name__, enc, p.port))
+```
+
+If `p.port` raises (because a boundary fault made 65535 invalid), this is an uncaught exception → error, not failure.
+
+I need to handle this:
+```python
+try:
+    port = p.port
+except ValueError as e:
+    port = e
+results.append((func.__name__, enc, port))
+```
+
+Then in the assertion:
+```python
+self.assertIsInstance(port, int)
+self.assertEqual(port, 65535)
+```
+
+If port is a ValueError (because of the fault), `assertIsInstance(port, int)` fails. Good.
+
+Let me update my valid-case methods to handle this:
+
+```python
+    def test_port_zero(self):
+        results = []
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com:0/", "str"),
+                             (b"http://example.com:0/", "bytes")]:
+                try:
+                    p = func(url)
+                except ValueError as e:
+                    results.append((func.__name__, enc, e))
+                    continue
+                try:
+                    port = p.port
+                except ValueError as e:
+                    port = e
+                results.append((func.__name__, enc, port))
+        for fname, enc, port in results:
+            self.assertIsInstance(port, int)
+            self.assertEqual(port, 0)
+```
+
+Hmm, but this is getting very verbose. And for the "no port" and "empty port" cases, `p.port` returns None (not an int). So `assertIsInstance(port, int)` would fail.
+
+Let me separate the cases:
+- None cases: expect port is None
+- Zero case: expect port is 0
+- Max case: expect port is 65535
+
+For None cases:
+```python
+    def test_port_none(self):
+        results = []
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com/", "str"),
+                             (b"http://example.com/", "bytes")]:
+                try:
+                    p = func(url)
+                except ValueError as e:
+                    results.append((func.__name__, enc, e))
+                    continue
+                try:
+                    port = p.port
+                except ValueError as e:
+                    port = e
+                results.append((func.__name__, enc, port))
+        for fname, enc, port in results:
+            self.assertIs(port, None)
+```
+
+If construction raises (shouldn't for "no port"), `port` is a ValueError, and `assertIs(port, None)` fails. Good.
+If `p.port` raises (shouldn't for "no port"), same thing. Good.
+
+For zero:
+```python
+    def test_port_zero(self):
+        results = []
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com:0/", "str"),
+                             (b"http://example.com:0/", "bytes")]:
+                try:
+                    p = func(url)
+                except ValueError as e:
+                    results.append((func.__name__, enc, e))
+                    continue
+                try:
+                    port = p.port
+                except ValueError as e:
+                    port = e
+                results.append((func.__name__, enc, port))
+        for fname, enc, port in results:
+            self.assertIsInstance(port, int)
+            self.assertEqual(port, 0)
+```
+
+For max:
+```python
+    def test_port_max(self):
+        results = []
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com:65535/", "str"),
+                             (b"http://example.com:65535/", "bytes")]:
+                try:
+                    p = func(url)
+                except ValueError as e:
+                    results.append((func.__name__, enc, e))
+                    continue
+                try:
+                    port = p.port
+                except ValueError as e:
+                    port = e
+                results.append((func.__name__, enc, port))
+        for fname, enc, port in results:
+            self.assertIsInstance(port, int)
+            self.assertEqual(port, 65535)
+```
+
+OK this is all getting very repetitive. Let me think about whether there's a cleaner way.
+
+Actually, you know what, let me step back and think about whether the "collect and assert" pattern is really necessary. Let me re-examine the check output.
+
+The check says `complete: false` for `error_arguments`. The missing paths are the ones AFTER the failure point. If I split into separate methods (one per case), then:
+- `test_port_too_high` fails (detects the fault)
+- `test_port_negative` still runs and observes its paths
+- `test_port_noninteger` still runs and observes its paths
+- `test_port_unicode_digits` still runs and observes its paths
+- `test_port_none` still runs and observes its paths
+- etc.
+
+The only paths that would be missing are the ones in the SAME method that come after the failure. If each method has only 4 iterations (2 functions × 2 encodings), and the failure is in iteration 1 (urlsplit+str), then iterations 2-4 (urlsplit+bytes, urlparse+str, urlparse+bytes) are missing.
+
+So even with separate methods per case, I'd still have missing paths (3 out of 4 per error case).
+
+Unless... I make each method test only ONE (func, enc) combination. Then 32 methods total. That's excessive.
+
+OR, I use the "collect and assert" pattern within each method. Then ALL 4 paths are observed before any assertion. This is what I'll do.
+
+Let me finalize my design. I'll use the "collect and assert" pattern for all methods. The code will be verbose but correct.
+
+Actually, let me reconsider one more time. Is there a way to make the test "fail soft" within a loop? Like, collect assertion errors and report them all at the end?
+
+```python
+def test_port_too_high(self):
+    expected = ("Port out of range 0-65535",)
+    errors = []
+    for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+        for url, enc in [("http://example.com:65536/", "str"),
+                         (b"http://example.com:65536/", "bytes")]:
+            try:
+                p = func(url)
+            except ValueError as e:
+                errors.append(f"{func.__name__}/{enc}: construction raised {e}")
+                continue
+            try:
+                p.port
+                errors.append(f"{func.__name__}/{enc}: no exception")
+            except ValueError as e:
+                if e.args != expected:
+                    errors.append(f"{func.__name__}/{enc}: wrong args {e.args}")
+    if errors:
+        self.fail("\n".join(errors))
+```
+
+This is simpler! All paths are accessed (the `p.port` or `func(url)` happens before the error is recorded). Errors are collected and reported at the end.
+
+But wait, if `func(url)` raises, I `continue` to the next iteration. The path IS observed (the function was called, even though it raised). Is that enough for the check?
+
+I think the check observes the path at the point where the implementation code runs. If `func(url)` raises due to eager validation, the implementation's validation code ran (and the observation hook fired). So the path IS observed.
+
+Similarly, if `p.port` raises, the port property's validation code ran (observation fired). The path IS observed.
+
+So the "collect errors" pattern works:
+- All function calls and port accesses happen (paths observed)
+- Errors are collected, not raised immediately
+- Single `self.fail()` at the end (if any errors)
+
+This is cleaner than the "store results, assert separately" pattern. Let me use this.
+
+But there's a subtle issue: if `func(url)` raises and I `continue`, I skip the `p.port` access. Is the path still observed? The path is identified by (function, encoding, case). The function WAS called (with the right URL), so the (function, encoding) part is observed. The "case" part (too_high) is determined by the URL, not by whether port was accessed. So I think the path IS observed.
+
+But if the check's observation is specifically on the `port` property access (not the function call), then not accessing `p.port` means the path isn't observed. In that case, I'd need to ensure `p.port` is accessed.
+
+For the eager_validation fault, `func(url)` raises, so `p` is never assigned, and `p.port` can't be accessed. If the observation is on `p.port` access, the path isn't observed.
+
+Hmm, this is the fundamental issue. With eager_validation, the port property is never accessed (construction raises first). If the check requires the port property access to be observed, it's impossible to observe it when construction raises.
+
+Unless the check is designed to handle this: maybe for the eager_validation fault, the check only requires that the test DETECTS the fault (fails), not that all paths are observed. Let me look at the eager_validation result again:
+
+```
+"eager_validation":{"tests":1,"failures":0,"errors":1,"skipped":0,"successful":false,
+"details":[{"test":"...","trace":"..."}],
+"missing_paths":[...],
+"complete":false}
+```
+
+It has `complete: false`. So the check DOES require completeness even for eager_validation. But if construction raises, the port property is never accessed, so those paths can't be observed through the port property.
+
+This suggests that the observation is NOT on the port property specifically, but on something else (like the function call). Or maybe the check patches the constructor to also record the path.
+
+I think the observation is at the function call level (urlsplit/urlparse), not the port property level. The "path" is (function_name, encoding, port_case_in_url). The observation fires when the function is called with a specific URL pattern.
+
+Under this interpretation:
+- `func("http://example.com:65536/")` is observed as path (func_name, str, too_high) regardless of whether it raises
+- `p.port` access is a separate observation
+
+So even if `func(url)` raises, the path is observed (the function was called). And my "collect errors" pattern works because the function call happens before the `continue`.
+
+Let me go with this interpretation and the "collect errors" pattern.
+
+Final design:
+
+```python
+    def test_port_none(self):
+        # No port in netloc: port property returns None
+        errors = []
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com/", "str"),
+                             (b"http://example.com/", "bytes")]:
+                try:
+                    p = func(url)
+                except ValueError as e:
+                    errors.append(f"{func.__name__}/{enc}: construction raised {e!r}")
+                    continue
+                try:
+                    port = p.port
+                except ValueError as e:
+                    errors.append(f"{func.__name__}/{enc}: port raised {e!r}")
+                    continue
+                if port is not None:
+                    errors.append(f"{func.__name__}/{enc}: expected None, got {port!r}")
+        if errors:
+            self.fail("\n".join(errors))
+
+    def test_port_empty(self):
+        # Empty port (trailing colon): port property returns None
+        errors = []
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com:", "str"),
+                             (b"http://example.com:", "bytes")]:
+                try:
+                    p = func(url)
+                except ValueError as e:
+                    errors.append(f"{func.__name__}/{enc}: construction raised {e!r}")
+                    continue
+                try:
+                    port = p.port
+                except ValueError as e:
+                    errors.append(f"{func.__name__}/{enc}: port raised {e!r}")
+                    continue
+                if port is not None:
+                    errors.append(f"{func.__name__}/{enc}: expected None, got {port!r}")
+        if errors:
+            self.fail("\n".join(errors))
+
+    def test_port_zero(self):
+        # Port 0: valid lower boundary
+        errors = []
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com:0/", "str"),
+                             (b"http://example.com:0/", "bytes")]:
+                try:
+                    p = func(url)
+                except ValueError as e:
+                    errors.append(f"{func.__name__}/{enc}: construction raised {e!r}")
+                    continue
+                try:
+                    port = p.port
+                except ValueError as e:
+                    errors.append(f"{func.__name__}/{enc}: port raised {e!r}")
+                    continue
+                if port != 0:
+                    errors.append(f"{func.__name__}/{enc}: expected 0, got {port!r}")
+        if errors:
+            self.fail("\n".join(errors))
+
+    def test_port_max(self):
+        # Port 65535: valid upper boundary
+        errors = []
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com:65535/", "str"),
+                             (b"http://example.com:65535/", "bytes")]:
+                try:
+                    p = func(url)
+                except ValueError as e:
+                    errors.append(f"{func.__name__}/{enc}: construction raised {e!r}")
+                    continue
+                try:
+                    port = p.port
+                except ValueError as e:
+                    errors.append(f"{func.__name__}/{enc}: port raised {e!r}")
+                    continue
+                if port != 65535:
+                    errors.append(f"{func.__name__}/{enc}: expected 65535, got {port!r}")
+        if errors:
+            self.fail("\n".join(errors))
+
+    def test_port_too_high(self):
+        # Port 65536: out of range; construction succeeds, access raises
+        expected_msg = "Port out of range 0-65535"
+        errors = []
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc in [("http://example.com:65536/", "str"),
+                             (b"http://example.com:65536/", "bytes")]:
+                try:
+                    p = func(url)
+                except ValueError as e:
+                    errors.append(
+                        f"{func.__name__}/{enc}: construction should not "
+                        f"raise but got {e!r}")
+                    continue
+                try:
+                    p.port
+                    errors.append(f"{func.__name__}/{enc}: expected ValueError")
+                except ValueError as e:
+                    if e.args != (expected_msg,):
+                        errors.append(
+                            f"{func.__name__}/{enc}: wrong args {e.args!r}, "
+                            f"expected ({expected_msg!r},)")
+                    if str(e) != expected_msg:
+                        errors.append(
+                            f"{func.__name__}/{enc}: wrong message "
+                            f"{str(e)!r}")
+        if errors:
+            self.fail("\n".join(errors))
+
+    def test_port_negative(self):
+        # Negative port: not castable to integer
+        errors = []
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc, expected_msg in [
+                ("http://example.com:-1/", "str",
+                 "Port could not be cast to integer value as '-1'"),
+                (b"http://example.com:-1/", "bytes",
+                 "Port could not be cast to integer value as b'-1'"),
+            ]:
+                try:
+                    p = func(url)
+                except ValueError as e:
+                    errors.append(
+                        f"{func.__name__}/{enc}: construction should not "
+                        f"raise but got {e!r}")
+                    continue
+                try:
+                    p.port
+                    errors.append(f"{func.__name__}/{enc}: expected ValueError")
+                except ValueError as e:
+                    if e.args != (expected_msg,):
+                        errors.append(
+                            f"{func.__name__}/{enc}: wrong args {e.args!r}")
+                    if str(e) != expected_msg:
+                        errors.append(
+                            f"{func.__name__}/{enc}: wrong message "
+                            f"{str(e)!r}")
+        if errors:
+            self.fail("\n".join(errors))
+
+    def test_port_noninteger(self):
+        # Non-integer port: not castable to integer
+        errors = []
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, enc, expected_msg in [
+                ("http://example.com:abc/", "str",
+                 "Port could not be cast to integer value as 'abc'"),
+                (b"http://example.com:abc/", "bytes",
+                 "Port could not be cast to integer value as b'abc'"),
+            ]:
+                try:
+                    p = func(url)
+                except ValueError as e:
+                    errors.append(
+                        f"{func.__name__}/{enc}: construction should not "
+                        f"raise but got {e!r}")
+                    continue
+                try:
+                    p.port
+                    errors.append(f"{func.__name__}/{enc}: expected ValueError")
+                except ValueError as e:
+                    if e.args != (expected_msg,):
+                        errors.append(
+                            f"{func.__name__}/{enc}: wrong args {e.args!r}")
+                    if str(e) != expected_msg:
+                        errors.append(
+                            f"{func.__name__}/{enc}: wrong message "
+                            f"{str(e)!r}")
+        if errors:
+            self.fail("\n".join(errors))
+
+    def test_port_unicode_digits(self):
+        # Non-ASCII decimal digit in text URL
+        expected_msg = "Port could not be cast to integer value as '\u0661'"
+        errors = []
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            try:
+                p = func("http://example.com:\u0661/")
+            except ValueError as e:
+                errors.append(
+                    f"{func.__name__}/str: construction should not "
+                    f"raise but got {e!r}")
+                continue
+            try:
+                p.port
+                errors.append(f"{func.__name__}/str: expected ValueError")
+            except ValueError as e:
+                if e.args != (expected_msg,):
+                    errors.append(
+                        f"{func.__name__}/str: wrong args {e.args!r}")
+                if str(e) != expected_msg:
+                    errors.append(
+                        f"{func.__name__}/str: wrong message {str(e)!r}")
+        if errors:
+            self.fail("\n".join(errors))
+```
+
+This is clean, handles all fault types, and ensures all paths are observed before any assertion.
+
+Wait, I realize there's still a potential issue. In the "collect errors" pattern, if `func(url)` raises and I `continue`, the `p.port` is never accessed. If the check observes the `port` property access specifically (not the function call), then the path isn't observed.
+
+But as I discussed, for the eager_validation fault, it's IMPOSSIBLE to access `p.port` (construction raises first). So the check MUST be observing at the function call level, not the port property level. Otherwise, the eager_validation fault would be impossible to handle.
+
+I'll go with this design. Let me now write the actual patch operation.
+
+Let me also think about whether I should include a `str(e)` assertion. The task says "assert the exact exception class, complete argument tuple and diagnostic text." The "diagnostic text" is `str(e)`. For a single-argument ValueError, `str(e)` == `e.args[0]`. So asserting `e.args == (msg,)` implies `str(e) == msg`. But to be explicit, I'll include both.
+
+In my "collect errors" pattern, I check both `e.args` and `str(e)`. If they don't match the expected, I add an error. This covers both requirements.
+
+One more thought: the task says "Establish when invalid-port errors occur." This means I need to verify that the error occurs at ACCESS time, not construction time. My tests do this by:
+1. Constructing the result (should not raise)
+2. Accessing port (should raise for invalid ports)
+
+If construction raises (eager_validation fault), my test detects it as an error. Good.
+
+I'm satisfied with my design. Let me write the patch.
+
+Actually, let me reconsider the size. My new text is quite long (8 methods). Let me estimate:
+- Each valid method: ~15 lines × 4 = 60 lines
+- Each error method: ~20 lines × 4 = 80 lines
+- Total: ~140 lines × ~50 chars/line = ~7000 bytes
+
+Well within the 65,536 byte limit. Good.
+
+Now let me construct the exact patch. I need to match the old text exactly. Let me look at the source one more time.
+
+From the working set, the test file shows (I'll focus on the method boundaries):
+
+```
+    def test_port_casting_failure_message(self):
+        message = "Port could not be cast to integer value as 'oracle'"
+        p1 = urllib.parse.urlparse('http://Server=sde; Service=sde:oracle')
+        with self.assertRaisesRegex(ValueError, message):
+            p1.port
+
+        p2 = urllib.parse.urlsplit('http://Server=sde; Service=sde:oracle')
+        with self.assertRaisesRegex(ValueError, message):
+            p2.port
+
+    def test_port_access_boundary_and_errors(self):
+        ...[the method body]...
+
+    def test_telurl_params(self):
+```
+
+The old text for the patch is the `test_port_access_boundary_and_errors` method (from its `def` line to the blank line before the next method).
+
+Let me be very precise. The old text starts with:
+```
+    def test_port_access_boundary_and_errors(self):
+```
+and ends with the last line of the method (the unicode_digits assertion) plus a trailing newline.
+
+Actually, in a Python file, methods are separated by blank lines. The method ends with its last statement, and then there's a blank line before the next method. I need to include the trailing newline(s) correctly.
+
+Looking at the source display:
+```
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as '\u0661'",))
+
+    def test_telurl_params(self):
+```
+
+There's a blank line between the last assertion and the next method. So the old text ends with:
+```
+                             ("Port could not be cast to integer value as '\u0661'",))
+```
+followed by a newline, then a blank line, then `    def test_telurl_params(self):`.
+
+For the patch, I'll replace from `    def test_port_access_boundary_and_errors(self):` through the blank line before `    def test_telurl_params(self):`.
+
+Let me construct the old text carefully:
+
+```
+    def test_port_access_boundary_and_errors(self):
+        # The port property validates on access, not at construction time.
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            # No port
+            p = func("http://example.com/")
+            self.assertIs(p.port, None)
+            p = func(b"http://example.com/")
+            self.assertIs(p.port, None)
+
+            # Empty port (trailing colon, no digits)
+            p = func("http://example.com:")
+            self.assertIs(p.port, None)
+            p = func(b"http://example.com:")
+            self.assertIs(p.port, None)
+
+            # Port 0
+            p = func("http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            p = func(b"http://example.com:0/")
+            self.assertEqual(p.port, 0)
+
+            # Port 65535 (max valid)
+            p = func("http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            p = func(b"http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+
+            # Port 65536 (out of range); construction succeeds
+            p = func("http://example.com:65536/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port out of range 0-65535",))
+            self.assertEqual(str(cm.exception),
+                             "Port out of range 0-65535")
+            p = func(b"http://example.com:65536/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port out of range 0-65535",))
+
+            # Negative port
+            p = func("http://example.com:-1/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as '-1'",))
+            p = func(b"http://example.com:-1/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as b'-1'",))
+
+            # Non-integer port
+            p = func("http://example.com:abc/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as 'abc'",))
+            p = func(b"http://example.com:abc/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as b'abc'",))
+
+            # Non-ASCII decimal digit (text URL)
+            p = func("http://example.com:\u0661/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as '\u0661'",))
+```
+
+And the new text will be my 8 methods followed by a blank line.
+
+Let me write this out. I need to be very careful with the exact whitespace.
+
+Actually, I just realized: I should double-check that the source I'm looking at is accurate. The working set shows the file content starting from line 750. Let me verify the method is there.
+
+Yes, I can see `test_port_access_boundary_and_errors` in the working set source. The content matches what I expect.
+
+Now, one concern: the `\u0661` in the source. In the file, this is literally the 6 characters `\`, `u`, `0`, `6`, `6`, `1` (a Python unicode escape in a string literal). When I write my patch, I need to use the same representation.
+
+In my new code, I'll use `\u0661` in string literals, which in the source file will be the same 6 characters.
+
+Let me finalize and write the patch.
+
+Wait, actually I want to double-check one thing about the port property behavior for bytes URLs with "no port" and "empty port". Let me trace through:
+
+For `b"http://example.com/"`:
+- netloc = `b"example.com"`
+- `_hostinfo` property:
+  - `netloc.rpartition(b'@')` → `(b'', b'', b'example.com')` → hostinfo = `b'example.com'`
+  - `hostinfo.partition(b'[')` → `(b'example.com', b'', b'')` → have_open_br = False
+  - `hostinfo.partition(b':')` → `(b'example.com', b'', b'')` → port = `` (empty)
+  - `if not port: port = None` → port = None
+- `port` property: port is None → return None ✓
+
+For `b"http://example.com:"`:
+- netloc = `b"example.com:"`
+- `_hostinfo`:
+  - hostinfo = `b'example.com:'`
+  - `hostinfo.partition(b':')` → `(b'example.com', b':', b'')` → port = `` (empty)
+  - `if not port: port = None` → port = None
+- `port` property: port is None → return None ✓
+
+For `b"http://example.com:0/"`:
+- netloc = `b"example.com:0"`
+- `_hostinfo`:
+  - hostinfo = `b'example.com:0'`
+  - `hostinfo.partition(b':')` → `(b'example.com', b':', b'0')` → port = `b'0'`
+  - port is not empty → keep as `b'0'`
+- `port` property:
+  - port = `b'0'`
+  - `port.isdigit()` → True (b'0' is a digit byte)
+  - `port.isascii()` → True
+  - port = int(b'0') = 0
+  - 0 <= 0 <= 65535 → True
+  - return 0 ✓
+
+For `b"http://example.com:65535/"`:
+- Similar, port = b'65535', int = 65535, in range → return 65535 ✓
+
+For `b"http://example.com:65536/"`:
+- port = b'65536', int = 65536, 65536 > 65535 → raise ValueError("

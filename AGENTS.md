@@ -1,14 +1,31 @@
 # Experiment operating rules
 
-The owner now authorizes `development/operable_recovery/PLAN.md`: preserve observations
-before report reduction, implement a bounded recovery presentation with retained
-designations and exact region assembly, qualify actual information paths, then one
-separately frozen uncoached contribution. Publish the plan and concrete run package
-before their respective work. At most sixteen new requests/forty-eight operations,
-one attempt, unchanged medium/uncapped actor settings; no live coaching or new proposal
-format. Every scripted decision must be reviewed against the information actually
-available, without treating researcher knowledge as model evidence. Previous packages
-and unused allowances remain closed. Follow the plan's full review/publication duties.
+The owner-directed `development/operable_recovery/PLAN.md` is complete; read its
+`review/RESULTS.md`, full transcript review and host/artifact audits. Plan 5fe48c51
+and concrete implementation/qualification freeze 70e6e21c were pushed before their
+respective work. Preserve observations before report reduction and retain the bounded
+recovery arrangement with actual-delivery edit authority. 94 selected checks and
+eleven native grammar cases pass; scripted completion remains engineering evidence.
+
+The one uncoached attempt returns thirteen responses and executes sixteen operations.
+Qwen chooses its recovery group, saves one additive test method, consumes the failed
+quality check and retrieves its exact observation. All sixteen receipts arrive.
+The tests miss the exact-class requirement; documentation remains unchanged. C13
+misreads mutation-test success/coverage, fills context with 36,705 generated tokens
+beside 19,871 input tokens, and emits no final action. Total cost is 65,537 generated
+tokens / 72.242 model-request minutes. No coaching, retry or private-draft rescue.
+
+All full responses and actual inputs are directly reviewed. Replay verifies twelve
+complete replies, twenty-two native inputs, 297 custody records and 294 source files;
+the one observation replays without re-execution. Runtime closure is verified.
+Three requests/thirty-two operations close unused. No successor exposure belongs
+to this package, and no historical allowance reopens.
+
+The review earns prospective small-account display and check-criterion reporting
+corrections, not another unchanged long run. Recovery and partial saved work are
+demonstrated; complete contribution, maintained account benefit and reliable final-
+action generation remain unresolved. Keep source-derived test-run outcomes distinct
+from fault detection, and scripted knowledge distinct from supplied model evidence.
 
 The owner-directed `development/working_account/decision_recovery/PLAN.md` is closed;
 read its `review/RESULTS.md`, host/artifact audits and both full consultation reviews.

@@ -1,0 +1,990 @@
+Let me analyze the current state:
+
+1. **Task**: Extend regression tests for port access on urlsplit/urlparse results, and add documentation with executable examples.
+
+2. **Current state**:
+   - I have the port property implementation (lines 174-186 of parse.py)
+   - I have the _hostinfo implementations (lines 200-250 of parse.py)
+   - I have the test file content (lines 801-1457)
+   - I have the doc file (lines 1-39)
+   - I have the test file lines 1-30
+
+3. **What I need to do**:
+   - Add regression tests in `Lib/test/test_urlparse.py` for port access covering:
+     - Both public functions (urlsplit and urlparse)
+     - Text URLs and ASCII byte URLs
+     - No port, empty port, 0, 65535, 65536, negative port, noninteger port
+     - Non-ASCII decimal digits in text URLs
+     - Assert exact exception class, complete argument tuple, and diagnostic text
+     - Assert concrete results for accepted boundary cases
+     - Establish when invalid-port errors occur (timing)
+   - Add documentation in `Doc/library/urllib.parse.rst` with executable examples
+
+4. **Port property behavior** (from parse.py lines 174-186):
+   ```python
+   @property
+   def port(self):
+       port = self._hostinfo[1]
+       if port is not None:
+           if port.isdigit() and port.isascii():
+               port = int(port)
+           else:
+               raise ValueError(f"Port could not be cast to integer value as {port!r}")
+           if not (0 <= port <= 65535):
+               raise ValueError("Port out of range 0-65535")
+       return port
+   ```
+
+   Key behaviors:
+   - `port is None` → return None
+   - `port.isdigit() and port.isascii()` → int(port), then range check
+   - Not digit/ascii → ValueError("Port could not be cast to integer value as {port!r}")
+   - Range check fails → ValueError("Port out of range 0-65535")
+   - Valid: 0 <= port <= 65535
+
+   Wait, let me re-read. The `isdigit()` check: if port is a string like "80", `"80".isdigit()` is True, `"80".isascii()` is True. So it becomes int("80") = 80. Then 0 <= 80 <= 65535, so returns 80.
+
+   For empty port: `port = ""` → `"".isdigit()` is False → raises ValueError("Port could not be cast to integer value as ''"). Wait, but _hostinfo sets `if not port: port = None`. So empty string becomes None, and the property returns None.
+
+   Wait, let me re-check _hostinfo:
+   ```python
+   hostname, _, port = hostinfo.partition(':')
+   if not port:
+       port = None
+   return hostname, port
+   ```
+
+   So if the URL is "http://host:" → partition(':') gives hostname="host", port="" → `not port` is True → port = None. So accessing .port on the result returns None.
+
+   Actually wait - for "http://host:" the netloc is "host:" and partition(':') gives ("host", ":", ""). So hostname="host", port="". Then `if not port: port = None`. So port is None, and .port returns None.
+
+   For "http://host:0" → partition(':') gives ("host", ":", "0"). port="0". `"0".isdigit()` is True, `"0".isascii()` is True. int("0")=0. 0<=0<=65535 → returns 0.
+
+   For "http://host:65535" → returns 65535.
+
+   For "http://host:65536" → int("65536")=65536. 65536 > 65535 → ValueError("Port out of range 0-65535").
+
+   For "http://host:-1" → partition(':') gives ("host", ":", "-1"). port="-1". `"-1".isdigit()` is False → ValueError("Port could not be cast to integer value as '-1'").
+
+   Wait, but "-1" - does partition(':') on "host:-1" give ("host", ":", "-1")? Yes. So port = "-1". `"-1".isdigit()` → False. So it raises ValueError.
+
+   Actually wait - for negative port in URL, how does it appear? "http://host:-1" - the netloc would be "host:-1". partition(':') → hostname="host", port="-1". Then port="-1" is not digit → ValueError.
+
+   For non-ASCII decimal digits: e.g., "http://host:١" (Arabic-Indic digit 1, U+0661). `"١".isdigit()` → True (it's a decimal digit in Unicode). `"١".isascii()` → False. So it raises ValueError("Port could not be cast to integer value as '١'").
+
+   Wait, let me reconsider. The check is `port.isdigit() and port.isascii()`. For "١": isdigit() is True, isascii() is False. So the condition is False, and it goes to the else branch: raises ValueError.
+
+   Actually, I need to be more careful. Let me think about what "non-ASCII decimal digits" means. Characters like:
+   - U+0661 ١ (Arabic-Indic digit ONE)
+   - U+0967 ७ (Devanagari digit SEVEN)
+   - U+FF11 １ (Fullwidth digit ONE)
+
+   For "１" (U+FF11): `"１".isdigit()` → True. `"１".isascii()` → False. So ValueError.
+
+   For the negative port case: "http://host:-1" → netloc is "host:-1". partition(':') → ("host", ":", "-1"). port = "-1". `"-1".isdigit()` → False. ValueError("Port could not be cast to integer value as '-1'").
+
+   Now I need to understand where in the test file to add the new tests. The test file is large. Let me look at what I have:
+   - Lines 1-30 (imports and start of parse_qsl_test_cases)
+   - Lines 750-800 (test_attributes_without_netloc, test_noslash)
+   - Lines 801-1457 (many test methods)
+
+   I need to find where to add port-specific tests. Let me search for existing port-related tests to understand the structure.
+
+   Looking at the existing tests in lines 801-1457, I can see:
+   - `test_port_casting_failure_message` (already exists) - tests that a non-integer port raises ValueError with a specific message
+   - Various other tests
+
+   I need to add comprehensive port tests. Let me figure out where to insert them. I'll add them after the existing `test_port_casting_failure_message` test or in a logical location.
+
+   Actually, let me first look at what's already there more carefully. The `test_port_casting_failure_message` at line ~1268:
+   ```python
+   def test_port_casting_failure_message(self):
+       message = "Port could not be cast to integer value as 'oracle'"
+       p1 = urllib.parse.urlparse('http://Server=sde; Service=sde:oracle')
+       with self.assertRaisesRegex(ValueError, message):
+           p1.port
+   ```
+
+   I need to add tests that cover:
+   1. No port → returns None
+   2. Empty port (e.g., "http://host:") → returns None
+   3. Port 0 → returns 0
+   4. Port 65535 → returns 65535
+   5. Port 65536 → ValueError("Port out of range 0-65535")
+   6. Negative port (e.g., "http://host:-1") → ValueError("Port could not be cast to integer value as '-1'")
+   7. Non-integer port (e.g., "http://host:abc") → ValueError("Port could not be cast to integer value as 'abc'")
+   8. Non-ASCII decimal digits (e.g., "http://host:١") → ValueError("Port could not be cast to integer value as '١'")
+
+   All for both urlsplit and urlparse, with both text and bytes URLs.
+
+   And I need to establish timing: the error occurs when accessing .port, not when constructing the result.
+
+   Let me now plan the edits:
+
+   1. First, I need to see where to insert in the test file. I'll add a new test method. Let me find a good spot - perhaps after `test_port_casting_failure_message`.
+
+   2. For the doc, I need to see where to add the port documentation. Let me look at the doc file more.
+
+   Let me start by reading more of the test file to find the right insertion point, and also read more of the doc file.
+
+   Actually, I already have lines 801-1457 of the test file. Let me find `test_port_casting_failure_message` in there. Looking at the content... yes, it's there:
+
+   ```python
+   def test_port_casting_failure_message(self):
+       message = "Port could not be cast to integer value as 'oracle'"
+       p1 = urllib.parse.urlparse('http://Server=sde; Service=sde:oracle')
+       with self.assertRaisesRegex(ValueError, message):
+           p1.port
+
+       p2 = urllib.parse.urlsplit('http://Server=sde; Service=sde:oracle')
+       with self.assertRaisesRegex(ValueError, message):
+           p2.port
+   ```
+
+   I'll add my new test method right after this one.
+
+   Now let me plan the test method. I need to be careful about the exact error messages:
+
+   For ValueError with "Port could not be cast to integer value as {port!r}":
+   - The argument tuple would be (f"Port could not be cast to integer value as {port!r}",)
+   - Actually, ValueError takes one argument, so args = (message,)
+
+   For ValueError with "Port out of range 0-65535":
+   - args = ("Port out of range 0-65535",)
+
+   Let me now write the test:
+
+   ```python
+   def test_port_access_boundary_and_errors(self):
+       """Test port property boundary values and error cases for urlsplit/urlparse."""
+       # Both functions, both str and bytes
+       for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+           for url_type, expected_none in ((str, None), (bytes, None)):
+               # No port: url without :port
+               p = func("http://example.com/")
+               self.assertIs(p.port, None)
+               p = func(b"http://example.com/")
+               self.assertIs(p.port, None)
+               # Empty port: trailing colon
+               p = func("http://example.com:")
+               self.assertIs(p.port, None)
+               p = func(b"http://example.com:")
+               self.assertIs(p.port, None)
+               # Port 0
+               p = func("http://example.com:0/")
+               self.assertEqual(p.port, 0)
+               p = func(b"http://example.com:0/")
+               self.assertEqual(p.port, 0)
+               # Port 65535
+               p = func("http://example.com:65535/")
+               self.assertEqual(p.port, 65535)
+               p = func(b"http://example.com:65535/")
+               self.assertEqual(p.port, 65535)
+               # Port 65536: out of range
+               p = func("http://example.com:65536/")
+               with self.assertRaises(ValueError) as cm:
+                   p.port
+               self.assertEqual(cm.exception.args, ("Port out of range 0-65535",))
+               self.assertEqual(str(cm.exception), "Port out of range 0-65535")
+               p = func(b"http://example.com:65536/")
+               with self.assertRaises(ValueError) as cm:
+                   p.port
+               self.assertEqual(cm.exception.args, ("Port out of range 0-65535",))
+               # Negative port
+               p = func("http://example.com:-1/")
+               with self.assertRaises(ValueError) as cm:
+                   p.port
+               self.assertEqual(cm.exception.args,
+                              ("Port could not be cast to integer value as '-1'",))
+               p = func(b"http://example.com:-1/")
+               with self.assertRaises(ValueError) as cm:
+                   p.port
+               self.assertEqual(cm.exception.args,
+                              ("Port could not be cast to integer value as b'-1'",))
+               # Non-integer port
+               p = func("http://example.com:abc/")
+               with self.assertRaises(ValueError) as cm:
+                   p.port
+               self.assertEqual(cm.exception.args,
+                              ("Port could not be cast to integer value as 'abc'",))
+               p = func(b"http://example.com:abc/")
+               with self.assertRaises(ValueError) as cm:
+                   p.port
+               self.assertEqual(cm.exception.args,
+                              ("Port could not be cast to integer value as b'abc'",))
+               # Non-ASCII decimal digit
+               p = func("http://example.com:\u0661/")
+               with self.assertRaises(ValueError) as cm:
+                   p.port
+               self.assertEqual(cm.exception.args,
+                              ("Port could not be cast to integer value as '\u0661'",))
+       ```
+
+   Wait, I need to be more careful. Let me re-examine the _hostinfo property.
+
+   For the str version:
+   ```python
+   @property
+   def _hostinfo(self):
+       netloc = self.netloc
+       _, _, hostinfo = netloc.rpartition('@')
+       _, have_open_br, bracketed = hostinfo.partition('[')
+       if have_open_br:
+           hostname, _, port = bracketed.partition(']')
+           _, _, port = port.partition(':')
+       else:
+           hostname, _, port = hostinfo.partition(':')
+       if not port:
+           port = None
+       return hostname, port
+   ```
+
+   For "http://example.com:0/": netloc = "example.com:0"
+   - rpartition('@') → ('', '', 'example.com:0') → hostinfo = 'example.com:0'
+   - partition('[') → ('example.com:0', '', '') → have_open_br = '' (falsy)
+   - partition(':') on 'example.com:0' → ('example.com', ':', '0') → hostname='example.com', port='0'
+   - `not port` → `not '0'` → False (since '0' is truthy)
+   - return ('example.com', '0')
+
+   Then in port property:
+   - port = '0'
+   - port is not None → True
+   - '0'.isdigit() → True, '0'.isascii() → True
+   - port = int('0') = 0
+   - 0 <= 0 <= 65535 → True
+   - return 0 ✓
+
+   For "http://example.com:" (empty port): netloc = "example.com:"
+   - partition(':') → ('example.com', ':', '') → hostname='example.com', port=''
+   - `not port` → `not ''` → True → port = None
+   - return ('example.com', None)
+
+   Then in port property:
+   - port = None
+   - port is not None → False
+   - return None ✓
+
+   For "http://example.com:65536/": netloc = "example.com:65536"
+   - partition(':') → ('example.com', ':', '65536') → port='65536'
+   - `not port` → False
+   - return ('example.com', '65536')
+
+   In port property:
+   - port = '65536'
+   - not None → True
+   - '65536'.isdigit() → True, .isascii() → True
+   - port = int('65536') = 65536
+   - 0 <= 65536 <= 65535 → False
+   - raise ValueError("Port out of range 0-65535") ✓
+
+   For "http://example.com:-1/": netloc = "example.com:-1"
+   - partition(':') → ('example.com', ':', '-1') → port='-1'
+   - `not port` → False
+   - return ('example.com', '-1')
+
+   In port property:
+   - port = '-1'
+   - not None → True
+   - '-1'.isdigit() → False
+   - raise ValueError(f"Port could not be cast to integer value as {'-1'!r}")
+   - = ValueError("Port could not be cast to integer value as '-1'") ✓
+
+   For "http://example.com:abc/": netloc = "example.com:abc"
+   - partition(':') → ('example.com', ':', 'abc') → port='abc'
+   - return ('example.com', 'abc')
+
+   In port property:
+   - port = 'abc'
+   - 'abc'.isdigit() → False
+   - raise ValueError("Port could not be cast to integer value as 'abc'") ✓
+
+   For "http://example.com:١/" (U+0661): netloc = "example.com:١"
+   - partition(':') → ('example.com', ':', '١') → port='١'
+   - return ('example.com', '١')
+
+   In port property:
+   - port = '١'
+   - '١'.isdigit() → True
+   - '١'.isascii() → False
+   - Condition `port.isdigit() and port.isascii()` → False
+   - raise ValueError(f"Port could not be cast to integer value as {'١'!r}")
+   - = ValueError("Port could not be cast to integer value as '١'") ✓
+
+   Now for bytes:
+   For b"http://example.com:0/": netloc = b"example.com:0"
+   - partition(b':') → (b'example.com', b':', b'0') → port=b'0'
+   - `not port` → False
+   - return (b'example.com', b'0')
+
+   In port property (same property, but with bytes):
+   - port = b'0'
+   - not None → True
+   - b'0'.isdigit() → True, b'0'.isascii() → True
+   - port = int(b'0') = 0
+   - 0 <= 0 <= 65535 → True
+   - return 0 ✓
+
+   For b"http://example.com:-1/": netloc = b"example.com:-1"
+   - port = b'-1'
+   - b'-1'.isdigit() → False
+   - raise ValueError(f"Port could not be cast to integer value as {b'-1'!r}")
+   - = ValueError("Port could not be cast to integer value as b'-1'") ✓
+
+   Great, so my analysis is correct.
+
+   Now, for the "timing" aspect - I need to show that constructing the result doesn't raise, only accessing .port does. I'll include that in the test.
+
+   Let me also think about what "non-ASCII decimal digits in text URLs" means more broadly. The key point is that `isdigit()` returns True for many Unicode digits, but `isascii()` filters them out. I'll use U+0661 (Arabic-Indic digit) as a representative example.
+
+   Now, where to insert in the test file? I'll add it after `test_port_casting_failure_message`. Let me find the exact text to use as the anchor for the patch.
+
+   Looking at the content I have (lines 801-1457), I can see:
+   ```
+       def test_port_casting_failure_message(self):
+           message = "Port could not be cast to integer value as 'oracle'"
+           p1 = urllib.parse.urlparse('http://Server=sde; Service=sde:oracle')
+           with self.assertRaisesRegex(ValueError, message):
+               p1.port
+
+           p2 = urllib.parse.urlsplit('http://Server=sde; Service=sde:oracle')
+           with self.assertRaisesRegex(ValueError, message):
+               p2.port
+
+       def test_telurl_params(self):
+   ```
+
+   I'll insert between `test_port_casting_failure_message` and `test_telurl_params`.
+
+   Now for the doc, I need to read more of the doc file to find where to add the port documentation. Let me read more of it.
+
+   Actually, let me first do the test file edit, then deal with the doc. Let me plan the patch.
+
+   The old text will be:
+   ```
+       def test_telurl_params(self):
+   ```
+
+   And I'll replace it with:
+   ```
+       def test_port_access_boundary_and_errors(self):
+           ...
+       def test_telurl_params(self):
+   ```
+
+   Wait, I need to be careful. The `old` in the patch must be unique. Let me use a longer anchor.
+
+   Actually, let me look at what comes between `test_port_casting_failure_message` and `test_telurl_params`:
+
+   ```
+           p2 = urllib.parse.urlsplit('http://Server=sde; Service=sde:oracle')
+           with self.assertRaisesRegex(ValueError, message):
+               p2.port
+
+       def test_telurl_params(self):
+   ```
+
+   I'll use this as my anchor. Let me write the patch now.
+
+   Actually wait - I need to also verify: for the "no port" case, I should be careful. "http://example.com/" has netloc "example.com". partition(':') on "example.com" → ("example.com", "", ""). So port = "". `not port` → True → port = None. Good.
+
+   But what about "http://example.com"? Same thing - netloc is "example.com", partition(':') → ("example.com", "", ""). port = "" → None.
+
+   Let me also think about whether I should test with a URL that has a path or not. It shouldn't matter for port access, but let me be consistent.
+
+   Now let me also think about the "timing" aspect. The task says "Establish when invalid-port errors occur". This means I should show that:
+   1. `urlparse("http://example.com:65536/")` does NOT raise
+   2. `result.port` DOES raise
+
+   I'll include this explicitly in the test.
+
+   Let me write the complete test method:
+
+   ```python
+    def test_port_access_boundary_and_errors(self):
+        """Port property: boundary values, errors, and timing.
+
+        The port property validates on access, not at construction time.
+        """
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            # --- No port ---
+            p = func("http://example.com/")
+            self.assertIs(p.port, None)
+            p = func(b"http://example.com/")
+            self.assertIs(p.port, None)
+
+            # --- Empty port (trailing colon, no digits) ---
+            p = func("http://example.com:")
+            self.assertIs(p.port, None)
+            p = func(b"http://example.com:")
+            self.assertIs(p.port, None)
+
+            # --- Port 0 ---
+            p = func("http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            p = func(b"http://example.com:0/")
+            self.assertEqual(p.port, 0)
+
+            # --- Port 65535 (max valid) ---
+            p = func("http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            p = func(b"http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+
+            # --- Port 65536 (out of range) ---
+            # Construction succeeds; error only on .port access
+            p = func("http://example.com:65536/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port out of range 0-65535",))
+            self.assertEqual(str(cm.exception),
+                             "Port out of range 0-65535")
+            p = func(b"http://example.com:65536/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port out of range 0-65535",))
+
+            # --- Negative port ---
+            p = func("http://example.com:-1/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as '-1'",))
+            p = func(b"http://example.com:-1/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as b'-1'",))
+
+            # --- Non-integer port ---
+            p = func("http://example.com:abc/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as 'abc'",))
+            p = func(b"http://example.com:abc/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as b'abc'",))
+
+            # --- Non-ASCII decimal digit (text URL only; bytes are ASCII) ---
+            p = func("http://example.com:\u0661/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as '\u0661'",))
+   ```
+
+   Wait, I need to double-check: for bytes, can I have non-ASCII? The task says "ASCII byte URLs" so I think bytes tests should only use ASCII. The non-ASCII test is only for text URLs. Let me re-read the task:
+
+   "add regression coverage for both public functions with text URLs and ASCII byte URLs: no port, an empty port, 0, 65535, 65536, a negative port, and a noninteger port. Also cover non-ASCII decimal digits in text URLs."
+
+   So the non-ASCII case is only for text URLs. Good, my test above is correct.
+
+   Now let me think about the timing aspect more carefully. The task says "Establish when invalid-port errors occur". I should explicitly test that construction doesn't raise. Let me add:
+
+   ```python
+            # --- Timing: construction does not validate the port ---
+            p = func("http://example.com:65536/")
+            # p was constructed successfully; the error is only on .port
+            with self.assertRaises(ValueError):
+                p.port
+   ```
+
+   Actually, this is implicitly shown by the fact that I construct `p` and then access `p.port` in a separate step. But let me make it more explicit with a comment or a separate assertion.
+
+   Actually, the way the test is structured already demonstrates this: I call `func(...)` which constructs the result (no error), and then `p.port` which raises. That's sufficient to establish timing. But let me add a comment to make it clear.
+
+   Let me now think about where exactly to insert. I'll use the text between `test_port_casting_failure_message` ending and `test_telurl_params` starting.
+
+   From the source I have:
+   ```
+           p2 = urllib.parse.urlsplit('http://Server=sde; Service=sde:oracle')
+           with self.assertRaisesRegex(ValueError, message):
+               p2.port
+
+       def test_telurl_params(self):
+   ```
+
+   My patch will replace:
+   ```
+           p2 = urllib.parse.urlsplit('http://Server=sde; Service=sde:oracle')
+           with self.assertRaisesRegex(ValueError, message):
+               p2.port
+
+       def test_telurl_params(self):
+   ```
+
+   With:
+   ```
+           p2 = urllib.parse.urlsplit('http://Server=sde; Service=sde:oracle')
+           with self.assertRaisesRegex(ValueError, message):
+               p2.port
+
+       def test_port_access_boundary_and_errors(self):
+           ...
+       def test_telurl_params(self):
+   ```
+
+   Wait, I need to make sure the indentation is correct. The test methods are indented with 4 spaces (they're inside a class). Let me check: looking at the source, `def test_port_casting_failure_message(self):` has 4 spaces of indentation. The body has 8 spaces. So my new method should follow the same pattern.
+
+   Let me now carefully write the patch. The `old` string must be exactly what's in the file. Let me use:
+
+   old:
+   ```
+           p2 = urllib.parse.urlsplit('http://Server=sde; Service=sde:oracle')
+           with self.assertRaisesRegex(ValueError, message):
+               p2.port
+
+       def test_telurl_params(self):
+   ```
+
+   new:
+   ```
+           p2 = urllib.parse.urlsplit('http://Server=sde; Service=sde:oracle')
+           with self.assertRaisesRegex(ValueError, message):
+               p2.port
+
+       def test_port_access_boundary_and_errors(self):
+           # The port property validates on access, not at construction time.
+           for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+               # No port
+               p = func("http://example.com/")
+               self.assertIs(p.port, None)
+               p = func(b"http://example.com/")
+               self.assertIs(p.port, None)
+
+               # Empty port (trailing colon, no digits)
+               p = func("http://example.com:")
+               self.assertIs(p.port, None)
+               p = func(b"http://example.com:")
+               self.assertIs(p.port, None)
+
+               # Port 0
+               p = func("http://example.com:0/")
+               self.assertEqual(p.port, 0)
+               p = func(b"http://example.com:0/")
+               self.assertEqual(p.port, 0)
+
+               # Port 65535 (max valid)
+               p = func("http://example.com:65535/")
+               self.assertEqual(p.port, 65535)
+               p = func(b"http://example.com:65535/")
+               self.assertEqual(p.port, 65535)
+
+               # Port 65536 (out of range); construction succeeds
+               p = func("http://example.com:65536/")
+               with self.assertRaises(ValueError) as cm:
+                   p.port
+               self.assertEqual(cm.exception.args,
+                                ("Port out of range 0-65535",))
+               self.assertEqual(str(cm.exception),
+                                "Port out of range 0-65535")
+               p = func(b"http://example.com:65536/")
+               with self.assertRaises(ValueError) as cm:
+                   p.port
+               self.assertEqual(cm.exception.args,
+                                ("Port out of range 0-65535",))
+
+               # Negative port
+               p = func("http://example.com:-1/")
+               with self.assertRaises(ValueError) as cm:
+                   p.port
+               self.assertEqual(cm.exception.args,
+                                ("Port could not be cast to integer value as '-1'",))
+               p = func(b"http://example.com:-1/")
+               with self.assertRaises(ValueError) as cm:
+                   p.port
+               self.assertEqual(cm.exception.args,
+                                ("Port could not be cast to integer value as b'-1'",))
+
+               # Non-integer port
+               p = func("http://example.com:abc/")
+               with self.assertRaises(ValueError) as cm:
+                   p.port
+               self.assertEqual(cm.exception.args,
+                                ("Port could not be cast to integer value as 'abc'",))
+               p = func(b"http://example.com:abc/")
+               with self.assertRaises(ValueError) as cm:
+                   p.port
+               self.assertEqual(cm.exception.args,
+                                ("Port could not be cast to integer value as b'abc'",))
+
+               # Non-ASCII decimal digit (text URL)
+               p = func("http://example.com:\u0661/")
+               with self.assertRaises(ValueError) as cm:
+                   p.port
+               self.assertEqual(cm.exception.args,
+                                ("Port could not be cast to integer value as '\u0661'",))
+
+       def test_telurl_params(self):
+   ```
+
+   Hmm wait, I need to be careful about the `\u0661` in the patch. In the actual file, this will be a literal Unicode character. But in my patch string, I need to represent it correctly. Since the patch is a JSON string, `\u0661` will be interpreted as the Unicode character U+0661. That should be fine.
+
+   Actually wait - in the test, I'm writing `func("http://example.com:\u0661/")`. In the Python source file, this should be the literal escape sequence `\u0661` in the string, or the actual character. Let me think... In the Python source, `"http://example.com:\u0661/"` - Python will interpret `\u0661` as the Unicode character U+0661 (١). So in the file, I should write it as the escape sequence `\u0661` in the source code. That way it's clearly non-ASCII and readable.
+
+   Actually, for the patch, I'm writing the content as a JSON string. If I write `\\u0661` in JSON, that becomes `\u0661` in the actual file content (the literal backslash-u-0661). If I write `\u0661` in JSON, that becomes the actual character ١ in the file.
+
+   For a Python source file, either would work:
+   - `"\u0661"` (escape sequence in source) → the character ١
+   - `"١"` (literal character in source) → the character ١
+
+   I'll use the escape sequence form for clarity: in the file it should be `"\u0661"`. In my JSON patch string, to get a literal `\u0661` in the file (backslash, u, 0, 6, 6, 1), I need to write `\\u0661` in JSON. Wait no...
+
+   Let me think again. The JSON string `"\\u0661"` represents the 6-character string `\u0661`. When this goes into the Python file, it becomes `"\u0661"` which Python interprets as the character U+0661. Good.
+
+   Actually, I realize I need to be more careful. In my JSON response, the `new` field is a string. If I want the file to contain the literal text `\u0661` (as a Python unicode escape in a string literal), I need the JSON to encode that as `\\u0661`. Let me verify:
+   - JSON: `"\\u0661"` → string value: `\u0661` (6 chars: \, u, 0, 6, 6, 1)
+   - In the Python file: `"...:\u0661/"` → Python interprets as the character ١
+
+   Yes, that's correct.
+
+   But wait - I also need the assertion to match. In the assertion:
+   ```python
+   self.assertEqual(cm.exception.args,
+                    ("Port could not be cast to integer value as '\u0661'",))
+   ```
+
+   Here `\u0661` in the Python source will be the character ١. The actual exception message will be `f"Port could not be cast to integer value as {port!r}"` where port is the string `'١'`. So `port!r` is `"'١'"`. The message is `"Port could not be cast to integer value as '١'"`.
+
+   In my test assertion, `"\u0661"` in the source is the character ١, so the string comparison will work correctly.
+
+   Actually, let me reconsider. I'll use the Unicode character directly in the assertion for clarity, but use the escape in the URL construction. Actually, for consistency and to avoid any encoding issues, let me just use `\u0661` escape sequences throughout in the Python source. In JSON, that's `\\u0661`.
+
+   Hmm, but actually the error message uses `!r` which for a string containing U+0661 would produce the actual character in the repr (since it's printable). Let me verify: `repr('١')` → `"'١'"`. Yes, for printable Unicode characters, repr shows them directly.
+
+   So the exception message is: `Port could not be cast to integer value as '١'` (with the actual ١ character).
+
+   In my test, I compare against the string `"Port could not be cast to integer value as '\u0661'"` which in Python is the same string. Good.
+
+   Now let me also think about whether I need to handle the `isascii()` check more carefully. The condition is:
+   ```python
+   if port.isdigit() and port.isascii():
+   ```
+
+   For the string "١": `isdigit()` → True, `isascii()` → False. So it goes to the else branch.
+   For the string "1": `isdigit()` → True, `isascii()` → True. So it converts to int.
+
+   What about a string like "1١" (mixed)? `"1١".isdigit()` → True (all chars are digits). `"1١".isascii()` → False. So it would raise ValueError. That's an edge case I don't need to test explicitly.
+
+   OK, I think my test is solid. Let me now also think about whether I need to test the case where the URL has no colon at all (no port separator) vs. a trailing colon (empty port). I've covered both:
+   - "http://example.com/" → no colon in netloc → port is None
+   - "http://example.com:" → colon present but nothing after → port is "" → None
+
+   Good.
+
+   Now, let me also think about whether the test for "no port" should use a URL with or without a trailing slash. Both work:
+   - "http://example.com" → netloc = "example.com" → partition(':') → ("example.com", "", "") → port = "" → None
+   - "http://example.com/" → same netloc, path is "/"
+
+   I'll use "http://example.com/" consistently (with trailing slash) for clarity.
+
+   Now for the doc file. I need to read more of it to find where to add the port documentation. Let me read the doc file further.
+
+   Actually, let me first do the test edit since I have all the information I need for that. Then I'll read the doc and do the doc edit.
+
+   Let me check: the file_sha256 for test_urlparse.py is `c8f4d478470cb5b3e9daa653a42d029be19aef842fd9577fd524415ce2f037d1` (from the read result).
+
+   The candidate_id is `2921cbc8a115c86871a11f8eaea929c3d48a8e4d2bb2ca03bf48971c36cf15cd`.
+
+   Let me write the patch. I need to be very precise about the whitespace in the `old` string.
+
+   Looking at the source content I have:
+   ```
+           p2 = urllib.parse.urlsplit('http://Server=sde; Service=sde:oracle')
+           with self.assertRaisesRegex(ValueError, message):
+               p2.port
+
+       def test_telurl_params(self):
+   ```
+
+   The indentation: `def test_port_casting_failure_message` is at 4 spaces. Its body is at 8 spaces. So `p2 = ...` is at 8 spaces, `with self...` is at 8 spaces, `p2.port` is at 12 spaces. Then blank line, then `def test_telurl_params` at 4 spaces.
+
+   Let me write the old string carefully:
+   ```
+            p2 = urllib.parse.urlsplit('http://Server=sde; Service=sde:oracle')
+            with self.assertRaisesRegex(ValueError, message):
+                p2.port
+
+        def test_telurl_params(self):
+   ```
+
+   Wait, I need to count the spaces. In the source:
+   - `def test_port_casting_failure_message(self):` starts at column 5 (4 spaces indent)
+   - Body lines start at column 9 (8 spaces indent)
+   - `with self.assertRaisesRegex...` is at 8 spaces
+   - `p1.port` is at 12 spaces
+
+   Let me re-read the exact content from the source I have:
+
+   ```
+       def test_port_casting_failure_message(self):
+           message = "Port could not be cast to integer value as 'oracle'"
+           p1 = urllib.parse.urlparse('http://Server=sde; Service=sde:oracle')
+           with self.assertRaisesRegex(ValueError, message):
+               p1.port
+
+           p2 = urllib.parse.urlsplit('http://Server=sde; Service=sde:oracle')
+           with self.assertRaisesRegex(ValueError, message):
+               p2.port
+
+       def test_telurl_params(self):
+   ```
+
+   So:
+   - `    def test_port_casting_failure_message(self):` (4 spaces)
+   - `        message = ...` (8 spaces)
+   - `        p1 = ...` (8 spaces)
+   - `        with self.assertRaisesRegex(ValueError, message):` (8 spaces)
+   - `            p1.port` (12 spaces)
+   - `` (blank)
+   - `        p2 = ...` (8 spaces)
+   - `        with self.assertRaisesRegex(ValueError, message):` (8 spaces)
+   - `            p2.port` (12 spaces)
+   - `` (blank)
+   - `    def test_telurl_params(self):` (4 spaces)
+
+   My old string:
+   ```
+            p2 = urllib.parse.urlsplit('http://Server=sde; Service=sde:oracle')
+            with self.assertRaisesRegex(ValueError, message):
+                p2.port
+
+        def test_telurl_params(self):
+   ```
+
+   Wait, that's 12 spaces for `p2 = ...`. Let me recount from the source:
+   - The class body methods are at 4 spaces
+   - Method bodies are at 8 spaces
+   - `with` blocks inside method bodies: the `with` is at 8 spaces, its body at 12 spaces
+
+   So:
+   ```
+        p2 = urllib.parse.urlsplit('http://Server=sde; Service=sde:oracle')
+        with self.assertRaisesRegex(ValueError, message):
+            p2.port
+
+    def test_telurl_params(self):
+   ```
+
+   Hmm, that's 8 spaces for p2, 8 for with, 12 for p2.port, blank line, 4 spaces for def. Let me be very precise.
+
+   From the raw content in the JSON, looking at the test_port_casting_failure_message section:
+
+   The content shows (I'll mark spaces with ·):
+   ```
+   ····def test_port_casting_failure_message(self):
+   ········message = "Port could not be cast to integer value as 'oracle'"
+   ········p1 = urllib.parse.urlparse('http://Server=sde; Service=sde:oracle')
+   ········with self.assertRaisesRegex(ValueError, message):
+   ············p1.port
+   
+   ········p2 = urllib.parse.urlsplit('http://Server=sde; Service=sde:oracle')
+   ········with self.assertRaisesRegex(ValueError, message):
+   ············p2.port
+   
+   ····def test_telurl_params(self):
+   ```
+
+   So:
+   - 4 spaces: def, blank line before next def
+   - 8 spaces: message, p1, with, p2, with
+   - 12 spaces: p1.port, p2.port
+   - blank lines between sections
+
+   My `old` string (exact):
+   ```
+            p2 = urllib.parse.urlsplit('http://Server=sde; Service=sde:oracle')
+            with self.assertRaisesRegex(ValueError, message):
+                p2.port
+
+        def test_telurl_params(self):
+   ```
+
+   Wait no. 8 spaces for `p2 =`, 8 spaces for `with`, 12 spaces for `p2.port`. Let me write it out:
+
+   Line 1: 8 spaces + `p2 = urllib.parse.urlsplit('http://Server=sde; Service=sde:oracle')`
+   Line 2: 8 spaces + `with self.assertRaisesRegex(ValueError, message):`
+   Line 3: 12 spaces + `p2.port`
+   Line 4: (empty)
+   Line 5: 4 spaces + `def test_telurl_params(self):`
+
+   In JSON, this is:
+   `"        p2 = urllib.parse.urlsplit('http://Server=sde; Service=sde:oracle')\n        with self.assertRaisesRegex(ValueError, message):\n            p2.port\n\n    def test_telurl_params(self):"`
+
+   And my `new` string will be the same but with the new test method inserted between `p2.port` and `def test_telurl_params`.
+
+   Let me now write the full new content. The new test method:
+
+   ```python
+    def test_port_access_boundary_and_errors(self):
+        # The port property validates on access, not at construction time.
+        for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            # No port
+            p = func("http://example.com/")
+            self.assertIs(p.port, None)
+            p = func(b"http://example.com/")
+            self.assertIs(p.port, None)
+
+            # Empty port (trailing colon, no digits)
+            p = func("http://example.com:")
+            self.assertIs(p.port, None)
+            p = func(b"http://example.com:")
+            self.assertIs(p.port, None)
+
+            # Port 0
+            p = func("http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            p = func(b"http://example.com:0/")
+            self.assertEqual(p.port, 0)
+
+            # Port 65535 (max valid)
+            p = func("http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            p = func(b"http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+
+            # Port 65536 (out of range); construction succeeds
+            p = func("http://example.com:65536/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port out of range 0-65535",))
+            self.assertEqual(str(cm.exception),
+                             "Port out of range 0-65535")
+            p = func(b"http://example.com:65536/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port out of range 0-65535",))
+
+            # Negative port
+            p = func("http://example.com:-1/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as '-1'",))
+            p = func(b"http://example.com:-1/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as b'-1'",))
+
+            # Non-integer port
+            p = func("http://example.com:abc/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as 'abc'",))
+            p = func(b"http://example.com:abc/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as b'abc'",))
+
+            # Non-ASCII decimal digit (text URL)
+            p = func("http://example.com:\u0661/")
+            with self.assertRaises(ValueError) as cm:
+                p.port
+            self.assertEqual(cm.exception.args,
+                             ("Port could not be cast to integer value as '\u0661'",))
+   ```
+
+   Now let me assemble the full patch. The `old` is:
+   ```
+            p2 = urllib.parse.urlsplit('http://Server=sde; Service=sde:oracle')
+            with self.assertRaisesRegex(ValueError, message):
+                p2.port
+
+        def test_telurl_params(self):
+   ```
+
+   The `new` is:
+   ```
+            p2 = urllib.parse.urlsplit('http://Server=sde; Service=sde:oracle')
+            with self.assertRaisesRegex(ValueError, message):
+                p2.port
+
+        def test_port_access_boundary_and_errors(self):
+            # The port property validates on access, not at construction time.
+            for func in (urllib.parse.urlsplit, urllib.parse.urlparse):
+                # No port
+                p = func("http://example.com/")
+                self.assertIs(p.port, None)
+                p = func(b"http://example.com/")
+                self.assertIs(p.port, None)
+
+                # Empty port (trailing colon, no digits)
+                p = func("http://example.com:")
+                self.assertIs(p.port, None)
+                p = func(b"http://example.com:")
+                self.assertIs(p.port, None)
+
+                # Port 0
+                p = func("http://example.com:0/")
+                self.assertEqual(p.port, 0)
+                p = func(b"http://example.com:0/")
+                self.assertEqual(p.port, 0)
+
+                # Port 65535 (max valid)
+                p = func("http://example.com:65535/")
+                self.assertEqual(p.port, 65535)
+                p = func(b"http://example.com:65535/")
+                self.assertEqual(p.port, 65535)
+
+                # Port 65536 (out of range); construction succeeds
+                p = func("http://example.com:65536/")
+                with self.assertRaises(ValueError) as cm:
+                    p.port
+                self.assertEqual(cm.exception.args,
+                                 ("Port out of range 0-65535",))
+                self.assertEqual(str(cm.exception),
+                                 "Port out of range 0-65535")
+                p = func(b"http://example.com:65536/")
+                with self.assertRaises(ValueError) as cm:
+                    p.port
+                self.assertEqual(cm.exception.args,
+                                 ("Port out of range 0-65535",))
+
+                # Negative port
+                p = func("http://example.com:-1/")
+                with self.assertRaises(ValueError) as cm:
+                    p.port
+                self.assertEqual(cm.exception.args,
+                                 ("Port could not be cast to integer value as '-1'",))
+                p = func(b"http://example.com:-1/")
+                with self.assertRaises(ValueError) as cm:
+                    p.port
+                self.assertEqual(cm.exception.args,
+                                 ("Port could not be cast to integer value as b'-1'",))
+
+                # Non-integer port
+                p = func("http://example.com:abc/")
+                with self.assertRaises(ValueError) as cm:
+                    p.port
+                self.assertEqual(cm.exception.args,
+                                 ("Port could not be cast to integer value as 'abc'",))
+                p = func(b"http://example.com:abc/")
+                with self.assertRaises(ValueError) as cm:
+                    p.port
+                self.assertEqual(cm.exception.args,
+                                 ("Port could not be cast to integer value as b'abc'",))
+
+                # Non-ASCII decimal digit (text URL)
+                p = func("http://example.com:\u0661/")
+                with self.assertRaises(ValueError) as cm:
+                    p.port
+                self.assertEqual(cm.exception.args,
+                                 ("Port could not be cast to integer value as '\u0661'",))
+
+        def test_telurl_params(self):
+   ```
+
+   This looks good. Let me now execute the patch.
+
+   Wait, I should double-check one thing. The `old` text - is it truly unique in the file? The text `p2 = urllib.parse.urlsplit('http://Server=sde; Service=sde:oracle')` followed by `with self.assertRaisesRegex(ValueError, message):` and `p2.port` - this is specific enough. And `def test_telurl_params(self):` is a unique method name. So the combination should be unique.
+
+   Let me proceed with the patch.
