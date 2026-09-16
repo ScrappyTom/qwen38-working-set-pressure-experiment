@@ -1,5 +1,21 @@
 # Experiment operating rules
 
+The owner's "Fix the issues and rerun" authorizes the prospective
+`development/decision_interface/feedback_repair/PLAN.md`, published at f3001917.
+Complete the seven earned repairs and native saved-state qualification, publish the
+new freeze, then execute one uncoached sixteen-request/forty-eight-operation attempt
+from the original checkpoint. Preserve the previous run and checker scores. Retain
+medium uncapped thinking, seed 961221, q4 K/V, no MTP and existing capacity/monitoring.
+No repeated approval, researcher coaching, private-draft execution or silent retry.
+
+The successor must make known rejection causes actionable, keep projected diagnostic
+counts truthful, qualify mutation detection against a passing control and each
+declared target, expose exact preservation rules, distinguish range/file extent,
+and own the declared non-EOF line separator. Preserve emitted and applied identities
+separately. Do not attribute these corrections to a better model or new memory.
+Engineering completion and a successful reference route do not establish Qwen use;
+review the actual new trajectory and its artifact independently before closing it.
+
 The owner's "Complete the repairs and then rerun" is closed under published freeze
 `37dee2c5`. Read `development/decision_interface/channel_repair/review/RESULTS.md`
 and its complete transcript, host and artifact reviews. The opt-in thinking/final

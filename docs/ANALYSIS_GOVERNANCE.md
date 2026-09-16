@@ -66,6 +66,14 @@ preserving emitted bytes does not establish safe whole-line replacement. Record
 any exact preservation criterion in the actor-facing task before exposure, rather
 than treating an unstated checker restriction as a model comprehension failure.
 
+Qualify a stronger checker against plausible partial work, not only a complete
+reference and uniformly weakened tests. Separate API, input-family and case scope
+when claiming that each is covered. Preserve the raw target outcomes while keeping
+the decision report bounded. For host-owned line operations, distinguish exact
+proposal custody from any declared separator supplied during construction; inspect
+the following unselected line as well as the replacement. Exact documentation
+preservation includes line endings; universal-newline reads cannot establish it.
+
 For each finding, state what the model saw, what its thinking and final
 response indicate separately, what the host actually did, the observed
 consequence, and any uncertainty. Distinguish absent-evidence recovery,

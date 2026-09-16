@@ -12,6 +12,7 @@ from .working_session import WorkingSession, MAX_FRAGMENT_BYTES
 
 class DecisionSession(OperableSession):
     mutation_actions = ('patch', 'replace_region')
+    assessment_api = check_assessment
 
     def __init__(self, *args, check_contracts=None, **kwargs):
         self.recovery_focus = []
@@ -49,7 +50,7 @@ class DecisionSession(OperableSession):
         return contract if contract and contract['checker_sha256']==record['checker_sha256'] else None
 
     def _assessment(self, handle):
-        return check_assessment.assessment(self.observations, handle, self._contract(handle))
+        return self.assessment_api.assessment(self.observations, handle, self._contract(handle))
 
     def verification_view(self):
         checks = {}
@@ -61,7 +62,7 @@ class DecisionSession(OperableSession):
                 state = dict(state)
                 if result.get('observation'):
                     value = self._assessment(result['observation'])
-                    state['assessment'] = check_assessment.overview(value)
+                    state['assessment'] = self.assessment_api.overview(value)
                     state['inspect'] = dict(action='inspect_check', observation=result['observation'], offset=0)
                 else:
                     state['assessment_unavailable'] = 'Historical receipt has no preserved observation in this configuration.'
@@ -100,7 +101,7 @@ class DecisionSession(OperableSession):
         if value['latest_feedback']:
             result=value['latest_feedback']['result']
             if result.get('executed') and result.get('observation') and result.get('check_id'):
-                result['report']=check_assessment.overview(self._assessment(result['observation']))
+                result['report']=self.assessment_api.overview(self._assessment(result['observation']))
         visible_spans = self._verified_source_ranges(visible)
         inventory = self.selection_inventory(count=8)
         for entry in inventory['entries']:
@@ -216,7 +217,7 @@ class DecisionSession(OperableSession):
     def _ordinary(self, action):
         name = action['action']
         if name == 'inspect_check':
-            return check_assessment.inspect_check(self.observations, action['observation'], action['offset'], self._contract(action['observation']))
+            return self.assessment_api.inspect_check(self.observations, action['observation'], action['offset'], self._contract(action['observation']))
         result = super()._ordinary(action)
         if name == 'search' and result.get('accepted'):
             # Return a mechanically identified edit-sized region, not merely a
@@ -240,7 +241,7 @@ class DecisionSession(OperableSession):
         if name == 'check' and result.get('observation'):
             # The executed observation remains durable even if this later view fails.
             try:
-                result['report'] = check_assessment.overview(self._assessment(result['observation']))
+                result['report'] = self.assessment_api.overview(self._assessment(result['observation']))
             except (ValueError, TypeError, KeyError, AttributeError) as error:
                 result['assessment_status'] = 'unavailable'
                 result['assessment_error'] = type(error).__name__
