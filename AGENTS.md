@@ -1,5 +1,15 @@
 # Experiment operating rules
 
+The owner now extends the repair/qualify/run process to all other previously tested
+workloads. Follow development/workload_requalification/PLAN.md and STATUS.md.
+The URL-port completion below closes one entry, not this broader programme. Keep
+distinct task contracts, entry states and prior exposures in the inventory; do not
+drop difficult workloads or count a historical pass on another host as a current
+regression pass. New runs and earned repairs are authorized without repeated approval.
+Preserve frozen history, uncoached execution, meaningful checks, complete input/output
+review, actual saved artifacts and cumulative costs. Qualify checker/report portability
+before exposing another task to a host specialized around the last successful one.
+
 The standing repeat cycle has reached checked completion on this task. The
 coherent_diagnostics continuation frozen at ec51de65 completes in five uncoached
 requests/eleven operations, with 13.709 model-request minutes. Read its review/
