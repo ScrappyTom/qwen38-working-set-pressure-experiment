@@ -1,5 +1,21 @@
 # Experiment operating rules
 
+The owner's latest standing direction is: "We keep repeating until all host and
+your run apparatus features are fixed and things are successful." This supersedes
+earlier instructions to stop after a single repaired-host attempt or seek another
+execution approval. Continue the inspect/repair/qualify/run cycle on the same task
+until meaningful tests and accurate documentation are saved, preserved, checked and
+submitted. Include runner and qualification defects, not only production host code.
+Do not declare all possible host defects eliminated by one success.
+
+Keep each exposure separately frozen and finite, preserve every prior result, and
+record changed settings, reused prefixes, consumed resources and any operator stop.
+Repeated permission is unnecessary. Do not silently extend a live allowance, coach
+the actor, execute private drafts, weaken acceptance to manufacture success, or
+repeat a known broken configuration. The current cycle plan is
+`development/decision_interface/completion_cycle/PLAN.md`. The former offline-only
+repair remains historically offline; its successor now has explicit run authority.
+
 The reference continuation at 899a7023 is closed: six replies/nine operations, no
 file changes or submission, 24.248 model-request minutes. Read its review/RESULTS.md.
 The tests correction passes in qualified public replay; do not attribute that to a
