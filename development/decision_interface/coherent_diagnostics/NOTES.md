@@ -29,3 +29,15 @@
   preparation admits the actual stopped candidate at 11,666 tokens with its real
   one-failure result and unchanged, inaccurate account. Three earlier corrections
   are inherited work, not an effect attributable to this projection change.
+- The continuation at ec51de65 reaches correct saved documentation, actual public
+  verification and submission in five uncoached requests. Direct review and exact
+  replay agree on the outcome; see review/RESULTS.md. Preserve the failed runs and
+  inherited-work attribution. Do not convert this success into a claim that all
+  future host paths are qualified or that the diagnostic change alone caused it.
+- A complete initial failure plus its surrounding source supported a precise new
+  question. The model acquired the missing implementation and corrected both prose
+  and example. Its final account lagged the edit, but actual feedback supported
+  closure. Preserve model authorship and let later recorded facts remain distinct.
+- The model still spends effort manually aligning source line locations and
+  revisiting doctest output construction. Record that cost. No extra intervention
+  is earned merely by preferring a shorter response after supported work succeeds.

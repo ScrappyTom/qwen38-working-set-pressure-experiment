@@ -1,5 +1,22 @@
 # Experiment operating rules
 
+The standing repeat cycle has reached checked completion on this task. The
+coherent_diagnostics continuation frozen at ec51de65 completes in five uncoached
+requests/eleven operations, with 13.709 model-request minutes. Read its review/
+RESULTS.md and independent artifact audit: exact normalization source informs
+corrected prose and examples, the actual current public check passes (74 suite
+tests, 72 targeted faults, fourteen examples), and Qwen submits the checked version.
+No further run is needed solely to obtain another pass. The earlier failed attempts
+and inherited test work retain their original classifications and costs.
+
+This closes the known blockers exercised by the current repair cycle, not every
+possible host defect or general productivity question. Do not attribute the new
+success solely to diagnostic projection: it starts with already saved partial work
+and one remaining failure. Preserve complete audits and the cumulative three-attempt
+cost of 78.131 model-request minutes, separate from offline and reviewer effort.
+An account may be outdated while later source and actual checks establish completion;
+retain that provenance and examine the actor's use rather than silently rewriting it.
+
 The recovery_inspection attempt at 35f70c8d is closed after eight replies/thirteen
 operations and a graceful operator stop. Read its review/RESULTS.md. The actor saved
 documentation, consumed failed verification and corrected three of four example

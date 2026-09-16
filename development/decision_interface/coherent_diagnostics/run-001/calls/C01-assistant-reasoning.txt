@@ -1,0 +1,211 @@
+Let me analyze the situation:
+
+1. The tests pass (CHK-0029 on candidate 389292f6...)
+2. The public check fails because of a doctest example at line 186 in Doc/library/urllib.parse.rst
+3. The failing example is:
+```
+try:
+    p.port
+except ValueError as e:
+    print(e)
+```
+Expected: `Port could not be cast to integer value as ''`
+Got: nothing
+
+This means the example at line 186 is for the empty port case (`http://example.com:/`). Let me look at what's currently in the doc file.
+
+From the visible source (lines 125-210 of Doc/library/urllib.parse.rst), I can see the examples. Let me count lines to find line 186.
+
+Looking at the content shown (starting at line 125):
+- Line 125: `   | :attr:`password` |       | Password                | :const:`None`          |`
+- ...
+
+Let me count more carefully. The content starts at line 125.
+
+Line 125: `   | :attr:`password` |       | Password                | :const:`None`          |`
+Line 126: `   +------------------+-------+-------------------------+------------------------+`
+Line 127: `   | :attr:`hostname` |       | Host name (lower case)  | :const:`None`          |`
+Line 128: `   +------------------+-------+-------------------------+------------------------+`
+Line 129: `   | :attr:`port`     |       | Port number as integer, | :const:`None`          |`
+Line 130: `   |                  |       | if present              |                        |`
+Line 131: `   +------------------+-------+-------------------------+------------------------+`
+Line 132: (empty)
+Line 133: `   Reading the :attr:`port` attribute will raise a :exc:`ValueError` if`
+Line 134: `   an invalid port is specified in the URL.  See section`
+Line 135: `   :ref:`urlparse-result-object` for more information on the result object.`
+Line 136: (empty)
+Line 137: `   Port validation occurs when the :attr:`port` attribute is accessed,`
+Line 138: `   not when the URL is parsed.  :func:`urlparse` and :func:`urlsplit``
+Line 139: `   return a result object for any syntactically valid URL; the`
+Line 140: `   :exc:`ValueError` is raised only upon access to the`
+Line 141: `   :attr:`port` attribute.`
+Line 142: (empty)
+Line 143: `   The port must be a non-negative ASCII decimal integer in the range`
+Line 144: `   0 through 65535 (inclusive).  The following rules apply when the`
+Line 145: `   :attr:`port` attribute is accessed:`
+Line 146: (empty)
+Line 147: `   * An empty port string, as in ``http://host:/path``, raises`
+Line 148: `     :exc:`ValueError`.`
+Line 149: `   * A negative port, as in ``http://host:-1/path``, raises`
+Line 150: `     :exc:`ValueError`.`
+Line 151: `   * A port whose integer value is outside the range 0 through 65535,`
+Line 152: `     as in ``http://host:65536/path``, raises :exc:`ValueError`.`
+Line 153: `   * A port string that is not a pure ASCII decimal integer (including`
+Line 154: `     strings with non-ASCII decimal digits, such as U+0663 ARABIC-INDIC`
+Line 155: `     DIGIT THREE, or with any non-digit characters) raises`
+Line 156: `     :exc:`ValueError`.`
+Line 157: (empty)
+Line 158: `   The boundary values 0 and 65535 are accepted without error.`
+Line 159: (empty)
+Line 160: `   Examples of the port boundary and error behavior::`
+Line 161: (empty)
+Line 162: `      >>> from urllib.parse import urlparse`
+Line 163: `      >>> p = urlparse("http://example.com:0/")`
+Line 164: `      >>> p.port`
+Line 165: `      0`
+Line 166: `      >>> p = urlparse("http://example.com:65535/")`
+Line 167: `      >>> p.port`
+Line 168: `      65535`
+Line 169: `      >>> p = urlparse("http://example.com:65536/")`
+Line 170: `      >>> p.hostname`
+Line 171: `      'example.com'`
+Line 172: `      >>> try:`
+Line 173: `      ...     p.port`
+Line 174: `      ... except ValueError as e:`
+Line 175: `      ...     print(e)`
+Line 176: `      ... `
+Line 177: `      Port out of range 0-65535`
+Line 178: `      >>> p = urlparse("http://example.com:-1/")`
+Line 179: `      >>> try:`
+Line 180: `      ...     p.port`
+Line 181: `      ... except ValueError as e:`
+Line 182: `      ...     print(e)`
+Line 183: `      ... `
+Line 184: `      Port could not be cast to integer value as '-1'`
+Line 185: `      >>> p = urlparse("http://example.com:/")`
+Line 186: `      >>> try:`
+Line 187: `      ...     p.port`
+Line 188: `      ... except ValueError as e:`
+Line 189: `      ...     print(e)`
+Line 190: `      ... `
+Line 191: `      Port could not be cast to integer value as ''`
+Line 192: `      >>> p = urlparse("http://example.com:abc/")`
+Line 193: `      >>> try:`
+Line 194: `      ...     p.port`
+Line 195: `      ... except ValueError as e:`
+Line 196: `      ...     print(e)`
+Line 197: `      ... `
+Line 198: `      Port could not be cast to integer value as 'abc'`
+Line 199: (empty)
+Line 200: `   The same behavior applies to :func:`urlsplit` results.`
+Line 201: (empty)
+Line 202: `   Unmatched square brackets in the :attr:`netloc` attribute will raise a`
+Line 203: `   :exc:`ValueError`.`
+Line 204: (empty)
+Line 205: `   Characters in the :attr:`netloc` attribute that decompose under NFKC`
+Line 206: `   normalization (as used by the IDNA encoding) into any of ``/``, ``?``,`
+Line 207: `   ``#``, ``@``, or ``:`` will raise a :exc:`ValueError`. If the URL is`
+Line 208: `   decomposed before parsing, no error will be raised.`
+Line 209: (empty)
+Line 210: `   As is the case with all named tuples, the subclass has a few additional methods`
+
+So line 186 is `      >>> try:` - this is the try block for the empty port case (`http://example.com:/`).
+
+The doctest says:
+- Expected: `Port could not be cast to integer value as ''`
+- Got: nothing
+
+So the actual behavior when accessing `p.port` for `urlparse("http://example.com:/")` is... let me look at the implementation.
+
+From the source code (Lib/urllib/parse.py):
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+So if `port is None`, it returns `None`. If `port` is not None, it checks if it's a digit and ASCII, and if not, raises ValueError. If it is a valid digit, it converts to int and checks range.
+
+For `http://example.com:/`, what is `_hostinfo[1]`? The URL is `http://example.com:/path` - the port part after the colon is empty string. Let me think...
+
+Actually, for `http://example.com:/`, the netloc is `example.com:`. The hostinfo would split on `:` giving `['example.com', '']`. So `port = ''` (empty string).
+
+Then: `port is not None` → True
+`port.isdigit()` → `"".isdigit()` → False
+So it raises `ValueError(f"Port could not be cast to integer value as {port!r}")` → `Port could not be cast to integer value as ''`
+
+Wait, but the doctest says "Got nothing". That means the try/except didn't produce any output. That's strange...
+
+Actually wait, let me re-read the error:
+```
+Failed example:
+    try:
+        p.port
+    except ValueError as e:
+        print(e)
+Expected:
+    Port could not be cast to integer value as ''
+Got nothing
+```
+
+"Got nothing" means no output was produced. This could mean:
+1. The exception wasn't raised (p.port didn't raise), OR
+2. The print(e) didn't produce output
+
+Actually, wait. Let me think about this differently. In doctest, the example is:
+```
+>>> try:
+...     p.port
+... except ValueError as e:
+...     print(e)
+```
+
+If `p.port` doesn't raise an exception, then no output. If it does raise, `print(e)` would print the error message.
+
+But the implementation says for empty string port: `"".isdigit()` is False, so it would raise ValueError. Unless... the port is actually None?
+
+Let me look more carefully at how the port is stored. For `http://example.com:/`, the URL parsing might store the port differently.
+
+Actually, let me look at how `_hostinfo` is set. I need to see the `__new__` or `__init__` of the result objects, or how `_hostinfo` is computed.
+
+Let me look at the source more carefully. I only see lines 1-100 and 130-190 of parse.py. I need to see where `_hostinfo` is set.
+
+Let me search for `_hostinfo` in the source to understand when port becomes None vs empty string.
+
+Actually, wait. Let me reconsider. The URL `http://example.com:/` - what does urlsplit/urlparse actually produce for the port?
+
+Looking at the implementation, I need to see how the netloc is parsed into host and port. Let me search for this.
+
+Actually, I think the issue might be that for `http://example.com:/`, the port portion after the colon is an empty string, but the parsing code might convert it to None. Let me check.
+
+Let me search for how the port is extracted from netloc. I'll need to look at more of parse.py.
+
+Actually, I should just look at what actually happens. The doctest says "Got nothing" which means no exception was raised and no output. Let me verify by looking at the actual behavior.
+
+Wait, actually I need to reconsider. Maybe the issue is that `p.port` returns `None` (not raising an exception) when the port is an empty string. Let me think about why.
+
+If the parsing code sets port to None when the part after `:` is empty, then `p.port` would return None (since `port is None` → skip the if block → return port which is None).
+
+Let me look at how the netloc is parsed. I need to see the `__new__` method or wherever `_hostinfo` is set. Let me read more of parse.py.
+
+Actually, I think the key question is: for `urlparse("http://example.com:/")`, what is `p._hostinfo[1]`? Is it `None` or `""`?
+
+Let me search for where hostinfo is set in the source.
+
+I should read more of parse.py to find where _hostinfo is set. Let me search for "_hostinfo" in parse.py.
+
+Actually, let me just do a search to find the relevant code.
+
+But wait - I also need to fix the doctest. If the actual behavior is that `p.port` returns None (no exception) for an empty port string, then I need to change the doctest to reflect that.
+
+Let me first verify by searching the source, then fix the doc.
+
+Let me search for "_hostinfo" in Lib/urllib/parse.py.

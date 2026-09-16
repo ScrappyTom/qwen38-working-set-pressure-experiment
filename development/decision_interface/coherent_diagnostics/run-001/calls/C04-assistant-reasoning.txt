@@ -1,0 +1,394 @@
+Let me analyze the situation:
+
+1. The tests pass (on candidate `389292f683634a48a33bb8abcd9d70953b885802d432816ca9d75c1ad4ce8fa6`).
+2. The public check fails on the current candidate `85669528169923e2ceb01f91bf83b53829bc740cb3f09fcb348861c4e9f3c6b4`.
+3. The failure is at line 187 in `Doc/library/urllib.parse.rst`:
+   - The doctest expects: `Port could not be cast to integer value as ''`
+   - Got: nothing (i.e., no exception was raised)
+
+Looking at the implementation in `Lib/urllib/parse.py` (lines 130-190), the `port` property is:
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+And `_hostinfo` (for str) is:
+```python
+@property
+def _hostinfo(self):
+    netloc = self.netloc
+    _, _, hostinfo = netloc.rpartition('@')
+    _, have_open_br, bracketed = hostinfo.partition('[')
+    if have_open_br:
+        hostname, _, port = bracketed.partition(']')
+        _, _, port = port.partition(':')
+    else:
+        hostname, _, port = hostinfo.partition(':')
+    if not port:
+        port = None
+    return hostname, port
+```
+
+So for `http://example.com:/`:
+- `netloc` = `example.com:`
+- After `rpartition('@')`, `hostinfo` = `example.com:`
+- No `[`, so `hostname, _, port = hostinfo.partition(':')` gives `hostname='example.com'`, `port=''`
+- `if not port: port = None` → port becomes `None`
+- Back in `port` property: `port is not None` is False, so it returns `port` which is `None`
+
+So `p.port` for `http://example.com:/` returns `None`, NOT raising a ValueError!
+
+The doc at line 187 has:
+```
+>>> p = urlparse("http://example.com:/")
+>>> try:
+...     p.port
+... except ValueError as e:
+...     print(e)
+... 
+Port could not be cast to integer value as ''
+```
+
+But the actual behavior is that `p.port` returns `None` (no exception). So I need to fix this doctest.
+
+The empty port case should show:
+```
+>>> p = urlparse("http://example.com:/")
+>>> p.port
+```
+
+Wait, but `p.port` returns `None`, so the doctest should be:
+```
+>>> p = urlparse("http://example.com:/")
+>>> p.port
+```
+
+Which gives no output (None is not printed in doctest? Actually in doctest, `None` results in no output). So the correct doctest would be:
+```
+>>> p = urlparse("http://example.com:/")
+>>> p.port
+```
+
+That's it - no output, meaning it returns None.
+
+Let me look at the current doc content to find the exact text to replace. From the visible source (lines 125-211 of the doc), I can see the section around line 187. Let me find the exact text.
+
+The failing example is at line 187:
+```
+      >>> p = urlparse("http://example.com:/")
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port could not be cast to integer value as ''
+```
+
+This should be replaced with:
+```
+      >>> p = urlparse("http://example.com:/")
+      >>> p.port
+```
+
+Because `p.port` returns `None` when the port is empty (it's treated as no port specified).
+
+Wait, but the doc text above says:
+```
+   * An empty port string, as in ``http://host:/path``, is treated as
+     no port being specified and the :attr:`port` attribute returns
+     :const:`None`.
+```
+
+So the doc already correctly states that empty port returns None. The doctest just needs to match. Let me fix the doctest.
+
+I need to find the exact text in the file. Looking at the visible source content (lines 125-211), I can see the doctest section. Let me find the exact old text to patch.
+
+The failing part is:
+```
+      >>> p = urlparse("http://example.com:/")
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port could not be cast to integer value as ''
+```
+
+This should become:
+```
+      >>> p = urlparse("http://example.com:/")
+      >>> p.port
+```
+
+Let me verify what line this is on. The failure says line 187. Let me look at the visible content more carefully.
+
+The visible source shows lines 125-211. Let me count from the content shown:
+
+Starting from line 125 (which is `   | :attr:`password` |       | Password                | :const:`None`          |`):
+
+Actually, the returned content starts at line 125. Let me count the lines in the visible source to find line 187.
+
+Line 125: `   | :attr:`password` |       | Password                | :const:`None`          |`
+Line 126: `   +------------------+-------+-------------------------+------------------------+`
+Line 127: `   | :attr:`hostname` |       | Host name (lower case)  | :const:`None`          |`
+Line 128: `   +------------------+-------+-------------------------+------------------------+`
+Line 129: `   | :attr:`port`     |       | Port number as integer, | :const:`None`          |`
+Line 130: `   |                  |       | if present              |                        |`
+Line 131: `   +------------------+-------+-------------------------+------------------------+`
+Line 132: (empty)
+Line 133: `   Reading the :attr:`port` attribute will raise a :exc:`ValueError` if`
+Line 134: `   an invalid port is specified in the URL.  See section`
+Line 135: `   :ref:`urlparse-result-object` for more information on the result object.`
+Line 136: (empty)
+Line 137: `   Port validation occurs when the :attr:`port` attribute is accessed,`
+Line 138: `   not when the URL is parsed.  :func:`urlparse` and :func:`urlsplit``
+Line 139: `   return a result object for any syntactically valid URL; the`
+Line 140: `   :exc:`ValueError` is raised only upon access to the`
+Line 141: `   :attr:`port` attribute.`
+Line 142: (empty)
+Line 143: `   The port must be a non-negative ASCII decimal integer in the range`
+Line 144: `   0 through 65535 (inclusive).  The following rules apply when the`
+Line 145: `   :attr:`port` attribute is accessed:`
+Line 146: (empty)
+Line 147: `   * An empty port string, as in ``http://host:/path``, is treated as`
+Line 148: `     no port being specified and the :attr:`port` attribute returns`
+Line 149: `     :const:`None`.`
+Line 150: `   * A negative port, as in ``http://host:-1/path``, raises`
+Line 151: `     :exc:`ValueError`.`
+Line 152: `   * A port whose integer value is outside the range 0 through 65535,`
+Line 153: `     as in ``http://host:65536/path``, raises :exc:`ValueError`.`
+Line 154: `   * A port string that is not a pure ASCII decimal integer (including`
+Line 155: `     strings with non-ASCII decimal digits, such as U+0663 ARABIC-INDIC`
+Line 156: `     DIGIT THREE, or with any non-digit characters) raises`
+Line 157: `     :exc:`ValueError`.`
+Line 158: (empty)
+Line 159: `   The boundary values 0 and 65535 are accepted without error.`
+Line 160: (empty)
+Line 161: `   Examples of the port boundary and error behavior::`
+Line 162: (empty)
+Line 163: `      >>> from urllib.parse import urlparse`
+Line 164: `      >>> p = urlparse("http://example.com:0/")`
+Line 165: `      >>> p.port`
+Line 166: `      0`
+Line 167: `      >>> p = urlparse("http://example.com:65535/")`
+Line 168: `      >>> p.port`
+Line 169: `      65535`
+Line 170: `      >>> p = urlparse("http://example.com:65536/")`
+Line 171: `      >>> p.hostname`
+Line 172: `      'example.com'`
+Line 173: `      >>> try:`
+Line 174: `      ...     p.port`
+Line 175: `      ... except ValueError as e:`
+Line 176: `      ...     print(e)`
+Line 177: `      ... `
+Line 178: `      Port out of range 0-65535`
+Line 179: `      >>> p = urlparse("http://example.com:-1/")`
+Line 180: `      >>> try:`
+Line 181: `      ...     p.port`
+Line 182: `      ... except ValueError as e:`
+Line 183: `      ...     print(e)`
+Line 184: `      ... `
+Line 185: `      Port could not be cast to integer value as '-1'`
+Line 186: `      >>> p = urlparse("http://example.com:/")`
+Line 187: `      >>> try:`
+Line 188: `      ...     p.port`
+Line 189: `      ... except ValueError as e:`
+Line 190: `      ...     print(e)`
+Line 191: `      ... `
+Line 192: `      Port could not be cast to integer value as ''`
+Line 193: `      >>> p = urlparse("http://example.com:abc/")`
+Line 194: `      >>> try:`
+Line 195: `      ...     p.port`
+Line 196: `      ... except ValueError as e:`
+Line 197: `      ...     print(e)`
+Line 198: `      ... `
+Line 199: `      Port could not be cast to integer value as 'abc'`
+Line 200: (empty)
+Line 201: `   The same behavior applies to :func:`urlsplit` results.`
+Line 202: (empty)
+Line 203: `   Unmatched square brackets in the :attr:`netloc` attribute will raise a`
+Line 204: `   :exc:`ValueError`.`
+Line 205: (empty)
+Line 206: `   Characters in the :attr:`netloc` attribute that decompose under NFKC`
+Line 207: `   normalization (as used by the IDNA encoding) into any of ``/``, ``?``,`
+Line 208: `   ``#``, ``@``, or ``:`` will raise a :exc:`ValueError`. If the URL is`
+Line 209: `   decomposed before parsing, no error will be raised.`
+Line 210: (empty)
+Line 211: `   As is the case with all named tuples, the subclass has a few additional methods`
+
+Wait, the failure says "line 187" which is where the `try:` starts. Let me re-examine.
+
+The doctest framework says:
+- File "Doc/library/urllib.parse.rst", line 187, in changed_documentation
+- Failed example:
+  ```
+  try:
+      p.port
+  except ValueError as e:
+      print(e)
+  ```
+- Expected: `Port could not be cast to integer value as ''`
+- Got: nothing
+
+So the example starting at line 187 is:
+```
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+```
+
+And the expected output is `Port could not be cast to integer value as ''` but got nothing.
+
+This means that `p.port` for `http://example.com:/` does NOT raise an exception - it returns `None`. The `try/except` block catches nothing, so `print(e)` is never called, and the output is empty (which in doctest means the expression evaluated to None, which is displayed as nothing).
+
+Wait, actually in doctest, if a statement produces no output, it's fine. But here the issue is that the `try` block doesn't raise an exception, so `print(e)` never executes. The `>>>` before `try:` means it's a statement. In a doctest, a `try:` block that doesn't raise would just... the `try` block executes normally, the `except` is skipped. But doctests don't have a way to show "no exception was raised" in a try/except - the try/except just executes without output.
+
+Actually wait - in doctest, `>>> try:` is not standard doctest syntax. Let me reconsider.
+
+Looking at the other examples that DO pass (like the 65536 one), they use:
+```
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port out of range 0-65535
+```
+
+This is a multi-line statement in doctest. The `...` indicates continuation lines. The whole thing is one statement. If the exception is raised, `print(e)` produces the output. If no exception is raised, the whole block produces no output.
+
+But wait - if no exception is raised, the `try` block just executes `p.port` which returns `None`. Since it's not an assignment or print, the doctest sees the expression `p.port` returning `None`... hmm, actually no. In a try/except block, the expression's value isn't printed. The whole `try...except` block is a compound statement that doesn't produce output unless there's a `print` or similar.
+
+So the issue is clear: for empty port, no exception is raised, so `print(e)` is never called, and the output is empty. But the doctest expects `Port could not be cast to integer value as ''`.
+
+The fix: replace the empty-port try/except block with a simple `p.port` that shows `None`:
+
+```
+      >>> p = urlparse("http://example.com:/")
+      >>> p.port
+```
+
+This would produce no output (since `p.port` returns `None`, and in doctest, `None` results aren't shown).
+
+Wait, actually let me think about this more carefully. In doctest:
+- `>>> p.port` when `p.port` is `None` → no output (doctest doesn't print None return values)
+- `>>> p.port` when `p.port` is `0` → `0`
+- `>>> p.port` when `p.port` is `65535` → `65535`
+
+So for the empty port case, the correct doctest is just:
+```
+      >>> p = urlparse("http://example.com:/")
+      >>> p.port
+```
+
+With no expected output (which means no output).
+
+Now let me construct the patch. I need to find the exact old text and replace it with the correct new text.
+
+The old text (lines 186-192 approximately) is:
+```
+      >>> p = urlparse("http://example.com:/")
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port could not be cast to integer value as ''
+```
+
+The new text should be:
+```
+      >>> p = urlparse("http://example.com:/")
+      >>> p.port
+```
+
+Let me verify this is unique in the file. The string `Port could not be cast to integer value as ''` should be unique (the other "could not be cast" messages have different port values: `'-1'` and `'abc'`).
+
+Let me use the patch action. I need:
+- path: `Doc/library/urllib.parse.rst`
+- old: the exact text to find
+- new: the replacement
+- expected_candidate_id: `85669528169923e2ceb01f91bf83b53829bc740cb3f09fcb348861c4e9f3c6b4`
+- expected_file_sha256: `837866017729cc69349d59de798ef1a41f647b6b86b574d7398afe181a97a62d`
+
+The old text should be:
+```
+      >>> p = urlparse("http://example.com:/")
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... \n      Port could not be cast to integer value as ''
+```
+
+Wait, I need to be careful about the exact whitespace. Looking at the source, each line is indented with 6 spaces (for the doctest content within the paragraph). Let me be precise.
+
+From the visible source:
+```
+      >>> p = urlparse("http://example.com:/")
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port could not be cast to integer value as ''
+```
+
+This should be replaced with:
+```
+      >>> p = urlparse("http://example.com:/")
+      >>> p.port
+```
+
+Let me make sure I have the exact text. The `...` lines have a trailing space after `...` (the last continuation line `      ... ` has a trailing space). Let me look carefully at the source content.
+
+From the source:
+```
+      >>> p = urlparse("http://example.com:/")
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port could not be cast to integer value as ''
+```
+
+The `... ` line (line 191) appears to have a trailing space (it's `      ... ` with a space after the three dots). This is the standard doctest blank continuation line.
+
+Let me construct the old string carefully. I'll use a unique enough substring. The key unique part is `Port could not be cast to integer value as ''` (with two single quotes around the empty string). Let me include enough context.
+
+Actually, I realize I should be careful. Let me use:
+
+old:
+```
+      >>> p = urlparse("http://example.com:/")
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port could not be cast to integer value as ''
+```
+
+new:
+```
+      >>> p = urlparse("http://example.com:/")
+      >>> p.port
+```
+
+This should be unique because `Port could not be cast to integer value as ''` (with the empty string in single quotes) only appears once.
+
+Wait, I need to double-check: does the file use `''` (two single quotes) or something else? In the doctest expected output, the string representation of an empty string in Python is `''`. So the expected output line would be `Port could not be cast to integer value as ''`.
+
+Yes, that's correct. Let me proceed with the patch.

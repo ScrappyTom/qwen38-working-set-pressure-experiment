@@ -1,0 +1,313 @@
+Let me analyze the situation:
+
+1. The test file passes (CHK-0029)
+2. The public documentation check fails at line 186 in `Doc/library/urllib.parse.rst` - the empty port example
+3. The issue: The doc says `urlparse("http://example.com:/")` should raise ValueError with "Port could not be cast to integer value as ''" but it doesn't.
+
+Looking at the port property code (lines 130-190):
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+And `_hostinfo` (lines 205-247):
+```python
+@property
+def _hostinfo(self):
+    netloc = self.netloc
+    _, _, hostinfo = netloc.rpartition('@')
+    _, have_open_br, bracketed = hostinfo.partition('[')
+    if have_open_br:
+        hostname, _, port = bracketed.partition(']')
+        _, _, port = port.partition(':')
+    else:
+        hostname, _, port = hostinfo.partition(':')
+    if not port:
+        port = None
+    return hostname, port
+```
+
+So for `http://example.com:/`:
+- netloc = "example.com:"
+- rpartition('@') → hostinfo = "example.com:"
+- partition(':') → hostname = "example.com", port = ""
+- `if not port:` → `if not "":` → True → port = None
+
+So `_hostinfo` returns `("example.com", None)`.
+
+Then in the `port` property:
+- `port = self._hostinfo[1]` → `port = None`
+- `if port is not None:` → False
+- Returns `port` which is `None`
+
+So for an empty port string, the port attribute returns `None` (not an error!). This means:
+- `urlparse("http://example.com:/")` → `p.port` returns `None`, no exception raised.
+
+This is the actual behavior. The documentation I wrote is wrong about empty ports raising ValueError. Let me fix the doc.
+
+Wait, let me re-read the task requirements:
+"add regression coverage for both public functions with text URLs and ASCII byte URLs: no port, an empty port, 0, 65535, 65536, a negative port, and a noninteger port."
+
+So for empty port, the actual behavior is that `p.port` returns `None` (no exception). The doc example is wrong.
+
+Let me look at what the doc currently says about empty port:
+```
+* An empty port string, as in ``http://host:/path``, raises :exc:`ValueError`.
+```
+
+And the example:
+```
+>>> p = urlparse("http://example.com:/")
+>>> try:
+...     p.port
+... except ValueError as e:
+...     print(e)
+... 
+Port could not be cast to integer value as ''
+```
+
+This is incorrect. The actual behavior is that empty port returns `None`. Let me fix the documentation.
+
+I need to:
+1. Fix the bullet point about empty port
+2. Fix the doctest example for empty port
+
+Let me read the current state of the doc file around line 186 to see exactly what needs to change.
+
+Actually, looking at the shown source, the doc content (lines 125-210) shows the relevant section. Let me identify what needs to change:
+
+The bullet list says:
+```
+   * An empty port string, as in ``http://host:/path``, raises
+     :exc:`ValueError`.
+```
+
+This should say it returns `None` instead.
+
+And the example:
+```
+      >>> p = urlparse("http://example.com:/")
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port could not be cast to integer value as ''
+```
+
+Should be:
+```
+      >>> p = urlparse("http://example.com:/")
+      >>> p.port
+      is None
+```
+
+Wait, let me think about what the actual output would be. In a doctest:
+```
+>>> p = urlparse("http://example.com:/")
+>>> p.port
+```
+The output would be nothing (since port is None, and in doctest `None` values just show nothing... actually no, in doctest, `None` is shown as nothing? Let me think...
+
+Actually in Python doctest:
+```
+>>> x = None
+>>> x
+```
+This shows nothing - the output is empty because `repr(None)` is `'None'` but doctest... wait no. In doctest, when you evaluate an expression and it returns `None`, the doctest shows nothing. Actually no - doctest does NOT show `None`. The REPL shows nothing when an expression evaluates to `None` (it doesn't print `None`). But doctest expects that - if the expression returns `None`, the expected output is empty.
+
+Wait, let me reconsider. In CPython:
+- `>>> x = None` → no output (assignment)
+- `>>> None` → no output (the REPL doesn't print None)
+
+Actually no! The REPL does NOT print None. So in doctest:
+```
+>>> p = urlparse("http://example.com:/")
+>>> p.port
+```
+would have no expected output (empty line after).
+
+But wait - let me verify. In a Python doctest:
+```
+>>> x = None
+>>> x
+```
+This expects NO output. The doctest would be:
+```
+>>> x = None
+>>> x
+```
+with no output line. That's correct because the REPL doesn't echo None.
+
+So the fix for the empty port example should be:
+```
+      >>> p = urlparse("http://example.com:/")
+      >>> p.port
+```
+(with no output - empty result)
+
+But actually, I need to also fix the bullet point. Let me look at the exact text to change.
+
+Now, I also need to check: does the test file already handle the empty port case correctly? The tests passed (CHK-0029), so presumably the test file correctly asserts that empty port returns None.
+
+Let me look at what I need to patch. I need to:
+1. Change the bullet about empty port from "raises ValueError" to "returns None" (or similar)
+2. Change the doctest example for empty port
+
+Let me read the doc file around the relevant lines to get the exact text for patching.
+
+Actually, I already have the source shown (lines 125-210 of the doc file). Let me identify the exact text to patch.
+
+The bullet point:
+```
+   * An empty port string, as in ``http://host:/path``, raises
+     :exc:`ValueError`.
+```
+
+Should become something like:
+```
+   * An empty port string, as in ``http://host:/path``, is treated as
+     no port being specified and returns :const:`None`.
+```
+
+And the example:
+```
+      >>> p = urlparse("http://example.com:/")
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port could not be cast to integer value as ''
+```
+
+Should become:
+```
+      >>> p = urlparse("http://example.com:/")
+      >>> p.port
+```
+
+Wait, but the doctest needs to show the output. For `p.port` returning None, the doctest would show nothing. Let me verify this is correct by checking how other None results are shown in doctests.
+
+Actually, I need to be careful. In doctest format:
+```
+>>> p.port
+```
+If `p.port` is `None`, the expected output is nothing (no line). So the doctest would just be:
+```
+>>> p.port
+```
+followed by the next statement or blank line.
+
+Let me now look at the exact text I need to patch. From the shown source (lines 125-210), I can see the relevant content. Let me use patch to make the changes.
+
+First, let me fix the bullet point. The exact text in the file:
+```
+   * An empty port string, as in ``http://host:/path``, raises
+     :exc:`ValueError`.
+```
+
+Second, the example block. The exact text:
+```
+      >>> p = urlparse("http://example.com:/")
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port could not be cast to integer value as ''
+```
+
+Let me patch both. But first, let me make sure I have the right file SHA and candidate ID.
+
+File: Doc/library/urllib.parse.rst
+File SHA: 07280233c982bf999bd839651f5c384ae768c3aa3349377bfae042219d6f8f9f
+Candidate: df3a3e87a91fad3eb5215c14496a3888cc044dc713570092a0355d1d26de12f4
+
+Let me do two patches:
+
+Patch 1: Fix the bullet point
+Old:
+```
+   * An empty port string, as in ``http://host:/path``, raises
+     :exc:`ValueError`.
+```
+New:
+```
+   * An empty port string, as in ``http://host:/path``, is treated as
+     no port being specified and the :attr:`port` attribute returns
+     :const:`None`.
+```
+
+Patch 2: Fix the doctest example
+Old:
+```
+      >>> p = urlparse("http://example.com:/")
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port could not be cast to integer value as ''
+```
+New:
+```
+      >>> p = urlparse("http://example.com:/")
+      >>> p.port
+```
+
+Wait, but I need to be careful about what follows. Let me look at the context more carefully from the shown source.
+
+From the source (lines 125-210):
+```
+   * An empty port string, as in ``http://host:/path``, raises
+     :exc:`ValueError`.
+   * A negative port, as in ``http://host:-1/path``, raises
+     :exc:`ValueError`.
+```
+
+And later:
+```
+      >>> p = urlparse("http://example.com:-1/")
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port could not be cast to integer value as '-1'
+      >>> p = urlparse("http://example.com:/")
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port could not be cast to integer value as ''
+      >>> p = urlparse("http://example.com:abc/")
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port could not be cast to integer value as 'abc'
+```
+
+So I need to:
+1. Change the bullet about empty port
+2. Change the empty port doctest
+
+Let me do the patches. I'll do them one at a time.
+
+Actually wait - I need to also check: does the test file correctly handle the empty port case? The tests passed, so yes. But let me make sure my test file has the right assertion for empty port.
+
+The tests already pass (CHK-0029), so the test file is correct. I just need to fix the documentation.
+
+Let me start with patch 1 (the bullet point).
