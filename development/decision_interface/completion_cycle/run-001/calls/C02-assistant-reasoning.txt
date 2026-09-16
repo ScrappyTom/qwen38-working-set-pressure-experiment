@@ -1,0 +1,530 @@
+Let me understand the current state:
+
+1. The test file (`Lib/test/test_urlparse.py`) has been edited with new test methods (`test_urlsplit_port_validation`, `test_urlparse_port_validation`) and the tests are passing (CHK-0029 passed).
+
+2. The documentation file (`Doc/library/urllib.parse.rst`) still needs to be edited. The last operation (sequence 38) was a `read` of lines 125-145 that was rejected due to capacity issues.
+
+3. The working account says: "Tests pass CHK-0029. Now patching Doc/library/urllib.parse.rst: inserting port boundary/error explanation + doctest examples between the existing port paragraph and the unmatched-brackets paragraph. 1 request remaining after this; expect public check to run automatically, then submit."
+
+4. Current candidate: `389292f683634a48a33bb8abcd9d70953b885802d432816ca9d75c1ad4ce8fa6`
+
+5. I need to add documentation to `Doc/library/urllib.parse.rst` with:
+   - A focused explanation of port boundary/error behavior
+   - Executable examples (doctests) showing the behavior
+   - Distinction between constructing the parsed result and accessing its port
+   - Self-contained examples with imports, >>> prompts, real outputs
+   - Insertions only, preserving all original lines byte-for-byte
+
+6. The insertion point: between the existing port paragraph (lines 139-142 area: "Reading the :attr:`port` attribute will raise a :exc:`ValueError` if an invalid port is specified in the URL. See section :ref:`urlparse-result-object` for more information on the result object.") and the unmatched-brackets paragraph.
+
+Let me look at what's currently visible. From `SRC-254ab8c91bac7973d5464dc3f15e7dc9eb82ddb93be0098ed947af71e01df92a` (lines 108-156), I can see:
+
+Line ~139-142:
+```
+   Reading the :attr:`port` attribute will raise a :exc:`ValueError` if
+   an invalid port is specified in the URL.  See section
+   :ref:`urlparse-result-object` for more information on the result object.
+```
+
+Then line ~143-144:
+```
+   Unmatched square brackets in the :attr:`netloc` attribute will raise a
+   :exc:`ValueError`.
+```
+
+Wait, let me re-read the source more carefully. The region `SRC-254ab8c91bac7973d5464dc3f15e7dc9eb82ddb93be0098ed947af71e01df92a` shows lines 108-156. Let me trace through the lines:
+
+Looking at the content of that region, I need to identify the exact text where the port paragraph ends and the unmatched-brackets paragraph begins.
+
+From the visible source:
+```
+   Reading the :attr:`port` attribute will raise a :exc:`ValueError` if
+   an invalid port is specified in the URL.  See section
+   :ref:`urlparse-result-object` for more information on the result object.
+
+   Unmatched square brackets in the :attr:`netloc` attribute will raise a
+   :exc:`ValueError`.
+```
+
+So I need to insert between the blank line after "result object." and the "Unmatched square brackets" paragraph.
+
+Now, what content should I add? The task says:
+- Add a focused explanation and executable examples of the observed boundary/error behavior
+- Including the distinction between constructing the parsed result and accessing its port
+- New examples must be self-contained (include imports), use >>> prompts, show real outputs or exceptions
+- Don't copy untested expectations
+
+Based on the test file I wrote, the behavior is:
+- Construction (urlsplit/urlparse) always succeeds
+- `.port` access raises ValueError for invalid ports
+- Valid ports: 0 through 65535
+- Port 65536: ValueError "Port out of range 0-65535"
+- Negative port (e.g., "-1"): ValueError "Port could not be cast to integer value as '-1'"
+- Non-integer (e.g., "abc"): ValueError "Port could not be cast to integer value as 'abc'"
+- Non-ASCII digit: ValueError with the repr of the port string
+
+Let me craft the doctest examples. I need to show real outputs. Based on the implementation in `Lib/urllib/parse.py`:
+
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+So:
+- `urlsplit("http://example.com:0/")` → `.port` → 0
+- `urlsplit("http://example.com:65535/")` → `.port` → 65535
+- `urlsplit("http://example.com:65536/")` → `.port` → ValueError: Port out of range 0-65535
+- `urlsplit("http://example.com:-1/")` → `.port` → ValueError: Port could not be cast to integer value as '-1'
+- `urlsplit("http://example.com:abc/")` → `.port` → ValueError: Port could not be cast to integer value as 'abc'
+
+For the doctest in RST, I'll use the `.. doctest::` directive with `:options: +NORMALIZE_WHITESPACE`.
+
+Let me think about what exact text to insert. The insertion goes after the blank line following "result object." and before the blank line before "Unmatched square brackets".
+
+Actually, looking more carefully at the source:
+
+```
+   Reading the :attr:`port` attribute will raise a :exc:`ValueError` if
+   an invalid port is specified in the URL.  See section
+   :ref:`urlparse-result-object` for more information on the result object.
+
+   Unmatched square brackets in the :attr:`netloc` attribute will raise a
+   :exc:`ValueError`.
+```
+
+The blank line between "result object." and "Unmatched square brackets" is where I'll insert. I'll insert after "result object." and its trailing newline, before the blank line, or I'll insert the new content plus a blank line between the two paragraphs.
+
+Actually, the cleanest approach: I'll replace the old text:
+```
+   Reading the :attr:`port` attribute will raise a :exc:`ValueError` if
+   an invalid port is specified in the URL.  See section
+   :ref:`urlparse-result-object` for more information on the result object.
+
+   Unmatched square brackets
+```
+
+With:
+```
+   Reading the :attr:`port` attribute will raise a :exc:`ValueError` if
+   an invalid port is specified in the URL.  See section
+   :ref:`urlparse-result-object` for more information on the result object.
+
+   Port validation occurs when the :attr:`port` attribute is accessed,
+   not when the parsed result is constructed.  ...
+   
+   .. doctest::
+      :options: +NORMALIZE_WHITESPACE
+
+      >>> from urllib.parse import urlsplit
+      >>> p = urlsplit("http://example.com:65536/")
+      >>> p.port
+      Traceback (most recent call last):
+        ...
+      ValueError: Port out of range 0-65535
+
+   Unmatched square brackets
+```
+
+Wait, but I need to be careful. The doctest in the docs will be run by the "examples" scope. Let me think about what the doctest output would actually be.
+
+In CPython's doctest for documentation, exceptions are shown as:
+```
+>>> p.port
+Traceback (most recent call last):
+    ...
+ValueError: Port out of range 0-65535
+```
+
+Actually, in Python's doctest, when an exception is raised, the output shows the last line of the traceback (the exception type and message). With `:options: +NORMALIZE_WHITESPACE`, whitespace is normalized.
+
+Let me look at how other doctests in this file handle exceptions... I don't see any in the visible portion. But the standard CPython doctest format for exceptions is:
+
+```
+>>> 1/0
+Traceback (most recent call last):
+    ...
+ZeroDivisionError: division by zero
+```
+
+So my examples should use this format.
+
+Now let me plan the insertion. I need to find the exact old text to patch. The old text should be unique. Let me use:
+
+```
+   Reading the :attr:`port` attribute will raise a :exc:`ValueError` if
+   an invalid port is specified in the URL.  See section
+   :ref:`urlparse-result-object` for more information on the result object.
+
+   Unmatched square brackets in the :attr:`netloc` attribute will raise a
+   :exc:`ValueError`.
+```
+
+And replace it with the same text plus the new content inserted between the two paragraphs.
+
+Wait, I need to be careful about what "insertions only" means. The task says "Preserve every original documentation line byte-for-byte and in its original order: insertions only, with no rewrites or deletions."
+
+So I can't modify the existing text. I need to insert new lines between existing lines. The cleanest way is to find a unique anchor point and insert after it.
+
+Let me use the patch operation. The `old` text needs to be unique in the file. Let me use:
+
+```
+   :ref:`urlparse-result-object` for more information on the result object.
+
+   Unmatched square brackets
+```
+
+And replace with:
+
+```
+   :ref:`urlparse-result-object` for more information on the result object.
+
+   Port validation is performed when the :attr:`port` attribute is
+   accessed, not when the parsed result object is constructed.  The
+   result of :func:`urlsplit` or :func:`urlparse` is always created
+   successfully; a :exc:`ValueError` is raised only upon reading
+   :attr:`port` if the port string is not a valid integer in the range
+   0 through 65535 (inclusive).
+
+   .. doctest::
+      :options: +NORMALIZE_WHITESPACE
+
+      >>> from urllib.parse import urlsplit
+      >>> p = urlsplit("http://example.com:65536/")
+      >>> p.port
+      Traceback (most recent call last):
+          ...
+      ValueError: Port out of range 0-65535
+      >>> p = urlsplit("http://example.com:0/")
+      >>> p.port
+      0
+      >>> p = urlsplit("http://example.com:65535/")
+      >>> p.port
+      65535
+      >>> p = urlsplit("http://example.com:abc/")
+      >>> p.port
+      Traceback (most recent call last):
+          ...
+      ValueError: Port could not be cast to integer value as 'abc'
+
+   Unmatched square brackets
+```
+
+Hmm wait, but the doctest examples need to be "self-contained together (include their imports)". Let me make sure the import is there.
+
+Also, I should think about whether the examples scope will actually run these. The task says "Examples scope executes the newly added examples." So yes, the doctests I add will be executed.
+
+Let me also think about what the real output would be. In CPython's doctest:
+- When an exception is raised, the output is the traceback ending with the exception. The standard format in docs uses `...` for intermediate traceback lines.
+
+Actually, let me look at how CPython docs typically format exception doctests. The typical format is:
+
+```
+>>> p.port
+Traceback (most recent call last):
+    ...
+ValueError: Port out of range 0-65535
+```
+
+This is the standard way CPython documentation shows exceptions in doctests. The `...` represents the intermediate traceback frames.
+
+Now, for the patch, I need the file SHA256. From the working set, the Doc file has `file_sha256: 052a4d950fa1d5311fe1a59cea668b028a12d7dc37c16603451c34513110fa3d`.
+
+And the candidate_id is `389292f683634a48a33bb8abcd9d70953b885802d432816ca9d75c1ad4ce8fa6`.
+
+Let me also verify: is the old text I'm matching unique in the file? The phrase "for more information on the result object" appears in the port paragraph. Let me check if it appears elsewhere... In the visible source (lines 1-156 of the doc), I see it once. Given the file is 766 lines, it could appear again later (e.g., in the urlsplit section which has similar structure). Let me be more specific with my match.
+
+Actually, let me use a longer unique match. The full paragraph is:
+
+```
+   Reading the :attr:`port` attribute will raise a :exc:`ValueError` if
+   an invalid port is specified in the URL.  See section
+   :ref:`urlparse-result-object` for more information on the result object.
+```
+
+This is likely unique because it specifically references the port attribute and the urlparse-result-object section. The urlsplit section might have similar text but referencing a different section.
+
+Actually, I realize I should check if there's a similar paragraph in the urlsplit section of the same file. Let me look... I don't have the full file visible. But given the file is 766 lines and I can only see up to line 156, there might be a urlsplit section later.
+
+To be safe, let me use the full 3-line paragraph as the old text, which is very likely unique:
+
+```
+   Reading the :attr:`port` attribute will raise a :exc:`ValueError` if
+   an invalid port is specified in the URL.  See section
+   :ref:`urlparse-result-object` for more information on the result object.
+```
+
+And I'll replace it with itself plus the new content after it (before the blank line that separates it from the next paragraph).
+
+Wait, actually I need to be more careful. The "insertions only" constraint means I can't change any existing line. So I should match a small unique portion and insert after it, keeping all original text intact.
+
+Let me think about this differently. I'll match:
+```
+   :ref:`urlparse-result-object` for more information on the result object.
+```
+
+And replace with:
+```
+   :ref:`urlparse-result-object` for more information on the result object.
+
+   Port validation is performed when the :attr:`port` attribute is
+   ...
+```
+
+But wait - this would insert content between this line and the next blank line + "Unmatched square brackets" paragraph. That's an insertion, not a modification. The existing lines remain in order.
+
+Actually, I think the safest approach is:
+
+old:
+```
+   :ref:`urlparse-result-object` for more information on the result object.
+
+   Unmatched square brackets
+```
+
+new:
+```
+   :ref:`urlparse-result-object` for more information on the result object.
+
+   Port validation is performed when the :attr:`port` attribute is
+   ...
+   ValueError: Port could not be cast to integer value as 'abc'
+
+   Unmatched square brackets
+```
+
+This preserves all original lines (the first line, the blank line, and the "Unmatched square brackets" line) and inserts new content in between. This is a pure insertion.
+
+But I need to make sure the old text is unique. Let me think... "for more information on the result object" followed by a blank line followed by "Unmatched square brackets" - this combination is almost certainly unique in the file.
+
+Actually, I realize there might be a similar paragraph in the urlsplit section. Let me check if the urlsplit section has the same structure. Looking at the visible source, the file goes up to line 156, and the urlsplit section would be later. Let me just be safe and include more context.
+
+Let me use:
+```
+   Reading the :attr:`port` attribute will raise a :exc:`ValueError` if
+   an invalid port is specified in the URL.  See section
+   :ref:`urlparse-result-object` for more information on the result object.
+
+   Unmatched square brackets in the :attr:`netloc` attribute will raise a
+   :exc:`ValueError`.
+```
+
+This is 5 lines. The combination of the port reference to "urlparse-result-object" followed by the unmatched brackets text should be unique. If the urlsplit section has similar text, it would reference "urlsplit-result-object" instead.
+
+Let me construct the patch now.
+
+For the doctest, I need to be precise about what the output will be. Let me trace through the implementation:
+
+For `urlsplit("http://example.com:65536/")`:
+- `_hostinfo` returns `("example.com", "65536")`
+- In the `port` property: `port = "65536"`
+- `port.isdigit()` → True, `port.isascii()` → True
+- `port = int("65536")` → 65536
+- `not (0 <= 65536 <= 65535)` → True
+- Raises `ValueError("Port out of range 0-65535")`
+
+For `urlsplit("http://example.com:0/")`:
+- `_hostinfo` returns `("example.com", "0")`
+- In the `port` property: `port = "0"`
+- `port.isdigit()` → True, `port.isascii()` → True
+- `port = int("0")` → 0
+- `not (0 <= 0 <= 65535)` → False
+- Returns 0
+
+For `urlsplit("http://example.com:65535/")`:
+- Similar, returns 65535
+
+For `urlsplit("http://example.com:abc/")`:
+- `_hostinfo` returns `("example.com", "abc")`
+- In the `port` property: `port = "abc"`
+- `port.isdigit()` → False
+- Raises `ValueError(f"Port could not be cast to integer value as 'abc'")`
+
+Good. Now for the doctest format in CPython docs. Looking at existing doctests in the file, they use:
+```
+   .. doctest::
+      :options: +NORMALIZE_WHITESPACE
+
+      >>> from urllib.parse import urlparse
+      ...
+```
+
+For exceptions, the CPython doctest format shows:
+```
+      >>> p.port
+      Traceback (most recent call last):
+          ...
+      ValueError: Port out of range 0-65535
+```
+
+Let me now write the complete insertion. I want to:
+1. Explain that port validation happens at access time, not construction time
+2. Show boundary cases (0, 65535 valid; 65536 invalid)
+3. Show non-integer port error
+4. Keep it concise and focused
+
+Here's my planned insertion content:
+
+```
+   Port validation is performed when the :attr:`port` attribute is
+   accessed, not when the parsed result is constructed.  Both
+   :func:`urlsplit` and :func:`urlparse` create their result object
+   successfully regardless of the port value in the URL; a
+   :exc:`ValueError` is raised only upon reading :attr:`port` if the
+   port portion is not a non-negative ASCII integer in the range 0
+   through 65535 (inclusive).
+
+   .. doctest::
+      :options: +NORMALIZE_WHITESPACE
+
+      >>> from urllib.parse import urlsplit
+      >>> p = urlsplit("http://example.com:65536/")
+      >>> p.port
+      Traceback (most recent call last):
+          ...
+      ValueError: Port out of range 0-65535
+      >>> p = urlsplit("http://example.com:0/")
+      >>> p.port
+      0
+      >>> p = urlsplit("http://example.com:65535/")
+      >>> p.port
+      65535
+      >>> p = urlsplit("http://example.com:abc/")
+      >>> p.port
+      Traceback (most recent call last):
+          ...
+      ValueError: Port could not be cast to integer value as 'abc'
+```
+
+This covers:
+- Construction vs. access distinction
+- Boundary: 65536 (out of range)
+- Boundary: 0 (valid minimum)
+- Boundary: 65535 (valid maximum)
+- Non-integer port (abc)
+- Uses urlsplit (the task says "both public functions" for tests, but for docs I should show at least one; let me add urlparse too)
+
+Actually, let me also show urlparse to cover both functions:
+
+```
+   Port validation is performed when the :attr:`port` attribute is
+   accessed, not when the parsed result is constructed.  Both
+   :func:`urlsplit` and :func:`urlparse` create their result object
+   successfully regardless of the port value in the URL; a
+   :exc:`ValueError` is raised only upon reading :attr:`port` if the
+   port portion is not a non-negative ASCII integer in the range 0
+   through 65535 (inclusive).
+
+   .. doctest::
+      :options: +NORMALIZE_WHITESPACE
+
+      >>> from urllib.parse import urlsplit, urlparse
+      >>> p = urlsplit("http://example.com:65536/")
+      >>> p.port
+      Traceback (most recent call last):
+          ...
+      ValueError: Port out of range 0-65535
+      >>> p = urlsplit("http://example.com:0/")
+      >>> p.port
+      0
+      >>> p = urlsplit("http://example.com:65535/")
+      >>> p.port
+      65535
+      >>> p = urlsplit("http://example.com:abc/")
+      >>> p.port
+      Traceback (most recent call last):
+          ...
+      ValueError: Port could not be cast to integer value as 'abc'
+      >>> p = urlparse("http://example.com:65536/")
+      >>> p.port
+      Traceback (most recent call last):
+          ...
+      ValueError: Port out of range 0-65535
+```
+
+This covers both functions and the key boundary cases. Let me finalize this.
+
+Now for the patch operation:
+- path: `Doc/library/urllib.parse.rst`
+- expected_candidate_id: `389292f683634a48a33bb8abcd9d70953b885802d432816ca9d75c1ad4ce8fa6`
+- expected_file_sha256: `052a4d950fa1d5311fe1a59cea668b028a12d7dc37c16603451c34513110fa3d`
+
+The old text (must be unique):
+```
+   Reading the :attr:`port` attribute will raise a :exc:`ValueError` if
+   an invalid port is specified in the URL.  See section
+   :ref:`urlparse-result-object` for more information on the result object.
+
+   Unmatched square brackets in the :attr:`netloc` attribute will raise a
+   :exc:`ValueError`.
+```
+
+The new text (old text preserved + insertion between the two paragraphs):
+```
+   Reading the :attr:`port` attribute will raise a :exc:`ValueError` if
+   an invalid port is specified in the URL.  See section
+   :ref:`urlparse-result-object` for more information on the result object.
+
+   Port validation is performed when the :attr:`port` attribute is
+   accessed, not when the parsed result is constructed.  Both
+   :func:`urlsplit` and :func:`urlparse` create their result object
+   successfully regardless of the port value in the URL; a
+   :exc:`ValueError` is raised only upon reading :attr:`port` if the
+   port portion is not a non-negative ASCII integer in the range 0
+   through 65535 (inclusive).
+
+   .. doctest::
+      :options: +NORMALIZE_WHITESPACE
+
+      >>> from urllib.parse import urlsplit, urlparse
+      >>> p = urlsplit("http://example.com:65536/")
+      >>> p.port
+      Traceback (most recent call last):
+          ...
+      ValueError: Port out of range 0-65535
+      >>> p = urlsplit("http://example.com:0/")
+      >>> p.port
+      0
+      >>> p = urlsplit("http://example.com:65535/")
+      >>> p.port
+      65535
+      >>> p = urlsplit("http://example.com:abc/")
+      >>> p.port
+      Traceback (most recent call last):
+          ...
+      ValueError: Port could not be cast to integer value as 'abc'
+      >>> p = urlparse("http://example.com:65536/")
+      >>> p.port
+      Traceback (most recent call last):
+          ...
+      ValueError: Port out of range 0-65535
+
+   Unmatched square brackets in the :attr:`netloc` attribute will raise a
+   :exc:`ValueError`.
+```
+
+This preserves the original 5 lines and inserts the new paragraph + doctest block between them. All original lines remain in their original order. This is an insertion-only change.
+
+Let me double-check the indentation. In RST files like this one, the content under a directive or function definition is indented by 3 spaces (for the function body). Let me verify by looking at the existing doctest blocks:
+
+```
+   .. doctest::
+      :options: +NORMALIZE_WHITESPACE
+
+      >>> from urllib.parse import urlparse
+      >>> urlparse("scheme://netloc/path;parameters?query#fragment")
+      ParseResult(scheme='scheme', netloc='netloc', path='/path;parameters', params='',
+                  query='query', fragment='fragment')
+```
+
+Yes, 3 spaces for the paragraph text, 6 spaces for the doctest content. My insertion follows this pattern.
+
+Let me finalize the patch.

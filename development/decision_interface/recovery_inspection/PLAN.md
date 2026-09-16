@@ -33,6 +33,20 @@ the real C01 request with the pinned native renderer; require the requested comp
 Also acquire the second reported region without selecting either edit location for
 Qwen. These are engineering probes, not a scripted model outcome.
 
+The drained C02 exposes a related information-path issue: C01 recognizes the two
+match locations, but C02 has neither that count nor either address. Its latest read
+rejection replaces the earlier edit rejection and recovery recent history is empty.
+The actor then speculates that the longer anchor is probably unique. Do not describe
+this as overlooking a still-visible diagnostic. Preserve one mechanically applicable
+recent edit rejection while the corresponding source file remains unchanged. Keep it
+clearly historical, not an instruction to retry or a claim that the old operation's
+candidate guard remains current. Avoid duplicating it when it is already the latest
+feedback, and omit it after the file changes. This small bounded carry-forward of
+actual host feedback does not require a model-authored summary or semantic ranking.
+Qualify its actual presence after source inspection and its version retirement
+before the next exposure. This is a declared additional presentation change; any
+behavioral result belongs to the combined recovery package.
+
 The current C02 was already in flight when the defect was established. A graceful
 operator stop drains that response without coaching, then seals and audits the
 attempt. No private draft is executed. Publish the qualified successor and a fresh
