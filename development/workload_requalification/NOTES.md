@@ -45,3 +45,12 @@ Future governance candidates: qualify task-specific report meanings and absent-w
 states, inspect the exact native input before declaring readiness, preserve the
 original acceptance separately, and record extra validation costs. Keep the test
 harness and actual autonomous capability distinct.
+
+Publishing correction: c0b68573 included preparation runtime launch/server logs
+because .gitignore covered the old study directories but not this new programme.
+Remove these from the tracked tree without deleting local custody; add the new
+ignore rule and byte-preserving attributes. The earlier pushed commit still contains
+those logs. This was an apparatus/publishing mistake, not a model failure. Before
+publishing a new study directory, establish its runtime exclusion and raw-byte rules
+and stop if the staged-file inspection finds private-runtime entries. Do not merely
+print that inspection and then continue to commit, as happened here.
