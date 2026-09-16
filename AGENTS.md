@@ -1,5 +1,18 @@
 # Experiment operating rules
 
+The reference continuation at 899a7023 is closed: six replies/nine operations, no
+file changes or submission, 24.248 model-request minutes. Read its review/RESULTS.md.
+The tests correction passes in qualified public replay; do not attribute that to a
+new live edit. C05's raw two-match rejection is informative, but C06's projection
+removes both addresses and the account despite ample post-reduction room. The
+native counterfactual fits both at 6,757 versus actual 6,115 tokens. Receipt presence
+is not evidence that its useful fields arrived. Do not blame Qwen for overlooking
+those omitted addresses. The initial progress claim of their delivery is corrected.
+
+Complete the narrow offline follow-through in
+`development/decision_interface/recovery_detail/PLAN.md`. Preserve all consumed
+allowances and frozen sources. No further model run is included in that repair.
+
 The opt-in reference repair is implemented and qualified under
 `development/decision_interface/reference_repair/IMPLEMENTATION.md`. Keep frozen
 FeedbackSession unchanged for historical replay. The actual C14 public proposal
