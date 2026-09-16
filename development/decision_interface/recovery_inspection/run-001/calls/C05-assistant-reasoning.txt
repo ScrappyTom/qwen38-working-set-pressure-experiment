@@ -1,0 +1,910 @@
+Let me understand the current state:
+
+1. **Task**: Add regression tests and documentation for port access on `urlsplit`/`urlparse` results.
+
+2. **Current state**:
+   - Tests in `Lib/test/test_urlparse.py` pass (CHK-0029 passed)
+   - I'm now working on `Doc/library/urllib.parse.rst` to add documentation
+   - A previous patch to the doc file was rejected because the old text was ambiguous (2 matches)
+   - I need to use `replace_region` with a unique region reference instead
+
+3. **Visible source**:
+   - `Doc/library/urllib.parse.rst` lines 125-145: Shows the port attribute description and surrounding text
+   - `Lib/urllib/parse.py` lines 1-100: File header
+   - `Lib/urllib/parse.py` lines 173-188: The `port` property implementation
+
+4. **Key information from the port property** (lines 173-188):
+   - `port` is a property
+   - If `self._hostinfo[1]` is not None:
+     - If `port.isdigit() and port.isascii()`: convert to int
+     - Else: raise `ValueError(f"Port could not be cast to integer value as {port!r}")`
+     - If not `0 <= port <= 65535`: raise `ValueError("Port out of range 0-65535")`
+   - Return port (or None)
+
+5. **What I need to do for the doc file**:
+   - Insert documentation about port boundary/error behavior
+   - Include executable examples with `>>>` prompts
+   - Show the distinction between constructing the parsed result and accessing its port
+   - Must be insertions only (no rewrites/deletions)
+   - Must preserve every original line byte-for-byte
+   - Examples must be self-contained (include imports)
+
+6. **The rejection issue**: The previous patch had ambiguous old text. I need to use `replace_region` with a unique region reference. The visible region `SRC-f791e7f999f1f26a06834dc73796aaeb7480cb9d18c61d7dc4d58543852a7f9c` covers lines 125-145 of the doc file.
+
+Wait, let me reconsider. The task says to use `replace_region` to replace a complete observed source region with new text. But I need to do insertions only. So I should replace the region with the original content PLUS my insertions.
+
+Actually, looking more carefully at the situation:
+- The doc file has the port description around lines 135-136
+- I need to insert content AFTER the port description (after line 136) and before the "Unmatched square brackets" paragraph (line 137/138)
+- The visible region is lines 125-145 of the doc file
+
+Let me think about what to insert. Based on the implementation:
+- Port `0` through `65535` are valid
+- Port `65536` raises `ValueError("Port out of range 0-65535")`
+- Negative port: can this happen? The port string from URL parsing... if the URL is `http://host:-1/`, the port string would be `-1`. Then `port.isdigit()` would be False (because of the `-`), so it would raise `ValueError("Port could not be cast to integer value as '-1'")`.
+- Empty port: `http://host:/` - the port string would be `""`. `"".isdigit()` is False, so it raises `ValueError("Port could not be cast to integer value as ''")`.
+- Non-integer port like `http://host:abc/`: `abc.isdigit()` is True? No! `abc` - `'a'.isdigit()` is False. So it raises ValueError.
+- Wait, `'abc'.isdigit()` - let me check. Actually in Python, `'abc'.isdigit()` returns False. So it would go to the else branch and raise ValueError.
+- Non-ASCII decimal digits: e.g., `'٣'.isdigit()` is True (Arabic-Indic digits), but `'٣'.isascii()` is False. So it would raise `ValueError(f"Port could not be cast to integer value as '٣'")`.
+- Actually wait: `port.isdigit() and port.isascii()` - for non-ASCII digits like `'٣'` (U+0663), `isdigit()` is True but `isascii()` is False, so it goes to else and raises ValueError.
+
+Let me think about what examples to include:
+
+For the documentation, I need to show:
+1. Valid boundary cases: port 0, port 65535
+2. Error cases: port 65536 (out of range), negative port, non-integer port, empty port, non-ASCII digits
+3. The distinction: constructing the parsed result succeeds, but accessing `.port` raises
+
+Let me draft the content:
+
+```
+   .. note::
+
+      The port number is validated when the :attr:`port` attribute is
+      accessed, not when the URL is parsed.  This means that
+      :func:`urlparse` and :func:`urlsplit` will successfully parse a URL
+      with an invalid port, but accessing the :attr:`port` attribute of the
+      result will raise an exception.
+
+      The valid range of port numbers is 0 through 65535 (inclusive).  A
+      port outside this range raises :exc:`ValueError` with the message
+      ``"Port out of range 0-65535"``.  A port string that cannot be
+      interpreted as a non-negative ASCII integer (including empty strings,
+      negative numbers, and strings containing non-ASCII decimal digits)
+      raises :exc:`ValueError` with the message
+      ``"Port could not be cast to integer value as <port>"`` where
+      ``<port>`` is the repr of the port string.
+
+      >>> from urllib.parse import urlparse
+      >>> p = urlparse("http://example.com:8080/")
+      >>> p.port
+      8080
+      >>> p = urlparse("http://example.com:0/")
+      >>> p.port
+      0
+      >>> p = urlparse("http://example.com:65535/")
+      >>> p.port
+      65535
+      >>> p = urlparse("http://example.com:65536/")
+      >>> p.port
+      Traceback (most recent call last):
+        File "<stdin>", line 1, in <module>
+      ValueError: Port out of range 0-65535
+      >>> p = urlparse("http://example.com:-1/")
+      >>> p.port
+      Traceback (most recent call last):
+        File "<stdin>", line 1, in <module>
+      ValueError: Port could not be cast to integer value as '-1'
+      >>> p = urlparse("http://example.com:/")
+      >>> p.port
+      Traceback (most recent call last):
+        File "<stdin>", line 1, in <module>
+      ValueError: Port could not be cast to integer value as ''
+```
+
+Wait, I need to be careful. Let me re-examine the port property:
+
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+So:
+- If `_hostinfo[1]` is None (no port specified), return None
+- If port string is all digits AND all ASCII: convert to int, then check range
+- Otherwise: raise ValueError with repr of the port string
+
+For empty port `http://example.com:/`:
+- The netloc would be `example.com:` and port would be `""`
+- `"".isdigit()` is False → raises ValueError("Port could not be cast to integer value as ''")
+
+Wait, actually `"".isdigit()` - let me think. In Python, `''.isdigit()` returns False. Yes.
+
+For negative port `http://example.com:-1/`:
+- Port string would be `-1`
+- `'-1'.isdigit()` is False → raises ValueError("Port could not be cast to integer value as '-1'")
+
+For non-ASCII digits, e.g., `http://example.com:٣/` (Arabic-Indic digit 3, U+0663):
+- `'٣'.isdigit()` is True, `'٣'.isascii()` is False → raises ValueError("Port could not be cast to integer value as '٣'")
+
+Now, for the doctest examples, I need to be very precise about the output. The traceback in a doctest would show:
+```
+>>> p.port
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+ValueError: Port out of range 0-65535
+```
+
+Actually, I need to be careful about what the doctest checker expects. In standard Python doctests, when an exception is raised, the expected output is:
+```
+ValueError: Port out of range 0-65535
+```
+
+But with `# doctest: +ELLIPSIS` or full traceback... Let me think about what format the doctest examples should use.
+
+In CPython's doctest framework, when an exception is raised, the typical format is just:
+```
+>>> p.port
+ValueError: Port out of range 0-65535
+```
+
+But the task says "show their real outputs or exceptions". The examples scope "executes the newly added examples". So these need to be actual doctests that pass.
+
+In CPython source, doctests in `.rst` files are typically run by the doc test runner. Let me look at how other examples in the file handle exceptions.
+
+Actually, I don't have access to see how other parts of the doc handle doctests. Let me just use the standard format that CPython's doctest framework expects.
+
+In CPython's doctest framework, when an exception is raised in a doctest, the output should be:
+```
+>>> p.port
+ValueError: Port out of range 0-65535
+```
+
+This is the standard format used in CPython documentation. The traceback is not shown; just the exception class and message.
+
+Wait, but actually I should double-check. Let me look at what format is used in CPython docs. In the CPython source, doctests in RST files typically show just:
+```
+>>> raise ValueError("msg")
+ValueError: msg
+```
+
+Actually no, that's not right either. In CPython's doctest runner, the format for showing an exception is:
+```
+>>> p.port
+ValueError: Port out of range 0-65535
+```
+
+The doctest framework catches the exception and just shows `ExceptionType: message`.
+
+Let me go with that format. Now let me also think about the `urlsplit` vs `urlparse` distinction. The task says to cover both public functions. In the documentation, I should show examples with both, or at least note that both behave the same way.
+
+Actually, re-reading the task: "add a focused explanation and executable examples of the observed boundary/error behavior, including the distinction between constructing the parsed result and accessing its port."
+
+The key insight is: `urlparse("http://example.com:65536/")` succeeds (returns a ParseResult), but `result.port` raises ValueError. This is the "distinction between constructing the parsed result and accessing its port."
+
+Let me also think about what the tests file already has. The tests passed CHK-0029, so my tests are already in place. Now I just need the documentation.
+
+Let me now figure out where exactly to insert in the doc file. Looking at the visible source (lines 125-145):
+
+```
+Line 125:    | :attr:`password` |       | Password                | :const:`None`          |
+Line 126:    +------------------+-------+-------------------------+------------------------+
+Line 127:    | :attr:`hostname` |       | Host name (lower case)  | :const:`None`          |
+Line 128:    +------------------+-------+-------------------------+------------------------+
+Line 129:    | :attr:`port`     |       | Port number as integer, | :const:`None`          |
+Line 130:    |                  |       | if present              |                        |
+Line 131:    +------------------+-------+-------------------------+------------------------+
+Line 132: (empty)
+Line 133:    Reading the :attr:`port` attribute will raise a :exc:`ValueError` if
+Line 134:    an invalid port is specified in the URL.  See section
+Line 135:    :ref:`urlparse-result-object` for more information on the result object.
+Line 136: (empty)
+Line 137:    Unmatched square brackets in the :attr:`netloc` attribute will raise a
+Line 138:    :exc:`ValueError`.
+Line 139: (empty)
+Line 140:    Characters in the :attr:`netloc` attribute that decompose under NFKC
+Line 141:    normalization (as used by the IDNA encoding) into any of ``/``, ``?``,
+Line 142:    ``#``, ``@``, or ``:`` will raise a :exc:`ValueError`. If the URL is
+Line 143:    decomposed before parsing, no error will be raised.
+Line 144: (empty)
+Line 145:    As is the case with all named tuples, the subclass has a few additional methods
+```
+
+So I want to insert after line 135 (the paragraph about port) and before line 136 (empty line) or after line 136 (empty line) and before line 137.
+
+Actually, looking more carefully:
+- Lines 133-135: existing port description paragraph
+- Line 136: empty line
+- Lines 137-138: "Unmatched square brackets" paragraph
+
+I should insert my new content between line 135 and line 137, i.e., after the existing port paragraph and its trailing empty line.
+
+Now, for the `replace_region` approach: I need to replace the entire visible region (lines 125-145) with the original content PLUS my insertions. That's a lot of text to include.
+
+Alternatively, I could use a patch with a unique anchor. Let me look at what's unique in the visible text.
+
+The text "Reading the :attr:`port` attribute will raise a :exc:`ValueError` if\n   an invalid port is specified in the URL.  See section\n   :ref:`urlparse-result-object` for more information on the result object.\n" should be unique in the file.
+
+Let me try a patch approach with a unique anchor. The old text would be:
+```
+   Reading the :attr:`port` attribute will raise a :exc:`ValueError` if
+   an invalid port is specified in the URL.  See section
+   :ref:`urlparse-result-object` for more information on the result object.
+```
+
+And I'd replace it with that text plus my new content.
+
+Actually wait - the previous patch was rejected because "The exact old text occurs 2 times in the current file." So this text appears twice! Let me think about why...
+
+Hmm, the doc file is 766 lines long. The paragraph about port validation might appear in two places - once for `urlsplit` results and once for `urlparse` results, since both have a `.port` attribute.
+
+Let me look at the two match regions from the rejection:
+- SRC-a02b6556983dc4c186399d7f3e28a3a0dd69dc2e922f37fd23f69822d3541be3: lines 133-137
+- SRC-f929069401278dc3052bf9cdd1b5f13219941f8bb41c9b9b3c187cce80a210c4: lines 319-323
+
+So the same text appears at lines 133-137 AND lines 319-323. This makes sense - once in the `urlsplit` section and once in the `urlparse` section.
+
+I need to either:
+1. Use `replace_region` with the specific region reference for lines 125-145 (which is unique to this location)
+2. Use a larger unique anchor that includes surrounding context
+
+Let me use `replace_region`. The region `SRC-f791e7f999f1f26a06834dc73796aaeb7480cb9d18c61d7dc4d58543852a7f9c` covers lines 125-145. If I replace this region, I need to provide the complete replacement for lines 125-145.
+
+The current content of lines 125-145 is:
+```
+   | :attr:`password` |       | Password                | :const:`None`          |
+   +------------------+-------+-------------------------+------------------------+
+   | :attr:`hostname` |       | Host name (lower case)  | :const:`None`          |
+   +------------------+-------+-------------------------+------------------------+
+   | :attr:`port`     |       | Port number as integer, | :const:`None`          |
+   |                  |       | if present              |                        |
+   +------------------+-------+-------------------------+------------------------+
+
+   Reading the :attr:`port` attribute will raise a :exc:`ValueError` if
+   an invalid port is specified in the URL.  See section
+   :ref:`urlparse-result-object` for more information on the result object.
+
+   Unmatched square brackets in the :attr:`netloc` attribute will raise a
+   :exc:`ValueError`.
+
+   Characters in the :attr:`netloc` attribute that decompose under NFKC
+   normalization (as used by the IDNA encoding) into any of ``/``, ``?``,
+   ``#``, ``@``, or ``:`` will raise a :exc:`ValueError`. If the URL is
+   decomposed before parsing, no error will be raised.
+
+   As is the case with all named tuples, the subclass has a few additional methods
+```
+
+I need to insert my new content between line 135 (end of port paragraph) and line 137 (start of "Unmatched square brackets"). So in the replacement, I keep everything the same and add my new content after line 135's text.
+
+Wait, but `replace_region` replaces the "complete observed source region with literal new text." The region is lines 125-145. So I need to provide the full replacement for all of lines 125-145.
+
+Let me use the literal SOURCE reply format to avoid JSON-escaping issues. The format is:
+- Single-line JSON header with discussion, optional account, and operation
+- Newline
+- The word SOURCE
+- Newline
+- The exact replacement source through the end of the reply
+
+The operation would be:
+```json
+{"discussion":"...","account":"...","operation":{"action":"replace_region","region":"SRC-f791e7f999f1f26a06834dc73796aaeb7480cb9d18c61d7dc4d58543852a7f9c","expected_candidate_id":"389292f683634a48a33bb8abcd9d70953b885802d432816ca9d75c1ad4ce8fa6"}}
+```
+
+Then SOURCE, then the replacement text.
+
+Now let me draft the replacement content. I'm replacing lines 125-145. The original is:
+
+```
+   | :attr:`password` |       | Password                | :const:`None`          |
+   +------------------+-------+-------------------------+------------------------+
+   | :attr:`hostname` |       | Host name (lower case)  | :const:`None`          |
+   +------------------+-------+-------------------------+------------------------+
+   | :attr:`port`     |       | Port number as integer, | :const:`None`          |
+   |                  |       | if present              |                        |
+   +------------------+-------+-------------------------+------------------------+
+
+   Reading the :attr:`port` attribute will raise a :exc:`ValueError` if
+   an invalid port is specified in the URL.  See section
+   :ref:`urlparse-result-object` for more information on the result object.
+
+   Unmatched square brackets in the :attr:`netloc` attribute will raise a
+   :exc:`ValueError`.
+
+   Characters in the :attr:`netloc` attribute that decompose under NFKC
+   normalization (as used by the IDNA encoding) into any of ``/``, ``?``,
+   ``#``, ``@``, or ``:`` will raise a :exc:`ValueError`. If the URL is
+   decomposed before parsing, no error will be raised.
+
+   As is the case with all named tuples, the subclass has a few additional methods
+```
+
+I want to insert after "result object." (line 135) and before the empty line (line 136) or after the empty line. Let me insert after line 136 (the empty line that follows the port paragraph), before line 137 (the "Unmatched square brackets" paragraph).
+
+Actually, I'll insert between line 135 and line 137. The structure would be:
+- Line 135: `   :ref:`urlparse-result-object` for more information on the result object.`
+- Line 136: (empty)
+- NEW: my inserted content
+- Line 137: `   Unmatched square brackets in the :attr:`netloc` attribute will raise a`
+
+Wait, I need to be careful. Let me re-read the lines:
+
+Line 133: `   Reading the :attr:`port` attribute will raise a :exc:`ValueError` if`
+Line 134: `   an invalid port is specified in the URL.  See section`
+Line 135: `   :ref:`urlparse-result-object` for more information on the result object.`
+Line 136: (empty - just newline)
+Line 137: `   Unmatched square brackets in the :attr:`netloc` attribute will raise a`
+
+So I'll insert my content between line 136 and line 137. The new content starts with an empty line separator.
+
+Let me draft the insertion:
+
+```
+
+   Port validation occurs when the :attr:`port` attribute is accessed,
+   not when the URL is parsed by :func:`urlparse` or :func:`urlsplit`.
+   The functions will return a result object for any syntactically valid
+   URL; the exception is raised only upon attribute access.
+
+   The port must be a non-negative ASCII decimal integer in the range
+   0 through 65535 (inclusive).  The following rules apply:
+
+   * An empty port string (e.g. ``http://host:/path``) raises
+     :exc:`ValueError`.
+   * A negative port (e.g. ``http://host:-1/path``) raises
+     :exc:`ValueError`.
+   * A port outside the range 0--65535 (e.g. ``http://host:65536/path``)
+     raises :exc:`ValueError`.
+   * A port containing non-ASCII characters, including non-ASCII decimal
+     digits (e.g. U+0663 ARABIC-INDIC DIGIT THREE), raises
+     :exc:`ValueError`.
+   * A port containing non-digit characters (e.g. ``http://host:abc/path``)
+     raises :exc:`ValueError`.
+
+   The boundary values 0 and 65535 are accepted without error.
+
+   Examples::
+
+      >>> from urllib.parse import urlparse, urlsplit
+      >>> p = urlparse("http://example.com:0/")
+      >>> p.port
+      0
+      >>> p = urlparse("http://example.com:65535/")
+      >>> p.port
+      65535
+      >>> p = urlparse("http://example.com:65536/")
+      >>> p.port
+      ValueError: Port out of range 0-65535
+      >>> p = urlparse("http://example.com:-1/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as '-1'
+      >>> p = urlparse("http://example.com:/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as ''
+      >>> p = urlparse("http://example.com:abc/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as 'abc'
+```
+
+Wait, I need to double-check: does `urlparse("http://example.com:/")` actually produce an empty port string? Let me think about how the netloc is parsed.
+
+In the URL `http://example.com:/`, the netloc is `example.com:`. The port part after the colon is empty string `""`. So `_hostinfo` would be `('example.com', '')`.
+
+Then in the port property:
+- `port = self._hostinfo[1]` → `port = ''`
+- `port is not None` → True (empty string is not None)
+- `port.isdigit()` → `''`.isdigit() → False
+- So it goes to else: `raise ValueError(f"Port could not be cast to integer value as {port!r}")`
+- Which is `ValueError("Port could not be cast to integer value as ''")`
+
+Yes, that's correct.
+
+For `http://example.com:-1/`:
+- netloc is `example.com:-1`
+- `_hostinfo` would be `('example.com', '-1')`
+- `'-1'.isdigit()` → False
+- Raises `ValueError("Port could not be cast to integer value as '-1'")`
+
+For `http://example.com:65536/`:
+- netloc is `example.com:65536`
+- `_hostinfo` would be `('example.com', '65536')`
+- `'65536'.isdigit()` → True, `'65536'.isascii()` → True
+- `int('65536')` → 65536
+- `0 <= 65536 <= 65535` → False
+- Raises `ValueError("Port out of range 0-65535")`
+
+For `http://example.com:abc/`:
+- netloc is `example.com:abc`
+- `_hostinfo` would be `('example.com', 'abc')`
+- `'abc'.isdigit()` → False
+- Raises `ValueError("Port could not be cast to integer value as 'abc'")`
+
+Now, I need to be careful about the doctest format. In CPython's documentation doctests, when an exception is raised, the expected output is just:
+```
+ValueError: Port out of range 0-65535
+```
+
+Not the full traceback. Let me verify this is the standard CPython doctest format.
+
+Actually, I realize I should check what the examples scope actually does. The task says "Examples scope executes the newly added examples." So the doctests need to actually pass when run.
+
+In CPython's test suite, doctests in documentation are run with `doctest` module. The standard behavior when an exception is raised in a doctest is that the expected output is:
+```
+ValueError: Port out of range 0-65535
+```
+
+This is how CPython's doctest framework handles uncaught exceptions in examples.
+
+Let me also think about whether I should use `urlsplit` in addition to `urlparse` in the examples. The task says "cover both public functions" for the tests. For the documentation, it says "executable examples of the observed boundary/error behavior." I'll use `urlparse` as the primary example since it's the more commonly referenced function, but I could also show `urlsplit`.
+
+Actually, let me keep it focused. I'll use `urlparse` in the main examples and mention that `urlsplit` behaves identically.
+
+Now, one concern: the doctest examples use `>>>` prompts. In RST files, the convention in CPython docs is to use `>>>` inside a `.. code-block::` directive or inside a `::` literal block. Let me check what format the file uses.
+
+Looking at the visible text, I see `::` is used (line 145 mentions "additional methods" which is followed by more content). The CPython docs typically use either:
+- `.. doctest::` directive
+- `>>>` inside a `::` block
+- `>>>` inside `.. code-block:: pycon`
+
+Since I can only see lines 125-145, I don't know exactly what format other examples use. But the standard CPython approach for doctest examples in RST is to use `>>>` inside a block. Let me use the `>>>` format directly, which is the most common in CPython docs.
+
+Actually, looking at this more carefully - in CPython documentation, doctest examples are typically written as:
+
+```
+   >>> from urllib.parse import urlparse
+   >>> urlparse("http://example.com:8080/").port
+   8080
+```
+
+Inside an indented block. The indentation is typically 3 spaces (matching the paragraph indentation in the RST file).
+
+But wait - for the doctest to be executable by the test framework, it needs to be in a specific format. In CPython, doctests in the docs are collected and run. The format is:
+- `>>>` prompt for input
+- Output on following lines without `>>>`
+- For exceptions, just `ExceptionType: message`
+
+Let me write the examples in this format. The indentation should match the surrounding RST content (3 spaces based on what I see).
+
+Now let me think about the exact text to use. I need to be very precise about:
+1. The ValueError messages (must match implementation exactly)
+2. The doctest format
+3. RST formatting
+
+Let me finalize my insertion. Here's what I'll insert between line 136 and line 137:
+
+```
+
+   Port validation occurs when the :attr:`port` attribute is accessed,
+   not when the URL is parsed.  :func:`urlparse` and :func:`urlsplit`
+   return a result object for any syntactically valid URL; the
+   :exc:`ValueError` is raised only upon access to the
+   :attr:`port` attribute.
+
+   The port must be a non-negative ASCII decimal integer in the range
+   0 through 65535 (inclusive).  The following rules apply when the
+   :attr:`port` attribute is accessed:
+
+   * An empty port string, as in ``http://host:/path``, raises
+     :exc:`ValueError`.
+   * A negative port, as in ``http://host:-1/path``, raises
+     :exc:`ValueError`.
+   * A port whose integer value is outside the range 0 through 65535,
+     as in ``http://host:65536/path``, raises :exc:`ValueError`.
+   * A port string that is not a pure ASCII decimal integer (including
+     strings with non-ASCII decimal digits, such as U+0663 ARABIC-INDIC
+     DIGIT THREE, or with any non-digit characters) raises
+     :exc:`ValueError`.
+
+   The boundary values 0 and 65535 are accepted without error.
+
+   Examples of the port boundary and error behavior::
+
+      >>> from urllib.parse import urlparse
+      >>> p = urlparse("http://example.com:0/")
+      >>> p.port
+      0
+      >>> p = urlparse("http://example.com:65535/")
+      >>> p.port
+      65535
+      >>> p = urlparse("http://example.com:65536/")
+      >>> p.port
+      ValueError: Port out of range 0-65535
+      >>> p = urlparse("http://example.com:-1/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as '-1'
+      >>> p = urlparse("http://example.com:/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as ''
+      >>> p = urlparse("http://example.com:abc/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as 'abc'
+
+   The same behavior applies to :func:`urlsplit` results.
+```
+
+Hmm, wait. I need to think about whether the doctest framework will correctly handle these. In CPython's doctest runner, when you have:
+```
+>>> p.port
+ValueError: Port out of range 0-65535
+```
+
+The framework expects that executing `p.port` will raise `ValueError` with message `Port out of range 0-65535`. This is the standard doctest behavior.
+
+But there's a subtlety: the doctest framework in CPython docs might expect a specific format. Let me think...
+
+In CPython's `doctest` module, when an exception is raised, the "expected" output in the test is typically just the exception line. The actual behavior is that the test runner catches the exception and compares the type and message.
+
+I think my format is correct. Let me proceed.
+
+Now, the full replacement for lines 125-145 would be the original content with my insertion. Let me write it out:
+
+Original (lines 125-145):
+```
+   | :attr:`password` |       | Password                | :const:`None`          |
+   +------------------+-------+-------------------------+------------------------+
+   | :attr:`hostname` |       | Host name (lower case)  | :const:`None`          |
+   +------------------+-------+-------------------------+------------------------+
+   | :attr:`port`     |       | Port number as integer, | :const:`None`          |
+   |                  |       | if present              |                        |
+   +------------------+-------+-------------------------+------------------------+
+
+   Reading the :attr:`port` attribute will raise a :exc:`ValueError` if
+   an invalid port is specified in the URL.  See section
+   :ref:`urlparse-result-object` for more information on the result object.
+
+   Unmatched square brackets in the :attr:`netloc` attribute will raise a
+   :exc:`ValueError`.
+
+   Characters in the :attr:`netloc` attribute that decompose under NFKC
+   normalization (as used by the IDNA encoding) into any of ``/``, ``?``,
+   ``#``, ``@``, or ``:`` will raise a :exc:`ValueError`. If the URL is
+   decomposed before parsing, no error will be raised.
+
+   As is the case with all named tuples, the subclass has a few additional methods
+```
+
+My replacement adds the new content after line 135 (`   :ref:`urlparse-result-object` for more information on the result object.`) and its following empty line.
+
+Wait, I need to be more careful about line numbers. Let me recount:
+
+Line 125: `   | :attr:`password` |       | Password                | :const:`None`          |`
+Line 126: `   +------------------+-------+-------------------------+------------------------+`
+Line 127: `   | :attr:`hostname` |       | Host name (lower case)  | :const:`None`          |`
+Line 128: `   +------------------+-------+-------------------------+------------------------+`
+Line 129: `   | :attr:`port`     |       | Port number as integer, | :const:`None`          |`
+Line 130: `   |                  |       | if present              |                        |`
+Line 131: `   +------------------+-------+-------------------------+------------------------+`
+Line 132: (empty)
+Line 133: `   Reading the :attr:`port` attribute will raise a :exc:`ValueError` if`
+Line 134: `   an invalid port is specified in the URL.  See section`
+Line 135: `   :ref:`urlparse-result-object` for more information on the result object.`
+Line 136: (empty)
+Line 137: `   Unmatched square brackets in the :attr:`netloc` attribute will raise a`
+Line 138: `   :exc:`ValueError`.`
+Line 139: (empty)
+Line 140: `   Characters in the :attr:`netloc` attribute that decompose under NFKC`
+Line 141: `   normalization (as used by the IDNA encoding) into any of ``/``, ``?``,`
+Line 142: `   ``#``, ``@``, or ``:`` will raise a :exc:`ValueError`. If the URL is`
+Line 143: `   decomposed before parsing, no error will be raised.`
+Line 144: (empty)
+Line 145: `   As is the case with all named tuples, the subclass has a few additional methods`
+
+So I want to insert after line 136 (empty line following the port paragraph) and before line 137.
+
+The replacement text for the full region (lines 125-145) would be:
+
+```
+   | :attr:`password` |       | Password                | :const:`None`          |
+   +------------------+-------+-------------------------+------------------------+
+   | :attr:`hostname` |       | Host name (lower case)  | :const:`None`          |
+   +------------------+-------+-------------------------+------------------------+
+   | :attr:`port`     |       | Port number as integer, | :const:`None`          |
+   |                  |       | if present              |                        |
+   +------------------+-------+-------------------------+------------------------+
+
+   Reading the :attr:`port` attribute will raise a :exc:`ValueError` if
+   an invalid port is specified in the URL.  See section
+   :ref:`urlparse-result-object` for more information on the result object.
+
+   Port validation occurs when the :attr:`port` attribute is accessed,
+   not when the URL is parsed.  :func:`urlparse` and :func:`urlsplit`
+   return a result object for any syntactically valid URL; the
+   :exc:`ValueError` is raised only upon access to the
+   :attr:`port` attribute.
+
+   The port must be a non-negative ASCII decimal integer in the range
+   0 through 65535 (inclusive).  The following rules apply when the
+   :attr:`port` attribute is accessed:
+
+   * An empty port string, as in ``http://host:/path``, raises
+     :exc:`ValueError`.
+   * A negative port, as in ``http://host:-1/path``, raises
+     :exc:`ValueError`.
+   * A port whose integer value is outside the range 0 through 65535,
+     as in ``http://host:65536/path``, raises :exc:`ValueError`.
+   * A port string that is not a pure ASCII decimal integer (including
+     strings with non-ASCII decimal digits, such as U+0663 ARABIC-INDIC
+     DIGIT THREE, or with any non-digit characters) raises
+     :exc:`ValueError`.
+
+   The boundary values 0 and 65535 are accepted without error.
+
+   Examples of the port boundary and error behavior::
+
+      >>> from urllib.parse import urlparse
+      >>> p = urlparse("http://example.com:0/")
+      >>> p.port
+      0
+      >>> p = urlparse("http://example.com:65535/")
+      >>> p.port
+      65535
+      >>> p = urlparse("http://example.com:65536/")
+      >>> p.port
+      ValueError: Port out of range 0-65535
+      >>> p = urlparse("http://example.com:-1/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as '-1'
+      >>> p = urlparse("http://example.com:/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as ''
+      >>> p = urlparse("http://example.com:abc/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as 'abc'
+
+   The same behavior applies to :func:`urlsplit` results.
+
+   Unmatched square brackets in the :attr:`netloc` attribute will raise a
+   :exc:`ValueError`.
+
+   Characters in the :attr:`netloc` attribute that decompose under NFKC
+   normalization (as used by the IDNA encoding) into any of ``/``, ``?``,
+   ``#``, ``@``, or ``:`` will raise a :exc:`ValueError`. If the URL is
+   decomposed before parsing, no error will be raised.
+
+   As is the case with all named tuples, the subclass has a few additional methods
+```
+
+Wait, I need to double-check the empty line situation. The original has:
+- Line 135: port paragraph end
+- Line 136: empty
+- Line 137: "Unmatched..."
+
+In my replacement, I have:
+- port paragraph end
+- empty line (was line 136)
+- new paragraph 1
+- empty line
+- new paragraph 2 (bullet list)
+- empty line
+- new paragraph 3 (boundary values)
+- empty line
+- new examples block
+- empty line
+- "The same behavior..." line
+- empty line
+- "Unmatched square brackets..."
+
+This looks good. Let me also make sure the RST is valid. The bullet list items use `*` with proper indentation.
+
+Actually, wait. I need to reconsider the doctest format. In CPython documentation, when using `>>>` examples in RST, they're typically inside a `.. code-block::` or a `::` literal block. The `::` at the end of a line makes everything following it (until dedent) a literal block.
+
+Looking at my format:
+```
+   Examples of the port boundary and error behavior::
+
+      >>> from urllib.parse import urlparse
+```
+
+This should work - the `::` at the end of the "Examples..." line makes the following indented block a literal block. The `>>>` lines inside will be treated as literal text by RST, but the doctest runner will pick them up.
+
+Actually, I realize I should check: does CPython's documentation test framework look for `>>>` in RST files? Yes, CPython has a doctest runner that processes RST files and finds `>>>` examples. The format is standard.
+
+Let me also reconsider whether I need `urlsplit` examples. The task says the documentation should show "the distinction between constructing the parsed result and accessing its port." I think showing `urlparse` examples is sufficient for the doc, and I'll note that `urlsplit` behaves the same.
+
+One more thought: should I show that the parsing itself succeeds? Like:
+```
+>>> p = urlparse("http://example.com:65536/")
+>>> p
+ParseResult(scheme='http', netloc='example.com:65536', path='', params='', query='', fragment='')
+```
+
+This would show the distinction more clearly - the parse succeeds but the port access fails. Let me add this.
+
+Actually, the repr of a ParseResult might be long. Let me keep it simpler and just show that the parse succeeds (by the fact that we can access other attributes) and the port access fails.
+
+Let me revise:
+
+```
+   Examples of the port boundary and error behavior::
+
+      >>> from urllib.parse import urlparse
+      >>> p = urlparse("http://example.com:0/")
+      >>> p.port
+      0
+      >>> p = urlparse("http://example.com:65535/")
+      >>> p.port
+      65535
+      >>> p = urlparse("http://example.com:65536/")
+      >>> p.hostname
+      'example.com'
+      >>> p.port
+      ValueError: Port out of range 0-65535
+      >>> p = urlparse("http://example.com:-1/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as '-1'
+      >>> p = urlparse("http://example.com:/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as ''
+      >>> p = urlparse("http://example.com:abc/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as 'abc'
+```
+
+The `p.hostname` line shows that the result object was successfully constructed (hostname is accessible), but `p.port` fails. This illustrates the distinction.
+
+Actually, I want to make sure `p.hostname` returns `'example.com'` for `http://example.com:65536/`. The hostname is the lowercased host without port. Yes, it should be `'example.com'`.
+
+Let me finalize my text. I'll use the literal SOURCE reply format.
+
+Wait, one more consideration: the task says "New examples must be self-contained together (include their imports)." My examples include `from urllib.parse import urlparse` at the start. Good.
+
+Also: "show their real outputs or exceptions." My examples show the actual integer values for valid ports and the actual ValueError messages for invalid ports. Good.
+
+Let me also think about whether I need to handle the trailing newline situation. The `replace_region` operation says "Before an unselected following line, the host supplies a missing original line separator for nonempty replacement text and records it separately from your exact proposal." So I don't need to worry about the trailing newline - the host handles it.
+
+Actually, re-reading: "Use the literal SOURCE reply to avoid JSON-escaping code." and "Trailing newlines are source bytes." So the text I provide after "SOURCE" is exactly what replaces the region. The last line of my replacement corresponds to the last line of the region (line 145). If line 145 originally ended with a newline (which it should, since it's not the last line of the file - the file has 766 lines), then I need my text to end with a newline too.
+
+Wait, the region is lines 125-145. Line 145 is `   As is the case with all named tuples, the subclass has a few additional methods`. This is not the last line of the file (file has 766 lines), so it ends with a newline. My replacement should also end with a newline after this line.
+
+Let me write out the complete replacement text. I'll use the literal SOURCE format.
+
+Actually, let me reconsider the structure. The `replace_region` says "Replaces the complete observed source region with literal new text." The region is defined by the region_ref. The content I see is lines 125-145. So my replacement text is exactly what lines 125-145 will become.
+
+The original content (I'll denote each line with a number for clarity, but won't include numbers in the actual text):
+
+```
+   | :attr:`password` |       | Password                | :const:`None`          |
+   +------------------+-------+-------------------------+------------------------+
+   | :attr:`hostname` |       | Host name (lower case)  | :const:`None`          |
+   +------------------+-------+-------------------------+------------------------+
+   | :attr:`port`     |       | Port number as integer, | :const:`None`          |
+   |                  |       | if present              |                        |
+   +------------------+-------+-------------------------+------------------------+
+[empty]
+   Reading the :attr:`port` attribute will raise a :exc:`ValueError` if
+   an invalid port is specified in the URL.  See section
+   :ref:`urlparse-result-object` for more information on the result object.
+[empty]
+   Unmatched square brackets in the :attr:`netloc` attribute will raise a
+   :exc:`ValueError`.
+[empty]
+   Characters in the :attr:`netloc` attribute that decompose under NFKC
+   normalization (as used by the IDNA encoding) into any of ``/``, ``?``,
+   ``#``, ``@``, or ``:`` will raise a :exc:`ValueError`. If the URL is
+   decomposed before parsing, no error will be raised.
+[empty]
+   As is the case with all named tuples, the subclass has a few additional methods
+```
+
+My new content inserts between the first `[empty]` after the port paragraph and the "Unmatched square brackets" line. Let me write the full replacement:
+
+```
+   | :attr:`password` |       | Password                | :const:`None`          |
+   +------------------+-------+-------------------------+------------------------+
+   | :attr:`hostname` |       | Host name (lower case)  | :const:`None`          |
+   +------------------+-------+-------------------------+------------------------+
+   | :attr:`port`     |       | Port number as integer, | :const:`None`          |
+   |                  |       | if present              |                        |
+   +------------------+-------+-------------------------+------------------------+
+
+   Reading the :attr:`port` attribute will raise a :exc:`ValueError` if
+   an invalid port is specified in the URL.  See section
+   :ref:`urlparse-result-object` for more information on the result object.
+
+   Port validation occurs when the :attr:`port` attribute is accessed,
+   not when the URL is parsed.  :func:`urlparse` and :func:`urlsplit`
+   return a result object for any syntactically valid URL; the
+   :exc:`ValueError` is raised only upon access to the
+   :attr:`port` attribute.
+
+   The port must be a non-negative ASCII decimal integer in the range
+   0 through 65535 (inclusive).  The following rules apply when the
+   :attr:`port` attribute is accessed:
+
+   * An empty port string, as in ``http://host:/path``, raises
+     :exc:`ValueError`.
+   * A negative port, as in ``http://host:-1/path``, raises
+     :exc:`ValueError`.
+   * A port whose integer value is outside the range 0 through 65535,
+     as in ``http://host:65536/path``, raises :exc:`ValueError`.
+   * A port string that is not a pure ASCII decimal integer (including
+     strings with non-ASCII decimal digits, such as U+0663 ARABIC-INDIC
+     DIGIT THREE, or with any non-digit characters) raises
+     :exc:`ValueError`.
+
+   The boundary values 0 and 65535 are accepted without error.
+
+   Examples of the port boundary and error behavior::
+
+      >>> from urllib.parse import urlparse
+      >>> p = urlparse("http://example.com:0/")
+      >>> p.port
+      0
+      >>> p = urlparse("http://example.com:65535/")
+      >>> p.port
+      65535
+      >>> p = urlparse("http://example.com:65536/")
+      >>> p.hostname
+      'example.com'
+      >>> p.port
+      ValueError: Port out of range 0-65535
+      >>> p = urlparse("http://example.com:-1/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as '-1'
+      >>> p = urlparse("http://example.com:/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as ''
+      >>> p = urlparse("http://example.com:abc/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as 'abc'
+
+   The same behavior applies to :func:`urlsplit` results.
+
+   Unmatched square brackets in the :attr:`netloc` attribute will raise a
+   :exc:`ValueError`.
+
+   Characters in the :attr:`netloc` attribute that decompose under NFKC
+   normalization (as used by the IDNA encoding) into any of ``/``, ``?``,
+   ``#``, ``@``, or ``:`` will raise a :exc:`ValueError`. If the URL is
+   decomposed before parsing, no error will be raised.
+
+   As is the case with all named tuples, the subclass has a few additional methods
+```
+
+This looks good. Now let me format this as the literal SOURCE reply.
+
+The header line is:
+```
+{"discussion":"Using replace_region to insert port documentation after the existing port paragraph, using the unique region reference to avoid the ambiguity issue.","account":"Tests pass CHK-0029. Editing Doc/library/urllib.parse.rst via replace_region (region SRC-f791e7f999f1f26a06834dc73796aaeb7480cb9d18c61d7dc4d58543852a7f9c, lines 125-145) to insert port boundary/error docs with doctest examples between the existing port paragraph and unmatched-brackets paragraph. ValueError messages verified from implementation: 'Port out of range 0-65535' for out-of-range, 'Port could not be cast to integer value as <repr>' for non-ASCII/non-digit/empty/negative.","operation":{"action":"replace_region","region":"SRC-f791e7f999f1f26a06834dc73796aaeb7480cb9d18c61d7dc4d58543852a7f9c","expected_candidate_id":"389292f683634a48a33bb8abcd9d70953b885802d432816ca9d75c1ad4ce8fa6"}}
+```
+
+Then:
+```
+SOURCE
+```
+
+Then the exact replacement source.
+
+Wait, I need to double-check one thing. The `replace_region` documentation says: "Use the literal SOURCE reply to avoid JSON-escaping code." and "the exact replacement source through the end of the reply."
+
+So the format is:
+1. JSON header line
+2. Newline
+3. "SOURCE"
+4. Newline
+5. Exact replacement source (through end of reply)
+
+Let me make sure my replacement source is correct. The key question is: does the original line 145 end with a newline? Since the file has 766 lines and this is line 145 (not the last line), yes, it ends with a newline. My replacement should end with the same last line plus a newline.
+
+Actually, I need to be careful. The "exact replacement source through the end of the reply" - does the last line need a trailing newline? The spec says "Trailing newlines are source bytes." So if the original region's last line ends with a newline (which it does since it's not EOF), my replacement should also end with a newline.
+
+Let me write this out carefully. The replacement text ends with:
+```
+   As is the case with all named tuples, the subclass has a few additional methods
+```
+followed by a newline.
+
+OK, I think I'm ready to write the response. Let me also make sure the JSON is valid - I need to escape any special characters in the JSON string values.
+
+Actually, in the account and discussion strings, I have backticks and quotes. Let me make sure those are properly escaped in JSON. Backticks are fine in JSON. Single quotes are fine. I don't have any double quotes or backslashes in the discussion/account text, so it should be fine.
+
+Let me write the final response.

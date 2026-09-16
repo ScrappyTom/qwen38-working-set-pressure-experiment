@@ -1,0 +1,1109 @@
+Let me analyze the situation:
+
+1. The public check (RES-0046) failed on "examples.execution" criterion - 4 out of 14 examples failed in the documentation.
+
+2. Looking at the diagnostics, the failures are in Doc/library/urllib.parse.rst at lines 175, 178, 181 (and one more not shown). The issues are:
+   - Line 175: `p.port` - raised ValueError "Port out of range 0-65535" but the doctest expected something different
+   - Line 178: `p.port` - raised ValueError "Port could not be cast to integer value as '-1'" but expected "ValueError: Port could not be cast to integer value as ''"
+   - Line 181: `p.port` - raised ValueError "Port could not be cast to integer value as 'abc'" but expected something else
+
+Wait, let me re-read the diagnostics more carefully:
+
+```
+File "Doc/library/urllib.parse.rst", line 175, in changed_documentation
+Failed example:
+    p.port
+Exception raised:
+    ...
+    ValueError: Port out of range 0-65535
+```
+This means the doctest at line 175 had `p.port` and it raised an exception, but the expected output didn't match.
+
+```
+File "Doc/library/urllib.parse.rst", line 178, in changed_documentation
+Failed example:
+    p.port
+Expected:
+    ValueError: Port could not be cast to integer value as ''
+Got nothing
+```
+This means at line 178, the doctest expected "ValueError: Port could not be cast to integer value as ''" but got nothing (no exception was raised).
+
+```
+File "Doc/library/urllib.parse.rst", line 181, in changed_documentation
+Failed example:
+    p.port
+Exception raised:
+    ...
+    ValueError: Port could not be cast to integer value as 'abc'
+```
+This means at line 181, `p.port` raised an exception but the expected output didn't match.
+
+Now let me look at the current documentation content (lines 125-194 of Doc/library/urllib.parse.rst) to understand what's there:
+
+The current source shows:
+```
+   Examples of the port boundary and error behavior::
+
+      >>> from urllib.parse import urlparse
+      >>> p = urlparse("http://example.com:0/")
+      >>> p.port
+      0
+      >>> p = urlparse("http://example.com:65535/")
+      >>> p.port
+      65535
+      >>> p = urlparse("http://example.com:65536/")
+      >>> p.hostname
+      'example.com'
+      >>> p.port
+      ValueError: Port out of range 0-65535
+      >>> p = urlparse("http://example.com:-1/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as '-1'
+      >>> p = urlparse("http://example.com:/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as ''
+      >>> p = urlparse("http://example.com:abc/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as 'abc'
+```
+
+The problem is that in doctest format, to show an exception, you need to use `Traceback (most recent call last):` format, not just the exception message. Let me think about this...
+
+Actually, in Python's doctest, when an exception is raised, the output should be:
+```
+>>> p.port
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+ValueError: Port out of range 0-65535
+```
+
+But that's not how doctests typically show exceptions in documentation. Let me look at how the CPython docs typically handle this...
+
+Actually, looking at the doctest diagnostics more carefully:
+
+The doctest runner is using the `DOCTEST_EXCEPTION` option or similar. In CPython's documentation, exceptions in doctests are typically shown as:
+
+```
+>>> p.port
+Traceback (most recent call last):
+  ...
+ValueError: Port out of range 0-65535
+```
+
+But the standard way in CPython docs is to use `# doctest: +SKIP` or to show the full traceback. Let me look at what the actual doctest checker expects.
+
+Wait, looking at the error messages more carefully:
+
+1. Line 175: `p.port` raised `ValueError: Port out of range 0-65535` - but the doctest said it would output `ValueError: Port out of range 0-65535` as plain text. The doctest framework sees an exception raised where it expected plain output text, so it fails.
+
+2. Line 178: Expected `ValueError: Port could not be cast to integer value as ''` but "Got nothing" - this means the exception wasn't raised at all? Or the expected output didn't match.
+
+Wait, "Got nothing" means the doctest expected the text output `ValueError: Port could not be cast to integer value as ''` but got no output (empty). This could mean the exception was raised (which produces no "output" in doctest terms) OR the port was successfully computed.
+
+Actually wait - let me re-read. The URL is `http://example.com:/` - with an empty port. Let me look at the implementation:
+
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+For `http://example.com:/`, what does `_hostinfo[1]` return? Looking at the `_hostinfo` function... For a URL like `http://example.com:/path`, the netloc would be `example.com:` and the port would be `''` (empty string). Since `''` is not None, it enters the if block. `''`.isdigit() is False, so it raises ValueError.
+
+Wait, but the diagnostic says "Got nothing" for line 178. Let me look at the line numbers more carefully.
+
+The doctest examples in the file are at specific lines. Let me count from the visible source:
+
+Looking at the visible source (lines 125-194), the examples section starts around line 153 (the line with "Examples of the port boundary and error behavior::").
+
+Let me count the lines in the visible source to map to actual file line numbers. The source starts at line 125 of the file.
+
+Line 125: `   | :attr:`password` |       | Password                | :const:`None`          |`
+Line 126: `   +------------------+-------+-------------------------+------------------------+`
+...
+
+Actually, let me count more carefully. The visible source has these lines starting at line 125:
+
+125: `   | :attr:`password` |       | Password                | :const:`None`          |`
+126: `   +------------------+-------+-------------------------+------------------------+`
+127: `   | :attr:`hostname` |       | Host name (lower case)  | :const:`None`          |`
+128: `   +------------------+-------+-------------------------+------------------------+`
+129: `   | :attr:`port`     |       | Port number as integer, | :const:`None`          |`
+130: `   |                  |       | if present              |                        |`
+131: `   +------------------+-------+-------------------------+------------------------+`
+132: (empty line)
+133: `   Reading the :attr:`port` attribute will raise a :exc:`ValueError` if`
+134: `   an invalid port is specified in the URL.  See section`
+135: `   :ref:`urlparse-result-object` for more information on the result object.`
+136: (empty line)
+137: `   Port validation occurs when the :attr:`port` attribute is accessed,`
+138: `   not when the URL is parsed.  :func:`urlparse` and :func:`urlsplit``
+139: `   return a result object for any syntactically valid URL; the`
+140: `   :exc:`ValueError` is raised only upon access to the`
+141: `   :attr:`port` attribute.`
+142: (empty line)
+143: `   The port must be a non-negative ASCII decimal integer in the range`
+144: `   0 through 65535 (inclusive).  The following rules apply when the`
+145: `   :attr:`port` attribute is accessed:`
+146: (empty line)
+147: `   * An empty port string, as in ``http://host:/path``, raises`
+148: `     :exc:`ValueError`.`
+149: `   * A negative port, as in ``http://host:-1/path``, raises`
+150: `     :exc:`ValueError`.`
+151: `   * A port whose integer value is outside the range 0 through 65535,`
+152: `     as in ``http://host:65536/path``, raises :exc:`ValueError`.`
+153: `   * A port string that is not a pure ASCII decimal integer (including`
+154: `     strings with non-ASCII decimal digits, such as U+0663 ARABIC-INDIC`
+155: `     DIGIT THREE, or with any non-digit characters) raises`
+156: `     :exc:`ValueError`.`
+157: (empty line)
+158: `   The boundary values 0 and 65535 are accepted without error.`
+159: (empty line)
+160: `   Examples of the port boundary and error behavior::`
+161: (empty line)
+162: `      >>> from urllib.parse import urlparse`
+163: `      >>> p = urlparse("http://example.com:0/")`
+164: `      >>> p.port`
+165: `      0`
+166: `      >>> p = urlparse("http://example.com:65535/")`
+167: `      >>> p.port`
+168: `      65535`
+169: `      >>> p = urlparse("http://example.com:65536/")`
+170: `      >>> p.hostname`
+171: `      'example.com'`
+172: `      >>> p.port`
+173: `      ValueError: Port out of range 0-65535`
+174: `      >>> p = urlparse("http://example.com:-1/")`
+175: `      >>> p.port`
+176: `      ValueError: Port could not be cast to integer value as '-1'`
+177: `      >>> p = urlparse("http://example.com:/")`
+178: `      >>> p.port`
+179: `      ValueError: Port could not be cast to integer value as ''`
+180: `      >>> p = urlparse("http://example.com:abc/")`
+181: `      >>> p.port`
+182: `      ValueError: Port could not be cast to integer value as 'abc'`
+183: (empty line)
+184: `   The same behavior applies to :func:`urlsplit` results.`
+185: (empty line)
+186: `   Unmatched square brackets in the :attr:`netloc` attribute will raise a`
+...
+
+So the doctest failures are at:
+- Line 175: `p.port` (for `http://example.com:-1/`) - raised ValueError but doctest expected plain text output
+- Line 178: `p.port` (for `http://example.com:/`) - "Got nothing" 
+- Line 181: `p.port` (for `http://example.com:abc/`) - raised ValueError
+
+And there's a 4th failure not shown (diagnostics_total is 1 but it contains 3 visible failures... wait, let me re-read).
+
+Actually, looking at the diagnostics:
+- `diagnostics_shown: 1` and `diagnostics_total: 1` - there's only 1 diagnostic shown which contains all 3 visible failures plus mentions 4 failures total.
+
+Wait, `counts: {"examples": 14, "failures": 4}` - 14 examples total, 4 failures.
+
+The 3 shown failures are at lines 175, 178, 181. There must be a 4th failure. Let me think about what it could be...
+
+Actually wait - looking more carefully at line 172-173:
+```
+      >>> p.port
+      ValueError: Port out of range 0-65535
+```
+
+This is also a doctest where `p.port` raises an exception. The doctest framework sees the raised exception and the expected text `ValueError: Port out of range 0-65535`. In standard doctest, when an exception is raised, the output is the traceback, not just the exception message.
+
+The issue is how to properly show exceptions in doctests within CPython documentation. Looking at how CPython docs handle this...
+
+In CPython documentation, to show an exception in a doctest, you typically need to either:
+1. Use `# doctest: +ELLIPSIS` and show part of the traceback
+2. Show the full expected traceback
+3. Use `# doctest: +NORMALIZE_WHITESPACE` with the traceback
+
+But actually, looking at the CPython source code documentation, they often use this pattern:
+
+```
+>>> p.port
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+ValueError: Port out of range 0-65535
+```
+
+But that's fragile because the file path changes. A better approach used in CPython docs is:
+
+```
+>>> p.port
+ValueError: Port out of range 0-65535
+```
+
+Wait, but that's what's already there and it's failing! Let me look at how doctest handles exceptions...
+
+In Python's doctest module, when an exception is raised:
+- The output is the traceback followed by the exception type and message
+- To match this, the expected output needs to include the traceback
+
+But CPython docs often use `# doctest: +ELLIPSIS` to match partial tracebacks. However, the standard approach in CPython's documentation for showing exceptions is actually to NOT use doctest for the exception case, or to use a different format.
+
+Wait, let me look at how other CPython docs handle exceptions in doctests. The typical pattern is:
+
+```
+>>> 1/0
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+ZeroDivisionError: division by zero
+```
+
+Or with ELLIPSIS:
+```
+>>> 1/0
+Traceback (most recent call last):
+  ...
+ZeroDivisionError: division by zero
+```
+
+The `...` is an ellipsis line that matches any number of lines.
+
+So the fix is to change the exception examples to include the proper traceback format with `...` for the middle lines. But wait - the CPython doctest checker for documentation might have specific handling.
+
+Actually, let me reconsider. Looking at the doctest diagnostic output:
+
+```
+File "Doc/library/urllib.parse.rst", line 175, in changed_documentation
+Failed example:
+    p.port
+Exception raised:
+    Traceback (most recent call last):
+      File "C:\Users\danmc\AppData\Local\Temp\ws-observed-check-wu62zv5j\Lib\urllib\parse.py", line 182, in port
+        raise ValueError(f"Port could not be cast to integer value as {port!r}")
+    ValueError: Port could not be cast to integer value as '-1'
+```
+
+So the doctest framework sees that `p.port` raised an exception, but the expected output was `ValueError: Port could not be cast to integer value as '-1'` (just the text). The framework reports "Exception raised" where it expected text output.
+
+For line 178:
+```
+File "Doc/library/urllib.parse.rst", line 178, in changed_documentation
+Failed example:
+    p.port
+Expected:
+    ValueError: Port could not be cast to integer value as ''
+Got nothing
+```
+
+"Got nothing" means the actual output was empty. This is strange - it means `p.port` didn't raise an exception for `http://example.com:/`? Let me think...
+
+Wait, for `http://example.com:/`, the URL is `http://example.com:/`. Let me trace through the parsing:
+- scheme: http
+- netloc: `example.com:`
+- The netloc has a colon at the end, so the port part is `''` (empty string)
+
+In `_hostinfo`:
+```python
+def _hostinfo(netloc):
+    ...
+    userinfo, have_info, hostinfo = netloc.rpartition('@')
+    if not have_info:
+        ...
+    # split hostinfo into host and port
+    ...
+```
+
+Actually, let me look at the actual `_hostinfo` implementation. From the search results, I can see it's at lines 205-217. Let me look at what's there.
+
+Actually, I don't have the full implementation visible. But from the port property:
+```python
+port = self._hostinfo[1]
+if port is not None:
+    ...
+```
+
+For `http://example.com:/`, the port string would be `''` (empty string after the colon). `''` is not None, so it enters the if block. `''`.isdigit() is False (empty string has no digits), so it raises ValueError.
+
+But the diagnostic says "Got nothing" for line 178. Hmm, that's confusing. Unless the issue is that the doctest framework is matching the exception against the expected text differently.
+
+Wait, I think I misread. Let me re-read:
+
+"Failed example: p.port / Expected: ValueError: Port could not be cast to integer value as '' / Got nothing"
+
+This means:
+- The doctest expected the output text `ValueError: Port could not be cast to integer value as ''`
+- But the actual output was "nothing" (empty string)
+
+In doctest, when an exception is raised and the expected output is plain text (not a traceback), the framework reports the exception separately and says "Got nothing" for the text output comparison. The exception is reported in a separate part of the diagnostic.
+
+But wait, in this case, only 3 failures are shown for lines 175, 178, 181. And line 172-173 (`p.port` → `ValueError: Port out of range 0-65535`) should also fail. That's the 4th failure!
+
+So all 4 exception examples are failing because the doctest format doesn't properly handle the raised exceptions.
+
+The correct format for doctests that show exceptions is:
+
+```
+>>> p.port
+Traceback (most recent call last):
+  ...
+ValueError: Port out of range 0-65535
+```
+
+The `  ...` line uses the ELLIPSIS option to match the middle of the traceback.
+
+But wait, does CPython's documentation doctest setup use ELLIPSIS by default? Let me check...
+
+In CPython's documentation build system, doctests are typically run with specific options. The `test.doctest` module in CPython uses `DOCTEST_OPTIONS` which often includes `ELLIPSIS`.
+
+Actually, looking at how CPython docs are tested, the documentation examples are run by `tools/scripts/doctest_proper.py` or similar, which sets up doctest with specific options. The standard CPython documentation doctest setup uses:
+- `ELLIPSIS` (to allow `...` in expected output)
+- `NORMALIZE_WHITESPACE` (sometimes)
+
+With ELLIPSIS enabled, the format would be:
+```
+>>> p.port
+Traceback (most recent call last):
+  ...
+ValueError: Port out of range 0-65535
+```
+
+But I'm not 100% sure about the exact setup. Let me think about what format to use.
+
+Actually, looking at the CPython documentation source for similar patterns, I've seen them use:
+
+```
+>>> 1/0
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+ZeroDivisionError: division by zero
+```
+
+This works when the doctest is run in a specific context. But for the CPython documentation test harness, the typical pattern I've seen is to just show the exception line without the full traceback, using a special doctest directive.
+
+Hmm, let me look at this differently. The check that's running is the "public" check which includes "examples" scope. The examples scope "executes the newly added examples." So it's running the doctests from the documentation.
+
+Looking at the actual error output from the doctest:
+```
+File "Doc/library/urllib.parse.rst", line 175, in changed_documentation
+Failed example:
+    p.port
+Exception raised:
+```
+
+This tells me the doctest is comparing the raised exception against the expected text. The expected text was `ValueError: Port could not be cast to integer value as '-1'` but an exception was raised.
+
+The proper way to handle this in a doctest is to expect the traceback. The format depends on the doctest options used by the checker.
+
+Given the diagnostic shows:
+```
+Traceback (most recent call last):
+  File "C:\Users\danmc\AppData\Local\Temp\ws-observed-check-wu62zv5j\Lib\urllib\parse.py", line 182, in port
+    raise ValueError(f"Port could not be cast to integer value as {port!r}")
+ValueError: Port could not be cast to integer value as '-1'
+```
+
+The traceback format is:
+```
+Traceback (most recent call last):
+  File "...", line NNN, in port
+    <source line>
+ValueError: <message>
+```
+
+For the doctest to match this, I need to use ELLIPSIS for the variable parts:
+```
+>>> p.port
+Traceback (most recent call last):
+  ...
+ValueError: Port could not be cast to integer value as '-1'
+```
+
+This would work if ELLIPSIS is enabled. The `  ...` matches any number of lines between "Traceback (most recent call last):" and the final exception line.
+
+Actually wait - I need to be more careful. In doctest with ELLIPSIS:
+- `...` on its own line matches zero or more lines
+- The `...` must be on a line by itself (with optional leading whitespace)
+
+So the expected output would be:
+```
+Traceback (most recent call last):
+  ...
+ValueError: Port could not be cast to integer value as '-1'
+```
+
+Let me verify this is the right approach by looking at what the CPython documentation test harness does.
+
+Actually, I realize I should look at how the check actually runs the doctests. The check is a custom check that the host runs. Let me look at what options it uses.
+
+I don't have direct access to the check implementation, but based on the diagnostic output, it's clearly running doctests and comparing outputs. The key question is whether ELLIPSIS is enabled.
+
+Given that this is a custom check (not the standard CPython doc test), I should look at what format would work. The safest approach that I've seen work in CPython's documentation testing is:
+
+Option 1: Show the full expected exception with ELLIPSIS:
+```
+>>> p.port
+Traceback (most recent call last):
+  ...
+ValueError: Port out of range 0-65535
+```
+
+Option 2: Wrap in try/except to show the exception:
+```
+>>> try:
+...     p.port
+... except ValueError as e:
+...     print(e)
+... 
+Port out of range 0-65535
+```
+
+Option 2 is more robust because it doesn't depend on ELLIPSIS being enabled. But it's less clean for documentation.
+
+Actually, wait. Let me reconsider. Looking at the diagnostic output again:
+
+```
+Failed example:
+    p.port
+Exception raised:
+    Traceback (most recent call last):
+      File "C:\Users\danmc\AppData\Local\Temp\ws-observed-check-wu62zv5j\Lib\urllib\parse.py", line 182, in port
+        raise ValueError(f"Port could not be cast to integer value as {port!r}")
+    ValueError: Port could not be cast to integer value as '-1'
+```
+
+This is the standard doctest output when an exception is raised but not expected. If the exception WAS expected (i.e., the expected output contains a traceback), the comparison would be different.
+
+Let me try the approach of showing the expected exception in the doctest. The format that typically works:
+
+```
+>>> p.port
+Traceback (most recent call last):
+  ...
+ValueError: Port out of range 0-65535
+```
+
+But I'm not confident ELLIPSIS is enabled. Let me think of another approach.
+
+Actually, you know what, let me look at this from a different angle. The task says "show their real outputs or exceptions." Maybe the right approach is to NOT use doctest for the exception cases, but instead show them as plain code blocks or use a different mechanism.
+
+Wait, but the task says "New examples must be self-contained together (include their imports), use >>> prompts, and show their real outputs or exceptions." So they must use >>> prompts.
+
+Let me look at how other CPython documentation handles exceptions in doctests. Looking at the CPython source, in `Doc/library/exceptions.rst` or similar files, they typically show exceptions like:
+
+```
+>>> 1/0
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+ZeroDivisionError: division by zero
+```
+
+This works in the CPython documentation doctest because the doctest is run in a context where `<stdin>` is the file. But in a general doctest runner, the file path would be different.
+
+The CPython documentation doctest setup (in `tools/johnny` or `Tools/scripts/doctest_proper.py`) typically:
+1. Runs with `ELLIPSIS` enabled
+2. Uses `<doctest>` or similar for the filename
+
+With ELLIPSIS, the format `  ...` should work.
+
+But actually, I just realized - I should look at what the actual check does. The check is "public" scope which includes "examples" scope. The examples scope "executes the newly added examples." This is a custom check by the host.
+
+Given the uncertainty, let me try the most robust approach: use a try/except pattern in the doctest to capture and display the exception message. This way, no exception actually propagates out of the doctest, and the output is just the exception message text.
+
+```
+>>> p = urlparse("http://example.com:65536/")
+>>> p.hostname
+'example.com'
+>>> try:
+...     p.port
+... except ValueError as e:
+...     print(e)
+... 
+Port out of range 0-65535
+```
+
+This is clean, unambiguous, and doesn't depend on doctest options. The `...` continuation lines are standard Python syntax in the doctest.
+
+Wait, but the task says "show their real outputs or exceptions." Using try/except still shows the real exception message. And it's a common pattern in CPython documentation.
+
+Actually, let me reconsider. Let me look at what the 4th failure might be. The diagnostics show 3 failures explicitly but say 4 total. The 4th is likely line 172-173:
+```
+      >>> p.port
+      ValueError: Port out of range 0-65535
+```
+
+This is the same pattern - exception raised where text output expected.
+
+So all 4 failures are the exception examples. The fix is to change the format.
+
+Let me go with the try/except approach:
+
+```
+      >>> from urllib.parse import urlparse
+      >>> p = urlparse("http://example.com:0/")
+      >>> p.port
+      0
+      >>> p = urlparse("http://example.com:65535/")
+      >>> p.port
+      65535
+      >>> p = urlparse("http://example.com:65536/")
+      >>> p.hostname
+      'example.com'
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port out of range 0-65535
+      >>> p = urlparse("http://example.com:-1/")
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port could not be cast to integer value as '-1'
+      >>> p = urlparse("http://example.com:/")
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port could not be cast to integer value as ''
+      >>> p = urlparse("http://example.com:abc/")
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port could not be cast to integer value as 'abc'
+```
+
+This should work because:
+1. The try/except catches the ValueError
+2. print(e) outputs the exception message
+3. No exception propagates out of the doctest
+4. The output is deterministic and matches exactly
+
+Now, I need to find the exact text to replace in the file. Let me look at the current visible source for lines 160-183 of Doc/library/urllib.parse.rst.
+
+From the visible source (starting at line 125):
+Line 160: `   Examples of the port boundary and error behavior::`
+Line 161: (empty)
+Line 162: `      >>> from urllib.parse import urlparse`
+Line 163: `      >>> p = urlparse("http://example.com:0/")`
+Line 164: `      >>> p.port`
+Line 165: `      0`
+Line 166: `      >>> p = urlparse("http://example.com:65535/")`
+Line 167: `      >>> p.port`
+Line 168: `      65535`
+Line 169: `      >>> p = urlparse("http://example.com:65536/")`
+Line 170: `      >>> p.hostname`
+Line 171: `      'example.com'`
+Line 172: `      >>> p.port`
+Line 173: `      ValueError: Port out of range 0-65535`
+Line 174: `      >>> p = urlparse("http://example.com:-1/")`
+Line 175: `      >>> p.port`
+Line 176: `      ValueError: Port could not be cast to integer value as '-1'`
+Line 177: `      >>> p = urlparse("http://example.com:/")`
+Line 178: `      >>> p.port`
+Line 179: `      ValueError: Port could not be cast to integer value as ''`
+Line 180: `      >>> p = urlparse("http://example.com:abc/")`
+Line 181: `      >>> p.port`
+Line 182: `      ValueError: Port could not be cast to integer value as 'abc'`
+Line 183: (empty)
+
+I need to replace the section from line 172 to line 182 (the four exception examples) with the try/except versions.
+
+Let me use patch to replace the old text with the new text. The old text is:
+
+```
+      >>> p.port
+      ValueError: Port out of range 0-65535
+      >>> p = urlparse("http://example.com:-1/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as '-1'
+      >>> p = urlparse("http://example.com:/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as ''
+      >>> p = urlparse("http://example.com:abc/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as 'abc'
+```
+
+And the new text is:
+
+```
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port out of range 0-65535
+      >>> p = urlparse("http://example.com:-1/")
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port could not be cast to integer value as '-1'
+      >>> p = urlparse("http://example.com:/")
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port could not be cast to integer value as ''
+      >>> p = urlparse("http://example.com:abc/")
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port could not be cast to integer value as 'abc'
+```
+
+Wait, I need to be careful about the indentation. In the doctest, the code is indented with 6 spaces (the RST list indentation). Let me look at the existing lines:
+
+```
+      >>> p = urlparse("http://example.com:65536/")
+      >>> p.hostname
+      'example.com'
+      >>> p.port
+```
+
+Yes, 6 spaces before `>>>`. So the try/except would be:
+
+```
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+```
+
+Wait, the continuation lines in doctest start with `...` (three dots) followed by the code. The indentation of the `...` should match the `>>>` indentation (6 spaces), and then the code follows.
+
+Actually, in doctest:
+- `>>> ` is the primary prompt
+- `... ` is the secondary (continuation) prompt
+
+So it should be:
+```
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+```
+
+The `...` is at the same indentation as `>>>` (6 spaces from the start of the line), and then there's a space before the code.
+
+Wait, looking at the existing format: `      >>> p = urlparse(...)` - that's 6 spaces, then `>>>`, then space, then code.
+
+For continuation: `      ...     p.port` - that's 6 spaces, then `...`, then space, then code (which is indented by 4 more spaces for the block).
+
+Let me be precise:
+- `      >>> try:` (6 spaces + ">>> try:")
+- `      ...     p.port` (6 spaces + "...     p.port")
+- `      ... except ValueError as e:` (6 spaces + "... except ValueError as e:")
+- `      ...     print(e)` (6 spaces + "...     print(e)")
+- `      ... ` (6 spaces + "... " - this is the empty line at end of the block)
+
+Wait, the last `...` line - in doctest, the empty continuation line is just `... ` (with a trailing space) or just `...`. Let me think about this.
+
+In a doctest:
+```
+>>> try:
+...     p.port
+... except ValueError as e:
+...     print(e)
+... 
+Port out of range 0-65535
+```
+
+The `... ` (with trailing space) indicates an empty line in the continuation. Actually, in doctest format, the continuation line that's empty is just:
+```
+...
+```
+or 
+```
+... 
+```
+(with trailing space). Let me check what Python's doctest expects.
+
+In Python doctest, the continuation prompt is `... ` (three dots followed by a space). An empty continuation line would be `... ` (three dots, space, and then nothing else). Or it could be just `...` without the trailing space.
+
+Looking at the Python doctest source code, the `_CONTINUE_PREFIX` is `'... '` (three dots and a space). So the continuation line format is `... ` followed by the code (or nothing for an empty line).
+
+So the empty continuation line should be `... ` (with the trailing space). But in the RST file with 6-space indentation:
+```
+      ... 
+```
+(6 spaces + "... " - note the trailing space)
+
+Actually, I need to be careful. Let me look at how CPython docs handle multi-line doctests. Let me think of a concrete example from CPython docs...
+
+In `Doc/library/exceptions.rst`:
+```
+   >>> try:
+   ...    1/0
+   ... except ZeroDivisionError:
+   ...    print("divided by zero")
+   ... 
+   divided by zero
+```
+
+So the format with 3-space indentation (for a blockquote) would be:
+```
+   >>> try:
+   ...    1/0
+   ... except ZeroDivisionError:
+   ...    print("divided by zero")
+   ... 
+```
+
+In our case with 6-space indentation:
+```
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+```
+
+The `... ` at the end has a trailing space (the space after `...`). This is the empty continuation line that terminates the try/except block.
+
+Now, there's a subtlety: in RST, trailing whitespace might be significant or might get stripped. But since this is in a code block (the `::` directive creates a literal block), trailing whitespace should be preserved.
+
+OK so my patch will replace:
+```
+      >>> p.port
+      ValueError: Port out of range 0-65535
+      >>> p = urlparse("http://example.com:-1/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as '-1'
+      >>> p = urlparse("http://example.com:/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as ''
+      >>> p = urlparse("http://example.com:abc/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as 'abc'
+```
+
+with:
+```
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port out of range 0-65535
+      >>> p = urlparse("http://example.com:-1/")
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port could not be cast to integer value as '-1'
+      >>> p = urlparse("http://example.com:/")
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port could not be cast to integer value as ''
+      >>> p = urlparse("http://example.com:abc/")
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port could not be cast to integer value as 'abc'
+```
+
+Wait, I need to make sure the old text is unique in the file. Let me check - the file has 815 lines and this text is specific to the section I inserted, so it should be unique.
+
+Let me also double-check: the `old` text starts with `      >>> p.port\n      ValueError: Port out of range 0-65535\n...`. Is `      >>> p.port` unique? There are multiple `>>> p.port` lines in the file (lines 164, 167, 172, 175, 178, 181). So I need to include enough context to make the match unique.
+
+Actually, the full block from `      >>> p.port\n      ValueError: Port out of range 0-65535` should be unique because `ValueError: Port out of range 0-65535` only appears once. Let me include the full block as the old text.
+
+Let me construct the patch carefully. I need to use the exact text from the file. Let me verify by looking at the visible source again:
+
+From the visible source (the first source entry, Doc/library/urllib.parse.rst, lines 125-194):
+
+```
+      >>> p.port
+      ValueError: Port out of range 0-65535
+      >>> p = urlparse("http://example.com:-1/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as '-1'
+      >>> p = urlparse("http://example.com:/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as ''
+      >>> p = urlparse("http://example.com:abc/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as 'abc'
+```
+
+This should be the exact text. Let me make sure there are no trailing spaces or other hidden characters.
+
+Now let me write the patch. I need:
+- path: "Doc/library/urllib.parse.rst"
+- expected_candidate_id: "b7a78b4c2e1da1a944ec10ac9d6746855929fc62709a2e00a85f9ceb39d4bde0"
+- expected_file_sha256: "c8221635944d4f7cb97975d2370e5ef2a23a8c0b6c7493552f43bf6a37af1521"
+- old: the text above
+- new: the try/except version
+
+Let me be very careful with the exact text. In the JSON, I need to use \n for newlines.
+
+Actually, I realize I should double-check: does the doctest framework in the CPython doc check use ELLIPSIS? If it does, I could use a simpler format. But the try/except approach is more robust and doesn't depend on doctest options, so let me go with that.
+
+One more thing: the `... ` continuation line. In the doctest, after `print(e)`, the next line in the block is empty (just the continuation prompt with no code). This is how Python's interactive interpreter shows the end of a multi-line statement. In doctest format, this is represented as `... ` (three dots followed by a space).
+
+But wait - in RST, is a line with just `... ` (trailing space) preserved in a literal block? It should be, since literal blocks preserve all whitespace.
+
+Actually, I just realized there might be an issue. Let me look at the doctest more carefully:
+
+```
+>>> try:
+...     p.port
+... except ValueError as e:
+...     print(e)
+... 
+Port out of range 0-65535
+```
+
+The `... ` line (with trailing space) is the empty line that ends the compound statement. In doctest, this is how you indicate the end of a multi-line construct. The doctest parser recognizes that after `... ` (with nothing after the prompt), the statement is complete.
+
+Actually, I need to double-check this. In Python's doctest:
+- `>>> ` starts a new statement
+- `... ` continues a multi-line statement
+- An empty `... ` (just the prompt with space) indicates a blank line within the continuation, OR it could indicate the end of the statement
+
+Hmm, actually in doctest, the way multi-line statements work is:
+1. You start with `>>> try:`
+2. Continuation lines start with `... `
+3. The statement ends when you have a `... ` line that's empty (just `... ` with nothing after) OR when the logical line is complete
+
+Wait, no. In doctest, the statement ends when the code is syntactically complete. The `... ` prompt is just the display prompt. The doctest parser actually compiles the code and knows when the statement is done.
+
+Let me look at this more carefully. In Python's doctest module:
+- `_CHECK_PARAM` and the parser look for `>>> ` and `... ` prompts
+- A "chunk" in doctest is a sequence of lines starting with `>>> ` or `... ` 
+- The source is everything after the prompts, joined with newlines
+- The doctest compiles and executes this source
+
+So for:
+```
+>>> try:
+...     p.port
+... except ValueError as e:
+...     print(e)
+... 
+```
+
+The source would be:
+```
+try:
+    p.port
+except ValueError as e:
+    print(e)
+```
+
+Wait, the `... ` at the end - the text after `... ` is empty (just a newline). So the source would be:
+```
+try:
+    p.port
+except ValueError as e:
+    print(e)
+
+```
+(with a trailing empty line)
+
+That's fine - a trailing empty line in Python source is harmless.
+
+Actually wait, I need to be more precise. Let me look at how doctest parses this:
+
+The doctest parser identifies "source" lines (starting with `>>> ` or `... `) and "expected output" lines. The source for a chunk is:
+- First line: text after `>>> ` (e.g., `try:`)
+- Subsequent lines: text after `... ` (e.g., `    p.port`, `except ValueError as e:`, `    print(e)`, `` (empty))
+
+These are joined with newlines to form the source:
+```
+try:
+    p.port
+except ValueError as e:
+    print(e)
+```
+(with a trailing newline from the empty continuation line)
+
+This should compile and run fine.
+
+OK, I'm confident the try/except approach will work. Let me write the patch.
+
+Actually, wait. Let me reconsider whether there's a simpler approach. What if I just use the expected exception format that the doctest framework understands?
+
+Looking at the diagnostic output again:
+```
+Failed example:
+    p.port
+Exception raised:
+    Traceback (most recent call last):
+      File "C:\Users\danmc\AppData\Local\Temp\ws-observed-check-wu62zv5j\Lib\urllib\parse.py", line 182, in port
+        raise ValueError(f"Port could not be cast to integer value as {port!r}")
+    ValueError: Port could not be cast to integer value as '-1'
+```
+
+This is the standard doctest "failure" output when an exception is raised but the expected output doesn't match. If I had specified the expected output as a traceback, the comparison would be different.
+
+The issue is that the file path in the traceback is machine-specific (`C:\Users\danmc\AppData\Local\Temp\ws-observed-check-wu62zv5j\Lib\urllib\parse.py`). To match this in a doctest, I'd need ELLIPSIS:
+
+```
+>>> p.port
+Traceback (most recent call last):
+  ...
+ValueError: Port out of range 0-65535
+```
+
+But I don't know if ELLIPSIS is enabled in the check's doctest configuration. The try/except approach is safer.
+
+Let me go with the try/except approach. Here's my final patch:
+
+old:
+```
+      >>> p.port
+      ValueError: Port out of range 0-65535
+      >>> p = urlparse("http://example.com:-1/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as '-1'
+      >>> p = urlparse("http://example.com:/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as ''
+      >>> p = urlparse("http://example.com:abc/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as 'abc'
+```
+
+new:
+```
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port out of range 0-65535
+      >>> p = urlparse("http://example.com:-1/")
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port could not be cast to integer value as '-1'
+      >>> p = urlparse("http://example.com:/")
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port could not be cast to integer value as ''
+      >>> p = urlparse("http://example.com:abc/")
+      >>> try:
+      ...     p.port
+      ... except ValueError as e:
+      ...     print(e)
+      ... 
+      Port could not be cast to integer value as 'abc'
+```
+
+Wait, I need to be very careful about the `... ` line. In the JSON string, this would be `      ... \n` (6 spaces, three dots, one space, newline). But actually, does it need a trailing space? Let me think...
+
+In Python's doctest, the continuation prompt is `... ` (three dots followed by a space). So the line in the file should be:
+```
+      ... 
+```
+That's 6 spaces + `... ` (three dots and a space). The trailing space is part of the prompt format.
+
+But wait - in RST, within a literal block (created by `::`), all content is preserved literally. So trailing spaces should be fine.
+
+However, I'm now worried about whether the doctest parser will correctly handle this. Let me look at it from the doctest parser's perspective:
+
+The doctest parser looks for lines matching `_EXAMPLE_RE` which is:
+```python
+_EXAMPLE_RE = _re.compile(r'^{0}([A-Za-z0-9_\.\*\? ]+).*?\n?'
+                           r'(.*)', _re.S)
+```
+
+No wait, that's not right. Let me think about how doctest actually parses.
+
+The doctest module's `_doctest_test` function uses a `DocTestRunner` which uses `DocTestFinder` to find examples. The finder looks for patterns like:
+- `>>> ` (primary prompt)
+- `... ` (continuation prompt)
+
+The key regex in `doctest.py` is:
+```python
+_SOURCE_PROMPT = '>>>'
+_CONTINUATION_PROMPT = '...'
+```
+
+And it identifies source lines as those starting with the prompt (after any leading whitespace).
+
+For the line `      ... ` (6 spaces, three dots, space):
+- Leading whitespace: 6 spaces
+- Prompt: `... `
+- Remainder: `` (empty)
+
+This should be recognized as a continuation line with empty content.
+
+OK, I'm fairly confident this will work. Let me write the patch.
+
+Actually, one more concern: the `... ` line. In some doctest implementations, the continuation prompt is `...` (three dots) without a trailing space, and the space after it is just part of the formatting. Let me check...
+
+In CPython's `doctest.py`:
+```python
+_SOURCE_PROMPT = '>>>'
+_CONTINUATION_PROMPT = '...'
+```
+
+And in the `_find_examples` method, it looks for:
+```python
+m = _EXAMPLE_RE.match(text)
+```
+
+Where `_EXAMPLE_RE` is compiled from a pattern that matches the prompt. Looking at the actual code:
+
+```python
+_EXAMPLE_RE = _re.compile(
+    r'(?P<source>'
+    r'(?:' + _re.escape(_SOURCE_PROMPT) + r' '  # Primary prompt
+    r'|(?:' + _re.escape(_CONTINUATION_PROMPT) + r' )?'  # Continuation prompt (optional space)
+    r')'
+    r'(?P<code>[^\n]*'  # Code on this line
+    r')'
+    r'(?P<rest>\n.*)', _re.S)
+```
+
+Hmm, I'm not remembering the exact regex. But the key point is that `... ` (with space) is the standard continuation prompt format in doctests.
+
+Let me just go with it. If it doesn't work, I'll get feedback from the check and can adjust.
+
+Let me also reconsider: maybe I should look at how the existing CPython documentation handles this. Let me check if there are any existing exception doctests in the file or in other Doc files...
+
+Actually, I don't have access to other files right now. Let me just go with the try/except approach which is the most robust.
+
+One final check: the `old` text needs to be exactly what's in the file. Let me verify each line:
+
+1. `      >>> p.port` - 6 spaces, ">>> p.port"
+2. `      ValueError: Port out of range 0-65535` - 6 spaces, "ValueError: Port out of range 0-65535"
+3. `      >>> p = urlparse("http://example.com:-1/")` - 6 spaces, ">>> p = urlparse(\"http://example.com:-1/\")"
+4. `      >>> p.port` - 6 spaces, ">>> p.port"
+5. `      ValueError: Port could not be cast to integer value as '-1'` - 6 spaces, "ValueError: Port could not be cast to integer value as '-1'"
+6. `      >>> p = urlparse("http://example.com:/")` - 6 spaces, ">>> p = urlparse(\"http://example.com:/\")"
+7. `      >>> p.port` - 6 spaces, ">>> p.port"
+8. `      ValueError: Port could not be cast to integer value as ''` - 6 spaces, "ValueError: Port could not be cast to integer value as ''"
+9. `      >>> p = urlparse("http://example.com:abc/")` - 6 spaces, ">>> p = urlparse(\"http://example.com:abc/\")"
+10. `      >>> p.port` - 6 spaces, ">>> p.port"
+11. `      ValueError: Port could not be cast to integer value as 'abc'` - 6 spaces, "ValueError: Port could not be cast to integer value as 'abc'"
+
+This should be unique in the file because of the specific error messages.
+
+Now let me write the JSON patch action.

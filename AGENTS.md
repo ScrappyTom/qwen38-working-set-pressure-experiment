@@ -1,5 +1,27 @@
 # Experiment operating rules
 
+The recovery_inspection attempt at 35f70c8d is closed after eight replies/thirteen
+operations and a graceful operator stop. Read its review/RESULTS.md. The actor saved
+documentation, consumed failed verification and corrected three of four example
+failures; the empty-port example and prose remain wrong, with no public pass or
+submission. C08's final failed check had no subsequent invocation. Preserve this
+partial progress and its 55.584 model-request minutes without calling it completion.
+
+The next coherent_diagnostics package repairs a demonstrated information-path
+defect: a concatenated failure tail lost its first location and encouraged a wrong
+example/exception association in C07. Keep each failure's location, source and
+observed outcome together; count the actual units shown. Exact capture does not
+guarantee an interpretable shortened report. Unknown formats must not gain inferred
+associations. Qualify both immediate feedback and standing verification in actual
+inputs, preserving original observations, candidates and grading.
+
+Include apparatus boundaries in this process. Nested test tools must explicitly
+select the production format rather than inherit the outer test runner's arguments;
+native qualification cases must use the owned runtime's actual monitoring source.
+Preserve failed qualifications and corrected diagnoses. Continue the authorized
+separately frozen runs until correct saved, checked work and submission, without
+coaching or silently extending an active allowance.
+
 The owner's latest standing direction is: "We keep repeating until all host and
 your run apparatus features are fixed and things are successful." This supersedes
 earlier instructions to stop after a single repaired-host attempt or seek another

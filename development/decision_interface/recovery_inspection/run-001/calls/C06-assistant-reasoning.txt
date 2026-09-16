@@ -1,0 +1,441 @@
+Let me analyze the situation. The public check failed on the documentation examples. Let me look at the failures:
+
+1. Line 175: `p.port` - expected exception but got a different exception. The example is for port 65536, and it raised `ValueError: Port out of range 0-65535` but the doctest expected something else (or vice versa).
+
+2. Line 178: `p.port` - Expected `ValueError: Port could not be cast to integer value as ''` but got nothing. This is for the empty port case `http://example.com:/`.
+
+3. Line 181: `p.port` - Expected exception for `http://example.com:abc/` but got a traceback.
+
+Let me look more carefully at the diagnostics:
+
+- Line 175 (changed_documentation[7]): `p.port` - The actual behavior raised `ValueError: Port out of range 0-65535` (from line 184 of parse.py). But the doctest seems to have expected something else. Wait, let me re-read.
+
+Actually looking at the diagnostic text more carefully:
+
+```
+File "Doc/library/urllib.parse.rst", line 175, in changed_documentation
+Failed example:
+    p.port
+Exception raised:
+    Traceback (most recent call last):
+      ...
+      File "...Lib\urllib\parse.py", line 184, in port
+        raise ValueError("Port out of range 0-65535")
+    ValueError: Port out of range 0-65535
+```
+
+Wait, this says "Exception raised" with the full traceback. That means the doctest expected a specific exception format but got a different one, OR the doctest expected no exception but got one.
+
+Let me re-read the diagnostic structure. In doctest output:
+- "Failed example:" shows what was executed
+- "Exception raised:" means an exception was raised when none was expected (or a different one was expected)
+- "Expected:" means the expected output didn't match
+
+Looking at the four failures:
+
+1. Line 175: `p.port` - "Exception raised" with `ValueError: Port out of range 0-65535`. This means the doctest didn't expect an exception here, but one was raised. So my example for port 65536 shows `ValueError: Port out of range 0-65535` as the expected output text, but in doctest format, I need to show it as an exception, not as output text.
+
+2. Line 178: `p.port` - "Expected: ValueError: Port could not be cast to integer value as ''" and "Got nothing". This means I wrote the expected output as `ValueError: Port could not be cast to integer value as ''` but doctest treated it as expected stdout output, and no exception was raised (or a different one was). Wait, "Got nothing" means no output was produced. But an exception should have been raised... unless the empty port case works differently.
+
+Wait, let me think about this. For `http://example.com:/`, what is the port component? The URL is `http://example.com:/`. The netloc is `example.com:`. The port would be the empty string after the colon. Let me check the implementation:
+
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+So if `port` is the empty string `""`, then `"".isdigit()` is `False`, so it would go to the else branch and raise `ValueError(f"Port could not be cast to integer value as ''")`.
+
+But wait - maybe the issue is that `http://example.com:/` doesn't actually produce an empty port string. Let me think about how the URL is parsed. The netloc is `example.com:`. The `_hostinfo` would be `(hostname, port)` where port is the string after the colon. For `example.com:`, the port would be `""` (empty string).
+
+Actually, wait. Let me re-read the diagnostic. It says:
+- Line 178: "Expected: ValueError: Port could not be cast to integer value as ''" and "Got nothing"
+
+This means my doctest had:
+```
+>>> p.port
+ValueError: Port could not be cast to integer value as ''
+```
+
+And doctest interpreted `ValueError: Port could not be cast to integer value as ''` as expected stdout output. But since an exception was raised (not output), doctest says "Got nothing" because no stdout was produced.
+
+Wait, actually I think the issue is different. In doctest, to show an exception, you just show the exception trace. If you write:
+```
+>>> p.port
+ValueError: Port could not be cast to integer value as ''
+```
+
+doctest will try to match the output `ValueError: Port could not be cast to integer value as ''` against the actual stdout. But since a ValueError is raised, there's no stdout output, hence "Got nothing".
+
+To properly show an exception in doctest, you need to show the full traceback:
+```
+>>> p.port
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+    p.port
+  File "...", line X, in port
+    raise ValueError(...)
+ValueError: Port could not be cast to integer value as ''
+```
+
+But actually, in the documentation examples for CPython, I recall they often just show the exception class and message without the full traceback. Let me think about how doctest handles this...
+
+Actually, in doctest, if an exception is raised, the expected output should be the full traceback. But there's a special case: if you just write the exception line like:
+```
+>>> p.port
+ValueError: some message
+```
+
+doctest will interpret this as "expect stdout to be 'ValueError: some message'", NOT as "expect a ValueError to be raised with message 'some message'".
+
+To show an expected exception in doctest, you need the full traceback format. However, in CPython documentation, they often use a shortened form. Let me check how CPython docs typically handle this...
+
+Actually, looking at the CPython source documentation, I see they sometimes use:
+```
+>>> p.port
+Traceback (most recent call last):
+  ...
+ValueError: Port could not be cast to integer value as 'abc'
+```
+
+But actually, I think the proper way in doctest to indicate an expected exception is to show the full traceback. But there's also the `# doctest: +ELLIPSIS` directive and the ability to just show the last line.
+
+Wait, actually I think I need to look at this differently. In doctest, when an exception is raised:
+- The expected output should be the traceback text
+- If you just write `ValueError: message`, doctest thinks you expect that as stdout output
+
+The correct way to show an expected exception in doctest is:
+```
+>>> p.port
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+    p.port
+  ...
+ValueError: Port could not be cast to integer value as 'abc'
+```
+
+But since the intermediate lines vary by platform, CPython docs often use ellipsis. But doctest doesn't support that by default unless you use `+ELLIPSIS`.
+
+Actually, wait. Let me re-read how doctest handles exceptions. According to Python docs:
+
+"If an exception is raised, the expected output should be the traceback. However, if the expected output is just the last line (the exception type and message), doctest will match any traceback ending with that line."
+
+Hmm, actually I don't think that's true. Let me reconsider.
+
+Actually, I recall now: in doctest, if you write:
+```
+>>> 1/0
+ZeroDivisionError: division by zero
+```
+
+This is NOT the correct way. The correct way is:
+```
+>>> 1/0
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+    1/0
+ZeroDivisionError: division by zero
+```
+
+But wait, I've seen CPython documentation that does use the short form. Let me check...
+
+Actually, I think the issue is that doctest DOES support a short form where you just write the exception. Let me look at this more carefully.
+
+From the doctest documentation: "If an exception is raised, the expected output is the traceback. But there's a shortcut: if the expected output is a single line that looks like an exception (starts with an exception class name), doctest will match it against the last line of the traceback."
+
+Wait, I don't think that's right either. Let me just look at what actually happened:
+
+For line 175 (port 65536 case):
+- My example shows `p.port` followed by `ValueError: Port out of range 0-65535`
+- The diagnostic says "Exception raised" with the full traceback
+- This means doctest raised the exception but my expected output didn't match the traceback format
+
+For line 178 (empty port case):
+- My example shows `p.port` followed by `ValueError: Port could not be cast to integer value as ''`
+- The diagnostic says "Expected: ValueError: Port could not be cast to integer value as ''" and "Got nothing"
+- "Got nothing" means no output was produced (the exception was raised but doctest didn't match it as expected output)
+
+Hmm wait, "Got nothing" is strange. If an exception was raised, doctest should report "Exception raised" not "Got nothing". Unless... the exception was NOT raised?
+
+Let me reconsider. For `http://example.com:/`:
+- The netloc is `example.com:`
+- After splitting on the last `:`, hostname is `example.com` and port is `` (empty string)
+
+Wait, but what if the URL parser doesn't actually produce an empty port for this URL? Let me think...
+
+`http://example.com:/` - the path is `/` and the netloc is `example.com:`. When parsing the netloc, it splits on `:` to get host and port. The port would be the empty string.
+
+But wait - maybe the issue is that `urlparse("http://example.com:/")` doesn't produce what I expect. Let me think about what the netloc actually is.
+
+Actually, I think the URL `http://example.com:/` might be parsed as:
+- scheme: http
+- netloc: example.com: (or maybe just example.com?)
+- path: /
+
+Hmm, this is getting complicated. The key issue is that my doctest examples don't properly format the expected exceptions.
+
+Let me look at how CPython documentation handles exception examples. I recall seeing patterns like:
+
+```
+>>> p.port
+Traceback (most recent call last):
+  ...
+ValueError: Port out of range 0-65535
+```
+
+But actually, I think the proper approach for the doctest in documentation is to show the exception with a traceback. The doctest runner will match the traceback against the actual traceback.
+
+But wait - in the CPython source tree, how do they handle this in .rst files? Let me look at existing examples in the documentation...
+
+Actually, I think I need to look at how the doctest checker works for the documentation. The check runs doctest on the documentation examples. The standard doctest behavior for exceptions is:
+
+1. If the expected output contains a full traceback, it matches against the actual traceback (with some flexibility for filenames/line numbers)
+2. If the expected output is just `ExceptionType: message`, I don't think standard doctest handles this as an expected exception
+
+Actually, wait. Let me re-read the doctest documentation more carefully. From the Python docs:
+
+"If an exception is raised, doctest will compare the exception's type, value, and traceback (if available) against the expected output. The expected output for an exception should be the full traceback text."
+
+But there IS a special handling: if the expected output is a single line of the form `SomeException: message`, doctest will check if an exception of that type was raised with that message. Let me verify this...
+
+Actually, I just recalled: doctest does NOT support the short exception form by default. You need the full traceback. However, there's `doctest.ELLIPSIS` and `doctest.NORMALIZE_WHITESPACE` options, but none of those help with exception matching.
+
+Wait, but I've definitely seen CPython documentation with short exception forms in doctests. Let me think about what format they use...
+
+Looking at CPython's own documentation, I see examples like:
+```
+>>> 1/0
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+    1/0
+ZeroDivisionError: division by zero
+```
+
+So they show the full traceback. The middle lines (file paths) can be matched loosely by doctest.
+
+Actually, I just realized something. Let me re-read the doctest source code behavior:
+
+When doctest runs an example and an exception is raised, it compares the string representation of the exception (which includes the traceback) against the expected output. The comparison is done line by line.
+
+For the traceback matching, doctest does some special handling:
+- Lines that start with "  File" are matched loosely (just checking they exist)
+- The actual exception line at the end must match exactly
+
+So the correct format for my examples would be:
+
+```
+>>> p.port
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+    p.port
+  ...
+ValueError: Port out of range 0-65535
+```
+
+But the `...` might not work. Let me think about what doctest actually matches.
+
+Actually, I think the issue is simpler. Let me look at the actual doctest matching for tracebacks:
+
+From the doctest source, when comparing expected vs actual tracebacks:
+- It looks for the "short summary" line at the end (the exception type and message)
+- The intermediate lines are matched with some flexibility
+
+But I think the key issue is: in my current documentation, I wrote the expected output as just the exception message without a traceback. The doctest runner sees this as expected stdout, not as an expected exception.
+
+The fix is to either:
+1. Show the full traceback in the expected output
+2. Or use a different format
+
+Let me look at how CPython's actual documentation handles this. Let me search for existing exception examples in the Doc directory.
+
+Actually, let me just look at what the correct format is. In CPython documentation, I've seen:
+
+```
+>>> p.port
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+    p.port
+ValueError: Port out of range 0-65535
+```
+
+This is the format that doctest expects. The doctest runner will:
+1. See that an exception was raised
+2. Compare the expected traceback text against the actual traceback
+3. The "File" lines in the middle can be matched loosely
+4. The final exception line must match
+
+Actually, I realize I should just look at the actual file to see what I currently have, and then fix it. Let me read the relevant section of the documentation file.
+
+Let me read the current state of the documentation file around lines 170-190 to see exactly what's there.
+
+Wait, I already have the file content visible. Let me look at what's in the working set:
+
+From the source shown (lines 125-194 of Doc/library/urllib.parse.rst), I can see my inserted examples:
+
+```
+   Examples of the port boundary and error behavior::
+
+      >>> from urllib.parse import urlparse
+      >>> p = urlparse("http://example.com:0/")
+      >>> p.port
+      0
+      >>> p = urlparse("http://example.com:65535/")
+      >>> p.port
+      65535
+      >>> p = urlparse("http://example.com:65536/")
+      >>> p.hostname
+      'example.com'
+      >>> p.port
+      ValueError: Port out of range 0-65535
+      >>> p = urlparse("http://example.com:-1/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as '-1'
+      >>> p = urlparse("http://example.com:/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as ''
+      >>> p = urlparse("http://example.com:abc/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as 'abc'
+```
+
+The problem is clear: I'm showing exceptions as just the exception line, but doctest needs the full traceback format.
+
+Now, how does doctest handle this? Let me think carefully.
+
+Actually, I just realized I should check: does doctest have special handling where if the "expected output" after an example is a single line that looks like an exception, it treats it as an expected exception?
+
+Looking at the doctest source code (Python 3.12), in the `_do_exec` method and the comparison logic:
+
+When an exception is raised during doctest execution:
+- The actual output is the traceback string
+- This is compared against the expected output
+
+The comparison in `DoctestRunner._do_check()` or similar method:
+- If the expected output matches the "short exception" pattern, it checks if an exception of that type was raised
+
+Wait, actually I think I'm overcomplicating this. Let me look at what actually happened:
+
+1. Line 175 (65536 case): "Exception raised" with full traceback - this means doctest did NOT expect an exception, but one was raised. So my `ValueError: Port out of range 0-65535` line was interpreted as expected stdout, and the actual behavior was an exception.
+
+2. Line 178 (empty port case): "Expected: ValueError: Port could not be cast to integer value as ''" and "Got nothing" - this means doctest expected stdout to be that text, but got nothing (no output). But wait, if an exception was raised, it should say "Exception raised" not "Got nothing". Unless no exception was raised for this case!
+
+Hmm, that's interesting. For `http://example.com:/`, maybe no exception is raised because the port is actually `None` (not an empty string)?
+
+Let me think about this. The URL `http://example.com:/` - how is it parsed?
+
+In `urlsplit`, the netloc is everything between `//` and the next `/`. So for `http://example.com:/`, the netloc would be `example.com:` and the path would be `` (empty) or `/`?
+
+Wait, actually: `http://example.com:/` - after the `//`, we have `example.com:/`. The first `/` after `//` starts the path. So netloc is `example.com:` and path is `/`.
+
+Now, parsing `example.com:` as host:port: split on the last `:`, we get host=`example.com` and port=`` (empty string).
+
+But wait - maybe the parsing is different. Let me look at how `_hostinfo` is computed in the implementation.
+
+Actually, I need to look at the actual implementation more carefully. Let me read the relevant part of parse.py.
+
+From the visible source (lines 173-188):
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+So `port` (the string from `_hostinfo[1]`) could be `None`, an empty string, or some other string.
+
+If `port` is `None`, no exception is raised and `None` is returned.
+If `port` is `""`, then `"".isdigit()` is `False`, so it goes to else and raises ValueError.
+
+But the question is: for `http://example.com:/`, what is `_hostinfo[1]`? Is it `""` or `None`?
+
+Let me think about how the URL is parsed. The netloc is `example.com:`. When we split this into host and port:
+- If we split on `:` and get `["example.com", ""]`, then port is `""`.
+- But maybe the code treats a trailing colon specially and sets port to `None`?
+
+I need to check the actual implementation. Let me look at how `_hostinfo` is set.
+
+Actually, I think the key issue is:
+1. My doctest format is wrong (need full tracebacks for exceptions)
+2. The empty port case might not raise an exception (port might be None)
+
+For issue 2, the diagnostic says "Got nothing" which means no exception was raised AND no output was produced. But wait, if `p.port` returns `None`, the output would be empty (no repr shown for None in interactive mode? No, it would show `None`).
+
+Actually wait - in doctest, if a statement produces no output (like an assignment), nothing is shown. But `p.port` is an expression, so it should show its value. If it returns `None`, the output would be `None`. If it raises an exception, we'd see "Exception raised".
+
+"Got nothing" means the expression produced no output at all. That's very strange for a property access. Unless... the property returns `None` and doctest treats `None` return as no output? No, that's not right. In the interactive interpreter, `>>> None` shows `None`.
+
+Wait, actually I think "Got nothing" in doctest means the stdout was empty. If the expression is `p.port` and it returns `None`, the stdout would show `None`. If it raises an exception, the stdout would show the traceback.
+
+Hmm, but "Got nothing" with "Expected: ValueError: ..." means doctest was looking for the literal text `ValueError: Port could not be cast to integer value as ''` in stdout, and found nothing there. The exception WAS raised (since the diagnostic for line 175 shows "Exception raised" for a similar case), but for line 178, the format is different.
+
+Wait, I'm confused. Let me re-read the diagnostics:
+
+Failure 1 (line 175, changed_documentation[7]):
+```
+Failed example:
+    p.port
+Exception raised:
+    Traceback (most recent call last):
+      ...
+    ValueError: Port out of range 0-65535
+```
+This means: the example `p.port` was expected to produce some output (my `ValueError: Port out of range 0-65535` line), but instead an exception was raised.
+
+Failure 2 (line 178, changed_documentation[9]):
+```
+Failed example:
+    p.port
+Expected:
+    ValueError: Port could not be cast to integer value as ''
+Got nothing
+```
+This means: the example `p.port` was expected to produce stdout `ValueError: Port could not be cast to integer value as ''`, but got nothing (empty stdout). No exception was raised!
+
+Wait, that's the key difference! For the empty port case, NO exception was raised. The property returned something (or nothing) without raising.
+
+This suggests that for `http://example.com:/`, the port in `_hostinfo[1]` is `None`, not `""`. So the property returns `None` without raising.
+
+Let me verify: if port is `None`, the code does:
+```python
+port = self._hostinfo[1]  # None
+if port is not None:  # False, skip
+    ...
+return port  # returns None
+```
+
+So `p.port` would return `None`, and in doctest, the output would be `None`.
+
+But the diagnostic says "Got nothing", not "Got: None". Hmm.
+
+Actually wait, let me re-read. "Got nothing" might mean the stdout was empty. But if `p.port` returns `None`, the doctest output would be `None`. Unless... the doctest is configured differently.
+
+Hmm, actually I think I need to just look at what's happening. Let me check: for `http://example.com:/`, does the URL parser actually put an empty string as the port, or does it put None?
+
+I need to read more of the implementation to understand how `_hostinfo` is computed. Let me read the relevant part of parse.py.
+
+Actually, let me step back. The key issues are:
+1. My doctest exception format is wrong - I need to show full tracebacks
+2. The empty port case (`http://example.com:/`) might not raise an exception at all
+
+For issue 1, I need to change my examples to show proper tracebacks.
+For issue 2, I need to determine the actual behavior.
+
+Let me first read the implementation to understand the empty port case, then fix the documentation.
+
+Let me read the relevant part of parse.py to see how _hostinfo is set.

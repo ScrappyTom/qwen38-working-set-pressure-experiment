@@ -1,0 +1,621 @@
+Let me analyze the current situation:
+
+1. **Tests**: Pass (CHK-0029 on candidate 389292f683634a48a33bb8abcd9d70953b885802d432816ca9d75c1ad4ce8fa6) - but that's NOT the current candidate. The current candidate is b7a78b4c2e1da1a944ec10ac9d6746855929fc62709a2e00a85f9ceb39d4bde0. The tests check says `applies_to_current: false` and `candidate_matches: false`. So I need to re-run tests on the current candidate.
+
+2. **Public check** (CHK-0046 on current candidate b7a78b4c...): FAILED on `examples.execution`. There are 4 failures in 14 examples. The diagnostics show:
+   - Line 175: `p.port` - raised `ValueError: Port out of range 0-65535` (this seems like the example expected something different or didn't expect an exception)
+   - Line 178: `p.port` - raised `ValueError: Port could not be cast to integer value as '-1'` (expected something else)
+   - Line 181: `p.port` - Expected `ValueError: Port could not be cast to integer value as ''` but "Got nothing" (no exception raised)
+   - Line 184: `p.port` - raised `ValueError: Port could not be cast to integer value as 'abc'`
+
+Wait, let me re-read the diagnostics more carefully:
+
+```
+File "Doc/library/urllib.parse.rst", line 175, in changed_documentation
+Failed example:
+    p.port
+Exception raised:
+    ...
+    ValueError: Port out of range 0-65535
+```
+
+This means the example `p.port` on line 175 raised an exception but the doctest expected something else (or expected no exception).
+
+```
+File "Doc/library/urllib.parse.rst", line 178, in changed_documentation
+Failed example:
+    p.port
+Expected:
+    ValueError: Port could not be cast to integer value as ''
+Got nothing
+```
+
+Wait, this says "Expected: ValueError: Port could not be cast to integer value as ''" and "Got nothing". So the doctest expected a ValueError but none was raised. That means `p.port` for an empty port string did NOT raise an exception. Let me look at the implementation again.
+
+From the source (lines 173-188):
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+So if `port` is `None`, it returns `None`. If `port` is not None:
+- If `port.isdigit() and port.isascii()`: convert to int, then check range
+- Else: raise ValueError "Port could not be cast to integer value as ..."
+
+Wait, what about empty string? `"".isdigit()` returns `False`. So empty string would go to the else branch and raise ValueError. But the doctest says "Got nothing" for the empty port case.
+
+Hmm, let me think about this. When you have `http://example.com:/`, what does `_hostinfo` look like? The URL is `http://example.com:/`. The netloc is `example.com:`. The `_hostinfo` would be... Let me think about how the parsing works.
+
+Actually, wait. Let me look at this more carefully. In `http://example.com:/`, the part after `:` is empty. So the port string would be `""`. But wait - does the parser actually store an empty string as the port, or does it store `None`?
+
+Let me look at how `_hostinfo` is constructed. I need to see the parsing code. Let me check the source.
+
+Actually, looking at the doctest failure more carefully:
+
+Line 181: `p.port` - Expected `ValueError: Port could not be cast to integer value as ''` but "Got nothing"
+
+This means for `http://example.com:/`, `p.port` did NOT raise an exception. It returned something (probably `None`). This suggests that when the port part is empty, the parser stores `None` rather than `""` in `_hostinfo[1]`.
+
+Let me verify by looking at the parsing code. I need to see how the netloc is parsed to extract host and port.
+
+Let me also look at the other failures:
+
+Line 175: The example is `p.port` after `p = urlparse("http://example.com:65536/")` and `p.hostname` was accessed (showing 'example.com'). Then `p.port` raised `ValueError: Port out of range 0-65535`. But in my documentation, I wrote:
+```
+>>> p.port
+ValueError: Port out of range 0-65535
+```
+
+Wait, in doctest format, to show an exception, you just write the exception line. But the issue might be that doctest is treating it differently. Actually, in Python doctests, to show an exception you write:
+```
+>>> p.port
+Traceback (most recent call last):
+  ...
+ValueError: Port out of range 0-65535
+```
+
+Or you can use `# doctest: +ELLIPSIS` or just show the exception. Actually, in standard doctest, if you expect an exception, you show the full traceback or just the last line. Let me think...
+
+Actually in doctest, the way to show an expected exception is:
+```
+>>> p.port
+ValueError: Port out of range 0-65535
+```
+
+This should work - doctest will match if the raised exception matches. But the diagnostic says "Exception raised" which means the exception WAS raised but the doctest didn't expect it there (or expected a different output).
+
+Wait, re-reading the diagnostic:
+```
+File "Doc/library/urllib.parse.rst", line 175, in changed_documentation
+Failed example:
+    p.port
+Exception raised:
+    Traceback (most recent call last):
+      ...
+    ValueError: Port out of range 0-65535
+```
+
+This format "Exception raised:" in doctest diagnostics means the exception was raised but the expected output didn't match. But I wrote `ValueError: Port out of range 0-65535` as the expected output. Why would it fail?
+
+Oh wait! In doctest, the exception output format is specific. The expected output for an exception in doctest is just the exception line, BUT it needs to be the last line of the expected output. Let me think about this differently.
+
+Actually, I think the issue is with how doctest handles exceptions. In a doctest:
+```
+>>> p.port
+ValueError: Port out of range 0-65535
+```
+
+This should work. But maybe the issue is that the `>>>` prompt on line 174 (`>>> p.hostname`) and its output (`'example.com'`) are consuming lines, and then the `p.port` on line 175 is the one failing.
+
+Wait, I need to re-read the actual content I wrote. Let me look at the visible source for the doc file:
+
+```
+   Examples of the port boundary and error behavior::
+
+      >>> from urllib.parse import urlparse
+      >>> p = urlparse("http://example.com:0/")
+      >>> p.port
+      0
+      >>> p = urlparse("http://example.com:65535/")
+      >>> p.port
+      65535
+      >>> p = urlparse("http://example.com:65536/")
+      >>> p.hostname
+      'example.com'
+      >>> p.port
+      ValueError: Port out of range 0-65535
+      >>> p = urlparse("http://example.com:-1/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as '-1'
+      >>> p = urlparse("http://example.com:/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as ''
+      >>> p = urlparse("http://example.com:abc/")
+      >>> p.port
+      ValueError: Port could not be cast to integer value as 'abc'
+```
+
+Now the failures:
+1. Line 175: `p.port` after `http://example.com:65536/` - raised ValueError but expected output didn't match? Or...
+
+Actually wait, I think I need to count lines more carefully. The visible source starts at line 125. Let me count from the beginning of the visible content:
+
+Line 125: `   | :attr:`password` | ...`
+...
+
+Actually, let me look at the diagnostic line numbers:
+- Line 175: `p.port` - "Exception raised: ... ValueError: Port out of range 0-65535"
+- Line 178: `p.port` - "Expected: ValueError: Port could not be cast to integer value as ''" / "Got nothing"
+- Line 181: `p.port` - "Exception raised: ... ValueError: Port could not be cast to integer value as 'abc'"
+
+Wait, the diagnostic says:
+- Line 175: Failed example `p.port`, Exception raised (ValueError: Port out of range 0-65535)
+- Line 178: Failed example `p.port`, Expected `ValueError: Port could not be cast to integer value as ''`, Got nothing
+- Line 181: Failed example `p.port`, Exception raised (ValueError: Port could not be cast to integer value as 'abc')
+
+So lines 175, 178, 181 are three different `p.port` calls that failed. Plus there's a 4th failure (4 failures total).
+
+The key issue for line 178: "Expected: ValueError: Port could not be cast to integer value as ''" but "Got nothing". This means the empty port case (`http://example.com:/`) does NOT raise an exception. The port property returns `None` (or something else) without raising.
+
+This makes sense! Let me re-examine the implementation:
+
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+If `port is None`, it returns `None` immediately. So the question is: for `http://example.com:/`, what is `_hostinfo[1]`?
+
+I need to look at how the netloc is parsed. Let me search for where `_hostinfo` is set.
+
+Actually, I think I need to look at the parsing code. Let me search for `_hostinfo` in the parse.py file.
+
+But first, let me understand the doctest failures:
+
+1. Line 175: `p.port` after `urlparse("http://example.com:65536/")` - raised `ValueError: Port out of range 0-65535`. My expected output was `ValueError: Port out of range 0-65535`. Why did it fail?
+
+Hmm, maybe the issue is with doctest's exception handling. In doctest, when you expect an exception, you need to be precise. The format is:
+```
+>>> p.port
+ValueError: Port out of range 0-65535
+```
+
+This SHOULD work in doctest. The doctest module catches the exception and compares the string representation. But maybe there's a subtlety...
+
+Actually wait, I think the issue might be different. Let me re-read the diagnostic format:
+
+```
+File "Doc/library/urllib.parse.rst", line 175, in changed_documentation
+Failed example:
+    p.port
+Exception raised:
+    Traceback (most recent call last):
+      File ...
+    ValueError: Port out of range 0-65535
+```
+
+This diagnostic format "Exception raised:" with a full traceback is what doctest reports when an exception is raised but the expected output was NOT an exception (or was a different exception). If my expected output was `ValueError: Port out of range 0-65535`, then the exception WAS the right one... unless doctest is comparing the full traceback.
+
+Wait, actually I think I know what's happening. In doctest, the expected output for an exception should just be the exception line. But doctest actually compares it as:
+- The exception type and message should match
+- BUT the "Failed example" with "Exception raised" format means the exception was unexpected OR didn't match
+
+Let me reconsider. Maybe the issue is that doctest in the context of the documentation check is configured differently. Or maybe the line numbering is off and the examples are being parsed differently.
+
+Actually, you know what, let me just look at the actual content of the file around lines 170-185 to see exactly what's there. Let me read that range.
+
+But wait - I also need to understand the empty port case. Let me search for how `_hostinfo` is populated to understand when port is `None` vs `""`.
+
+Let me search for `_hostinfo` in the parse.py file.
+
+Actually, let me step back and think about what I need to do:
+
+1. The public check failed because 4 doctest examples failed.
+2. I need to fix the documentation examples to match actual behavior.
+3. The key question is: what does `p.port` return/raise for each case?
+
+From the implementation:
+- `port` from `_hostinfo[1]`
+- If `port is None`: return `None`
+- If `port.isdigit() and port.isascii()`: convert to int, check range
+- Else: raise ValueError "Port could not be cast to integer value as {port!r}"
+
+The critical question: for `http://example.com:/`, is `_hostinfo[1]` equal to `""` or `None`?
+
+If it's `""`: then `"".isdigit()` is `False`, so it would raise ValueError.
+If it's `None`: then it returns `None`.
+
+The doctest says "Got nothing" for the empty port case, meaning NO exception was raised. So `_hostinfo[1]` must be `None` for an empty port.
+
+Let me verify by looking at the parsing code. I need to find where the host/port split happens.
+
+Let me search for the relevant code. I'll search for `_hostinfo` or the parsing logic.
+
+Actually, let me also reconsider the other failures. Let me count the lines in my visible source to figure out which examples are on which lines.
+
+The visible source for the doc file starts at line 125. Let me count:
+
+Line 125: `   | :attr:`password` |       | Password                | :const:`None`          |`
+Line 126: `   +------------------+-------+-------------------------+------------------------+`
+Line 127: `   | :attr:`hostname` |       | Host name (lower case)  | :const:`None`          |`
+Line 128: `   +------------------+-------+-------------------------+------------------------+`
+Line 129: `   | :attr:`port`     |       | Port number as integer, | :const:`None`          |`
+Line 130: `   |                  |       | if present              |                        |`
+Line 131: `   +------------------+-------+-------------------------+------------------------+`
+Line 132: (empty)
+Line 133: `   Reading the :attr:`port` attribute will raise a :exc:`ValueError` if`
+Line 134: `   an invalid port is specified in the URL.  See section`
+Line 135: `   :ref:`urlparse-result-object` for more information on the result object.`
+Line 136: (empty)
+Line 137: `   Port validation occurs when the :attr:`port` attribute is accessed,`
+Line 138: `   not when the URL is parsed.  :func:`urlparse` and :func:`urlsplit``
+Line 139: `   return a result object for any syntactically valid URL; the`
+Line 140: `   :exc:`ValueError` is raised only upon access to the`
+Line 141: `   :attr:`port` attribute.`
+Line 142: (empty)
+Line 143: `   The port must be a non-negative ASCII decimal integer in the range`
+Line 144: `   0 through 65535 (inclusive).  The following rules apply when the`
+Line 145: `   :attr:`port` attribute is accessed:`
+Line 146: (empty)
+Line 147: `   * An empty port string, as in ``http://host:/path``, raises`
+Line 148: `     :exc:`ValueError`.`
+Line 149: `   * A negative port, as in ``http://host:-1/path``, raises`
+Line 150: `     :exc:`ValueError`.`
+Line 151: `   * A port whose integer value is outside the range 0 through 65535,`
+Line 152: `     as in ``http://host:65536/path``, raises :exc:`ValueError`.`
+Line 153: `   * A port string that is not a pure ASCII decimal integer (including`
+Line 154: `     strings with non-ASCII decimal digits, such as U+0663 ARABIC-INDIC`
+Line 155: `     DIGIT THREE, or with any non-digit characters) raises`
+Line 156: `     :exc:`ValueError`.`
+Line 157: (empty)
+Line 158: `   The boundary values 0 and 65535 are accepted without error.`
+Line 159: (empty)
+Line 160: `   Examples of the port boundary and error behavior::`
+Line 161: (empty)
+Line 162: `      >>> from urllib.parse import urlparse`
+Line 163: `      >>> p = urlparse("http://example.com:0/")`
+Line 164: `      >>> p.port`
+Line 165: `      0`
+Line 166: `      >>> p = urlparse("http://example.com:65535/")`
+Line 167: `      >>> p.port`
+Line 168: `      65535`
+Line 169: `      >>> p = urlparse("http://example.com:65536/")`
+Line 170: `      >>> p.hostname`
+Line 171: `      'example.com'`
+Line 172: `      >>> p.port`
+Line 173: `      ValueError: Port out of range 0-65535`
+Line 174: `      >>> p = urlparse("http://example.com:-1/")`
+Line 175: `      >>> p.port`
+Line 176: `      ValueError: Port could not be cast to integer value as '-1'`
+Line 177: `      >>> p = urlparse("http://example.com:/")`
+Line 178: `      >>> p.port`
+Line 179: `      ValueError: Port could not be cast to integer value as ''`
+Line 180: `      >>> p = urlparse("http://example.com:abc/")`
+Line 181: `      >>> p.port`
+Line 182: `      ValueError: Port could not be cast to integer value as 'abc'`
+Line 183: (empty)
+Line 184: `   The same behavior applies to :func:`urlsplit` results.`
+Line 185: (empty)
+
+So the doctest failures are:
+- Line 175: `p.port` (after `http://example.com:-1/`) - Expected `ValueError: Port could not be cast to integer value as '-1'` but got `ValueError: Port out of range 0-65535`?
+
+Wait no, let me re-read the diagnostics:
+
+```
+File "Doc/library/urllib.parse.rst", line 175, in changed_documentation
+Failed example:
+    p.port
+Exception raised:
+    Traceback (most recent call last):
+      ...
+    ValueError: Port out of range 0-65535
+```
+
+Line 175 is `>>> p.port` after `urlparse("http://example.com:-1/")`. The exception raised was `ValueError: Port out of range 0-65535`. But I expected `ValueError: Port could not be cast to integer value as '-1'`.
+
+Wait! `-1` - is `-1`.isdigit()? Let's see: `"-1".isdigit()` is `False` because of the minus sign. So it should go to the else branch and raise "Port could not be cast to integer value as '-1'". But the actual exception is "Port out of range 0-65535".
+
+Hmm, that's strange. Unless... wait, maybe the parsing of `http://example.com:-1/` doesn't result in port being `-1`. Let me think about this.
+
+Actually wait - could it be that `-` is being treated as a separator or something? Or maybe the netloc parsing splits differently? Let me think...
+
+In `http://example.com:-1/`, the netloc is `example.com:-1`. The host is `example.com` and the port is `-1`. So `_hostinfo` should be `("example.com", "-1")`.
+
+Then `port = "-1"`. `"-1".isdigit()` → `False`. So it should go to else and raise `ValueError(f"Port could not be cast to integer value as {port!r}")` which would be `ValueError: Port could not be cast to integer value as '-1'`.
+
+But the actual error is `ValueError: Port out of range 0-65535`. That means the code somehow converted `-1` to an int and then the range check failed. How?
+
+Wait... `"-1".isdigit()` is definitely `False`. Unless... hmm.
+
+Oh wait! Maybe I'm wrong about what `isdigit()` does. Let me reconsider. In Python:
+- `"-1".isdigit()` → `False` (because of the minus sign)
+
+So the code should raise the "could not be cast" error. But the actual result shows "Port out of range 0-65535". This is contradictory unless the port string is NOT `-1`.
+
+Could it be that the URL `http://example.com:-1/` is parsed differently? What if the `-` is not part of the port? Let me think about how netloc is parsed.
+
+Actually, I bet the issue is in how the netloc is split. In `http://example.com:-1/`, maybe the parser sees `example.com` as host and `-1` as port. OR maybe it sees something else.
+
+Wait, actually I wonder if there's a different parsing path. Let me look at how netloc is split into host and port. I need to see the actual parsing code.
+
+Let me search for the relevant parsing logic. I'll search for `_hostinfo` or `rpartition` or `rsplit` with `:` in the parse.py file.
+
+Actually, let me re-read the diagnostic more carefully:
+
+```
+File "Doc/library/urllib.parse.rst", line 175, in changed_documentation
+Failed example:
+    p.port
+Exception raised:
+    Traceback (most recent call last):
+      File "<doctest changed_documentation[7]>", line 1, in <module>
+        p.port
+      File "C:\Users\danmc\AppData\Local\Temp\ws-observed-check-wu62zv5j\Lib\urllib\parse.py", line 184, in port
+        raise ValueError("Port out of range 0-65535")
+    ValueError: Port out of range 0-65535
+```
+
+Line 184 in parse.py raises "Port out of range 0-65535". Let me look at my visible source of parse.py (lines 130-190):
+
+```python
+    @property
+    def port(self):
+        port = self._hostinfo[1]
+        if port is not None:
+            if port.isdigit() and port.isascii():
+                port = int(port)
+            else:
+                raise ValueError(f"Port could not be cast to integer value as {port!r}")
+            if not (0 <= port <= 65535):
+                raise ValueError("Port out of range 0-65535")
+        return port
+```
+
+Let me count lines from line 130:
+130: `            raise TypeError("Cannot mix str and non-str arguments")`
+131: `    if str_input:`
+132: `        return args + (_noop,)`
+133: `    return _decode_args(args) + (_encode_result,)`
+134: (empty)
+135: `# Result objects are more helpful than simple tuples`
+136: `class _ResultMixinStr(object):`
+137: `    """Standard approach to encoding parsed results from str to bytes"""`
+138: `    __slots__ = ()`
+139: (empty)
+140: `    def encode(self, encoding='ascii', errors='strict'):`
+141: `        return self._encoded_counterpart(*(x.encode(encoding, errors) for x in self))`
+142: (empty)
+143: (empty)
+144: `class _ResultMixinBytes(object):`
+145: `    """Standard approach to decoding parsed results from bytes to str"""`
+146: `    __slots__ = ()`
+147: (empty)
+148: `    def decode(self, encoding='ascii', errors='strict'):`
+149: `        return self._decoded_counterpart(*(x.decode(encoding, errors) for x in self))`
+150: (empty)
+151: (empty)
+152: `class _NetlocResultMixinBase(object):`
+153: `    """Shared methods for the parsed result objects containing a netloc element"""`
+154: `    __slots__ = ()`
+155: (empty)
+156: `    @property`
+157: `    def username(self):`
+158: `        return self._userinfo[0]`
+159: (empty)
+160: `    @property`
+161: `    def password(self):`
+162: `        return self._userinfo[1]`
+163: (empty)
+164: `    @property`
+165: `    def hostname(self):`
+166: `        hostname = self._hostinfo[0]`
+167: `        if not hostname:`
+168: `            return None`
+169: `        # Scoped IPv6 address may have zone info, which must not be lowercased`
+170: `        # like http://[fe80::822a:a8ff:fe49:470c%tESt]:1234/keys`
+171: `        separator = '%' if isinstance(hostname, str) else b'%'`
+172: `        hostname, percent, zone = hostname.partition(separator)`
+173: `        return hostname.lower() + percent + zone`
+174: (empty)
+175: `    @property`
+176: `    def port(self):`
+177: `        port = self._hostinfo[1]`
+178: `        if port is not None:`
+179: `            if port.isdigit() and port.isascii():`
+180: `                port = int(port)`
+181: `            else:`
+182: `                raise ValueError(f"Port could not be cast to integer value as {port!r}")`
+183: `            if not (0 <= port <= 65535):`
+184: `                raise ValueError("Port out of range 0-65535")`
+185: `        return port`
+186: (empty)
+187: `    __class_getitem__ = classmethod(types.GenericAlias)`
+188: (empty)
+189: (empty)
+190: `class _NetlocResultMixinStr(_NetlocResultMixinBase, _ResultMixinStr):`
+
+OK so line 184 is `raise ValueError("Port out of range 0-65535")` and line 182 is `raise ValueError(f"Port could not be cast to integer value as {port!r}")`.
+
+The diagnostic for line 175 in the doc shows the exception at line 184 (range check), and the diagnostic for line 178 shows the exception at line 182 (cast check).
+
+So for `http://example.com:-1/`:
+- The port is somehow being converted to int successfully (meaning `port.isdigit()` returned True?) and then the range check fails.
+
+But `"-1".isdigit()` is `False`! Unless... the port string isn't actually `-1`.
+
+Wait, maybe the URL parsing of `http://example.com:-1/` doesn't give port `-1`. Maybe the `-` is handled differently. Let me think about what characters are valid in a port.
+
+Actually, I wonder if the parser only takes digits as the port. Let me look at how the netloc is parsed. I need to see the actual parsing code.
+
+Let me search for where the host/port split happens in parse.py.
+
+Actually, let me look at this differently. The diagnostic says:
+- For `http://example.com:-1/`, `p.port` raises `ValueError: Port out of range 0-65535` (line 184)
+
+This means `port.isdigit() and port.isascii()` was True, so the port was converted to int, and then `0 <= port <= 65535` was False. The only way this makes sense is if the port string consists of only digits that form a number < 0 or > 65535. But a string of only digits can't be negative!
+
+Unless... the port string is something like `4294967295` or some large number? No, that doesn't make sense for `-1`.
+
+Wait, I'm confused. Let me re-read the diagnostics more carefully.
+
+Actually, I think I may have misread the line numbers. Let me look again:
+
+Diagnostic 1:
+```
+File "Doc/library/urllib.parse.rst", line 175, in changed_documentation
+Failed example:
+    p.port
+Exception raised:
+    ...
+    ValueError: Port out of range 0-65535
+```
+
+Diagnostic 2:
+```
+File "Doc/library/urllib.parse.rst", line 178, in changed_documentation
+Failed example:
+    p.port
+Expected:
+    ValueError: Port could not be cast to integer value as ''
+Got nothing
+```
+
+Diagnostic 3:
+```
+File "Doc/library/urllib.parse.rst", line 181, in changed_documentation
+Failed example:
+    p.port
+Exception raised:
+    ...
+    ValueError: Port could not be cast to integer value as 'abc'
+```
+
+So there are 4 failures total but only 3 distinct diagnostics shown (with `diagnostics_remaining: 0` and `diagnostics_shown: 1`... wait, it says `diagnostics_shown: 1` and `diagnostics_remaining: 0` and `diagnostics_total: 1`. But the text shows multiple failures. Let me re-read.
+
+Oh wait, the diagnostic text is a single string that contains all the failures. The `diagnostics_shown: 1` means there's 1 diagnostic entry (which is the text block I see). Let me re-read the counts: `"counts":{"examples":14,"failures":4}`. So 14 examples total, 4 failures.
+
+Now, the key insight: the line numbers in the diagnostics refer to lines in the `.rst` file. Let me map them:
+
+- Line 175 in the rst: This is `>>> p.port` (the one after `http://example.com:-1/`)
+  - Expected: `ValueError: Port could not be cast to integer value as '-1'`
+  - Got: `ValueError: Port out of range 0-65535`
+  
+  Wait, that's weird. How can `-1` pass `isdigit()`?
+
+Hmm, unless the parsing of `http://example.com:-1/` gives a different port value. What if the `-` is not part of the port? What if the parser sees the netloc as `example.com:-1` and splits at the last `:`, giving host=`example.com` and port=`-1`? Or what if it does something else?
+
+Actually, wait. I just realized something. Let me look at the netloc parsing more carefully. In a URL like `http://example.com:-1/`, the authority part is `example.com:-1`. The standard way to split host:port is to take the last colon. But what about characters that aren't valid in ports?
+
+You know what, I think I need to actually look at the parsing code to understand what happens. Let me search for how the netloc is parsed into host and port.
+
+But actually, there's a simpler explanation. What if `-1` is being parsed as just `1`? Like, what if the parser strips non-digit characters from the port? Or what if the split happens differently?
+
+Actually, I think the most likely explanation is that the port parsing takes only the digits. Or maybe the netloc `example.com:-1` is split at `:` giving `example.com` and `-1`, but then there's some additional processing.
+
+Wait, let me reconsider. What if the issue is that `-` is a valid character in a hostname? In some URL parsing, the authority part `example.com:-1` might be parsed as hostname `example.com` with port `-1`. But then when accessing `.port`, the code does `port.isdigit()` on `-1` which is False, so it should raise the "could not be cast" error.
+
+UNLESS the actual port string is not `-1`. What if the URL `http://example.com:-1/` is parsed such that the netloc becomes something unexpected?
+
+I really need to see the parsing code. Let me search for it.
+
+Actually, you know what, let me take a different approach. Instead of trying to figure out the exact behavior by reasoning, let me:
+1. Read the relevant parsing code to understand how netloc → host/port works
+2. Run the tests to verify my test file is still correct
+3. Fix the documentation to match actual behavior
+
+Let me first search for how the port is extracted from netloc in parse.py.
+
+Wait, actually I realize I should look at this more carefully. The diagnostic says the exception for line 175 (`p.port` after `urlparse("http://example.com:-1/")`) is `ValueError: Port out of range 0-65535` at line 184 of parse.py.
+
+For this to happen, the code must have:
+1. `port is not None` → True
+2. `port.isdigit() and port.isascii()` → True (so it enters the int conversion)
+3. `int(port)` succeeds
+4. `0 <= port <= 65535` → False
+
+For step 2 to be True, `port` must be a string of ASCII digits only. So the port string CANNOT be `-1`. It must be something else.
+
+What if the URL parsing of `http://example.com:-1/` doesn't give port `-1`? What if it gives port `1` (ignoring the `-`)? Or what if the netloc is parsed differently?
+
+Actually, I bet what happens is: the netloc `example.com:-1` is split, but the parser might only consider digits as valid port characters. Or maybe the `-` causes the port to be parsed differently.
+
+Let me look at the actual parsing. I'll search for the relevant code.
+
+Let me search for "rpartition" or "rsplit" or the port-splitting logic in parse.py.
+
+Actually, I recall that in CPython's urllib.parse, the netloc is split using something like:
+```python
+netloc, port = netloc.rsplit(':', 1)
+```
+
+But there might be more logic around it. Let me search.
+
+Let me search for "port" in parse.py to find the parsing logic.
+
+OK let me just do the search and read operations I need. Let me:
+1. Search for how port is extracted from netloc in parse.py
+2. Read the relevant section
+
+Then I'll fix the documentation.
+
+Actually, let me think about this differently. The tests PASSED (CHK-0029), which means my test file correctly tests the behavior. The tests presumably assert the exact exception types and messages. So my tests already know the correct behavior. The issue is just that my documentation examples don't match reality.
+
+Let me look at what my tests expect. I need to read the test file to see what I asserted for the `-1` case and the empty port case.
+
+But wait, I don't have the test file visible right now. Let me look at what's in my working set. I have:
+- Doc/library/urllib.parse.rst (lines 125-194 visible)
+- Lib/urllib/parse.py (lines 1-100 and 130-190 visible)
+- The test file is NOT currently visible
+
+Let me search for the port-related test code in the test file, or read the relevant section.
+
+Actually, let me think about what I know:
+1. Tests passed → my test assertions are correct
+2. Doc examples failed → my doc examples don't match actual behavior
+
+The specific failures tell me:
+- `http://example.com:65536/` → `p.port` raises `ValueError: Port out of range 0-65535` ✓ (this matches my expectation)
+- `http://example.com:-1/` → `p.port` raises `ValueError: Port out of range 0-65535` (NOT "could not be cast")
+- `http://example.com:/` → `p.port` returns None (NO exception)
+- `http://example.com:abc/` → `p.port` raises `ValueError: Port could not be cast to integer value as 'abc'` ✓ (this matches)
+
+Wait, but if `http://example.com:-1/` gives "Port out of range 0-65535", that means the port string passed `isdigit()` and `isascii()`. The only way a string passes `isdigit()` is if it contains only digit characters. So the port string for `http://example.com:-1/` must be something like `1` (just the digit, without the minus).
+
+OR... wait. What if `-1` in the URL is parsed as the port being `-1`, but then the `isdigit()` check... no, `"-1".isdigit()` is definitely `False`.
+
+Unless the parsing does something to the port before storing it in `_hostinfo`. Let me look at the parsing code.
+
+I'll search for how the netloc is split into host and port. Let me look for "rpartition" or similar in parse.py.
+
+Actually, you know what, I just realized: maybe the issue is that `http://example.com:-1/` is NOT parsed with port `-1`. Maybe the `-` makes the entire thing parse differently. In URL parsing, `:` separates host from port, but what if `-` after `:` is treated as part of the hostname or something?
+
+Let me just search the source code to understand the parsing.
+
+Let me search for "port" in parse.py to find the parsing logic, and also read the test file to see my assertions.
+
+Let me do multiple things:
+1. Search for port parsing in parse.py
+2. Read the test file section with my port tests
+
+Actually, I'm limited in actions. Let me be strategic. Let me search for how netloc is parsed in parse.py to understand the `-1` and empty port cases. Then I'll fix the documentation.
+
+Let me search for "rpartition" in parse.py since that's likely how host:port is split.
