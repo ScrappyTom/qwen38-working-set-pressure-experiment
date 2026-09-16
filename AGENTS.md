@@ -9,9 +9,24 @@ native counterfactual fits both at 6,757 versus actual 6,115 tokens. Receipt pre
 is not evidence that its useful fields arrived. Do not blame Qwen for overlooking
 those omitted addresses. The initial progress claim of their delivery is corrected.
 
-Complete the narrow offline follow-through in
-`development/decision_interface/recovery_detail/PLAN.md`. Preserve all consumed
-allowances and frozen sources. No further model run is included in that repair.
+The narrow offline follow-through is complete. Read
+`development/decision_interface/recovery_detail/IMPLEMENTATION.md` and RESULTS.md.
+RecoveryDetailSession remeasures complete feedback and account independently after
+the existing source-body reduction. 62 selected tests pass; the actual C05 reply,
+unchanged outcomes and a subsequent researcher-selected source acquisition replay
+exactly through eight native inputs. Both match addresses and the complete account
+fit at 6,757 tokens; the selected source fits at 6,504. No model or checker call is
+added, and no completed contribution is claimed. Preserve consumed allowances and
+frozen historical classes. Future checkpoint adapters must retain the new immutable
+`restored_control_fields` presentation setting.
+
+Audit delivery at the level of decision-relevant fields, not only receipt sequence
+or handle. When a capacity fallback removes bulky material, reassess affordable
+control detail against the complete input. Do not couple an oversized account to
+loss of fitting feedback, or the reverse. Check the actual next input before a
+progress update claims that a diagnostic or recovery address reached the actor;
+correct an overstatement explicitly and preserve that correction in the audit.
+No further model exposure belongs to this offline repair.
 
 The opt-in reference repair is implemented and qualified under
 `development/decision_interface/reference_repair/IMPLEMENTATION.md`. Keep frozen

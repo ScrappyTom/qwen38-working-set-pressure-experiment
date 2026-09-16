@@ -131,6 +131,19 @@ applicability, retaining valid evidence for unchanged files. Verify the complete
 create/store/externalize/retrieve path under real serialized bounds, including
 rejections. Offline oracle paths establish tool feasibility, not actor success.
 
+A receipt's sequence or retrieval handle in the next input establishes its presence,
+not delivery of the information needed for the next decision. Compare decisive
+diagnostics, counts, recovery addresses and account text with the actual rendered
+input. After bulk source reduction, remeasure whether complete control detail fits;
+an earlier crowded arrangement does not justify retaining its obsolete reductions.
+Qualify feedback and account admission independently, including truthful fallback
+when either is too large. Preserve source-delivery guards through this transition.
+If a progress report mistakes archived detail for delivered detail, correct it
+explicitly in conversation and the durable audit; do not bury the correction in a
+later metric. The reference continuation and recovery_detail qualification provide
+the concrete example. Native fit and a researcher-chosen recovery route still do
+not establish that the model would choose that route or finish the contribution.
+
 Report the input working-set target, exact native input, physical context and
 generation reserve separately. If the physical admission ceiling is already
 below the proposed working-set target, the proposed pressure contrast is absent.
