@@ -16,6 +16,16 @@ repeat a known broken configuration. The current cycle plan is
 `development/decision_interface/completion_cycle/PLAN.md`. The former offline-only
 repair remains historically offline; its successor now has explicit run authority.
 
+The first continuing-cycle attempt at 2b95ca36 is closed after a graceful stop:
+two replies/three operations, no file changes, 8.838 model-request minutes. Native
+trials establish that a recovery read revived hidden bulk and duplicated an existing
+extent. C02 then lacks C01's known two-match rejection. Read completion_cycle/review.
+The next recovery_inspection package repairs both information paths, with 68 selected
+tests and native input qualification. Preserve its address-inventory checkpoint field,
+verify actual visibility after reads, and keep historical rejection facts distinct
+from a current plan or editing authority. Continue to checked completion under the
+standing direction; do not end the work merely because another offline repair passes.
+
 The reference continuation at 899a7023 is closed: six replies/nine operations, no
 file changes or submission, 24.248 model-request minutes. Read its review/RESULTS.md.
 The tests correction passes in qualified public replay; do not attribute that to a
