@@ -1,5 +1,14 @@
 # Experiment operating rules
 
+The opt-in reference repair is implemented and qualified under
+`development/decision_interface/reference_repair/IMPLEMENTATION.md`. Keep frozen
+FeedbackSession unchanged for historical replay. The actual C14 public proposal
+passes its real tests check after the resolver repair; documentation is still
+untouched. This is mechanical qualification, not a newly completed Qwen contribution.
+The declared continuation starts at that saved corrected work with six requests and
+eighteen operations, unchanged medium uncapped settings and no coaching. Preserve
+every outcome and the full cost; do not silently restart or extend this allowance.
+
 The feedback-repair attempt at 02e530c7 is closed after C15 by an adaptive graceful
 stop for a reproduced host resolver defect. Read its review/RESULTS.md. Qwen's C14
 public correction uses the exact displayed current reference; three of four shown
