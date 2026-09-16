@@ -1,0 +1,643 @@
+Let me analyze the current situation:
+
+1. I have a failing test: `test_port_boundary_and_error_details` - the failure is at line 791 where `self.assertRaises(ValueError)` is not raising a ValueError. This means that for some port value, accessing `.port` doesn't raise an exception when expected.
+
+2. The test file is already in the working set (lines 1-870). Let me look at the test `test_port_boundary_and_error_details` more carefully.
+
+Looking at the test, the issue is at line 791. Let me count the lines... The test starts around line 750. Let me look at the structure:
+
+The test `test_port_boundary_and_error_details` has:
+- Valid boundary ports (None, 0, 65535) for both parse funcs and both str/bytes
+- Invalid ports: str_invalid and bytes_invalid lists
+
+The failure says:
+```
+File "Lib/test/test_urlparse.py", line 791, in test_port_boundary_and_error_details
+    with self.assertRaises(ValueError) as ctx:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised
+```
+
+So at line 791, the code expects a ValueError but none is raised. This means one of the "invalid" port values is actually valid according to the implementation.
+
+Let me think about what's at line 791. Looking at the test structure, after the valid boundary tests, we have:
+
+```python
+str_invalid = [
+    ("", "Port could not be cast to integer value as ''"),
+    ("65536", "Port out of range 0-65535"),
+    ("-1", "Port could not be cast to integer value as '-1'"),
+    ("abc", "Port could not be cast to integer value as 'abc'"),
+    ("\u0966", None),
+]
+```
+
+Wait - the issue is the empty string port `""`. Let me think about what happens:
+
+For URL `"http://example.com:/"`:
+- The netloc would be `"example.com:"` 
+- The port part would be `""` (empty string after the colon)
+
+Now looking at the implementation:
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+If port is `""` (empty string), then:
+- `port is not None` → True
+- `port.isdigit()` → `"".isdigit()` → False (empty string is not all digits)
+- So it should raise ValueError...
+
+Wait, but what about the URL parsing? For `"http://example.com:/"`:
+- The netloc is `"example.com:"`
+- The port part (after `:`) is `""`
+
+Actually wait - let me think about how `_hostinfo` works. In the implementation, the netloc is split at `:`. If the URL is `"http://example.com:/"`, the netloc is `"example.com:"`. The hostinfo would be split into `("example.com", "")`.
+
+Hmm, but actually I need to think about whether an empty port even gets set. Let me look at how `_hostinfo` is computed. I only have lines 170-200 of parse.py visible. Let me think...
+
+Actually wait - the issue might be different. Let me re-read the error:
+
+```
+File "Lib/test/test_urlparse.py", line 791, in test_port_boundary_and_error_details
+    with self.assertRaises(ValueError) as ctx:
+AssertionError: ValueError not raised
+```
+
+The problem is that for some URL, accessing `.port` does NOT raise a ValueError. Let me think about which case this could be.
+
+Looking at the `str_invalid` list:
+- `("", ...)` → URL is `"http://example.com:/"` → port is `""`
+- `("65536", ...)` → URL is `"http://example.com:65536/"` → port is `"65536"`
+- `("-1", ...)` → URL is `"http://example.com:-1/"` → port is `"-1"`
+- `("abc", ...)` → URL is `"http://example.com:abc/"` → port is `"abc"`
+- `("\u0966", ...)` → URL is `"http://example.com:६/"` → port is `"६"`
+
+Wait - for the empty port case: `"http://example.com:/"`. What does the parser actually do? The netloc would be `"example.com:"`. Now, in `_hostinfo`, the port part after the last `:` is `""`. 
+
+But wait - does an empty string actually get stored as the port, or does it get stored as `None`? Let me think about the CPython implementation. Looking at the `_hostinfo` property in the parse module...
+
+Actually, I need to check how `_hostinfo` handles the case where the port part is empty. In CPython's urllib.parse, the `_hostinfo` property splits the netloc. Let me recall:
+
+For a URL like `http://example.com:/`, the netloc is `example.com:`. The `_hostinfo` property would split this. Looking at typical CPython source:
+
+```python
+@property
+def _hostinfo(self):
+    netloc = self.netloc
+    hostinfo = netloc.partition('@')[2]
+    hostname, have_port, port = hostinfo.rpartition(':')
+    if not have_port or not port:
+        port = None
+    return hostname, port
+```
+
+Wait! If `port` is empty string `""`, then `not port` is `True`, so `port = None`. That means for URL `"http://example.com:/"`, the port stored is `None`, not `""`.
+
+So when we access `.port`:
+```python
+port = self._hostinfo[1]  # This is None
+if port is not None:  # False, so skip
+    ...
+return port  # Returns None
+```
+
+So `.port` returns `None` for the empty port case! That's why the test fails - it expects a ValueError but gets None instead.
+
+This is the bug in my test. The empty port case (`"http://example.com:/"`) doesn't raise a ValueError because the port is stored as `None` (since an empty string after `:` is treated as no port).
+
+Let me verify: for `"http://example.com:/"`:
+- netloc = `"example.com:"`
+- `_hostinfo` → hostinfo = `"example.com:"`, rpartition(':') → `("example.com", ":", "")`
+- Since `not ""` is True, port = None
+- So `_hostinfo[1]` is None
+- `.port` returns None
+
+So the empty port case is actually a "no port" case, just like no port at all. It should return None, not raise an error.
+
+I need to fix my test. The empty port case should be in the "valid" (returns None) category, not the "invalid" (raises ValueError) category.
+
+Wait, but the task says: "an empty port" should be tested. Let me re-read the task: "add regression coverage for both public functions with text URLs and ASCII byte URLs: no port, an empty port, 0, 65535, 65536, a negative port, and a noninteger port."
+
+So "empty port" is a case that should return None (since the parser treats `""` after `:` as no port). The test should assert that `.port` returns None for an empty port, not that it raises an exception.
+
+Let me fix the test. I need to:
+1. Move the empty port case from the invalid list to a valid case (returning None)
+2. Keep the other invalid cases
+
+Actually wait - let me re-read the existing test more carefully. The current test has:
+
+```python
+str_invalid = [
+    ("", "Port could not be cast to integer value as ''"),
+    ...
+]
+```
+
+This is wrong because the empty port doesn't actually produce a stored port value - it's treated as no port. I need to change this.
+
+But wait - there's also the `required_paths` criterion that's failing:
+```
+"urlparse","bytes","empty"
+"urlparse","bytes","negative"
+"urlparse","bytes","noninteger"
+"urlparse","bytes","too_high"
+"urlparse","str","empty"
+"urlparse","str","negative"
+"urlparse","str","noninteger"
+"urlparse","str","too_high"
+"urlparse","str","unicode_digits"
+"urlsplit","bytes","empty"
+"urlsplit","bytes","negative"
+"urlsplit","bytes","noninteger"
+"urlsplit","bytes","too_high"
+"urlsplit","str","negative"
+"urlsplit","str","noninteger"
+"urlsplit","str","too_high"
+```
+
+These are paths that the test needs to exercise. Let me decode what these mean:
+- `urlparse`/`urlsplit` - which function
+- `str`/`bytes` - which input type
+- `empty` - empty port
+- `negative` - negative port
+- `noninteger` - non-integer port
+- `too_high` - port > 65535
+- `unicode_digits` - unicode digit port
+
+So the test needs to exercise all these combinations. Let me think about what "empty" means in the context of paths. It seems like "empty" is a valid path (returns None), and the test should cover it.
+
+Now let me look at my current test and figure out what needs to change:
+
+The current test has the empty port in the "invalid" list, which is wrong. I need to:
+1. Move empty port to a "valid" assertion (returns None)
+2. Make sure all required path combinations are covered
+
+Let me also check: does the `test_attributes_bad_port` test already cover some of these? Yes, it covers "foo", "1.5", "-1", "0x10", "-0", "1_1", " 1", "1 ", "६" for both str and bytes. But it doesn't cover "65536" (too high) or empty port or the specific boundary cases with exact error messages.
+
+My `test_port_boundary_and_error_details` test needs to:
+1. Test valid cases: no port → None, empty port → None, 0 → 0, 65535 → 65535
+2. Test invalid cases: 65536 → range error, -1 → cast error, abc → cast error, unicode digit → cast error
+3. Do all of these for both urlsplit and urlparse, both str and bytes
+
+The fix: remove `("", ...)` from `str_invalid` and instead add a test that empty port returns None. Also need to make sure the bytes case for empty port is covered.
+
+Wait, let me also think about the bytes empty port. For `b"http://example.com:/"`:
+- netloc = `b"example.com:"`
+- `_hostinfo` → rpartition(b':') → `(b"example.com", b":", b"")`
+- `not b""` is True, so port = None
+- `.port` returns None
+
+Good, so bytes empty port also returns None.
+
+Now let me write the fix. I need to patch the test file. Let me look at the exact text I need to change.
+
+The current problematic section is:
+
+```python
+        # Invalid ports: ValueError raised at .port access, not at parse.
+        # Each entry is (port_value, expected_message).
+        str_invalid = [
+            # Empty port: no digits
+            ("", "Port could not be cast to integer value as ''"),
+            # One above upper bound
+            ("65536", "Port out of range 0-65535"),
+            # Negative: minus sign makes it not a digit string
+            ("-1", "Port could not be cast to integer value as '-1'"),
+            # Non-integer: letters
+            ("abc", "Port could not be cast to integer value as 'abc'"),
+            # Non-ASCII decimal digit (Devanagari 6)
+            ("\u0966", None),
+        ]
+        bytes_invalid = [
+            (b"", "Port could not be cast to integer value as b''"),
+            (b"65536", "Port out of range 0-65535"),
+            (b"-1", "Port could not be cast to integer value as b'-1'"),
+            (b"abc", "Port could not be cast to integer value as b'abc'"),
+        ]
+```
+
+I need to:
+1. Remove `("", ...)` from `str_invalid` and `(b"", ...)` from `bytes_invalid`
+2. Add assertions that empty port returns None for both str and bytes, both parse functions
+
+Let me look at the full test to understand the structure better and figure out exactly where to patch.
+
+Looking at the test:
+```python
+    def test_port_boundary_and_error_details(self):
+        """Regression tests for port boundary values and error specifics.
+
+        Verifies that port validation errors occur when accessing the .port
+        attribute, not when constructing the result. Checks the exact
+        exception class, args tuple, and message.
+        """
+        parse_funcs = (urllib.parse.urlsplit, urllib.parse.urlparse)
+
+        # Valid boundary ports: assert concrete return values.
+        for parse in parse_funcs:
+            # No port at all → None
+            p = parse("http://example.com/")
+            self.assertIsNone(p.port)
+            p = parse(b"http://example.com/")
+            self.assertIsNone(p.port)
+            # Port 0 (lower bound)
+            p = parse("http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            p = parse(b"http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            # Port 65535 (upper bound)
+            p = parse("http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            p = parse(b"http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+
+        # Invalid ports: ValueError raised at .port access, not at parse.
+        # Each entry is (port_value, expected_message).
+        str_invalid = [
+            # Empty port: no digits
+            ("", "Port could not be cast to integer value as ''"),
+            ...
+```
+
+I need to:
+1. Add empty port as a valid case (returns None) in the "Valid boundary ports" section
+2. Remove empty port from str_invalid and bytes_invalid
+
+Let me craft the patch. I'll need to:
+1. Add empty port assertions after the "No port at all" section
+2. Remove the empty entries from str_invalid and bytes_invalid
+
+Let me write the patch. The old text to replace:
+
+```
+            # No port at all → None
+            p = parse("http://example.com/")
+            self.assertIsNone(p.port)
+            p = parse(b"http://example.com/")
+            self.assertIsNone(p.port)
+```
+
+Should become:
+
+```
+            # No port at all → None
+            p = parse("http://example.com/")
+            self.assertIsNone(p.port)
+            p = parse(b"http://example.com/")
+            self.assertIsNone(p.port)
+            # Empty port (colon with nothing after) → None
+            p = parse("http://example.com:/")
+            self.assertIsNone(p.port)
+            p = parse(b"http://example.com:/")
+            self.assertIsNone(p.port)
+```
+
+And then remove the empty entries from str_invalid and bytes_invalid:
+
+str_invalid becomes:
+```python
+        str_invalid = [
+            # One above upper bound
+            ("65536", "Port out of range 0-65535"),
+            # Negative: minus sign makes it not a digit string
+            ("-1", "Port could not be cast to integer value as '-1'"),
+            # Non-integer: letters
+            ("abc", "Port could not be cast to integer value as 'abc'"),
+            # Non-ASCII decimal digit (Devanagari 6)
+            ("\u0966", None),
+        ]
+```
+
+bytes_invalid becomes:
+```python
+        bytes_invalid = [
+            (b"65536", "Port out of range 0-65535"),
+            (b"-1", "Port could not be cast to integer value as b'-1'"),
+            (b"abc", "Port could not be cast to integer value as b'abc'"),
+        ]
+```
+
+Now, I also need to make sure all the required paths are covered. Let me check:
+
+Required paths:
+- `urlparse`/`urlsplit` × `str`/`bytes` × {`empty`, `negative`, `noninteger`, `too_high`}
+- Plus `urlparse`/`urlsplit` × `str` × `unicode_digits`
+
+My test covers:
+- empty: ✓ (after fix, in valid section for both str and bytes)
+- negative: ✓ ("-1" in str_invalid, b"-1" in bytes_invalid)
+- noninteger: ✓ ("abc" in str_invalid, b"abc" in bytes_invalid)
+- too_high: ✓ ("65536" in str_invalid, b"65536" in bytes_invalid)
+- unicode_digits: ✓ ("\u0966" in str_invalid)
+
+Wait, but the required paths list shows:
+- `"urlsplit","str","empty"` - need urlsplit with str empty port
+- `"urlsplit","str","negative"` - need urlsplit with str negative port
+- etc.
+
+These all seem to be covered by my loop over `parse_funcs` which includes both `urlsplit` and `urlparse`.
+
+Let me also check: does the unicode_digits case need bytes? Looking at the required paths:
+- `"urlparse","str","unicode_digits"` ✓
+- `"urlsplit","str","unicode_digits"` - wait, I don't see this in the list!
+
+Looking at the required paths again:
+```
+["urlparse","bytes","empty"]
+["urlparse","bytes","negative"]
+["urlparse","bytes","noninteger"]
+["urlparse","bytes","too_high"]
+["urlparse","str","empty"]
+["urlparse","str","negative"]
+["urlparse","str","noninteger"]
+["urlparse","str","too_high"]
+["urlparse","str","unicode_digits"]
+["urlsplit","bytes","empty"]
+["urlsplit","bytes","negative"]
+["urlsplit","bytes","noninteger"]
+["urlsplit","bytes","too_high"]
+["urlsplit","str","negative"]
+["urlsplit","str","noninteger"]
+["urlsplit","str","too_high"]
+```
+
+Hmm, I don't see `["urlsplit","str","unicode_digits"]` or `["urlsplit","str","empty"]` in the list. Wait, let me re-read... Actually the list shows 15 entries. Let me count:
+
+urlparse bytes: empty, negative, noninteger, too_high (4)
+urlparse str: empty, negative, noninteger, too_high, unicode_digits (5)
+urlsplit bytes: empty, negative, noninteger, too_high (4)
+urlsplit str: negative, noninteger, too_high (3)
+
+Total: 16 entries (I count 15 in the list, let me recount)
+
+Actually looking at the JSON:
+```
+["urlparse","bytes","empty"],
+["urlparse","bytes","negative"],
+["urlparse","bytes","noninteger"],
+["urlparse","bytes","too_high"],
+["urlparse","str","empty"],
+["urlparse","str","negative"],
+["urlparse","str","noninteger"],
+["urlparse","str","too_high"],
+["urlparse","str","unicode_digits"],
+["urlsplit","bytes","empty"],
+["urlsplit","bytes","negative"],
+["urlsplit","bytes","noninteger"],
+["urlsplit","bytes","too_high"],
+["urlsplit","str","negative"],
+["urlsplit","str","noninteger"],
+["urlsplit","str","too_high"]
+```
+
+That's 16 entries. Notably missing:
+- `["urlsplit","str","empty"]` - hmm, but my loop covers both parse functions with both str and bytes
+- `["urlsplit","str","unicode_digits"]` - same
+
+Wait, actually my test loops over `parse_funcs = (urllib.parse.urlsplit, urllib.parse.urlparse)` for all cases. So if I have `parse("http://example.com:/")` in the loop, it covers both urlsplit and urlparse for str empty. Same for bytes.
+
+Actually wait - I need to check if the "empty" path is actually being exercised. The path might be identified by the test framework based on what URLs are parsed. If I add `parse("http://example.com:/")` in the loop over parse_funcs, that should cover both.
+
+But wait - for bytes empty, I have `parse(b"http://example.com:/")`. That should cover bytes empty for both functions.
+
+For unicode_digits, I only have it in str_invalid with the loop over parse_funcs, so it covers both urlsplit and urlparse for str. But there's no bytes unicode_digits case needed (the required paths don't list it for bytes).
+
+Actually, I realize the issue: the required paths might be identified by the test runner based on specific code paths or URL patterns. Let me not overthink this and just make sure my test covers all the combinations.
+
+Let me also think about whether the "empty" port case with bytes is correctly handled. For `b"http://example.com:/"`:
+- The parser strips/splits the netloc
+- `_hostinfo` would get `b"example.com:"` 
+- rpartition(b':') → `(b"example.com", b":", b"")`
+- `not b""` → True, so port = None
+
+Yes, this is correct.
+
+Now let me write the patch. I'll do it in two patches:
+
+Patch 1: Add empty port assertions after "No port at all"
+Patch 2: Remove empty entries from str_invalid and bytes_invalid
+
+Actually, I can do this in one patch if I replace a contiguous block. Let me look at the exact text.
+
+The section from "No port at all" through the end of bytes_invalid is:
+
+```
+            # No port at all → None
+            p = parse("http://example.com/")
+            self.assertIsNone(p.port)
+            p = parse(b"http://example.com/")
+            self.assertIsNone(p.port)
+            # Port 0 (lower bound)
+            p = parse("http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            p = parse(b"http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            # Port 65535 (upper bound)
+            p = parse("http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            p = parse(b"http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+
+        # Invalid ports: ValueError raised at .port access, not at parse.
+        # Each entry is (port_value, expected_message).
+        str_invalid = [
+            # Empty port: no digits
+            ("", "Port could not be cast to integer value as ''"),
+            # One above upper bound
+            ("65536", "Port out of range 0-65535"),
+            # Negative: minus sign makes it not a digit string
+            ("-1", "Port could not be cast to integer value as '-1'"),
+            # Non-integer: letters
+            ("abc", "Port could not be cast to integer value as 'abc'"),
+            # Non-ASCII decimal digit (Devanagari 6)
+            ("\u0966", None),
+        ]
+        bytes_invalid = [
+            (b"", "Port could not be cast to integer value as b''"),
+            (b"65536", "Port out of range 0-65535"),
+            (b"-1", "Port could not be cast to integer value as b'-1'"),
+            (b"abc", "Port could not be cast to integer value as b'abc'"),
+        ]
+```
+
+I'll replace this whole block. Let me be careful about the exact text.
+
+Actually, I can do this more simply with two separate patches:
+
+Patch 1: Add empty port cases after "No port at all"
+Old:
+```
+            p = parse(b"http://example.com/")
+            self.assertIsNone(p.port)
+            # Port 0 (lower bound)
+```
+New:
+```
+            p = parse(b"http://example.com/")
+            self.assertIsNone(p.port)
+            # Empty port (colon with nothing after) → None
+            p = parse("http://example.com:/")
+            self.assertIsNone(p.port)
+            p = parse(b"http://example.com:/")
+            self.assertIsNone(p.port)
+            # Port 0 (lower bound)
+```
+
+Patch 2: Remove empty from str_invalid
+Old:
+```
+        str_invalid = [
+            # Empty port: no digits
+            ("", "Port could not be cast to integer value as ''"),
+            # One above upper bound
+```
+New:
+```
+        str_invalid = [
+            # One above upper bound
+```
+
+Patch 3: Remove empty from bytes_invalid
+Old:
+```
+        bytes_invalid = [
+            (b"", "Port could not be cast to integer value as b''"),
+            (b"65536", "Port out of range 0-65535"),
+```
+New:
+```
+        bytes_invalid = [
+            (b"65536", "Port out of range 0-65535"),
+```
+
+Wait, but I can only do one patch per action (the patch action replaces exactly one occurrence). And I have 3 changes. Let me think about whether I can do them in one larger patch or need multiple.
+
+Actually, I can do all three in one patch if I replace the entire block from "# No port at all" through the end of bytes_invalid. Let me do that.
+
+But actually, looking at the patch constraints: "Replaces exactly one occurrence of old with new in an existing file". I need to make sure my `old` text is unique.
+
+Let me do the three patches separately since I have 37 actions remaining. Actually wait, each patch is one action. Let me just do them one at a time.
+
+Actually, let me reconsider. Can I do all three changes in one patch by replacing a larger contiguous block? Let me try:
+
+Old (the full block):
+```
+            # No port at all → None
+            p = parse("http://example.com/")
+            self.assertIsNone(p.port)
+            p = parse(b"http://example.com/")
+            self.assertIsNone(p.port)
+            # Port 0 (lower bound)
+            p = parse("http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            p = parse(b"http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            # Port 65535 (upper bound)
+            p = parse("http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            p = parse(b"http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+
+        # Invalid ports: ValueError raised at .port access, not at parse.
+        # Each entry is (port_value, expected_message).
+        str_invalid = [
+            # Empty port: no digits
+            ("", "Port could not be cast to integer value as ''"),
+            # One above upper bound
+            ("65536", "Port out of range 0-65535"),
+            # Negative: minus sign makes it not a digit string
+            ("-1", "Port could not be cast to integer value as '-1'"),
+            # Non-integer: letters
+            ("abc", "Port could not be cast to integer value as 'abc'"),
+            # Non-ASCII decimal digit (Devanagari 6)
+            ("\u0966", None),
+        ]
+        bytes_invalid = [
+            (b"", "Port could not be cast to integer value as b''"),
+            (b"65536", "Port out of range 0-65535"),
+            (b"-1", "Port could not be cast to integer value as b'-1'"),
+            (b"abc", "Port could not be cast to integer value as b'abc'"),
+        ]
+```
+
+New:
+```
+            # No port at all → None
+            p = parse("http://example.com/")
+            self.assertIsNone(p.port)
+            p = parse(b"http://example.com/")
+            self.assertIsNone(p.port)
+            # Empty port (colon with nothing after) → None
+            p = parse("http://example.com:/")
+            self.assertIsNone(p.port)
+            p = parse(b"http://example.com:/")
+            self.assertIsNone(p.port)
+            # Port 0 (lower bound)
+            p = parse("http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            p = parse(b"http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            # Port 65535 (upper bound)
+            p = parse("http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            p = parse(b"http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+
+        # Invalid ports: ValueError raised at .port access, not at parse.
+        # Each entry is (port_value, expected_message).
+        str_invalid = [
+            # One above upper bound
+            ("65536", "Port out of range 0-65535"),
+            # Negative: minus sign makes it not a digit string
+            ("-1", "Port could not be cast to integer value as '-1'"),
+            # Non-integer: letters
+            ("abc", "Port could not be cast to integer value as 'abc'"),
+            # Non-ASCII decimal digit (Devanagari 6)
+            ("\u0966", None),
+        ]
+        bytes_invalid = [
+            (b"65536", "Port out of range 0-65535"),
+            (b"-1", "Port could not be cast to integer value as b'-1'"),
+            (b"abc", "Port could not be cast to integer value as b'abc'"),
+        ]
+```
+
+This is one contiguous block replacement. Let me verify uniqueness - this block is definitely unique in the file since it's a specific test method.
+
+Now I need the file SHA. From the working set: `d25ffa0ec30ac2fa12befbcd3b1cccad57dec0f09198b353ca7fa5a73b623531`
+
+And the candidate ID: `918f06846dee28e7ffb04fc73627b1f8710d4969f25e2433edb9130546d60e12`
+
+Let me write the patch action.
+
+Wait, I need to be careful about the exact whitespace. Looking at the source in the working set, the indentation uses spaces. Let me make sure I match exactly.
+
+Looking at the source:
+```
+            # No port at all → None
+            p = parse("http://example.com/")
+```
+
+That's 12 spaces of indentation. Let me verify with the surrounding context:
+```
+        parse_funcs = (urllib.parse.urlsplit, urllib.parse.urlparse)
+
+        # Valid boundary ports: assert concrete return values.
+        for parse in parse_funcs:
+            # No port at all → None
+```
+
+Yes, the for loop body is indented 12 spaces (8 for the method body + 4 for the for loop).
+
+OK let me write the patch. I need to be very precise about the text.

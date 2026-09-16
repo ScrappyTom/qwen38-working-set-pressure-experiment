@@ -57,6 +57,15 @@ later recovery or cost. Inspect relevant source, artifact, and custody records
 before attributing a mismatch to the model or host. A correctly implemented
 interface can still impose avoidable interpretation or interaction costs.
 
+Review the projected report as a whole: removing a list can invalidate the meaning
+of its surviving residual count, and a generic rejection can omit a mechanically
+known recovery distinction. Positive fault-sensitivity claims require a passing
+normal control and a scope that distinguishes plausible partial implementations.
+Exact transport qualification must include the applied operation's boundaries;
+preserving emitted bytes does not establish safe whole-line replacement. Record
+any exact preservation criterion in the actor-facing task before exposure, rather
+than treating an unstated checker restriction as a model comprehension failure.
+
 For each finding, state what the model saw, what its thinking and final
 response indicate separately, what the host actually did, the observed
 consequence, and any uncertainty. Distinguish absent-evidence recovery,

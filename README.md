@@ -2,6 +2,30 @@
 
 ## Project status
 
+The [response-boundary repair and same-task rerun are complete](development/decision_interface/channel_repair/review/RESULTS.md).
+The transport now returns sixteen complete final replies. Qwen chooses its recovery
+selection, saves tests, corrects actual failures and eventually saves documentation
+using literal SOURCE. The final public check fails preservation and no submission
+occurs. All 30 nonterminal receipts reach their next inputs. No coaching or retry
+occurs, and the request allowance is closed.
+
+The 19 new documentation examples pass, but the contribution remains incomplete:
+independent review finds missing byte-input exact-class coverage despite a passing
+tests scope. Three exact documentation anchors are rejected for unseen duplicate
+matches; the host's generic feedback omits the actual cause. The final replacement
+rephrases old text and omits a boundary newline, joining the next line. The frozen
+checker requires insertions only, more precisely than the task states. These are
+recorded host/reporting/contract issues, not another missing-result diagnosis.
+
+Cost is 91,350 generated tokens and 106.023 model-request minutes. Exact replay
+verifies 328 source identities, 69 native inputs, 707 custody records and four
+observations. Full inputs, thinking, finals and artifacts are reviewed. The
+[host audit](development/decision_interface/channel_repair/review/HOST_AUDIT.md)
+and [running notes](development/decision_interface/channel_repair/NOTES.md) identify
+the prospective repairs; no extra model exposure belongs to this package.
+
+Earlier closed development packages follow.
+
 The [observation/recovery implementation and sole uncoached attempt are complete](development/operable_recovery/review/RESULTS.md).
 Qwen selects a smaller group, returns from recovery to ordinary work, saves an
 additive regression method, receives its actual failed coverage check and retrieves

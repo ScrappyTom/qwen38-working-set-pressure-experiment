@@ -291,3 +291,21 @@ prefix, channel delimiters, constraint activation, endpoint extraction and guard
 execution. Separately valid template, grammar and parser components do not establish
 that composition. Preserve final-only authority; action-shaped reasoning remains
 private output, even when the host itself caused the channel error.
+
+The [repaired transport and same-task rerun](development/decision_interface/channel_repair/review/RESULTS.md)
+cross that boundary on sixteen complete replies and exercise an actual failed-test
+correction. Exact delivery succeeds; complete contribution does not. The remaining
+host issues concern information and operation contracts: a projected count can become
+misleading when its list disappears; a rejected edit needs the known match count and
+locations; a global mutation failure does not establish every requested input path;
+and an insertions-only preservation criterion must be stated as such.
+
+The literal channel also demonstrates why exact bytes and usable line operations
+are separate responsibilities. The final bytes omit LF; transport preserves them,
+and replacing a nonterminal line region joins its tail to the next unselected line.
+The rest of the file remains preserved. This earns a declared boundary contract or
+guard and operation-level qualification, not silent rewriting of historical content.
+Likewise, a selected extent shown in full does not mean the whole file is shown.
+Retain the core identities and archive while qualifying these specific decision and
+editing boundaries. Accounts, scoped passes and saved proposals remain distinct from
+complete supported work.

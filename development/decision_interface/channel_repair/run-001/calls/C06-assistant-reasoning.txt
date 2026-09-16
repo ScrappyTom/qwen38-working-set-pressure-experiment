@@ -1,0 +1,106 @@
+Let me analyze the test failure. The test check showed:
+- 73 tests run, 1 failure
+- 1 observed path test failed
+- 1 required path missing
+
+Let me look at the failure details by inspecting the observation.
+
+Let me first understand what's happening. The test `test_port_boundary_and_error_details` was added in the patch. Let me check what went wrong.
+
+The issue is likely with the non-ASCII decimal digit case `"\u0966"`. Let me think about this:
+
+In the implementation:
+```python
+if port.isdigit() and port.isascii():
+    port = int(port)
+else:
+    raise ValueError(f"Port could not be cast to integer value as {port!r}")
+```
+
+For `"\u0966"` (Devanagari digit 6):
+- `port.isdigit()` → True (it's a Unicode digit)
+- `port.isascii()` → False
+- So it raises ValueError
+
+The message would be: `Port could not be cast to integer value as '६'`
+
+In my test, I have:
+```python
+("\u0966", None),
+```
+And then:
+```python
+if msg is None:
+    msg = (f"Port could not be cast to integer value "
+           f"as {port!r}")
+```
+
+Wait, the issue is that `\u0966` is Devanagari digit 6. Let me check: `\u0966` is actually the Devanagari digit 6 (६). Its repr would be `'\u0966'` or `'\u0966'`... Actually in Python 3, the repr of a printable Unicode character is the character itself. Let me think...
+
+Actually, `\u0966` is ६ which is printable. So `repr("\u0966")` would be `"'\\u0966'"` ... no wait. In Python 3, `repr()` of a string containing a printable character shows the character itself. So `repr("\u0966")` is `"'\\u0966'"` ... hmm, actually no. Let me think more carefully.
+
+In Python 3:
+- `repr("a")` → `"'a'"`
+- `repr("\u0966")` → `"'\\u0966'"` ... 
+
+Wait, actually in Python 3, `repr()` of a string shows printable characters as-is. The Devanagari digit ६ is printable, so `repr("\u0966")` should be `"'\\u0966'"` ... no. Let me think again.
+
+Actually, I need to be more careful. In Python 3:
+```python
+>>> repr("\u0966")
+"'\\u0966'"
+```
+
+Hmm, actually I'm not sure. Let me think about what `repr` does with non-ASCII characters. In Python 3, `repr()` of a string shows the actual character if it's printable. So `repr("café")` is `"'café'"`. Similarly, `repr("\u0966")` would be `"'\\u0966'"`... 
+
+Wait no. Let me be precise:
+- `repr("a")` → `"'a'"` (the string contains a single character `a`)
+- `repr("café")` → `"'café'"` (the string contains the actual é character)
+- `repr("\u0966")` → `"'\\u0966'"` ... 
+
+Actually I think in Python 3, `repr` of a string shows printable characters directly. The Devanagari digit is a printable character. So `repr("\u0966")` should be `"'\\u0966'"`... 
+
+Hmm, I'm going back and forth. Let me think about this differently.
+
+In Python 3, `str.__repr__` uses `PyUnicode_EncodeDecimal` or similar. For printable characters, it shows them directly. The Devanagari digit ६ (U+0966) is a printable character (it's in the Devanagari block, category Nd - decimal number).
+
+So `repr("\u0966")` should be `"'\\u0966'"` ... 
+
+OK let me just think about what the f-string would produce:
+```python
+port = "\u0966"
+f"Port could not be cast to integer value as {port!r}"
+```
+
+If `repr(port)` is `"'\\u0966'"` then the message is `"Port could not be cast to integer value as '\\u0966'"`.
+
+If `repr(port)` is `"'\\u0966'"` then... 
+
+Actually, I think the issue might be different. Let me look at the error more carefully.
+
+The test has 73 tests, 1 failure. Let me look at the actual failure by inspecting the observation.
+
+Also, there's "additional_missing_paths": 1 for the required_paths criterion. This means one of the required paths isn't being exercised.
+
+Let me inspect the observation to see the actual failure.
+
+Actually, let me look at the test more carefully. The issue might be with the `\u0966` character. In the test file, I wrote:
+
+```python
+# Non-ASCII decimal digit (Devanagari 6)
+("\u0966", None),
+```
+
+And then in the loop:
+```python
+for port, msg in str_invalid:
+    if msg is None:
+        msg = (f"Port could not be cast to integer value "
+               f"as {port!r}")
+```
+
+The problem: `f"as {port!r}"` uses the `!r` format, which calls `repr(port)`. For the Devanagari character, `repr` might produce a different form than what I expect.
+
+But wait, the test is actually running and one is failing. Let me just look at the actual failure output.
+
+Let me inspect the observation to see what went wrong.

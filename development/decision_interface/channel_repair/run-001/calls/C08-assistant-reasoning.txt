@@ -1,0 +1,175 @@
+Let me analyze the situation:
+
+1. The tests check failed on criterion `detect.error_class` - the test run still passed even when `ValueError` was replaced with a subclass while keeping its arguments.
+
+This means my current tests are catching `ValueError` (which a subclass would also satisfy via `assertRaises(ValueError)`), but the mutation check requires that the tests specifically detect when `ValueError` is replaced by a subclass.
+
+To detect this mutation, I need to assert the exact exception type, not just that it's a `ValueError`. Instead of using `assertRaises(ValueError)`, I need to check `type(e) is ValueError` or use `assertEqual(type(e), ValueError)`.
+
+Let me look at my current test code. In `test_port_boundary_and_error_details`, I'm using:
+```python
+with self.assertRaises(ValueError) as ctx:
+    _ = p.port
+```
+
+This will pass even if a subclass of ValueError is raised, because `assertRaises(ValueError)` catches subclasses too.
+
+To detect the mutation, I need to explicitly check that the exception type is exactly `ValueError`, not a subclass. I should add:
+```python
+self.assertIs(type(ctx.exception), ValueError)
+```
+
+Let me also check `test_attributes_bad_port` - it uses `assertRaises(ValueError)` too, but that's a pre-existing test. The mutation check is about "the new tests" detecting the change. Let me focus on my new tests.
+
+In `test_port_boundary_and_error_details`, I need to add `self.assertIs(type(ctx.exception), ValueError)` after catching the exception.
+
+Let me read the current test file to see the exact text I need to patch.
+
+Looking at the source, my `test_port_boundary_and_error_details` method has:
+```python
+                with self.assertRaises(ValueError) as ctx:
+                    _ = p.port
+                self.assertEqual(ctx.exception.args, (msg,))
+                self.assertEqual(str(ctx.exception), msg)
+```
+
+I need to add `self.assertIs(type(ctx.exception), ValueError)` between the `with` block and the args assertion. Actually, I should add it right after the `with` block ends.
+
+Let me find the exact text to patch. I need to be precise about the old text. Let me look at the source more carefully.
+
+In the str_invalid loop:
+```python
+                with self.assertRaises(ValueError) as ctx:
+                    _ = p.port
+                self.assertEqual(ctx.exception.args, (msg,))
+                self.assertEqual(str(ctx.exception), msg)
+```
+
+And in the bytes_invalid loop:
+```python
+                with self.assertRaises(ValueError) as ctx:
+                    _ = p.port
+                self.assertEqual(ctx.exception.args, (msg,))
+                self.assertEqual(str(ctx.exception), msg)
+```
+
+Both have the same pattern. I need to add `self.assertIs(type(ctx.exception), ValueError)` after each `with` block.
+
+Wait, but `patch` replaces exactly one occurrence. The two blocks are identical in their relevant lines. Let me use a more specific `old` string that includes surrounding context to make it unique.
+
+Actually, let me think about this differently. The `old` text needs to be unique. Let me include more context.
+
+For the str_invalid block, the surrounding context includes:
+```python
+                url = "http://example.com:" + port + "/"
+                p = parse(url)
+                self.assertEqual(p.netloc, "example.com:" + port)
+                with self.assertRaises(ValueError) as ctx:
+                    _ = p.port
+                self.assertEqual(ctx.exception.args, (msg,))
+                self.assertEqual(str(ctx.exception), msg)
+```
+
+For the bytes_invalid block:
+```python
+                url = b"http://example.com:" + port + b"/"
+                p = parse(url)
+                self.assertEqual(p.netloc, b"example.com:" + port)
+                with self.assertRaises(ValueError) as ctx:
+                    _ = p.port
+                self.assertEqual(ctx.exception.args, (msg,))
+                self.assertEqual(str(ctx.exception), msg)
+```
+
+These are distinguishable. Let me patch each one.
+
+Actually wait - I can also just do a single patch that replaces both by including enough context. But `patch` replaces exactly one occurrence. Let me do two patches.
+
+Actually, let me re-read the source. The file is `Lib/test/test_urlparse.py` with sha256 `3546bdc4604c60dfc8c43e00ac4f88100b7ef1369a74fc67f1d61f28da1b10d1`.
+
+Let me patch the first occurrence (str_invalid loop):
+
+old:
+```
+                with self.assertRaises(ValueError) as ctx:
+                    _ = p.port
+                self.assertEqual(ctx.exception.args, (msg,))
+                self.assertEqual(str(ctx.exception), msg)
+```
+
+Wait, but this exact text appears twice in the file (once in str_invalid loop, once in bytes_invalid loop). Let me check...
+
+Looking at the source:
+- str_invalid loop has:
+```
+                with self.assertRaises(ValueError) as ctx:
+                    _ = p.port
+                self.assertEqual(ctx.exception.args, (msg,))
+                self.assertEqual(str(ctx.exception), msg)
+```
+
+- bytes_invalid loop has:
+```
+                with self.assertRaises(ValueError) as ctx:
+                    _ = p.port
+                self.assertEqual(ctx.exception.args, (msg,))
+                self.assertEqual(str(ctx.exception), msg)
+```
+
+These are identical! So I can't use `patch` with this as `old` since it appears twice.
+
+Let me include more context to make each unique. For the str_invalid one, the preceding line is:
+```
+                self.assertEqual(p.netloc, "example.com:" + port)
+```
+
+For the bytes_invalid one:
+```
+                self.assertEqual(p.netloc, b"example.com:" + port)
+```
+
+So:
+
+First patch (str_invalid):
+old:
+```
+                self.assertEqual(p.netloc, "example.com:" + port)
+                with self.assertRaises(ValueError) as ctx:
+                    _ = p.port
+                self.assertEqual(ctx.exception.args, (msg,))
+                self.assertEqual(str(ctx.exception), msg)
+```
+
+new:
+```
+                self.assertEqual(p.netloc, "example.com:" + port)
+                with self.assertRaises(ValueError) as ctx:
+                    _ = p.port
+                self.assertIs(type(ctx.exception), ValueError)
+                self.assertEqual(ctx.exception.args, (msg,))
+                self.assertEqual(str(ctx.exception), msg)
+```
+
+Second patch (bytes_invalid):
+old:
+```
+                self.assertEqual(p.netloc, b"example.com:" + port)
+                with self.assertRaises(ValueError) as ctx:
+                    _ = p.port
+                self.assertEqual(ctx.exception.args, (msg,))
+                self.assertEqual(str(ctx.exception), msg)
+```
+
+new:
+```
+                self.assertEqual(p.netloc, b"example.com:" + port)
+                with self.assertRaises(ValueError) as ctx:
+                    _ = p.port
+                self.assertIs(type(ctx.exception), ValueError)
+                self.assertEqual(ctx.exception.args, (msg,))
+                self.assertEqual(str(ctx.exception), msg)
+```
+
+This should make the tests fail if ValueError is replaced with a subclass (since `assertIs(type(e), ValueError)` would fail for a subclass).
+
+Let me proceed with the first patch.

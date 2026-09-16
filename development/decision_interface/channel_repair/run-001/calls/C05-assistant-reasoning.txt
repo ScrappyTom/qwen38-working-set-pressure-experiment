@@ -1,0 +1,1312 @@
+Let me analyze the current state:
+
+1. I have the test file `Lib/test/test_urlparse.py` (800 lines) visible in full
+2. I have the implementation `Lib/urllib/parse.py` lines 170-200 visible, showing the `port` property
+3. I need to:
+   - Add regression tests for port access (no port, empty, 0, 65535, 65536, negative, noninteger, non-ASCII digits) for both urlsplit and urlparse with text and byte URLs
+   - Assert exception class, args, message for invalid ports; assert concrete results for valid boundary cases
+   - Add documentation with executable examples in Doc/library/urllib.parse.rst
+
+Let me first understand the port property from the implementation (lines 177-185):
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+So the behavior is:
+- If `port` is `None` (no port specified), returns `None`
+- If `port` is not None:
+  - If `port.isdigit() and port.isascii()`: cast to int
+  - Else: raise `ValueError(f"Port could not be cast to integer value as {port!r}")`
+  - If `0 <= port <= 65535`: OK
+  - Else: raise `ValueError("Port out of range 0-65535")`
+
+Wait, there's a subtlety. For byte URLs, `_hostinfo[1]` would be bytes. Let me check what `.isdigit()` and `.isascii()` do on bytes. Actually, bytes don't have `.isdigit()` or `.isascii()` methods in Python! Let me re-read the implementation.
+
+Wait, looking at the code again:
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+Hmm, but this is in `_NetlocResultMixinBase`. Let me check if there's a separate implementation for bytes. Looking at the file structure, I see `_NetlocResultMixinStr` is defined after this. Let me check if there's a `_NetlocResultMixinBytes` or similar.
+
+Actually, I need to read more of the file to see if there's a separate port implementation for bytes. Let me read more of parse.py.
+
+Wait, looking at the existing test `test_attributes_bad_port`:
+```python
+def test_attributes_bad_port(self):
+    """Check handling of invalid ports."""
+    for bytes in (False, True):
+        for parse in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for port in ("foo", "1.5", "-1", "0x10", "-0", "1_1", " 1", "1 ", "६"):
+                with self.subTest(bytes=bytes, parse=parse, port=port):
+                    netloc = "www.example.net:" + port
+                    url = "http://" + netloc + "/"
+                    if bytes:
+                        if netloc.isascii() and port.isascii():
+                            netloc = netloc.encode("ascii")
+                            url = url.encode("ascii")
+                        else:
+                            continue
+                    p = parse(url)
+                    self.assertEqual(p.netloc, netloc)
+                    with self.assertRaises(ValueError):
+                        p.port
+```
+
+This test only checks that ValueError is raised, but doesn't check the exact message or args. The task requires me to assert "the exact exception class, complete argument tuple and diagnostic text."
+
+Now, for bytes input, the port string would be bytes like `b"foo"`. Does bytes have `.isdigit()`? No! In Python, `bytes` objects don't have `.isdigit()` or `.isascii()` methods. So the code would fail with an `AttributeError` for bytes input, not a `ValueError`.
+
+Wait, let me re-read the code more carefully. The `port` property is in `_NetlocResultMixinBase`. Let me check if there are separate implementations for str and bytes.
+
+Actually, I need to read more of the file. Let me look at what's after line 200. The class `_NetlocResultMixinStr` starts at line 193. There might be a `_NetlocResultMixinBytes` or the port property might be overridden.
+
+Let me read more of parse.py to understand the full picture. I'll read from line 200 onwards.
+
+Actually wait - looking at the existing test, when `bytes=True` and the port is ASCII (like `b"foo"`), it does `url.encode("ascii")` and then calls `p.port`. The test expects `ValueError`. But how does the bytes version work?
+
+Let me think about this differently. In Python:
+- `b"123".isdigit()` - actually, bytes DO have `.isdigit()` in Python 3! Let me recall... Actually no, I think bytes only have some of the string methods. Let me check: `bytes.isdigit()` - yes, in Python 3, bytes objects do have `.isdigit()`, `.isalpha()`, etc. methods! They operate on ASCII values. And `bytes.isascii()` also exists.
+
+So for bytes:
+- `b"123".isdigit()` → True
+- `b"123".isascii()` → True  
+- `b"foo".isdigit()` → False
+- `b"६".isascii()` → False (but this would be encoded as non-ASCII bytes)
+
+Wait, but `b"६"` - actually, the non-ASCII digit ६ in UTF-8 is `b'\xe0\xa5\xa6'`. So for bytes input with non-ASCII digits, the URL would need to be encoded. Let me think...
+
+Actually, looking at the test more carefully:
+```python
+if bytes:
+    if netloc.isascii() and port.isascii():
+        netloc = netloc.encode("ascii")
+        url = url.encode("ascii")
+    else:
+        continue
+```
+
+So for bytes, it only tests if both netloc and port are ASCII. The non-ASCII digit "६" would be skipped for bytes.
+
+Now let me understand what happens with bytes ports:
+- `b"foo".isdigit()` → False → raises ValueError
+- `b"123".isdigit()` → True, `b"123".isascii()` → True → int(b"123") = 123
+- `b"0".isdigit()` → True → int(b"0") = 0
+- `b"65535".isdigit()` → True → int = 65535
+- `b"65536".isdigit()` → True → int = 65536 → out of range
+
+Wait, but what about `b""` (empty port)? `b"".isdigit()` → False (empty string is not a digit). So it would raise ValueError.
+
+And what about `b" " ` (space)? `b" ".isdigit()` → False.
+
+OK so now I understand the implementation. Let me plan my tests:
+
+For both urlsplit and urlparse, with both str and bytes URLs:
+1. No port: `http://example.com/` → port is None
+2. Empty port: `http://example.com:/` → port is "" → `"".isdigit()` is False → ValueError
+3. Port 0: `http://example.com:0/` → port is 0
+4. Port 65535: `http://example.com:65535/` → port is 65535
+5. Port 65536: `http://example.com:65536/` → port is 65536 → out of range → ValueError
+6. Negative port: `http://example.com:-1/` → `"-1".isdigit()` is False → ValueError (not "out of range"!)
+7. Non-integer port: `http://example.com:abc/` → `"abc".isdigit()` is False → ValueError
+8. Non-ASCII decimal digits: `http://example.com:६/` → `"६".isdigit()` is True (it's a Unicode digit), but `"६".isascii()` is False → ValueError
+
+Wait, let me verify: `"६".isdigit()` - In Python, the character ६ (DEVANAGARI DIGIT SIX, U+096C) - is it a digit? Let me check. `unicodedata.digit('६')` should be 6. And `'६'.isdigit()` should be True because it's a decimal digit. And `'६'.isascii()` is False.
+
+So for non-ASCII digits:
+- `"६".isdigit()` → True
+- `"६".isascii()` → False
+- So the condition `port.isdigit() and port.isascii()` is False
+- Raises `ValueError(f"Port could not be cast to integer value as {port!r}")`
+- The message would be: `Port could not be cast to integer value as '६'`
+
+For negative port "-1":
+- `"-1".isdigit()` → False (because of the minus sign)
+- So it goes to the else branch
+- Raises `ValueError(f"Port could not be cast to integer value as '-1'")`
+
+Wait, that's interesting. The negative port doesn't get caught by the range check - it gets caught by the "not a digit" check because `-` makes it not a digit.
+
+Let me verify: `"-1".isdigit()` → False. Yes, because `-` is not a digit character.
+
+So the two types of errors are:
+1. `ValueError("Port could not be cast to integer value as '...'")` - when the port string is not purely ASCII digits
+2. `ValueError("Port out of range 0-65535")` - when the port is a valid ASCII digit string but the integer value is outside 0-65535
+
+Now for the test cases:
+- No port: port is None → return None
+- Empty port "": `"".isdigit()` → False → ValueError("Port could not be cast to integer value as ''")
+- "0": isdigit=True, isascii=True → int=0, 0<=0<=65535 → return 0
+- "65535": isdigit=True, isascii=True → int=65535, 0<=65535<=65535 → return 65535
+- "65536": isdigit=True, isascii=True → int=65536, 0<=65536<=65535 is False → ValueError("Port out of range 0-65535")
+- "-1": isdigit=False → ValueError("Port could not be cast to integer value as '-1'")
+- "abc" (non-integer): isdigit=False → ValueError("Port could not be cast to integer value as 'abc'")
+- "६" (non-ASCII digit): isdigit=True, isascii=False → ValueError("Port could not be cast to integer value as '६'")
+
+For bytes:
+- b"" → `b"".isdigit()` → False → ValueError
+- b"0" → True, True → 0
+- b"65535" → True, True → 65535
+- b"65536" → True, True → 65536 → out of range
+- b"-1" → `b"-1".isdigit()` → False → ValueError
+- b"abc" → False → ValueError
+- Non-ASCII digits can't be tested with bytes (the test skips them)
+
+Wait, actually for bytes, the error message would be different because the repr of a bytes object is different:
+- `b"abc"` → repr is `b'abc'`
+- So the message would be: `Port could not be cast to integer value as b'abc'`
+
+Let me now think about what I need to read from the implementation to confirm my understanding. I already have lines 170-200 of parse.py which shows the port property. Let me verify my understanding is correct.
+
+From the visible code:
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+This is in `_NetlocResultMixinBase`. I need to check if this is the same property used for both str and bytes results, or if there's a separate one. Let me look at the class hierarchy.
+
+From what I can see:
+- `_NetlocResultMixinBase` has the `port` property
+- `_NetlocResultMixinStr(_NetlocResultMixinBase, _ResultMixinStr)` - for str
+- There should be `_NetlocResultMixinBytes(_NetlocResultMixinBase, _ResultMixinBytes)` - for bytes
+
+Since both inherit from `_NetlocResultMixinBase`, they share the same `port` property. The difference is that for bytes results, `self._hostinfo[1]` would be bytes, and for str results, it would be str.
+
+Now I need to check: does `bytes` have `.isdigit()` and `.isascii()` methods?
+
+In Python 3:
+- `bytes.isdigit()` - Yes, it exists. It returns True if all bytes in the string are ASCII digits (0x30-0x39) and the string is non-empty.
+- `bytes.isascii()` - Yes, it exists. Returns True if all bytes are ASCII (0x00-0x7F).
+
+So my analysis is correct.
+
+Now let me plan the test additions. The task says:
+- Add regression coverage for both public functions (urlsplit and urlparse)
+- With text URLs and ASCII byte URLs
+- Cases: no port, empty port, 0, 65535, 65536, negative port, noninteger port
+- Also cover non-ASCII decimal digits in text URLs
+- Establish when invalid-port errors occur
+- Assert the exact exception class, complete argument tuple and diagnostic text
+- Assert the concrete results for accepted boundary cases
+- Keep all existing tests and supporting source intact
+
+Looking at the existing test `test_attributes_bad_port`, it already tests some invalid ports but only checks that ValueError is raised. I need to add more specific tests.
+
+Let me also check: the task says "Establish when invalid-port errors occur" - this means I need to show that the error occurs when accessing `.port`, not when constructing the result. The existing code shows this: `p = parse(url)` succeeds, but `p.port` raises the error.
+
+Now let me write the test. I'll add a new test method `test_port_boundaries` (or similar name) to the `UrlParseTestCase` class. Let me think about where to add it - probably after `test_attributes_bad_port`.
+
+Actually, looking at the existing test `test_attributes_bad_port`, it tests:
+- ports: "foo", "1.5", "-1", "0x10", "-0", "1_1", " 1", "1 ", "६"
+- for both str and bytes (ASCII only for bytes)
+- for both urlsplit and urlparse
+- Only asserts ValueError is raised (no message check)
+
+I need to add tests that:
+1. Test boundary values (0, 65535) return the correct int
+2. Test 65536 raises the specific "out of range" error
+3. Test empty port raises the "could not be cast" error
+4. Test no port returns None
+5. Test negative port raises "could not be cast" (because "-1" is not all digits)
+6. Test non-ASCII digits raise "could not be cast"
+7. Assert exact exception class (ValueError), args tuple, and message
+
+Let me now write the test code:
+
+```python
+def test_port_boundaries_and_errors(self):
+    """Regression tests for port boundary values and error cases."""
+    # (port_string, expected) pairs for valid ports
+    # (port_string, error_message) pairs for invalid ports
+    valid_cases = [
+        (None, None),       # no port
+        ("0", 0),
+        ("65535", 65535),
+    ]
+    invalid_cases = [
+        ("", "Port could not be cast to integer value as ''"),
+        ("65536", "Port out of range 0-65535"),
+        ("-1", "Port could not be cast to integer value as '-1'"),
+        ("abc", "Port could not be cast to integer value as 'abc'"),
+        ("६", "Port could not be cast to integer value as '\\u0966'"),  # Hmm, need to check repr
+    ]
+```
+
+Wait, I need to be careful about the repr of the non-ASCII character. In Python, `repr('६')` gives `"'\\u0966'"` in some contexts, or it might give the actual character. Let me think...
+
+Actually in Python 3, `repr('६')` gives `"'\\u0966'"` only if the terminal can't display it. Actually no, in Python 3, `repr('६')` gives `"'\\u0966'"` - wait, no. Let me think again.
+
+In Python 3:
+- `repr('a')` → `"'a'"`
+- `repr('६')` → `"'\\u0966'"` 
+
+Actually, I'm not sure. Let me think about what Python 3 does. In Python 3, `repr()` of a string shows printable characters as-is and non-printable/non-ASCII as escape sequences. The DEVANAGARI DIGIT SIX (U+0966) is a printable character, so `repr('६')` might actually show the character itself: `"'६'"`.
+
+Hmm, but I'm not 100% sure. Let me look at this from the f-string perspective:
+```python
+f"Port could not be cast to integer value as {port!r}"
+```
+where `port = '६'`. The `!r` format specifier uses `repr()`. 
+
+In CPython 3.x, `repr('६')` - since ६ is a printable non-ASCII character, it should be shown as-is in the repr: `"'६'"`. So the message would be:
+`"Port could not be cast to integer value as '६'"`
+
+But wait, I need to be careful. The f-string uses `{port!r}` which is equivalent to `format(port, 'r')` which is `repr(port)`. For a string, `repr()` adds quotes. So:
+- `repr('६')` → `"'\\u0966'"` or `"'६'"`?
+
+In Python 3, strings are Unicode. The `repr()` of a string containing a non-ASCII printable character will show the character itself if it's printable. U+0966 (DEVANAGARI DIGIT SIX) is in the "Lo" (Letter, other) category... actually it's "Nd" (Number, decimal digit). It should be printable.
+
+Actually, let me just check: in Python 3, `repr('é')` gives `"'é'"`, not `"\\u00e9"`. So similarly, `repr('६')` should give `"'६'"`.
+
+But wait - there's a subtlety. The `!r` in an f-string for a string produces the repr including the outer quotes. So:
+```python
+port = '६'
+f"...{port!r}..."  # becomes ...'६'...
+```
+
+The full message would be: `Port could not be cast to integer value as '६'`
+
+For bytes:
+```python
+port = b'abc'
+f"...{port!r}..."  # becomes ...b'abc'...
+```
+
+OK so for my tests, I'll use the actual messages. But I need to be careful - I should test against what the implementation actually produces, not what I think it produces. Since I can't run the code right now, let me be precise about what I can verify from the source.
+
+The source says:
+```python
+raise ValueError(f"Port could not be cast to integer value as {port!r}")
+```
+
+And:
+```python
+raise ValueError("Port out of range 0-65535")
+```
+
+For the test, I'll use `assertRaises` with context manager and check `str(exc)` or use `assertRaisesRegex`... actually, the task says "assert the exact exception class, complete argument tuple and diagnostic text."
+
+The "complete argument tuple" means `exc.args` should be a tuple with one element (the message string). The "diagnostic text" means the string representation of the exception.
+
+Let me write the test using try/except or context managers:
+
+```python
+def test_port_boundaries_and_errors(self):
+    """Regression tests for port boundary values and error cases."""
+    parse_funcs = (urllib.parse.urlsplit, urllib.parse.urlparse)
+    
+    # Test valid boundary ports
+    valid_ports = [
+        ("0", 0),
+        ("65535", 65535),
+    ]
+    for parse in parse_funcs:
+        for port_str, expected in valid_ports:
+            url = f"http://example.com:{port_str}/"
+            p = parse(url)
+            self.assertEqual(p.port, expected)
+            # Also test with bytes
+            url_b = url.encode('ascii')
+            p_b = parse(url_b)
+            self.assertEqual(p_b.port, expected)
+    
+    # Test no port
+    for parse in parse_funcs:
+        p = parse("http://example.com/")
+        self.assertIsNone(p.port)
+        p = parse(b"http://example.com/")
+        self.assertIsNone(p.port)
+    
+    # Test invalid ports
+    invalid_ports = [
+        # (port_str, error_type, expected_message)
+        ("", ValueError, "Port could not be cast to integer value as ''"),
+        ("65536", ValueError, "Port out of range 0-65535"),
+        ("-1", ValueError, "Port could not be cast to integer value as '-1'"),
+        ("abc", ValueError, "Port could not be cast to integer value as 'abc'"),
+        ("६", ValueError, "Port could not be cast to integer value as '\\u0966'"),
+    ]
+```
+
+Hmm wait, I'm still uncertain about the repr of '६'. Let me think about this differently.
+
+Actually, you know what, let me just look at what the existing test does with the non-ASCII digit. In `test_attributes_bad_port`:
+```python
+for port in ("foo", "1.5", "-1", "0x10", "-0", "1_1", " 1", "1 ", "६"):
+```
+
+It uses "६" directly. So in the test file, the character is written directly. The repr in the error message would use whatever `repr()` produces.
+
+Let me just write the test to check the exception message using a format that matches. Actually, the safest approach is to:
+1. For valid cases: assert the port value
+2. For invalid cases: catch the exception and check `type`, `args`, and `str()`
+
+But I need to know the exact message. Let me think about what `repr('६')` gives in Python 3...
+
+In CPython 3.x, for a string containing a single Unicode character that is printable and non-ASCII:
+- If the character has a Unicode category of "Other" and is printable, `repr()` shows it literally
+- U+0966 is "Nd" (decimal number) and is printable
+- So `repr('६')` should be `"'\\u0966'"` ... 
+
+Actually no. Let me recall. In Python 3:
+```python
+>>> repr('a')
+"'a'"
+>>> repr('é')
+"'é'"
+>>> repr('\n')
+"'\\n'"
+>>> repr('\x00')
+"'\\x00'"
+```
+
+So printable characters are shown as-is, non-printable ones are escaped. The Devanagari digit ६ should be printable, so `repr('६')` should be `"'\\u0966'"` ... no wait, it should be `"'६'"`.
+
+Hmm, I'm going back and forth. Let me just look at it from a different angle. In the f-string:
+```python
+f"Port could not be cast to integer value as {port!r}"
+```
+
+If `port = '६'`, then `{port!r}` is `repr('६')`. In Python 3, this is a string with single quotes around the character. The question is whether the character itself or its escape is used.
+
+From the Python docs: "If the string is printable, repr() returns the string with quotes." The Devanagari digit is printable (it's a visible character). So `repr('६')` should be `"'\\u0966'"`... 
+
+OK I just realized I keep going back and forth. Let me just use a different approach in my test. Instead of hardcoding the exact message with the Unicode character, I can:
+1. Construct the expected message using the same f-string format
+2. Or use `assertRaises` and check parts of the message
+
+Actually, the cleanest approach for the test is:
+
+```python
+# For the non-ASCII digit case
+port_str = "\u0966"  # DEVANAGARI DIGIT SIX
+url = "http://example.com:" + port_str + "/"
+p = parse(url)
+try:
+    p.port
+    self.fail("Expected ValueError")
+except ValueError as e:
+    self.assertEqual(e.args, (f"Port could not be cast to integer value as {port_str!r}",))
+    self.assertEqual(str(e), f"Port could not be cast to integer value as {port_str!r}")
+```
+
+This way I don't need to know what `repr()` produces - I just compute the expected message the same way the implementation does. That's the safest approach.
+
+Similarly for bytes:
+```python
+port_b = b"abc"
+url = b"http://example.com:" + port_b + b"/"
+p = parse(url)
+try:
+    p.port
+    self.fail("Expected ValueError")
+except ValueError as e:
+    self.assertEqual(e.args, (f"Port could not be cast to integer value as {port_b!r}",))
+```
+
+OK let me now write the full test. I'll add it after `test_attributes_bad_port` in the file.
+
+Actually, let me re-read the task requirements more carefully:
+
+"In Lib/test/test_urlparse.py, add regression coverage for both public functions with text URLs and ASCII byte URLs: no port, an empty port, 0, 65535, 65536, a negative port, and a noninteger port. Also cover non-ASCII decimal digits in text URLs. Establish when invalid-port errors occur, and assert the exact exception class, complete argument tuple and diagnostic text. Assert the concrete results for accepted boundary cases. Keep all existing tests and supporting source intact."
+
+So I need:
+1. Both urlsplit and urlparse
+2. Text (str) URLs and ASCII byte URLs
+3. Cases: no port, empty port, 0, 65535, 65536, negative port, noninteger port
+4. Non-ASCII decimal digits in text URLs (only text, not bytes)
+5. Establish when errors occur (at `.port` access, not at construction)
+6. Assert exact exception class (ValueError), args tuple, and message
+7. Assert concrete results for valid boundary cases
+8. Keep existing tests intact
+
+Let me now figure out where to insert the new test in the file. The file is 800 lines. Let me look at the structure:
+- The file ends at line 800 with the `test_noslash` method
+- I'll add my new test method after `test_noslash` (at the end of the class)
+
+Wait, actually I should add it after `test_attributes_bad_port` since it's thematically related. But the task says "Keep all existing tests and supporting source intact" - so I just need to add, not modify. I can add the new test method anywhere in the class. Let me add it right after `test_attributes_bad_port` for logical grouping.
+
+Looking at the file, `test_attributes_bad_port` ends around line 698-699. Let me find the exact location.
+
+Actually, from the visible source, I can see the full 800-line file. Let me find where `test_attributes_bad_port` ends and `test_attributes_bad_scheme` begins.
+
+Looking at the source:
+```python
+    def test_attributes_bad_port(self):
+        """Check handling of invalid ports."""
+        for bytes in (False, True):
+            for parse in (urllib.parse.urlsplit, urllib.parse.urlparse):
+                for port in ("foo", "1.5", "-1", "0x10", "-0", "1_1", " 1", "1 ", "६"):
+                    with self.subTest(bytes=bytes, parse=parse, port=port):
+                        netloc = "www.example.net:" + port
+                        url = "http://" + netloc + "/"
+                        if bytes:
+                            if netloc.isascii() and port.isascii():
+                                netloc = netloc.encode("ascii")
+                                url = url.encode("ascii")
+                            else:
+                                continue
+                        p = parse(url)
+                        self.assertEqual(p.netloc, netloc)
+                        with self.assertRaises(ValueError):
+                            p.port
+
+    def test_attributes_bad_scheme(self):
+```
+
+So I'll insert my new test between `test_attributes_bad_port` and `test_attributes_bad_scheme`.
+
+Now let me write the test:
+
+```python
+    def test_port_boundary_and_error_details(self):
+        """Regression tests for port boundary values and error specifics.
+
+        Verifies that port validation errors are raised when accessing
+        the .port attribute (not when constructing the result), and
+        checks the exact exception class, args tuple, and message.
+        """
+        parse_funcs = (urllib.parse.urlsplit, urllib.parse.urlparse)
+
+        # --- Valid boundary ports: no port, 0, 65535 ---
+        for parse in parse_funcs:
+            # No port
+            for url in ("http://example.com/", b"http://example.com/"):
+                p = parse(url)
+                self.assertIsNone(p.port)
+            # Port 0
+            for url in ("http://example.com:0/", b"http://example.com:0/"):
+                p = parse(url)
+                self.assertEqual(p.port, 0)
+            # Port 65535
+            for url in ("http://example.com:65535/", b"http://example.com:65535/"):
+                p = parse(url)
+                self.assertEqual(p.port, 65535)
+
+        # --- Invalid ports: exact error class, args, and message ---
+        # Each entry: (port_str, is_bytes, error_message)
+        # The error is raised at .port access, not at parse time.
+        str_invalid = [
+            ("", "Port could not be cast to integer value as ''"),
+            ("65536", "Port out of range 0-65535"),
+            ("-1", "Port could not be cast to integer value as '-1'"),
+            ("abc", "Port could not be cast to integer value as 'abc'"),
+            ("\u0966", None),  # non-ASCII digit; message computed below
+        ]
+        bytes_invalid = [
+            (b"", b"Port could not be cast to integer value as b''"),
+            (b"65536", b"Port out of range 0-65535"),
+            (b"-1", b"Port could not be cast to integer value as b'-1'"),
+            (b"abc", b"Port could not be cast to integer value as b'abc'"),
+        ]
+
+        for parse in parse_funcs:
+            # str URLs
+            for port_str, msg in str_invalid:
+                url = "http://example.com:" + port_str + "/"
+                p = parse(url)
+                # Construction succeeds; error is at .port access
+                self.assertEqual(p.netloc, "example.com:" + port_str)
+                try:
+                    _ = p.port
+                    self.fail("Expected ValueError")
+                except ValueError as e:
+                    self.assertEqual(e.args[0], 
+                        f"Port could not be cast to integer value as {port_str!r}"
+                        if port_str else "Port could not be cast to integer value as ''"
+                        if port_str == "" else
+                        "Port out of range 0-65535" if port_str == "65536" else
+                        f"Port could not be cast to integer value as {port_str!r}")
+```
+
+Hmm, this is getting convoluted. Let me simplify. The issue is that for the non-ASCII digit, I want to compute the expected message dynamically. Let me just use a helper approach:
+
+```python
+    def test_port_boundary_and_error_details(self):
+        """Regression tests for port boundary values and error specifics."""
+        parse_funcs = (urllib.parse.urlsplit, urllib.parse.urlparse)
+
+        # Valid boundary ports
+        for parse in parse_funcs:
+            for url in ("http://example.com/", b"http://example.com/"):
+                p = parse(url)
+                self.assertIsNone(p.port)
+            for url in ("http://example.com:0/", b"http://example.com:0/"):
+                p = parse(url)
+                self.assertEqual(p.port, 0)
+            for url in ("http://example.com:65535/", b"http://example.com:65535/"):
+                p = parse(url)
+                self.assertEqual(p.port, 65535)
+
+        # Invalid ports: error occurs at .port access, not at construction
+        str_cases = [
+            "",       # empty port
+            "65536",  # out of range
+            "-1",     # negative
+            "abc",    # non-integer
+            "\u0966", # non-ASCII decimal digit (Devanagari 6)
+        ]
+        bytes_cases = [
+            b"",
+            b"65536",
+            b"-1",
+            b"abc",
+        ]
+
+        for parse in parse_funcs:
+            for port in str_cases:
+                url = "http://example.com:" + port + "/"
+                p = parse(url)
+                # Construction succeeds
+                self.assertEqual(p.netloc, "example.com:" + port)
+                # Accessing .port raises
+                with self.assertRaises(ValueError) as ctx:
+                    _ = p.port
+                exc = ctx.exception
+                self.assertEqual(exc.args, (self._port_error_msg(port),))
+                self.assertEqual(str(exc), self._port_error_msg(port))
+
+            for port in bytes_cases:
+                url = "http://example.com:" + port + b"/"
+                p = parse(url)
+                self.assertEqual(p.netloc, b"example.com:" + port)
+                with self.assertRaises(ValueError) as ctx:
+                    _ = p.port
+                exc = ctx.exception
+                self.assertEqual(exc.args, (self._port_error_msg(port),))
+                self.assertEqual(str(exc), self._port_error_msg(port))
+
+    def _port_error_msg(self, port):
+        """Compute the expected port error message matching the implementation."""
+        if port.isdigit() and port.isascii():
+            port_int = int(port)
+            if not (0 <= port_int <= 65535):
+                return "Port out of range 0-65535"
+        # Falls through to the "could not be cast" message
+        return f"Port could not be cast to integer value as {port!r}"
+```
+
+Wait, but this helper duplicates the logic. The task says I should test the actual behavior. Using a helper that mirrors the implementation logic is a bit circular but it's the standard way to compute expected messages when they depend on input formatting (like repr).
+
+Actually, let me reconsider. The cleaner approach is to just hardcode the messages for the simple cases and use the f-string for the non-ASCII one. Or better yet, just compute them all using the same pattern:
+
+For "could not be cast" cases:
+- `f"Port could not be cast to integer value as {port!r}"`
+
+For "out of range":
+- `"Port out of range 0-65535"`
+
+The question is which cases are which:
+- `""`: not a digit → "could not be cast"
+- `"65536"`: is a digit, in ASCII → int is 65536 → out of range
+- `"-1"`: not a digit (has `-`) → "could not be cast"
+- `"abc"`: not a digit → "could not be cast"
+- `"\u0966"`: is a digit, not ASCII → "could not be cast"
+- `b""`: not a digit → "could not be cast"
+- `b"65536"`: is a digit, ASCII → int is 65536 → out of range
+- `b"-1"`: not a digit → "could not be cast"
+- `b"abc"`: not a digit → "could not be cast"
+
+So only "65536" and b"65536" give "out of range". All others give "could not be cast".
+
+Let me write this more explicitly:
+
+```python
+    def test_port_boundary_and_error_details(self):
+        """Regression tests for port boundary values and error specifics."""
+        parse_funcs = (urllib.parse.urlsplit, urllib.parse.urlparse)
+
+        # Valid boundary ports: assert concrete results
+        for parse in parse_funcs:
+            # No port → None
+            p = parse("http://example.com/")
+            self.assertIsNone(p.port)
+            p = parse(b"http://example.com/")
+            self.assertIsNone(p.port)
+            # Port 0
+            p = parse("http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            p = parse(b"http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            # Port 65535
+            p = parse("http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            p = parse(b"http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+
+        # Invalid ports: error at .port access, not at construction
+        # (port_value, expected_error_message)
+        str_invalid = [
+            ("", "Port could not be cast to integer value as ''"),
+            ("65536", "Port out of range 0-65535"),
+            ("-1", "Port could not be cast to integer value as '-1'"),
+            ("abc", "Port could not be cast to integer value as 'abc'"),
+            ("\u0966", None),  # message computed below
+        ]
+        bytes_invalid = [
+            (b"", b"Port could not be cast to integer value as b''"),
+            (b"65536", "Port out of range 0-65535"),
+            (b"-1", b"Port could not be cast to integer value as b'-1'"),
+            (b"abc", b"Port could not be cast to integer value as b'abc'"),
+        ]
+
+        for parse in parse_funcs:
+            for port, msg in str_invalid:
+                if msg is None:
+                    msg = f"Port could not be cast to integer value as {port!r}"
+                url = "http://example.com:" + port + "/"
+                p = parse(url)
+                self.assertEqual(p.netloc, "example.com:" + port)
+                with self.assertRaises(ValueError) as ctx:
+                    _ = p.port
+                self.assertEqual(ctx.exception.args, (msg,))
+                self.assertEqual(str(ctx.exception), msg)
+
+            for port, msg in bytes_invalid:
+                url = b"http://example.com:" + port + b"/"
+                p = parse(url)
+                self.assertEqual(p.netloc, b"example.com:" + port)
+                with self.assertRaises(ValueError) as ctx:
+                    _ = p.port
+                self.assertEqual(ctx.exception.args, (msg,))
+                self.assertEqual(str(ctx.exception), msg)
+```
+
+Wait, for the bytes "out of range" case, the message is still the string `"Port out of range 0-65535"` (not bytes), because that's a hardcoded string in the implementation. Let me check:
+
+```python
+raise ValueError("Port out of range 0-65535")
+```
+
+Yes, it's always the string "Port out of range 0-65535", regardless of whether the input was str or bytes. So for bytes b"65536", the error message is still `"Port out of range 0-65535"` (a str, not bytes).
+
+Let me fix the bytes_invalid:
+```python
+bytes_invalid = [
+    (b"", "Port could not be cast to integer value as b''"),
+    (b"65536", "Port out of range 0-65535"),
+    (b"-1", "Port could not be cast to integer value as b'-1'"),
+    (b"abc", "Port could not be cast to integer value as b'abc'"),
+]
+```
+
+All messages are strings (str type), even for bytes input.
+
+Now, there's one more subtlety. When I do:
+```python
+url = b"http://example.com:" + port + b"/"
+```
+and `port = b""`, this gives `b"http://example.com:/"`. Let me verify that urlparse/urlsplit handles this correctly - the netloc would be `b"example.com:"` and the port part would be `b""`.
+
+Actually wait, I need to be more careful. The URL `http://example.com:/` - the netloc is `example.com:` and the path is `/`. The port part after the colon is empty string `""`. So `_hostinfo` would be `("example.com", "")`.
+
+For bytes: `http://example.com:/` → netloc is `b"example.com:"` → `_hostinfo` would be `(b"example.com", b"")`.
+
+Let me verify: `b"".isdigit()` → False (empty bytes is not a digit string). Yes.
+
+OK, I think my test is correct. Let me also think about whether I need to test that the construction (parsing) itself succeeds without error. The task says "Establish when invalid-port errors occur" - this means showing that the error happens at `.port` access, not at parse time. My test does this by:
+1. Calling `parse(url)` and checking `p.netloc` (proving construction succeeded)
+2. Then accessing `p.port` in a try/except or assertRaises (proving the error is at access time)
+
+Good.
+
+Now, let me also think about the non-ASCII digit case. The task says "Also cover non-ASCII decimal digits in text URLs." - only text URLs, not bytes. My test has `"\u0966"` in str_invalid but not in bytes_invalid. Good.
+
+But wait - should I also test other non-ASCII digits? The task says "non-ASCII decimal digits" (plural). But I think one example is sufficient for a regression test. The existing `test_attributes_bad_port` already includes "६" in its list. My new test adds the specific error message assertion.
+
+Actually, let me reconsider the test structure. The task says to cover:
+- no port ✓
+- empty port ✓
+- 0 ✓
+- 65535 ✓
+- 65536 ✓
+- negative port ✓
+- noninteger port ✓
+- non-ASCII decimal digits ✓
+
+For the non-ASCII digit, I'll use `\u0966` (Devanagari DIGIT SIX). I could also use `\u0666` (Arabic-Indic DIGIT SIX) or `\u0e56` (Thai DIGIT SIX) for more coverage, but one should be sufficient.
+
+Now let me think about where exactly to insert this in the file. The file is 800 lines. I need to find a good spot. Let me look at the end of `test_attributes_bad_port` and beginning of `test_attributes_bad_scheme`.
+
+From the source I can see:
+```
+    def test_attributes_bad_port(self):
+        """Check handling of invalid ports."""
+        for bytes in (False, True):
+            for parse in (urllib.parse.urlsplit, urllib.parse.urlparse):
+                for port in ("foo", "1.5", "-1", "0x10", "-0", "1_1", " 1", "1 ", "६"):
+                    with self.subTest(bytes=bytes, parse=parse, port=port):
+                        netloc = "www.example.net:" + port
+                        url = "http://" + netloc + "/"
+                        if bytes:
+                            if netloc.isascii() and port.isascii():
+                                netloc = netloc.encode("ascii")
+                                url = url.encode("ascii")
+                            else:
+                                continue
+                        p = parse(url)
+                        self.assertEqual(p.netloc, netloc)
+                        with self.assertRaises(ValueError):
+                            p.port
+
+    def test_attributes_bad_scheme(self):
+```
+
+I'll insert my new test between these two methods. The exact text to find for the patch would be the blank line + `    def test_attributes_bad_scheme(self):` or I can use the end of `test_attributes_bad_port` as the anchor.
+
+Actually, let me use a patch to insert after the `test_attributes_bad_port` method. I'll find the unique text that marks the end of that method and the start of the next one.
+
+The text between the two methods is:
+```
+                        with self.assertRaises(ValueError):
+                            p.port
+
+    def test_attributes_bad_scheme(self):
+```
+
+I'll replace this with:
+```
+                        with self.assertRaises(ValueError):
+                            p.port
+
+    def test_port_boundary_and_error_details(self):
+        ...my new test...
+
+    def test_attributes_bad_scheme(self):
+```
+
+Let me now write the complete new test method. I need to be careful about indentation (4 spaces per level, methods are at 4 spaces, body at 8 spaces).
+
+Here's my plan for the patch:
+- old: the text between end of test_attributes_bad_port and start of test_attributes_bad_scheme
+- new: same but with the new test inserted
+
+Let me write it out:
+
+```python
+    def test_port_boundary_and_error_details(self):
+        """Regression tests for port boundary values and error specifics.
+
+        Verifies that port validation errors occur when accessing the .port
+        attribute, not when constructing the result. Checks the exact
+        exception class, args tuple, and message.
+        """
+        parse_funcs = (urllib.parse.urlsplit, urllib.parse.urlparse)
+
+        # Valid boundary ports: assert concrete return values.
+        for parse in parse_funcs:
+            # No port at all → None
+            p = parse("http://example.com/")
+            self.assertIsNone(p.port)
+            p = parse(b"http://example.com/")
+            self.assertIsNone(p.port)
+            # Port 0 (lower bound)
+            p = parse("http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            p = parse(b"http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            # Port 65535 (upper bound)
+            p = parse("http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            p = parse(b"http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+
+        # Invalid ports: ValueError raised at .port access.
+        # (port_value, expected_message)
+        str_invalid = [
+            # Empty port: no digits at all
+            ("", "Port could not be cast to integer value as ''"),
+            # One above the upper bound
+            ("65536", "Port out of range 0-65535"),
+            # Negative: minus sign is not a digit
+            ("-1", "Port could not be cast to integer value as '-1'"),
+            # Non-integer: letters are not digits
+            ("abc", "Port could not be cast to integer value as 'abc'"),
+            # Non-ASCII decimal digit (Devanagari 6): isdigit() True,
+            # isascii() False → rejected
+            ("\u0966", None),  # message computed below
+        ]
+        bytes_invalid = [
+            (b"", "Port could not be cast to integer value as b''"),
+            (b"65536", "Port out of range 0-65535"),
+            (b"-1", "Port could not be cast to integer value as b'-1'"),
+            (b"abc", "Port could not be cast to integer value as b'abc'"),
+        ]
+
+        for parse in parse_funcs:
+            for port, msg in str_invalid:
+                if msg is None:
+                    msg = (f"Port could not be cast to integer value "
+                           f"as {port!r}")
+                url = "http://example.com:" + port + "/"
+                # Construction succeeds; error is deferred to .port
+                p = parse(url)
+                self.assertEqual(p.netloc, "example.com:" + port)
+                with self.assertRaises(ValueError) as ctx:
+                    _ = p.port
+                self.assertEqual(ctx.exception.args, (msg,))
+                self.assertEqual(str(ctx.exception), msg)
+
+            for port, msg in bytes_invalid:
+                url = b"http://example.com:" + port + b"/"
+                p = parse(url)
+                self.assertEqual(p.netloc, b"example.com:" + port)
+                with self.assertRaises(ValueError) as ctx:
+                    _ = p.port
+                self.assertEqual(ctx.exception.args, (msg,))
+                self.assertEqual(str(ctx.exception), msg)
+```
+
+Wait, I realize I should double-check: for the bytes "out of range" case, the message in the implementation is:
+```python
+raise ValueError("Port out of range 0-65535")
+```
+This is a str, not bytes. So even for bytes input, the error message is the str `"Port out of range 0-65535"`. My test has this correct.
+
+Now let me also think about whether `int(b"65536")` works. Yes, `int()` accepts bytes in Python 3. And `b"65536".isdigit()` is True, `b"65536".isascii()` is True. So the code would do `int(b"65536")` = 65536, then check `0 <= 65536 <= 65535` which is False, and raise the "out of range" error.
+
+OK, I'm confident in my test. Now let me figure out the exact patch.
+
+I need to find a unique string in the file to use as the `old` for the patch. Let me use:
+
+```
+                        with self.assertRaises(ValueError):
+                            p.port
+
+    def test_attributes_bad_scheme(self):
+```
+
+This should be unique in the file. Let me verify - the pattern `with self.assertRaises(ValueError):\n                            p.port` appears in `test_attributes_bad_port`. Is it unique? Let me check... the test method `test_attributes_bad_port` has this exact pattern. I don't see another occurrence of this exact sequence in the file. Yes, it should be unique.
+
+Actually wait, let me look more carefully. The indentation is:
+- `                        with self.assertRaises(ValueError):` (24 spaces)
+- `                            p.port` (28 spaces)
+
+Then a blank line, then:
+- `    def test_attributes_bad_scheme(self):` (4 spaces)
+
+Let me write the old string carefully:
+
+```
+                        with self.assertRaises(ValueError):
+                            p.port
+
+    def test_attributes_bad_scheme(self):
+```
+
+And the new string would be:
+
+```
+                        with self.assertRaises(ValueError):
+                            p.port
+
+    def test_port_boundary_and_error_details(self):
+        """Regression tests for port boundary values and error specifics.
+
+        Verifies that port validation errors occur when accessing the .port
+        attribute, not when constructing the result. Checks the exact
+        exception class, args tuple, and message.
+        """
+        parse_funcs = (urllib.parse.urlsplit, urllib.parse.urlparse)
+
+        # Valid boundary ports: assert concrete return values.
+        for parse in parse_funcs:
+            # No port at all → None
+            p = parse("http://example.com/")
+            self.assertIsNone(p.port)
+            p = parse(b"http://example.com/")
+            self.assertIsNone(p.port)
+            # Port 0 (lower bound)
+            p = parse("http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            p = parse(b"http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            # Port 65535 (upper bound)
+            p = parse("http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            p = parse(b"http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+
+        # Invalid ports: ValueError raised at .port access.
+        # (port_value, expected_message)
+        str_invalid = [
+            # Empty port: no digits at all
+            ("", "Port could not be cast to integer value as ''"),
+            # One above the upper bound
+            ("65536", "Port out of range 0-65535"),
+            # Negative: minus sign is not a digit
+            ("-1", "Port could not be cast to integer value as '-1'"),
+            # Non-integer: letters are not digits
+            ("abc", "Port could not be cast to integer value as 'abc'"),
+            # Non-ASCII decimal digit (Devanagari 6): isdigit() True,
+            # isascii() False → rejected
+            ("\u0966", None),  # message computed below
+        ]
+        bytes_invalid = [
+            (b"", "Port could not be cast to integer value as b''"),
+            (b"65536", "Port out of range 0-65535"),
+            (b"-1", "Port could not be cast to integer value as b'-1'"),
+            (b"abc", "Port could not be cast to integer value as b'abc'"),
+        ]
+
+        for parse in parse_funcs:
+            for port, msg in str_invalid:
+                if msg is None:
+                    msg = (f"Port could not be cast to integer value "
+                           f"as {port!r}")
+                url = "http://example.com:" + port + "/"
+                # Construction succeeds; error is deferred to .port
+                p = parse(url)
+                self.assertEqual(p.netloc, "example.com:" + port)
+                with self.assertRaises(ValueError) as ctx:
+                    _ = p.port
+                self.assertEqual(ctx.exception.args, (msg,))
+                self.assertEqual(str(ctx.exception), msg)
+
+            for port, msg in bytes_invalid:
+                url = b"http://example.com:" + port + b"/"
+                p = parse(url)
+                self.assertEqual(p.netloc, b"example.com:" + port)
+                with self.assertRaises(ValueError) as ctx:
+                    _ = p.port
+                self.assertEqual(ctx.exception.args, (msg,))
+                self.assertEqual(str(ctx.exception), msg)
+
+    def test_attributes_bad_scheme(self):
+```
+
+Wait, I need to double-check the f-string for the non-ASCII case. The implementation uses:
+```python
+raise ValueError(f"Port could not be cast to integer value as {port!r}")
+```
+
+So for `port = "\u0966"`:
+- `{port!r}` → `repr("\u0966")` → `"'\\u0966'"` or `"'६'"`?
+
+In Python 3, `repr('\u0966')`:
+- The character U+0966 is a Devanagari digit, category Nd
+- It's printable (it's a visible character)
+- In Python 3, `repr()` of a string shows printable characters literally
+- So `repr('\u0966')` should be `"'\\u0966'"`... 
+
+Actually, I just realized I need to test this. Let me think about what CPython actually does:
+
+```python
+>>> repr('é')  # Latin small letter e with acute
+"'é'"
+>>> repr('\u2603')  # Snowman
+"'☃'"
+>>> repr('\u0966')  # Devanagari digit six
+"'६'"
+```
+
+Yes! In Python 3, printable Unicode characters are shown literally in repr(). The Devanagari digit ६ is printable, so `repr('\u0966')` gives `"'६'"`.
+
+So the f-string `f"Port could not be cast to integer value as {'\u0966'!r}"` produces:
+`"Port could not be cast to integer value as '६'"`
+
+And in my test:
+```python
+msg = f"Port could not be cast to integer value as {port!r}"
+```
+where `port = "\u0966"`, this produces the same string.
+
+So my test is correct - it computes the expected message the same way the implementation does. 
+
+But wait, I want to make sure the test is meaningful. If I compute the expected message using the same logic as the implementation, am I just testing that the implementation is consistent with itself? No - I'm testing:
+1. That the correct type of exception is raised (ValueError)
+2. That the args tuple has exactly one element
+3. That the message matches the expected format
+4. That the error occurs at .port access, not at construction
+
+The fact that I use the same f-string format to compute the expected message is fine - it's the standard way to test error messages that depend on input formatting.
+
+Actually, I realize there might be an issue. Let me re-examine: in the test file, I'm writing `"\u0966"` as a literal in the source. When the test runs, Python will interpret this as the Devanagari digit character. Then `port!r` in the f-string will produce `repr()` of that character, which is `"'\\u0966'"` or `"'६'"`.
+
+In the implementation, when parsing a URL that contains the literal character ६, the `port` variable will be the string `"\u0966"` (the Devanagari digit). Then `{port!r}` in the f-string will produce the same repr. So both sides compute the same thing. ✓
+
+OK, I'm confident the test is correct. Let me now also think about whether I need to read more of the implementation to verify my understanding. I have lines 170-200 which show the port property. That's sufficient.
+
+Now, for the documentation part, I need to read `Doc/library/urllib.parse.rst`. Let me check if I have it visible... Looking at the working_set.sources, I only see two sources: the test file and parse.py. I don't have the documentation file visible yet. Let me read it.
+
+Actually, let me first do the test patch, then read and edit the documentation. Let me plan my operations:
+
+1. Patch the test file to add the new test method
+2. Read the documentation file
+3. Edit the documentation file
+4. Run checks
+5. Submit
+
+Let me start with the test patch. I need:
+- path: "Lib/test/test_urlparse.py"
+- expected_candidate_id: "2921cbc8a115c86871a11f8eaea929c3d48a8e4d2bb2ca03bf48971c36cf15cd"
+- expected_file_sha256: "c8f4d478470cb5b3e9daa653a42d029be19aef842fd9577fd524415ce2f037d1"
+- old: the unique text at the boundary
+- new: the same text with the new test inserted
+
+Let me be very precise about the whitespace. Looking at the source:
+
+```
+                        with self.assertRaises(ValueError):
+                            p.port
+
+    def test_attributes_bad_scheme(self):
+```
+
+The lines are:
+- Line with 24 spaces: `                        with self.assertRaises(ValueError):`
+- Line with 28 spaces: `                            p.port`
+- Empty line
+- Line with 4 spaces: `    def test_attributes_bad_scheme(self):`
+
+Let me count spaces carefully from the source:
+- `    def test_attributes_bad_port(self):` - 4 spaces
+- `        """Check handling of invalid ports."""` - 8 spaces
+- `        for bytes in (False, True):` - 8 spaces
+- `            for parse in ...` - 12 spaces
+- `                for port in ...` - 16 spaces
+- `                    with self.subTest(...)` - 20 spaces
+- `                        netloc = ...` - 24 spaces
+- `                        url = ...` - 24 spaces
+- `                        if bytes:` - 24 spaces
+- `                            if netloc.isascii()...` - 28 spaces
+- `                                netloc = ...` - 32 spaces
+- `                                url = ...` - 32 spaces
+- `                            else:` - 28 spaces
+- `                                continue` - 32 spaces
+- `                        p = parse(url)` - 24 spaces
+- `                        self.assertEqual(p.netloc, netloc)` - 24 spaces
+- `                        with self.assertRaises(ValueError):` - 24 spaces
+- `                            p.port` - 28 spaces
+
+Then blank line, then:
+- `    def test_attributes_bad_scheme(self):` - 4 spaces
+
+So my old text should be:
+```
+                        with self.assertRaises(ValueError):
+                            p.port
+
+    def test_attributes_bad_scheme(self):
+```
+
+Let me verify this is unique. The pattern `with self.assertRaises(ValueError):\n                            p.port` - is this unique? Looking through the file... I see `self.assertRaises(ValueError, urllib.parse.urlparse, invalid_url)` in test_RFC2732, and `self.assertRaisesRegex(ValueError, "out of range")` in test_urlsplit_attributes. But the exact pattern with 24-space indent followed by 28-space indent `p.port` should be unique to test_attributes_bad_port.
+
+Yes, I'm confident this is unique.
+
+Now let me write the final patch. I need to be careful about the exact content.
+
+Actually, one more thought: the task says "Keep all existing tests and supporting source intact." My patch only inserts a new method between two existing methods, so all existing content is preserved. ✓
+
+Let me also think about whether the test will actually pass. The key question is: does the implementation handle all these cases the way I expect?
+
+From the visible code:
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+Cases:
+1. No port: `_hostinfo[1]` is None → returns None ✓
+2. Empty port "": `"".isdigit()` → False → raises ValueError ✓
+3. "0": `"0".isdigit()` → True, `"0".isascii()` → True → `int("0")` = 0 → `0 <= 0 <= 65535` → True → returns 0 ✓
+4. "65535": `"65535".isdigit()` → True, isascii → True → int = 65535 → in range → returns 65535 ✓
+5. "65536": `"65536".isdigit()` → True, isascii → True → int = 65536 → `0 <= 65536 <= 65535` → False → raises "out of range" ✓
+6. "-1": `"-1".isdigit()` → False → raises "could not be cast" ✓
+7. "abc": `"abc".isdigit()` → False → raises "could not be cast" ✓
+8. "\u0966": `"\u0966".isdigit()` → True (it's a decimal digit), `"\u0966".isascii()` → False → raises "could not be cast" ✓
+
+For bytes:
+- b"": `b"".isdigit()` → False → raises ✓
+- b"0": `b"0".isdigit()` → True, `b"0".isascii()` → True → int = 0 → returns 0 ✓
+- b"65535": True, True → 65535 → returns 65535 ✓
+- b"65536": True, True → 65536 → out of range → raises ✓
+- b"-1": `b"-1".isdigit()` → False → raises ✓
+- b"abc": `b"abc".isdigit()` → False → raises ✓
+
+All good. Now let me also verify: does `int(b"65536")` work? Yes, `int()` accepts bytes in Python 3.
+
+And the error messages:
+- For str: `f"Port could not be cast to integer value as {port!r}"` where port is a str → message includes `'port'` with single quotes
+- For bytes: same f-string but port is bytes → `{port!r}` gives `b'port'` → message includes `b'port'`
+- For out of range: always `"Port out of range 0-65535"` (hardcoded str)
+
+My test expectations match.
+
+One more thing: I should verify that the URL parsing correctly extracts the port. For `http://example.com:65536/`:
+- scheme: "http"
+- netloc: "example.com:65536"
+- path: "/"
+- The netloc is split into host "example.com" and port "65536"
+
+For `http://example.com:/`:
+- scheme: "http"
+- netloc: "example.com:"
+- path: "/"
+- The netloc is split into host "example.com" and port ""
+
+This all seems correct based on standard URL parsing.
+
+Now let me write the patch. I'll use the `patch` action.
+
+Actually, wait. Let me reconsider the approach. The file is 800 lines and I have the full content visible. I could use `replace_region` with the region reference `SRC-d73ba3d57bfc2ef1eea7c000eb13c0857258d5064fc7ea5d1e8c75d65e309a96` to replace the entire file. But that's risky - I'd need to reproduce the entire 800-line file exactly. Better to use `patch` with a targeted old string.
+
+Let me use `patch` with the boundary between the two methods as the old text.
+
+Here's my final plan:
+
+old:
+```
+                        with self.assertRaises(ValueError):
+                            p.port
+
+    def test_attributes_bad_scheme(self):
+```
+
+new:
+```
+                        with self.assertRaises(ValueError):
+                            p.port
+
+    def test_port_boundary_and_error_details(self):
+        """Regression tests for port boundary values and error specifics.
+
+        Verifies that port validation errors occur when accessing the .port
+        attribute, not when constructing the result. Checks the exact
+        exception class, args tuple, and message.
+        """
+        parse_funcs = (urllib.parse.urlsplit, urllib.parse.urlparse)
+
+        # Valid boundary ports: assert concrete return values.
+        for parse in parse_funcs:
+            # No port at all → None
+            p = parse("http://example.com/")
+            self.assertIsNone(p.port)
+            p = parse(b"http://example.com/")
+            self.assertIsNone(p.port)
+            # Port 0 (lower bound)
+            p = parse("http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            p = parse(b"http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            # Port 65535 (upper bound)
+            p = parse("http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            p = parse(b"http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+
+        # Invalid ports: ValueError raised at .port access, not at parse.
+        # Each entry is (port_value, expected_message).
+        str_invalid = [
+            # Empty port: no digits
+            ("", "Port could not be cast to integer value as ''"),
+            # One above upper bound
+            ("65536", "Port out of range 0-65535"),
+            # Negative: minus sign makes it not a digit string
+            ("-1", "Port could not be cast to integer value as '-1'"),
+            # Non-integer: letters
+            ("abc", "Port could not be cast to integer value as 'abc'"),
+            # Non-ASCII decimal digit (Devanagari 6)
+            ("\u0966", None),
+        ]
+        bytes_invalid = [
+            (b"", "Port could not be cast to integer value as b''"),
+            (b"65536", "Port out of range 0-65535"),
+            (b"-1", "Port could not be cast to integer value as b'-1'"),
+            (b"abc", "Port could not be cast to integer value as b'abc'"),
+        ]
+
+        for parse in parse_funcs:
+            for port, msg in str_invalid:
+                if msg is None:
+                    msg = (f"Port could not be cast to integer value "
+                           f"as {port!r}")
+                url = "http://example.com:" + port + "/"
+                p = parse(url)
+                self.assertEqual(p.netloc, "example.com:" + port)
+                with self.assertRaises(ValueError) as ctx:
+                    _ = p.port
+                self.assertEqual(ctx.exception.args, (msg,))
+                self.assertEqual(str(ctx.exception), msg)
+
+            for port, msg in bytes_invalid:
+                url = b"http://example.com:" + port + b"/"
+                p = parse(url)
+                self.assertEqual(p.netloc, b"example.com:" + port)
+                with self.assertRaises(ValueError) as ctx:
+                    _ = p.port
+                self.assertEqual(ctx.exception.args, (msg,))
+                self.assertEqual(str(ctx.exception), msg)
+
+    def test_attributes_bad_scheme(self):
+```
+
+Wait, I need to be careful with the f-string line continuation. Let me make sure it's valid Python:
+
+```python
+msg = (f"Port could not be cast to integer value "
+       f"as {port!r}")
+```
+
+This is a valid implicit string concatenation across two lines inside parentheses. ✓
+
+Actually, hmm, I realize I should double-check one thing. In the test, I write `"\u0966"` in the source. When Python reads the source file, it will interpret `\u0966` as the Unicode escape for the Devanagari digit. So `port` will be the actual character ६. Then in the f-string `{port!r}`, it will call `repr('\u0966')` which gives `"'\\u0966'"` or `"'६'"`.
+
+In the implementation, when parsing a URL with the literal character ६ in it, the port string will also be `'\u0966'` (the same character). So `{port!r}` in the implementation's f-string gives the same result.
+
+The test will pass because both sides compute the same repr. ✓
+
+Now, there's one more subtlety I want to verify. The task says the test file should test "both public functions with text URLs and ASCII byte URLs." My test does:
+- Both urlsplit and urlparse: ✓ (via parse_funcs loop)
+- Text URLs: ✓ (str_invalid list)
+- ASCII byte URLs: ✓ (bytes_invalid list, all ASCII)
+- Non-ASCII digits in text URLs only: ✓ (only in str_invalid)
+
+And "Establish when invalid-port errors occur" - my test shows that `parse(url)` succeeds and returns a result with the correct netloc, but `p.port` raises the error. ✓
+
+I think this is solid. Let me now execute the patch.
+
+Oh wait, one more concern. The test file has `test_attributes_bad_port` which uses a variable named `bytes` (shadowing the built-in). My new test uses `bytes_invalid` which is fine. And I don't use `bytes` as a variable name. Good.
+
+Let me also make sure the test doesn't have any issues with the `parse` variable name shadowing. In the existing test `test_attributes_bad_port`, they use `parse` as a loop variable. My test does the same. No conflict since they're in different methods.
+
+Alright, I'm ready to execute the patch.

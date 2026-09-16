@@ -1,21 +1,58 @@
 # Experiment operating rules
 
-The owner now directs completion of the response-boundary repair and a separate
-same-task rerun. Read `development/decision_interface/channel_repair/PLAN.md`.
-Implement and qualify the complete thinking-to-final transport, including two
-small endpoint smoke calls, then freeze/publish and execute one uncoached rerun
-under the unchanged task, actor and sixteen-request/forty-eight-operation limits.
-This instruction authorizes that work without another approval question. Preserve
-the failed attempt below, and never execute a private reasoning draft as a repair.
+The owner's "Complete the repairs and then rerun" is closed under published freeze
+`37dee2c5`. Read `development/decision_interface/channel_repair/review/RESULTS.md`
+and its complete transcript, host and artifact reviews. The opt-in thinking/final
+grammar repair retains separate channels and executes complete final replies only.
+It is qualified by 23 focused tests, nineteen native cases and four real smoke
+calls (59.592 seconds); both failed literal-copying assertions remain preserved.
+The task's initial native input stays byte-identical at 4,947 tokens. No historical
+allowance reopens and no private reasoning draft becomes an executable proposal.
 
-The repair is qualified in that folder's QUALIFICATION.md: 23 focused checks,
-nineteen native delimiter/final cases, and real endpoint transport. Four smoke
-requests cost 59.592 seconds; two extra controls resolve an ambiguous newline
-fixture and distinguish literal-copying output from transport preservation. Both
-failed assertions remain. No smoke response executes an operation. The task's
-native input remains byte-identical at 4,947 tokens; only grammar changes. Use
-`run_ready.py` and the sealed manifest for the single rerun. All task/model/check
-settings and final-only authority remain. Review behavior before claiming benefit.
+The single uncoached rerun returns sixteen complete replies and executes 33
+operations. Qwen chooses its recovery selection, saves/corrects tests and eventually
+uses literal SOURCE for documentation. Its final public check fails preservation;
+no submission occurs. The 19 added examples pass, but independent review finds
+missing exact-class coverage for byte inputs despite the passing tests scope. The
+final failure has no later invocation: do not call it received and ignored feedback.
+All 30 nonterminal receipts arrive; all displayed source matches its version.
+
+Exact replay verifies 328 source identities, 69 native inputs, 707 custody records
+and four observations without additional check execution or inference. Runtime
+closure is verified. Model requests cost 106.023 minutes / 91,350 generated tokens;
+peak input is 23,796 and peak input plus output is 43,340 of 56,576. Minimum sampled
+free GPU memory is 377 MiB. Fifteen operations close unused at the request limit.
+No coaching, retry, settings change or historical-result substitution occurs.
+
+Carry the actual-input findings into prospective repairs and qualifications:
+
+- Projected reports must keep useful primary diagnostics and counts meaningful
+  relative to displayed lists. Removing sixteen entries while retaining
+  `additional_missing_paths=1` misled this actor about the total.
+- Positive mutation sensitivity requires a passing normal control. A global fault
+  detected on one path does not establish every required path's assertion. Qualify
+  checkers against plausible partial implementations, including text-only coverage.
+- Rejection must state its mechanically known cause. Three copied documentation
+  anchors matched twice, with the second match outside the displayed source. The
+  generic no-match/multiple-match/no-change message did not expose that fact. Provide
+  bounded exact location information rather than asking the model to infer it.
+- Make exact preservation requirements explicit. The frozen checker requires
+  insertions-only documentation; the task's plain preservation wording does not
+  state that precise rule. Preserve the historical failure without changing its score.
+- Name the selected extent separately from the entire file. A body shown in full
+  can still be only lines 1-237 of a 766-line source. Current fields permit this
+  distinction but still impose interpretation work; do not claim source was lost.
+- Qualify the literal source operation through its non-EOF boundary, not only its
+  transport. C16's emitted bytes omit LF and the exact replacement joins the next
+  line. A deterministic control proved LF transport when emitted; it did not prove
+  ordinary construction or safe line boundaries. Define/qualify the boundary contract
+  without silently modifying archived proposals or work.
+
+Keep the exact store, identities and guards. Do not repeat this configuration
+unchanged or promote its partial work into a completed contribution. The running
+notes and reviews distinguish observed defects, proposed remedies, actual final
+artifacts and separately executed reviewer probes. A future exposure needs its own
+qualified frozen package; the consumed run is not extended by unused operations.
 
 The owner-authorized same-task run is closed under published freeze fac264cc.
 Read `development/decision_interface/same_task/review/RESULTS.md`. The sole request

@@ -1,5 +1,9 @@
 **Proposal: resume the project after Experiment 020**
 
+This is the historical resume proposal. For the latest closed execution, findings
+and authorization boundary, read [AGENTS.md](AGENTS.md) and the
+[channel-repair rerun results](development/decision_interface/channel_repair/review/RESULTS.md).
+
 Current follow-up: the [delivery qualification and two-turn consultation are complete](development/delivery_dialogue/review/RESULTS.md).
 Both complete thinking/final responses and actual inputs were directly reviewed
 and independently verified. Qwen recognizes absent evidence; after clarification
