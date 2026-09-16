@@ -43,3 +43,13 @@ accept rewriting all original LF lines as CRLF despite the explicit byte contrac
 Qualification-001's checker/test sources are retained separately. The successor
 reads documentation bytes without newline normalization and adds the CRLF regression
 before the final qualification/freeze. No model exposure has occurred.
+
+## N04 — A displayed address must survive the whole source lifecycle
+
+The live assessment now prompts the correct fourteen-assertion public correction,
+but the host rejects its own refreshed/merged reference. Reproduce against the exact
+input before attributing the action to fabrication or staleness. Three of four
+displayed references fail; source custody and delivery alone are insufficient.
+Qualification must round-trip displayed addresses after acquisition, refresh,
+merging and delivery, while separately preserving edit authority and stale guards.
+The full run, graceful stop, direct audits and costs remain in review/RESULTS.md.

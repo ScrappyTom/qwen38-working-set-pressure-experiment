@@ -1,5 +1,20 @@
 # Experiment operating rules
 
+The feedback-repair attempt at 02e530c7 is closed after C15 by an adaptive graceful
+stop for a reproduced host resolver defect. Read its review/RESULTS.md. Qwen's C14
+public correction uses the exact displayed current reference; three of four shown
+references fail after refresh/merge. Do not call this an invented handle or execute
+private drafts. The exact rejected public proposal remains available for qualified
+replay. Every displayed address must round-trip after the full source lifecycle;
+resolution and actual-delivery edit authority remain distinct guarantees.
+
+The owner's standing fix-and-rerun direction covers the separately published
+`development/decision_interface/reference_repair/PLAN.md` at 86783899: preserve this
+attempt, repair and qualify the resolver, then one six-request/eighteen-operation
+reused-prefix continuation. Keep task/checker/model settings and no-coaching rules.
+Label the new allowance and reused prefix explicitly; no historical allowance
+reopens and no automatic further retry follows it.
+
 The owner's "Fix the issues and rerun" authorizes the prospective
 `development/decision_interface/feedback_repair/PLAN.md`, published at f3001917.
 Complete the seven earned repairs and native saved-state qualification, publish the

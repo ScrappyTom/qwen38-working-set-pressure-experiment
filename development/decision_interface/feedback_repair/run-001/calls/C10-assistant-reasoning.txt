@@ -1,0 +1,314 @@
+Let me understand the task:
+
+1. Add regression tests in `Lib/test/test_urlparse.py` for port access on `urlsplit` and `urlparse` results with both text and ASCII byte URLs:
+   - no port, empty port, 0, 65535, 65536, negative port, noninteger port
+   - non-ASCII decimal digits in text URLs
+   - Establish when invalid-port errors occur (constructing vs accessing)
+   - Assert exact exception class, complete argument tuple, and diagnostic text
+   - Assert concrete results for accepted boundary cases
+
+2. Add documentation in `Doc/library/urllib.parse.rst` with executable examples showing the boundary/error behavior.
+
+The implementation is in `Lib/urllib/parse.py`. I've seen the port property:
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+And `_hostinfo` returns `(hostname, port)` where port is `None` if empty (no colon or empty string after colon).
+
+Key observations:
+- For text URLs: `port` is a string, checked with `isdigit()` and `isascii()`. Non-ASCII digits like `'١٢٣'` (Arabic-Indic digits) would pass `isdigit()` but fail `isascii()`, raising ValueError.
+- For bytes URLs: `port` is bytes. `b'123'.isdigit()` returns `True` for bytes containing only digits, and `b'123'.isascii()` returns `True`. Wait, let me check - do bytes have `isdigit()` and `isascii()` methods? In Python 3, `bytes.isdigit()` exists and returns True if all bytes are ASCII digits. `bytes.isascii()` returns True if all bytes are in the ASCII range.
+
+Actually wait - for bytes, `b'123'.isdigit()` - does bytes have `isdigit()`? Let me think... In Python 3, `bytes` objects have methods like `isalpha()`, `isdigit()`, `isalpha()`, etc. But they only work on ASCII. Actually, I need to verify: `bytes.isdigit()` exists in Python 3 and returns True if all bytes are ASCII digits (0x30-0x39). `bytes.isascii()` returns True if all bytes are 0x00-0x7F.
+
+Wait, actually I need to be more careful. Let me look at the implementation again:
+
+```python
+if port.isdigit() and port.isascii():
+    port = int(port)
+else:
+    raise ValueError(f"Port could not be cast to integer value as {port!r}")
+```
+
+For bytes port:
+- `b'123'.isdigit()` → True
+- `b'123'.isascii()` → True
+- `int(b'123')` → 123
+
+For bytes, negative port: `b'-1'` → `b'-1'.isdigit()` → False → ValueError
+For bytes, 65536: `b'65536'.isdigit()` → True, `b'65536'.isascii()` → True, `int(b'65536')` → 65536 → out of range → ValueError
+
+Wait, but for bytes, can we even have a negative port in a URL? A URL like `http://host:-1/` - the port would be `-1` as a string. For bytes, it would be `b'-1'`.
+
+Actually, let me reconsider. The task says "ASCII byte URLs". So we're testing with bytes like `b'http://host:123/'`.
+
+Let me think about what tests I need:
+
+For both `urlsplit` and `urlparse`:
+- Text URLs and bytes URLs
+- Cases: no port, empty port, 0, 65535, 65536, negative port, noninteger port
+- Non-ASCII decimal digits in text URLs (e.g., `'http://host:١٢٣/'` where ١٢٣ are Arabic-Indic digits)
+
+For error cases:
+- 65536: `ValueError("Port out of range 0-65535")`
+- Negative port (e.g., -1): The string would be `-1`, `'-1'.isdigit()` is False → `ValueError(f"Port could not be cast to integer value as '-1'")`
+- Non-integer port (e.g., `abc`): `ValueError(f"Port could not be cast to integer value as 'abc'")`
+- Non-ASCII digits (e.g., `١٢٣`): `'١٢٣'.isdigit()` is True but `'١٢٣'.isascii()` is False → `ValueError(f"Port could not be cast to integer value as '١٢٣'")`
+
+Wait, for negative port in bytes: `b'-1'.isdigit()` → False → ValueError.
+
+Let me also check: what does `_hostinfo` do for an empty port? If the URL is `http://host:/`, then `hostinfo.partition(':')` gives `('host', ':', '')`, so port = `''`, and then `if not port: port = None`. So empty port returns `None`.
+
+For no port: `http://host/` → `hostinfo.partition(':')` gives `('host', '', '')` → port = `''` → None.
+
+Wait, actually I need to be more careful. Let me re-read `_hostinfo`:
+
+```python
+@property
+def _hostinfo(self):
+    netloc = self.netloc
+    _, _, hostinfo = netloc.rpartition('@')
+    _, have_open_br, bracketed = hostinfo.partition('[')
+    if have_open_br:
+        hostname, _, port = bracketed.partition(']')
+        _, _, port = port.partition(':')
+    else:
+        hostname, _, port = hostinfo.partition(':')
+    if not port:
+        port = None
+    return hostname, port
+```
+
+So for `http://host:/` → netloc = `host:` → `hostinfo = 'host:'` → `partition(':')` → `('host', ':', '')` → port = `''` → None.
+
+For `http://host:0/` → port = `'0'` → not empty → stays as `'0'`.
+
+Now, the key distinction: constructing the parsed result (calling `urlparse` or `urlsplit`) does NOT validate the port. The port is stored as a string in the tuple. The validation only happens when you access the `.port` property.
+
+Let me plan the tests. I'll add a new test method to the `UrlParseTestCase` class.
+
+For text URLs:
+```python
+def test_port_access_text(self):
+    # No port
+    r = urllib.parse.urlparse('http://example.com/')
+    self.assertIsNone(r.port)
+    r = urllib.parse.urlsplit('http://example.com/')
+    self.assertIsNone(r.port)
+    
+    # Empty port
+    r = urllib.parse.urlparse('http://example.com:/')
+    self.assertIsNone(r.port)
+    r = urllib.parse.urlsplit('http://example.com:/')
+    self.assertIsNone(r.port)
+    
+    # Port 0
+    r = urllib.parse.urlparse('http://example.com:0/')
+    self.assertEqual(r.port, 0)
+    r = urllib.parse.urlsplit('http://example.com:0/')
+    self.assertEqual(r.port, 0)
+    
+    # Port 65535
+    r = urllib.parse.urlparse('http://example.com:65535/')
+    self.assertEqual(r.port, 65535)
+    r = urllib.parse.urlsplit('http://example.com:65535/')
+    self.assertEqual(r.port, 65535)
+    
+    # Port 65536 - out of range
+    r = urllib.parse.urlparse('http://example.com:65536/')
+    # Construction succeeds
+    self.assertEqual(r.netloc, 'example.com:65536')
+    with self.assertRaises(ValueError) as ctx:
+        r.port
+    self.assertEqual(ctx.exception.args, ('Port out of range 0-65535',))
+    self.assertEqual(str(ctx.exception), 'Port out of range 0-65535')
+    
+    r = urllib.parse.urlsplit('http://example.com:65536/')
+    with self.assertRaises(ValueError) as ctx:
+        r.port
+    self.assertEqual(ctx.exception.args, ('Port out of range 0-65535',))
+    self.assertEqual(str(ctx.exception), 'Port out of range 0-65535')
+    
+    # Negative port
+    r = urllib.parse.urlparse('http://example.com:-1/')
+    with self.assertRaises(ValueError) as ctx:
+        r.port
+    self.assertEqual(ctx.exception.args, ("Port could not be cast to integer value as '-1'",))
+    self.assertEqual(str(ctx.exception), "Port could not be cast to integer value as '-1'")
+    
+    r = urllib.parse.urlsplit('http://example.com:-1/')
+    with self.assertRaises(ValueError) as ctx:
+        r.port
+    self.assertEqual(ctx.exception.args, ("Port could not be cast to integer value as '-1'",))
+    self.assertEqual(str(ctx.exception), "Port could not be cast to integer value as '-1'")
+    
+    # Non-integer port
+    r = urllib.parse.urlparse('http://example.com:abc/')
+    with self.assertRaises(ValueError) as ctx:
+        r.port
+    self.assertEqual(ctx.exception.args, ("Port could not be cast to integer value as 'abc'",))
+    
+    r = urllib.parse.urlsplit('http://example.com:abc/')
+    with self.assertRaises(ValueError) as ctx:
+        r.port
+    self.assertEqual(ctx.exception.args, ("Port could not be cast to integer value as 'abc'",))
+    
+    # Non-ASCII decimal digits (Arabic-Indic)
+    r = urllib.parse.urlparse('http://example.com:\u0661\u0662\u0663/')
+    with self.assertRaises(ValueError) as ctx:
+        r.port
+    self.assertEqual(ctx.exception.args, ("Port could not be cast to integer value as '\u0661\u0662\u0663'",))
+    
+    r = urllib.parse.urlsplit('http://example.com:\u0661\u0662\u0663/')
+    with self.assertRaises(ValueError) as ctx:
+        r.port
+    self.assertEqual(ctx.exception.args, ("Port could not be cast to integer value as '\u0661\u0662\u0663'",))
+```
+
+Wait, I need to think about the negative port case more carefully. `-1` as a string: `'-1'.isdigit()` → False (because `-` is not a digit). So it raises the "could not be cast" error, not "out of range". Good.
+
+For bytes URLs:
+```python
+def test_port_access_bytes(self):
+    # No port
+    r = urllib.parse.urlparse(b'http://example.com/')
+    self.assertIsNone(r.port)
+    r = urllib.parse.urlsplit(b'http://example.com/')
+    self.assertIsNone(r.port)
+    
+    # Empty port
+    r = urllib.parse.urlparse(b'http://example.com:/')
+    self.assertIsNone(r.port)
+    r = urllib.parse.urlsplit(b'http://example.com:/')
+    self.assertIsNone(r.port)
+    
+    # Port 0
+    r = urllib.parse.urlparse(b'http://example.com:0/')
+    self.assertEqual(r.port, 0)
+    r = urllib.parse.urlsplit(b'http://example.com:0/')
+    self.assertEqual(r.port, 0)
+    
+    # Port 65535
+    r = urllib.parse.urlparse(b'http://example.com:65535/')
+    self.assertEqual(r.port, 65535)
+    r = urllib.parse.urlsplit(b'http://example.com:65535/')
+    self.assertEqual(r.port, 65535)
+    
+    # Port 65536 - out of range
+    r = urllib.parse.urlparse(b'http://example.com:65536/')
+    with self.assertRaises(ValueError) as ctx:
+        r.port
+    self.assertEqual(ctx.exception.args, ('Port out of range 0-65535',))
+    
+    r = urllib.parse.urlsplit(b'http://example.com:65536/')
+    with self.assertRaises(ValueError) as ctx:
+        r.port
+    self.assertEqual(ctx.exception.args, ('Port out of range 0-65535',))
+    
+    # Negative port
+    r = urllib.parse.urlparse(b'http://example.com:-1/')
+    with self.assertRaises(ValueError) as ctx:
+        r.port
+    # b'-1' repr is b'-1'
+    self.assertEqual(ctx.exception.args, ("Port could not be cast to integer value as b'-1'",))
+    
+    r = urllib.parse.urlsplit(b'http://example.com:-1/')
+    with self.assertRaises(ValueError) as ctx:
+        r.port
+    self.assertEqual(ctx.exception.args, ("Port could not be cast to integer value as b'-1'",))
+    
+    # Non-integer port
+    r = urllib.parse.urlparse(b'http://example.com:abc/')
+    with self.assertRaises(ValueError) as ctx:
+        r.port
+    self.assertEqual(ctx.exception.args, ("Port could not be cast to integer value as b'abc'",))
+    
+    r = urllib.parse.urlsplit(b'http://example.com:abc/')
+    with self.assertRaises(ValueError) as ctx:
+        r.port
+    self.assertEqual(ctx.exception.args, ("Port could not be cast to integer value as b'abc'",))
+```
+
+Wait, I need to check: for bytes, `b'-1'.isdigit()` → False (hyphen is not a digit). So it goes to the else branch. The error message uses `{port!r}` which for bytes `b'-1'` would be `b'-1'`. So the message would be `Port could not be cast to integer value as b'-1'`.
+
+Now, let me also think about what the task says: "Establish when invalid-port errors occur". The key point is that `urlparse()` and `urlsplit()` themselves do NOT raise errors for invalid ports - the parsed result is constructed successfully. The error only occurs when you access the `.port` property.
+
+Let me also verify: does the task want me to test that construction succeeds for invalid ports? Yes: "Establish when invalid-port errors occur" - meaning I should show that construction is fine but access raises.
+
+Now let me look at the existing test file structure to find where to insert. The test file ends with deprecation tests and then `if __name__ == "__main__":`. I should insert my tests before the deprecation tests or after the last test method in the class.
+
+Actually, looking at the file structure, I see the last test method before the deprecation ones. Let me look at what's around line 1380 where I can see the end of the file. The file ends with:
+```
+    def test_splitvalue_deprecation(self):
+        ...
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+I should insert my new test methods before the deprecation tests or right before `if __name__ == "__main__":`. Actually, it's better to add them as proper test methods in the class. Let me look at the structure more carefully.
+
+Looking at the visible content of the test file, I can see:
+- Lines 1-50: imports and test case data
+- Lines 51-200: UrlParseTestCase class with methods like checkRoundtrips, test_qsl, test_qs, test_roundtrips, test_http_roundtrips, checkJoin, test_unparse_parse, test_RFC1808, test_RFC2368, test_RFC2396, test_RFC3986
+- Lines 201-348: more test methods
+- Lines 1380-1457: deprecation tests and main guard
+
+I need to find where to insert. Let me look at the end of the file. The file ends at line 1457 with `    unittest.main()`. I'll add my tests before the deprecation tests.
+
+Actually, let me look at what's between lines 348 and 1380. I don't have that content visible yet. Let me read more of the file to understand the structure.
+
+Actually, looking at the current visible source, I have:
+- test_urlparse.py lines 1-50 (region SRC-80fc...)
+- test_urlparse.py lines 51-200 (region SRC-7ba4...)
+- test_urlparse.py lines 201-348 (region SRC-2392...)
+- test_urlparse.py lines 1380-1457 (region SRC-b9fd...)
+
+I'm missing lines 349-1379. Let me read that section to understand what tests exist and find a good insertion point.
+
+Actually, for the insertion, I can just add the new test methods right before the deprecation tests. Let me read around line 1350-1380 to find the right insertion point.
+
+Wait, actually I have lines 1380-1457 visible. The deprecation tests start at line 1380. Let me look for the last non-deprecation test method. I need to read a bit before line 1380.
+
+Let me read lines 1340-1380 to find the insertion point.
+
+Actually, let me think about this differently. I'll insert the new tests right before the first deprecation test (`test_splittype_deprecation`). Looking at the visible content starting at line 1380:
+
+```python
+        with self.assertWarns(DeprecationWarning) as cm:
+            urllib.parse.splittype('')
+        ...
+```
+
+Wait, line 1380 starts with `        with self.assertWarns(DeprecationWarning) as cm:` which is inside a method. The method definition must be just before. Let me read lines 1370-1380 to see the method definition.
+
+Actually, I think I should just read a bit more to find the right spot. Let me read lines 1360-1390.
+
+Hmm, but I also need to see the Doc file. Let me plan my operations:
+
+1. Read test_urlparse.py lines ~1360-1385 to find the insertion point
+2. Read the Doc file to understand its structure
+3. Write the test patch
+4. Write the doc patch
+5. Run checks
+
+Let me be efficient. I'll read the insertion point in the test file and the doc file simultaneously... but I can only do one action at a time. Let me start with reading the test file insertion point.
+
+Actually wait - I already have lines 1380-1457 visible. Line 1380 starts with `        with self.assertWarns(DeprecationWarning) as cm:` which is the body of `test_splittype_deprecation`. So the method definition `def test_splittype_deprecation(self):` must be around line 1379.
+
+Let me read lines 1375-1385 to confirm.
+
+Actually, let me just read a small range to find the exact insertion point, and also look at the doc file.
+
+Let me start by reading the test file around the insertion point.

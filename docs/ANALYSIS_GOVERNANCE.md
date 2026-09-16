@@ -148,3 +148,14 @@ qualified before fresh measurement. Historical evidence remains immutable and
 is reclassified rather than rewritten. Results must include a compact table of
 `what Qwen saw -> what Qwen did -> what the host did next -> interpretation`,
 followed by explicit falsifiable hypotheses for the next study.
+# Displayed-reference lifecycle qualification
+
+An exact source body and a well-formed address do not establish that the address is
+operable. Round-trip every displayed reference after acquisition, source mutation,
+refresh, range merging and actual delivery. Check resolution separately from edit
+eligibility: a resolvable reference must not authorize editing unseen or stale text.
+When the host rejects its own supplied reference, reproduce against the actual
+input before diagnosing model fabrication. Preserve any public rejected proposal;
+replay under a repaired host is separate development evidence, not retrospective
+success or permission to execute private thinking. See feedback_repair/review and
+the published reference_repair plan for the earned example.

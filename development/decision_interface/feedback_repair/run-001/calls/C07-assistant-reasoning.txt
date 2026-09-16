@@ -1,0 +1,126 @@
+Let me understand the task:
+
+1. Add regression tests in `Lib/test/test_urlparse.py` for port access on `urlsplit` and `urlparse` results with both text URLs and ASCII byte URLs. Test cases: no port, empty port, 0, 65535, 65536, negative port, noninteger port, non-ASCII decimal digits.
+2. Add documentation in `Doc/library/urllib.parse.rst` explaining the port boundary/error behavior.
+
+I need to understand the implementation first. From the working account, I know:
+- Port property at line 176 checks `port.isdigit()` and `port.isascii()`, then `int(port)`, then `0 <= port <= 65535`
+- Raises `ValueError` with specific messages
+
+Let me look at the implementation more carefully. From the source I can see:
+
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+This is in `_NetlocResultMixinBase`. The `_hostinfo` property returns `(hostname, port)` where port is `None` if empty.
+
+For string results (`_NetlocResultMixinStr`):
+- `_hostinfo` uses `netloc.rpartition('@')`, then partitions on `[` for bracketed hosts, then `:` for port
+- If port is empty string, it becomes `None`
+
+For bytes results (`_NetlocResultMixinBytes`):
+- Same logic but with `b'@'`, `b'['`, `b']'`, `b':'`
+- If port is empty bytes, it becomes `None`
+
+Key behaviors:
+1. No port (no `:` in netloc): `port` property returns `None`
+2. Empty port (`host:` with nothing after): `_hostinfo` returns `None` for port, so `port` property returns `None`
+3. Port `0`: `int("0")` = 0, `0 <= 0 <= 65535` is True, returns 0
+4. Port `65535`: returns 65535
+5. Port `65536`: `int("65536")` = 65536, `0 <= 65536 <= 65535` is False, raises `ValueError("Port out of range 0-65535")`
+6. Negative port: This is tricky. For a "negative port" like `-1`, `port.isdigit()` would be False (since `-` is not a digit), so it would raise `ValueError(f"Port could not be cast to integer value as '-1'")`. Wait, but `-` isn't a digit character, so `isdigit()` returns False.
+
+Wait, let me think about negative ports more carefully. In a URL like `http://host:-1/`, the port would be `-1`. `"-1".isdigit()` is False, so it would go to the else branch and raise `ValueError(f"Port could not be cast to integer value as '-1'")`.
+
+For non-ASCII decimal digits: e.g., `http://host:١٢٣/` (Arabic-Indic digits). `"١٢٣".isdigit()` is True (they are digits in Unicode), but `"١٢٣".isascii()` is False. So it would raise `ValueError(f"Port could not be cast to integer value as '١٢٣'")`.
+
+Wait, let me reconsider. The check is `port.isdigit() and port.isascii()`. So:
+- If port is all ASCII digits: `isdigit()` True, `isascii()` True → `int(port)` succeeds → range check
+- If port is empty: `_hostinfo` returns `None`, so port property returns `None`
+- If port is non-ASCII digits: `isdigit()` True, `isascii()` False → ValueError "Port could not be cast to integer value as ..."
+- If port contains non-digit characters (like `-1`): `isdigit()` False → ValueError "Port could not be cast to integer value as ..."
+- If port is valid integer but out of range: ValueError "Port out of range 0-65535"
+
+Now for bytes:
+- `port` is a bytes object
+- `port.isdigit()` for bytes: In Python, `b"123".isdigit()` returns True, `b"١٢٣"` wouldn't be valid ASCII bytes... wait, for bytes, `isdigit()` checks if each byte is a digit (0-9). And `isascii()` checks if all bytes are in ASCII range (0-127).
+
+Actually wait, for bytes objects:
+- `b"123".isdigit()` → True
+- `b"123".isascii()` → True
+- `b"".isdigit()` → False (empty)
+
+But in the bytes `_hostinfo`, if port is `b""` (empty), it becomes `None`. So:
+- No port → None
+- Empty port (e.g., `http://host:`) → port is `b""` → becomes `None` → returns None
+- `b"0"` → `int(b"0")` = 0, range OK → 0
+- `b"65535"` → 65535
+- `b"65536"` → 65536 → range error
+- Negative: can't really have negative in bytes the same way... `b"-1"` → `b"-1".isdigit()` is False → ValueError
+- Non-ASCII: For bytes, you can't really have non-ASCII digits in a simple way. But if the bytes contain non-ASCII bytes like `b"\xd9\xa1"` (which is UTF-8 for ١), `b"\xd9\xa1".isdigit()` would be... let me think. For bytes, `isdigit()` checks if all bytes are ASCII digits. So `b"\xd9\xa1".isdigit()` is False. And `b"\xd9\xa1".isascii()` is also False. So it would raise ValueError.
+
+Wait, actually I need to be more careful. For bytes:
+- `bytes.isdigit()` returns True only if all bytes are ASCII digit characters (0x30-0x39)
+- `bytes.isascii()` returns True only if all bytes are < 0x80
+
+So for bytes, the non-ASCII digit case would be something like `b"\xd9\xa1\xd9\xa2\xd9\xa3"` (Arabic-Indic digits in UTF-8). This would fail `isdigit()` check (since those bytes aren't 0x30-0x39), so it would raise the "could not be cast" error.
+
+But wait - the task says "non-ASCII decimal digits in text URLs". So this is specifically about text URLs, not bytes URLs. For text URLs, you could have `http://host:١٢٣/` where ١٢٣ are Unicode digits.
+
+Now let me think about what the "negative port" case looks like. In a URL, how do you get a negative port? `http://host:-1/` - the port part would be `-1`. For strings, `"-1".isdigit()` is False. For bytes, `b"-1".isdigit()` is False. Both would raise the "could not be cast" ValueError.
+
+Wait, but the task says "negative port" as a separate case from "noninteger port". Let me re-read: "no port, an empty port, 0, 65535, 65536, a negative port, and a noninteger port."
+
+Hmm, so negative port is separate from noninteger port. But in the implementation, a negative port like `-1` would fail the `isdigit()` check and go to the "could not be cast" branch. So both negative port and noninteger port (like `abc`) would hit the same branch with the same exception type but different messages.
+
+Wait, actually I need to think about this more carefully. What if someone does `http://host:-0/`? `"-0".isdigit()` is False, so it would raise ValueError. What about just `-`? `"-".isdigit()` is False.
+
+Actually, I think the distinction the task is making is:
+- "negative port" = something like `-1` (has a minus sign)
+- "noninteger port" = something like `abc` or `1.5` (not an integer at all)
+
+Both would hit the same code path (the `else` branch of `isdigit()` check), raising `ValueError(f"Port could not be cast to integer value as {port!r}")`.
+
+The difference would be in the message content:
+- Negative: `Port could not be cast to integer value as '-1'`
+- Noninteger: `Port could not be cast to integer value as 'abc'`
+
+For bytes:
+- Negative: `Port could not be cast to integer value as b'-1'`
+- Noninteger: `Port could not be cast to integer value as b'abc'`
+
+Now let me think about the "empty port" case. In a URL like `http://host:/path`, the netloc is `host:`, and partitioning on `:` gives hostname=`host`, port=`` (empty string). Then `if not port: port = None`. So the port property returns `None`.
+
+For bytes: `http://host:/path` with bytes, netloc is `b'host:'`, partitioning on `b':'` gives hostname=`b'host'`, port=`b''` (empty bytes). Then `if not port: port = None`. So port property returns `None`.
+
+Now I need to look at the existing test file to understand the structure and find where to add tests. Let me also look at the documentation file.
+
+Let me first read more of the test file to understand its structure, and then the doc file. I already have the first 50 lines of the test file. Let me read more to find where port-related tests might be or where I should add them.
+
+Actually, let me first check what I have visible:
+- `Lib/urllib/parse.py` lines 1-100 and 101-220 and 221-280 (the port property is visible in the 101-220 range)
+- `Lib/test/test_urlparse.py` lines 1-50
+- I need to see more of the test file and the doc file
+
+Let me read more of the test file to find appropriate locations for new tests, and read the doc file.
+
+Let me plan my approach:
+1. Read more of the test file to understand structure
+2. Read the doc file
+3. Write tests
+4. Write documentation
+5. Run checks
+6. Submit
+
+Let me start by reading more of the test file to find existing port tests or a good location for new ones.

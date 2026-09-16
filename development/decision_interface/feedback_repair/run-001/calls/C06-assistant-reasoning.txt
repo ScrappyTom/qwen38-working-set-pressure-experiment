@@ -1,0 +1,72 @@
+Let me understand the task:
+
+1. Add regression tests in `Lib/test/test_urlparse.py` for port access on `urlsplit` and `urlparse` results with both text URLs and ASCII byte URLs. Test cases: no port, empty port, 0, 65535, 65536, negative port, noninteger port, non-ASCII decimal digits.
+2. Add documentation in `Doc/library/urllib.parse.rst` explaining the boundary/error behavior.
+
+From what I've seen so far:
+- The `port` property is in `_NetlocResultMixinBase` (around line 176 of parse.py)
+- For str results: checks `port.isdigit() and port.isascii()`, then `int(port)`, then range check 0-65535
+- For bytes results: the `_NetlocResultMixinBytes` class has its own `_hostinfo` property that I need to see
+
+Key questions:
+- What does the bytes version of port property look like?
+- What exceptions are raised and with what messages?
+- What's the current test file structure?
+
+Let me first look at the port property more carefully and the bytes variant. I already see the port property:
+
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+Wait, for bytes, `port` would be a bytes object. Does bytes have `isdigit()` and `isascii()`? Let me think... Actually, bytes in Python 3 have `isdigit()` and `isascii()` methods? Let me check. Actually no - bytes objects don't have `isdigit()` or `isascii()` in Python 3. Wait, actually they do! In Python 3, `bytes` objects have `isdigit()`, `isalpha()`, etc. methods. And `isascii()` was added in Python 3.7.
+
+So for bytes:
+- `b''.isdigit()` → False (empty bytes)
+- `b'0'.isdigit()` → True, `b'0'.isascii()` → True
+- `b'65535'.isdigit()` → True
+- `b'65536'.isdigit()` → True → int(b'65536') → 65536 → out of range
+- `b'-1'.isdigit()` → False (the minus sign isn't a digit) → ValueError
+- `b'abc'.isdigit()` → False → ValueError
+
+Wait, but what about the `_hostinfo` for bytes? Let me look at `_NetlocResultMixinBytes._hostinfo`. I need to see lines 221+ of parse.py.
+
+Actually, I need to look at the bytes `_hostinfo` property. From the str version:
+```python
+@property
+def _hostinfo(self):
+    netloc = self.netloc
+    _, _, hostinfo = netloc.rpartition('@')
+    _, have_open_br, bracketed = hostinfo.partition('[')
+    if have_open_br:
+        hostname, _, port = bracketed.partition(']')
+        _, _, port = port.partition(':')
+    else:
+        hostname, _, port = hostinfo.partition(':')
+    if not port:
+        port = None
+    return hostname, port
+```
+
+For bytes, it would be similar but with bytes partition methods and `b'['`, `b']'`, `b':'`, `b'@'` as separators.
+
+Let me look at the rest of parse.py to see the bytes _hostinfo. Let me also look at the test file to understand its structure.
+
+I need to:
+1. Read more of parse.py to see the bytes _hostinfo and any other relevant code
+2. Read the test file to understand its structure
+3. Read the documentation file
+4. Write the tests
+5. Write the documentation
+
+Let me start by reading the bytes _hostinfo from parse.py and the test file structure.

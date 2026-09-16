@@ -1,0 +1,2045 @@
+Let me analyze the situation. The tests check failed because of `detect.error_class` - the mutation test replaced `ValueError` with a subclass while keeping its arguments, and my tests need to detect this at each declared target. The undetected targets include `["urlsplit","str","too_high"]` and `["urlsplit","str","negative"]`, with 12 more remaining (14 total).
+
+The issue is that my tests use `self.assertRaises(ValueError)` which catches subclasses of ValueError too. To detect when ValueError is replaced with a subclass, I need to assert the exact exception class, not just that it's an instance of ValueError.
+
+I need to use `assertRaises` differently - I need to check that the exception's class is exactly `ValueError`, not a subclass. I should use `self.assertIs(type(exc), ValueError)` or `self.assertIsInstance` won't work either... I need to check `type(exc) is ValueError` or `assertEqual(type(ctx.exception), ValueError)`.
+
+Wait, let me think about this more carefully. The mutation is "Replace ValueError with a subclass while keeping its arguments." So if the code raises `class _MyValueError(ValueError)` instead of `ValueError`, my tests using `assertRaises(ValueError)` would still catch it (since it's a subclass). To detect this, I need to verify the exact type is `ValueError`.
+
+So I need to change my assertions from:
+```python
+with self.assertRaises(ValueError) as ctx:
+    p.port
+```
+to also assert:
+```python
+with self.assertRaises(ValueError) as ctx:
+    p.port
+self.assertIs(type(ctx.exception), ValueError)
+```
+
+Or I could use:
+```python
+with self.assertRaises(ValueError) as ctx:
+    p.port
+self.assertEqual(type(ctx.exception), ValueError)
+```
+
+This way, if the implementation raises a subclass of ValueError instead of ValueError itself, the test would fail because `type(ctx.exception)` would be the subclass, not `ValueError`.
+
+Let me look at my current test code. From the visible source, I can see the tests I already added. Let me read the current state of the test file around the port validation tests to see exactly what's there.
+
+Looking at the source in `SRC-29afcfdff458150912d95111cc2c95a7f8cdb4e479929b823e12757ce8ca3a50`, I can see my tests starting around the `test_urlsplit_port_validation` method. The tests use `self.assertRaises(ValueError) as ctx` but don't check the exact type.
+
+I need to add `self.assertIs(type(ctx.exception), ValueError)` after each `assertRaises` block. Let me count the targets:
+
+The 14 targets are: 2 APIs (urlsplit, urlparse) × 2 input types (str, bytes) × ... wait, let me think. The undetected targets shown are:
+- ["urlsplit","str","too_high"]
+- ["urlsplit","str","negative"]
+
+And there are 12 more (14 total). So the targets are likely:
+- API: urlsplit, urlparse (2)
+- Input type: str, bytes (2)  
+- Cases: no_port (none), empty_port (none), 0 (none), 65535 (none), 65536 (too_high), negative, noninteger (7 error cases? or fewer?)
+
+Wait, not all cases raise errors. The "no port", "empty port", "0", "65535" cases don't raise. Only "65536" (too_high), "negative", "noninteger" raise. Plus "non-ASCII digit" for text URLs.
+
+Actually let me reconsider. The targets that need error detection are the ones where an exception is raised:
+- 65536 (too_high) → ValueError "Port out of range"
+- negative → ValueError "Port could not be cast"
+- noninteger → ValueError "Port could not be cast"
+- non-ASCII digit → ValueError "Port could not be cast" (text only)
+
+So for each API (urlsplit, urlparse) × each input type (str, bytes):
+- too_high: both str and bytes
+- negative: both str and bytes  
+- noninteger: both str and bytes
+- non-ASCII: str only (bytes can't have non-ASCII digits)
+
+That's 2 × (3 + 1 for str only) = 2 × 4 = 8... hmm that's not 14.
+
+Wait, maybe the targets include all cases, not just error cases. Let me re-read: "targets_tested": 14, "undetected_targets_total": 14.
+
+Hmm, 14 targets with 2 shown. Maybe:
+- 2 APIs × 2 input types × 7 cases = 28? No, that's too many.
+
+Actually wait - maybe the "non-ASCII" case only applies to str, not bytes. Let me count:
+- Cases: no_port, empty_port, port_0, port_65535, port_65536, negative, noninteger = 7 cases for both str and bytes
+- Plus non-ASCII digit = 1 extra case for str only
+
+So: 2 APIs × (7×2 + 1) = 2 × 15 = 30? That's too many.
+
+Or maybe: 2 APIs × 2 types × 7 cases - but non-ASCII only for str:
+- urlsplit/str: 7 + 1 = 8
+- urlsplit/bytes: 7
+- urlparse/str: 7 + 1 = 8
+- urlparse/bytes: 7
+Total: 8 + 7 + 8 + 7 = 30? Still not 14.
+
+Hmm, maybe only the error-raising cases count:
+- 65536 (too_high), negative, noninteger = 3 cases for both str and bytes
+- non-ASCII digit = 1 extra for str only
+- Per API per type: str has 4 error cases, bytes has 3
+- Total: 2 × (4 + 3) = 14! Yes!
+
+So 14 targets = 2 APIs × (4 str-error-cases + 3 bytes-error-cases).
+
+Now, the problem: my tests use `assertRaises(ValueError)` which catches subclasses. I need to add an exact type check. Let me modify the tests.
+
+Looking at the current test code, I need to add `self.assertIs(type(ctx.exception), ValueError)` after each `with self.assertRaises(ValueError) as ctx:` block that has a port error.
+
+Let me identify the exact text I need to patch. From the visible source, my tests are in the middle section. Let me read the file to see the exact current content around the port validation tests.
+
+Actually, I can see the tests in the second source region. Let me trace through them:
+
+For `test_urlsplit_port_validation`:
+1. 65536 str: `with self.assertRaises(ValueError) as ctx:` then checks args and str
+2. negative str: same pattern
+3. noninteger str: same pattern
+4. non-ASCII str: same pattern
+5. 65536 bytes: same pattern
+6. negative bytes: same pattern
+7. noninteger bytes: same pattern
+
+For `test_urlparse_port_validation`:
+1. 65536 str: same
+2. negative str: same
+3. noninteger str: same
+4. non-ASCII str: same
+5. 65536 bytes: same
+6. negative bytes: same
+7. noninteger bytes: same
+
+I need to add `self.assertIs(type(ctx.exception), ValueError)` after each `p.port` access inside the `with` block, before the `self.assertEqual(ctx.exception.args, ...)` lines.
+
+Let me read the exact current content to get precise text for patching. Actually, I can see it in the source already. Let me construct the patches.
+
+For each occurrence, I need to change:
+```python
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+```
+to:
+```python
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertIs(type(ctx.exception), ValueError)
+        self.assertEqual(ctx.exception.args,
+```
+
+But wait, I have 14 such blocks (7 in each test method). I need to patch each one. But `patch` replaces exactly one occurrence. If the text is identical across multiple occurrences, it will be rejected as nonunique.
+
+Let me think about how to make each old text unique. I could include more surrounding context, or I could do larger patches that cover multiple blocks at once.
+
+Actually, let me look at the structure more carefully. Each block looks like:
+```python
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         (\"Port out of range 0-65535\",))
+```
+
+The "Port out of range" ones (65536 cases) appear 4 times (2 per API, str+bytes). The "Port could not be cast" ones appear more times.
+
+Let me try a different approach. I'll do a larger patch that covers an entire test method at once. Since the methods are long, I could replace the whole method. But that's a lot of text.
+
+Actually, let me think about this differently. The most efficient approach: I can patch each unique occurrence by including enough surrounding context to make it unique. 
+
+For the 65536 cases, the text after `p.port` differs between str and bytes (different repr in the message). So:
+- urlsplit str 65536: followed by `(\"Port out of range 0-65535\",))`
+- urlsplit bytes 65536: followed by `(\"Port out of range 0-65535\",))`
+
+Wait, the error message is the same for str and bytes for the "out of range" case! It's just "Port out of range 0-65535". So the text is identical.
+
+Hmm, but for the "could not be cast" cases, the messages differ:
+- str: `"Port could not be cast to integer value as '-1'"`
+- bytes: `"Port could not be cast to integer value as b'-1'"`
+
+So for the "could not be cast" cases, I can distinguish str vs bytes by the message content. But for "out of range", both str and bytes have the same message.
+
+Let me look at what comes before and after each block to find unique context.
+
+Actually, a better approach: let me include the preceding line (the URL) in the old text to make it unique. For example:
+
+```python
+        p = urllib.parse.urlsplit("http://example.com:65536/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         ("Port out of range 0-65535",))
+```
+
+vs
+
+```python
+        p = urllib.parse.urlsplit(b"http://example.com:65536/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         ("Port out of range 0-65535",))
+```
+
+These are different because of `b""` vs `""`. Good.
+
+And the urlsplit vs urlparse ones are different because of the function name.
+
+So I can make each patch unique by including the `p = urllib.parse.urlsplit(...)` or `p = urllib.parse.urlparse(...)` line.
+
+Let me plan the patches. There are 14 blocks to modify. That's a lot of patches. Let me see if I can do fewer, larger patches.
+
+Actually, let me reconsider. Instead of 14 individual patches, maybe I can replace entire test methods in fewer operations. The methods are:
+- `test_urlsplit_port_validation` (long)
+- `test_urlparse_port_validation` (long)
+
+I could replace each entire method. But I need to see the exact current text to do that. Let me read the file.
+
+Wait, I already have the source visible! The second source region shows lines 527-861 of the file. Let me trace through it.
+
+Looking at the visible source, I can see:
+- `test_urlsplit_port_validation` starts and contains all the str and bytes cases
+- `test_urlparse_port_validation` follows
+
+Let me identify the exact text boundaries. The method starts with:
+```python
+    def test_urlsplit_port_validation(self):
+```
+and ends before:
+```python
+    def test_urlparse_port_validation(self):
+```
+
+And `test_urlparse_port_validation` ends before:
+```python
+    def test_urlsplit_remove_unsafe_bytes(self):
+```
+
+So I could do two patches, each replacing an entire method. But I need to be very careful with the exact text.
+
+Actually, let me re-examine. The file currently has 1658 lines. Let me read the relevant section to get exact text for patching.
+
+Wait, I already have the source visible in the working set! The second source shows lines 527-861. Let me look at it more carefully.
+
+From the visible source (SRC-29afcfdff458150912d95111cc2c95a7f8cdb4e479929b823e12757ce8ca3a50, lines 527-861):
+
+I can see `test_urlsplit_port_validation` and `test_urlparse_port_validation`. Let me identify the exact text I need to patch.
+
+For each error-raising block, I need to insert `self.assertIs(type(ctx.exception), ValueError)` after the `p.port` line and before the `self.assertEqual(ctx.exception.args,...)` line.
+
+The pattern in each case is:
+```python
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+```
+
+I need to change it to:
+```python
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertIs(type(ctx.exception), ValueError)
+        self.assertEqual(ctx.exception.args,
+```
+
+To make each occurrence unique, I'll include the preceding `p = urllib.parse.urlsplit(...)` line. Let me enumerate the 14 patches:
+
+**test_urlsplit_port_validation:**
+1. urlsplit str 65536:
+   old: `p = urllib.parse.urlsplit("http://example.com:65536/")\n        with self.assertRaises(ValueError) as ctx:\n            p.port\n        self.assertEqual(ctx.exception.args,`
+   new: `p = urllib.parse.urlsplit("http://example.com:65536/")\n        with self.assertRaises(ValueError) as ctx:\n            p.port\n        self.assertIs(type(ctx.exception), ValueError)\n        self.assertEqual(ctx.exception.args,`
+
+2. urlsplit str negative:
+   old: `p = urllib.parse.urlsplit("http://example.com:-1/")\n        with self.assertRaises(ValueError) as ctx:\n            p.port\n        self.assertEqual(ctx.exception.args,`
+   new: same + `self.assertIs(type(ctx.exception), ValueError)\n`
+
+3. urlsplit str noninteger:
+   old: `p = urllib.parse.urlsplit("http://example.com:abc/")\n        with self.assertRaises(ValueError) as ctx:\n            p.port\n        self.assertEqual(ctx.exception.args,`
+   new: same + assertIs
+
+4. urlsplit str non-ASCII:
+   old: `p = urllib.parse.urlsplit("http://example.com:" + digit + "/")\n        with self.assertRaises(ValueError) as ctx:\n            p.port\n        self.assertEqual(ctx.exception.args,`
+   new: same + assertIs
+
+5. urlsplit bytes 65536:
+   old: `p = urllib.parse.urlsplit(b"http://example.com:65536/")\n        with self.assertRaises(ValueError) as ctx:\n            p.port\n        self.assertEqual(ctx.exception.args,`
+   new: same + assertIs
+
+6. urlsplit bytes negative:
+   old: `p = urllib.parse.urlsplit(b"http://example.com:-1/")\n        with self.assertRaises(ValueError) as ctx:\n            p.port\n        self.assertEqual(ctx.exception.args,`
+   new: same + assertIs
+
+7. urlsplit bytes noninteger:
+   old: `p = urllib.parse.urlsplit(b"http://example.com:abc/")\n        with self.assertRaises(ValueError) as ctx:\n            p.port\n        self.assertEqual(ctx.exception.args,`
+   new: same + assertIs
+
+**test_urlparse_port_validation:**
+8-14: Same pattern with `urlparse` instead of `urlsplit`
+
+That's 14 patches. I have 27 actions remaining and 3 requests remaining. Wait, I only have 3 requests remaining! Each request can contain operations. But each patch is one action. 14 actions is a lot.
+
+Wait, let me re-read: "actions_remaining": 27, "requests_remaining": 3. So I have 27 actions but only 3 requests (responses). Each response can contain multiple operations? No, re-reading the instructions: "Each response consumes one request; its operations consume the separate action allowance." So I can include multiple operations in one response? 
+
+Actually no - looking at the action forms, each reply is one JSON object with one operation. So each response = one operation = one action + one request. With 3 requests remaining, I can do at most 3 more operations.
+
+That's a problem. I need 14 patches but only have 3 requests left. I need a more efficient approach.
+
+Wait, let me re-read the action forms more carefully. The forms are:
+- {"discussion":string,"operation":operation}
+- {"discussion":string,"account":string,"operation":operation}
+- {"discussion":string,"account":string}
+- {"discussion":string}
+
+So each response has exactly one operation. With 3 requests remaining, I can do 3 operations.
+
+I need to be smarter. Instead of 14 individual patches, I should do larger patches. I could replace entire test methods.
+
+Let me think about what I can do in 3 operations:
+1. Patch to fix `test_urlsplit_port_validation` (one big patch replacing the whole method)
+2. Patch to fix `test_urlparse_port_validation` (one big patch replacing the whole method)
+3. Then I need to check tests... but that's another operation.
+
+Wait, but after a patch to the test file, the "tests" check runs automatically (per `verification.after_accepted_edit`). So:
+1. Patch test_urlsplit_port_validation
+2. Patch test_urlparse_port_validation (auto check runs after each)
+3. I still need the doc file work...
+
+Hmm, actually wait. Let me re-read: "verification.after_accepted_edit declares which check the host executes after an accepted edit to each listed path." So after a patch to `Lib/test/test_urlparse.py`, the "tests" check runs. After a patch to `Doc/library/urllib.parse.rst`, the "public" check runs.
+
+So if I patch the test file, the tests check runs automatically. If it passes, good. If not, I need to fix it.
+
+But I only have 3 requests. Let me think about what I can accomplish:
+- Request 1: Patch the test file (one of the methods) → auto tests check runs
+- Request 2: Patch the test file (the other method) → auto tests check runs
+- Request 3: I need to do the doc file too...
+
+Actually wait, I haven't even done the doc file yet! Let me check. Looking at the working set sources, I see `Doc/library/urllib.parse.rst` is selected (lines 1-39) but its body is omitted. I haven't made any doc edits yet.
+
+Hmm, this is tight. Let me reconsider.
+
+Actually, can I do a single patch that covers both methods at once? If I can find a unique old string that spans from the start of `test_urlsplit_port_validation` to the end of `test_urlparse_port_validation`, I could replace both in one patch. But that's a LOT of text and might exceed limits.
+
+Let me think about the size. Each method is probably around 100-150 lines. Together that's maybe 250-300 lines. At maybe 60 chars per line average, that's about 18KB. The limit is 65,536 bytes per fragment and 1,048,576 serialized action bytes. So size shouldn't be an issue.
+
+But I need the exact text. Let me read the file to get the exact content of both methods.
+
+Actually, I already have the source! Let me look at it carefully.
+
+From the second source region (lines 527-861), I can see the content. Let me trace through it:
+
+Starting from `test_urlsplit_port_validation`:
+```python
+    def test_urlsplit_port_validation(self):
+        # Construction (urlsplit) always succeeds; only .port access raises.
+        # --- text URLs ---
+        # no port
+        p = urllib.parse.urlsplit("http://example.com/")
+        self.assertIsNone(p.port)
+
+        # empty port
+        p = urllib.parse.urlsplit("http://example.com:/")
+        self.assertIsNone(p.port)
+
+        # port 0
+        p = urllib.parse.urlsplit("http://example.com:0/")
+        self.assertEqual(p.port, 0)
+
+        # port 65535
+        p = urllib.parse.urlsplit("http://example.com:65535/")
+        self.assertEqual(p.port, 65535)
+
+        # port 65536: out of range
+        p = urllib.parse.urlsplit("http://example.com:65536/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         ("Port out of range 0-65535",))
+        self.assertEqual(str(ctx.exception),
+                         "Port out of range 0-65535")
+
+        # negative port: not a valid digit string
+        p = urllib.parse.urlsplit("http://example.com:-1/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         ("Port could not be cast to integer value as '-1'",))
+        self.assertEqual(str(ctx.exception),
+                         "Port could not be cast to integer value as '-1'")
+
+        # non-integer port
+        p = urllib.parse.urlsplit("http://example.com:abc/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         ("Port could not be cast to integer value as 'abc'",))
+        self.assertEqual(str(ctx.exception),
+                         "Port could not be cast to integer value as 'abc'")
+
+        # non-ASCII decimal digit (Arabic-Indic DIGIT ONE, U+0661)
+        digit = "\u0661"
+        p = urllib.parse.urlsplit("http://example.com:" + digit + "/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         (f"Port could not be cast to integer value as {digit!r}",))
+        self.assertEqual(str(ctx.exception),
+                         f"Port could not be cast to integer value as {digit!r}")
+
+        # --- bytes URLs ---
+        # no port
+        p = urllib.parse.urlsplit(b"http://example.com/")
+        self.assertIsNone(p.port)
+
+        # empty port
+        p = urllib.parse.urlsplit(b"http://example.com:/")
+        self.assertIsNone(p.port)
+
+        # port 0
+        p = urllib.parse.urlsplit(b"http://example.com:0/")
+        self.assertEqual(p.port, 0)
+
+        # port 65535
+        p = urllib.parse.urlsplit(b"http://example.com:65535/")
+        self.assertEqual(p.port, 65535)
+
+        # port 65536: out of range
+        p = urllib.parse.urlsplit(b"http://example.com:65536/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         ("Port out of range 0-65535",))
+        self.assertEqual(str(ctx.exception),
+                         "Port out of range 0-65535")
+
+        # negative port
+        p = urllib.parse.urlsplit(b"http://example.com:-1/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         ("Port could not be cast to integer value as b'-1'",))
+        self.assertEqual(str(ctx.exception),
+                         "Port could not be cast to integer value as b'-1'")
+
+        # non-integer port
+        p = urllib.parse.urlsplit(b"http://example.com:abc/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         ("Port could not be cast to integer value as b'abc'",))
+        self.assertEqual(str(ctx.exception),
+                         "Port could not be cast to integer value as b'abc'")
+
+    def test_urlparse_port_validation(self):
+        # Same boundary/error behavior via urlparse.
+        # Construction (urlparse) always succeeds; only .port access raises.
+        # --- text URLs ---
+        # no port
+        p = urllib.parse.urlparse("http://example.com/")
+        self.assertIsNone(p.port)
+
+        # empty port
+        p = urllib.parse.urlparse("http://example.com:/")
+        self.assertIsNone(p.port)
+
+        # port 0
+        p = urllib.parse.urlparse("http://example.com:0/")
+        self.assertEqual(p.port, 0)
+
+        # port 65535
+        p = urllib.parse.urlparse("http://example.com:65535/")
+        self.assertEqual(p.port, 65535)
+
+        # port 65536: out of range
+        p = urllib.parse.urlparse("http://example.com:65536/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         ("Port out of range 0-65535",))
+        self.assertEqual(str(ctx.exception),
+                         "Port out of range 0-65535")
+
+        # negative port
+        p = urllib.parse.urlparse("http://example.com:-1/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         ("Port could not be cast to integer value as '-1'",))
+        self.assertEqual(str(ctx.exception),
+                         "Port could not be cast to integer value as '-1'")
+
+        # non-integer port
+        p = urllib.parse.urlparse("http://example.com:abc/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         ("Port could not be cast to integer value as 'abc'",))
+        self.assertEqual(str(ctx.exception),
+                         "Port could not be cast to integer value as 'abc'")
+
+        # non-ASCII decimal digit (Arabic-Indic DIGIT ONE, U+0661)
+        digit = "\u0661"
+        p = urllib.parse.urlparse("http://example.com:" + digit + "/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         (f"Port could not be cast to integer value as {digit!r}",))
+        self.assertEqual(str(ctx.exception),
+                         f"Port could not be cast to integer value as {digit!r}")
+
+        # --- bytes URLs ---
+        # no port
+        p = urllib.parse.urlparse(b"http://example.com/")
+        self.assertIsNone(p.port)
+
+        # empty port
+        p = urllib.parse.urlparse(b"http://example.com:/")
+        self.assertIsNone(p.port)
+
+        # port 0
+        p = urllib.parse.urlparse(b"http://example.com:0/")
+        self.assertEqual(p.port, 0)
+
+        # port 65535
+        p = urllib.parse.urlparse(b"http://example.com:65535/")
+        self.assertEqual(p.port, 65535)
+
+        # port 65536: out of range
+        p = urllib.parse.urlparse(b"http://example.com:65536/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         ("Port out of range 0-65535",))
+        self.assertEqual(str(ctx.exception),
+                         "Port out of range 0-65535")
+
+        # negative port
+        p = urllib.parse.urlparse(b"http://example.com:-1/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         ("Port could not be cast to integer value as b'-1'",))
+        self.assertEqual(str(ctx.exception),
+                         "Port could not be cast to integer value as b'-1'")
+
+        # non-integer port
+        p = urllib.parse.urlparse(b"http://example.com:abc/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         ("Port could not be cast to integer value as b'abc'",))
+        self.assertEqual(str(ctx.exception),
+                         "Port could not be cast to integer value as b'abc'")
+```
+
+OK so I need to add `self.assertIs(type(ctx.exception), ValueError)` in 14 places (7 in each method).
+
+Given my constraint of 3 requests, I need to be very efficient. Let me think about what approach minimizes the number of operations:
+
+Option A: Replace both entire methods in one patch (if I can find unique boundaries).
+- The old text would be from `    def test_urlsplit_port_validation(self):` through the last line of `test_urlparse_port_validation` (the last `self.assertEqual` line).
+- This is unique because no other code has these method names.
+- One patch fixes all 14 targets.
+
+Option B: Replace each method separately (2 patches).
+
+Option A is better since it's only 1 operation instead of 2.
+
+But wait - after the test file edit, the "tests" check runs automatically. If it passes, I still need to do the doc file. That's another operation (request 2). And then maybe a final check or submit (request 3).
+
+Actually, let me re-examine. The doc file work is completely separate. I haven't started it yet. Let me plan:
+- Request 1: Patch test file (both methods in one patch) → auto "tests" check
+- Request 2: Patch doc file → auto "public" check  
+- Request 3: If public passes, submit. If not, I'm stuck.
+
+Wait, but I don't even know what the doc file currently looks like or what I need to add. Let me check - the doc file is selected but its body is omitted in this recovery input. I'd need to read it first.
+
+Hmm, but reading is also an operation. Let me reconsider.
+
+Actually, wait. Let me re-read the situation. The current presentation mode is "recovery" - the source bodies are omitted. But the working_set.sources shows the test file and implementation file content. The doc file content is NOT shown (it's in retained_inventory but not in sources).
+
+So I need to:
+1. Read the doc file (1 operation)
+2. Patch the test file (1 operation) → auto tests check
+3. Patch the doc file (1 operation) → auto public check
+
+That's 3 operations = 3 requests. Then I can't submit! Unless the public check passes on request 3, and then I need a 4th request to submit.
+
+Wait, but I have 3 requests remaining. Let me recount. "requests_remaining": 3. So I can make 3 more responses. Each response is one operation. After the 3rd response, I have 0 requests left.
+
+Hmm, but actually - can I combine operations? Let me re-read the forms:
+- {"discussion":string,"operation":operation}
+
+It says "one JSON object" per response. So one operation per response. 3 responses = 3 operations.
+
+But wait - I haven't read the doc file yet. I need to see its content to know what to patch. Unless... I already know from the retained inventory that it has 766 lines and I selected lines 1-39. But I don't have the content.
+
+Actually, let me reconsider. Maybe I can use the literal SOURCE reply form for the test file patch (using replace_region), which avoids JSON escaping. And for the doc file, I might be able to work from what I know.
+
+But I still need to see the doc file content. Unless I use `read` to see it.
+
+Let me plan:
+- Request 1: Read doc file (to see its content)
+- Request 2: Patch test file (fix the error class detection) → auto tests check
+- Request 3: Patch doc file → auto public check
+
+After request 3, if public passes, I still need to submit. But I'll have 0 requests. Unless... the public check passing makes submission eligible, and I can include the submit in the same response? No, each response is one operation.
+
+Hmm, this is really tight. Let me think differently.
+
+Actually wait - do I really need to read the doc file? Let me think about what I need to add to it. The task says:
+- Add a focused explanation and executable examples of the observed boundary/error behavior
+- Including the distinction between constructing the parsed result and accessing its port
+- New examples must be self-contained (include imports), use >>> prompts, show real outputs
+- Insertions only, no rewrites or deletions
+
+I know the behavior from the implementation:
+- port property checks: port not None → port.isdigit() and port.isascii() → int(port) → 0<=port<=65535
+- Two ValueErrors: "Port could not be cast to integer value as {port!r}" and "Port out of range 0-65535"
+- Construction always succeeds; .port access raises
+
+But I need to see the doc file to know where to insert and what's already there. Let me check if I can get away without reading it.
+
+Actually, from the retained inventory, the doc file has 766 lines and I previously selected lines 1-39. The content is stored but omitted from this recovery input. I can't patch it without seeing the exact current text.
+
+Let me reconsider my options:
+
+1. I could use `work_on` or `work_on_exact` to bring the doc file into view, then patch it. But that's extra operations.
+
+2. I could use `read` to read the doc file.
+
+3. Actually, wait - can I use the literal SOURCE form? That requires a region reference. I'd need to have the source visible first.
+
+Let me think about this differently. What if I do:
+- Request 1: Patch the test file (the big fix) → auto tests check
+- Request 2: Read the doc file
+- Request 3: Patch the doc file → auto public check
+
+Then I can't submit. Unless the public check somehow also serves as the submission? No, submission is a separate action.
+
+Hmm, but wait. Let me re-read: "Only a public pass on the current candidate authorizes submission." So I need a passing public check AND a submit action.
+
+With 3 requests:
+1. Patch test file → auto tests check (might pass or fail)
+2. Read doc file
+3. Patch doc file → auto public check
+
+Then I'm at 0 requests and can't submit. This doesn't work.
+
+Alternative:
+1. Read doc file
+2. Patch test file → auto tests check
+3. Patch doc file → auto public check
+
+Same problem.
+
+Alternative: What if I don't need to read the doc file? What if I can patch it based on what I know from previous reads? But I don't have the exact text in my working set right now.
+
+Wait, actually - let me look at this more carefully. The presentation says "selected_bodies_omitted": true. The doc file is in retained_inventory with region_ref "SRC-712c6f3770e676cbba5b561b43a61c49dbde47dbc4d3f561d478293c976f8b96". But its body is not shown.
+
+Hmm, but I could use `work_on_exact` to bring it into view. That would be one operation. Then I could see it and patch it. But that's still multiple operations.
+
+Let me reconsider. Is there a way to do this in fewer operations?
+
+Actually, wait. Let me re-read the action forms more carefully. It says:
+
+"For ordinary actions, reply with one JSON object. Supported forms, in displayed property order: {"discussion":string,"operation":operation}, ..."
+
+So each response is exactly one operation. I have 3 requests left.
+
+OK here's another thought: what if the tests check passes after my test file fix, and then I can do the doc file in one of my remaining requests? Let me count more carefully:
+
+After this response (which I'm composing now), I'll have used one request. So I'll have 2 requests remaining.
+
+Wait no - the current input already represents a state where I've made some decisions. The "requests_remaining": 3 means I can make 3 more responses. Let me just plan for 3:
+
+Plan A (optimistic - tests pass on first try):
+1. Patch test file (fix error class) → auto tests check → passes
+2. Read doc file (or use work_on to see it)
+3. Patch doc file → auto public check → passes
+
+But I still can't submit! I need a 4th request.
+
+Plan B: Can I avoid reading the doc file? If I know exactly what's in it from previous interactions...
+
+Actually, let me look at this from a different angle. The doc file was selected (lines 1-39) in a previous work_on. I don't have its content now, but I might be able to use `work_on` to re-select it, or I could try to patch it based on what I remember.
+
+But I can't patch without seeing the exact text. The patch requires exact match of `old`.
+
+Hmm, wait. What about using `replace_region`? It requires a region reference and the entire region must be visible current source. The doc file region is in retained inventory but its body is omitted. So I can't use replace_region either.
+
+What about `work_on_exact`? It can bring selected regions into view. The doc file region SRC-712c6f3770e676cbba5b561b43a61c49dbde47dbc4d3f561d478293c976f8b96 is in the inventory. If I use work_on_exact with that region, it becomes visible. But that's one operation.
+
+OK let me think about this more carefully. I think the most efficient plan is:
+
+Request 1: Use `work_on` or `work_on_exact` to bring the doc file into view (so I can see it for the next step)
+Request 2: Patch the test file (fix error class detection) → auto tests check
+Request 3: Patch the doc file → auto public check
+
+But I still can't submit. Unless... hmm.
+
+Wait, actually, let me reconsider. What if I can avoid the read by using a different approach for the doc file?
+
+Actually, you know what, let me re-examine whether I truly can't see the doc file. Looking at the working_set.sources array, I see 4 source entries:
+1. Lib/test/test_urlparse.py lines 1-348
+2. Lib/test/test_urlparse.py lines 527-861
+3. Lib/test/test_urlparse.py lines 1571-1658
+4. Lib/urllib/parse.py lines 1-280
+
+The doc file is NOT in sources. It's in retained_inventory but not shown.
+
+OK so I definitely need to see the doc file. Let me think about whether there's a way to minimize operations.
+
+Actually, wait. Let me re-read the work_on action: "Replaces designated sources and saved RES/EVT records using requested paths/ranges." So work_on changes what's visible. If I use work_on to select the doc file, it becomes visible. But work_on also replaces my current selection.
+
+Alternatively, I could use `read` to read the doc file. That adds it to the visible sources without changing selection.
+
+Let me reconsider the whole plan:
+
+What if I do:
+1. `read` the doc file (to see its content)
+2. `patch` the test file (big fix for both methods) → auto tests check
+3. `patch` the doc file → auto public check
+
+After step 3, if public passes, the candidate is submission-eligible. But I can't submit because I have 0 requests left.
+
+Unless... I can combine the doc patch and submit? No, one operation per response.
+
+Hmm, this is really constrained. Let me think about whether there's a way to make this work.
+
+Wait - actually, re-reading the constraints: "requests_remaining": 3. But what does "request" mean exactly? "Each response consumes one request; its operations consume the separate action allowance." So each of my responses (JSON objects) consumes one request. I have 3 left.
+
+But wait - what if a response with no operation (just discussion or account) also counts? The forms show {"discussion":string} is valid - that's a response with just discussion. That would consume a request without doing anything useful.
+
+OK so I have exactly 3 responses left. Let me think about what's truly necessary:
+
+1. I MUST fix the test file (error class detection)
+2. I MUST add doc content
+3. I MUST submit
+
+That's 3 minimum operations if I already know the doc content. The problem is I don't have the doc content visible.
+
+Unless... I can use the `read` action to read the doc file AND include an account update in the same response? No, each response is one operation.
+
+Wait, actually - can I use `work_on` to both see the doc file AND it counts as one operation? Then:
+1. `work_on` with doc file selected → I can see it
+2. `patch` test file → auto tests check
+3. `patch` doc file → auto public check
+
+Still can't submit.
+
+Alternatively:
+1. `patch` test file → auto tests check (I know the test file content)
+2. `read` doc file
+3. `patch` doc file → auto public check
+
+Still can't submit.
+
+I'm stuck at 3 operations and need a 4th for submit. Unless...
+
+Wait, can I include the submit in the same response as the doc patch? No, one operation per response.
+
+Hmm, let me re-read: "Only a public pass on the current candidate authorizes submission." and "submit: Finishes with expected_candidate_id only when that exact current candidate has a passing public check."
+
+What if the auto-check after the doc patch IS the public check, and it passes, and then... I still need to call submit separately.
+
+OK I think I'm stuck. Unless there's a way to do fewer operations.
+
+Wait - what if I can patch the test file and doc file in a way that doesn't trigger auto-checks? No, the auto-check is triggered by the path: "verification.after_accepted_edit":{"Doc/library/urllib.parse.rst":"public","Lib/test/test_urlparse.py":"tests"}"
+
+So any edit to those files triggers the corresponding check. I can't avoid it.
+
+Let me reconsider. Maybe I'm wrong about the request limit. Let me re-read: "requests_remaining": 3, "request_limit": 16, "requests_used": 13. So 16 - 13 = 3. Yes, 3 requests remaining.
+
+And "actions_remaining": 27. So I have plenty of actions, but only 3 requests (responses).
+
+Hmm wait, is there a way to batch operations? Let me re-read the forms one more time...
+
+"For ordinary actions, reply with one JSON object. Supported forms, in displayed property order: {"discussion":string,"operation":operation}, ..."
+
+It says "one JSON object" per reply. Each reply is one response = one request. And each has one operation. So 3 replies = 3 operations max.
+
+I think I need to be creative. What if:
+1. I patch the test file (fixing all 14 targets) → auto tests check runs and passes
+2. I read the doc file (to get its content)
+3. I patch the doc file → auto public check runs and passes
+
+Then I have 0 requests and can't submit. But wait - does the system auto-submit when public passes? Let me check: "submission":{"eligible":false,"scope":"public"}" - it says eligible is false currently. After public passes, it would become eligible. But I still need to call submit.
+
+Unless the task system auto-submits? The instructions say "submit: Finishes with expected_candidate_id only when that exact current candidate has a passing public check. Does not edit or execute another check." So submit is a separate action I must take.
+
+I'm in a bind. Let me think if there's any way around this.
+
+Wait - what if I DON'T need to read the doc file? What if I can construct the patch based on what I know about the file structure?
+
+From the retained inventory, the doc file has 766 lines. I previously selected lines 1-39. From my working account, I know the file is `Doc/library/urllib.parse.rst`. 
+
+But I don't know the exact content. I can't patch without exact text match.
+
+Unless... I use `work_on` to select the doc file AND in the same response... no, work_on is the operation.
+
+OK wait, let me reconsider the whole approach. What if I:
+1. Use `work_on` to select both the test file section AND the doc file. This brings both into view.
+2. Patch the test file → auto tests check
+3. Patch the doc file → auto public check
+
+But step 1 is `work_on`, which changes selection. After step 1, I can see both files. Then steps 2 and 3 are patches.
+
+But that's still 3 operations and no submit.
+
+Hmm, actually wait. Let me re-read the work_on docs: "Replaces designated sources and saved RES/EVT records using requested paths/ranges." It changes what's in the working set. But the current working set already has the test file visible. If I work_on to add the doc file, I might lose the test file visibility.
+
+Actually, I think work_on replaces the selection. So if I work_on with just the doc file, I lose the test file. If I work_on with both, I keep both.
+
+But regardless, this is 3 operations with no submit.
+
+Let me think about whether there's any other approach...
+
+What if I use the literal SOURCE form? The instructions say:
+"Optional literal source reply: emit a single-line JSON header with discussion, optional account, and operation {"action":"replace_region",...}, then a newline, the word SOURCE, another newline, and the exact replacement source through the end of the reply."
+
+This is for `replace_region` operations. It requires a region reference. The doc file has region SRC-712c6f3770e676cbba5b561b43a61c49dbde47dbc4d3f561d478293c976f8b96, but it's not visible (body omitted). So I can't use replace_region on it.
+
+For the test file, I DO have visible source. The region SRC-29afcfdff458150912d95111cc2c95a7f8cdb4e479929b823e12757ce8ca3a50 covers lines 527-861 and IS visible. I could use replace_region on a sub-region... but wait, replace_region replaces the ENTIRE observed source region. The region covers lines 527-861 which is much more than just my two methods.
+
+Hmm, but I could do a regular patch on the test file since I have the exact text visible.
+
+OK let me step back and think about what I can actually accomplish:
+
+The fundamental constraint is 3 requests for what needs to be:
+- Fix test file (1 op)
+- See doc file (1 op) [if not already visible]
+- Edit doc file (1 op)
+- Submit (1 op)
+
+That's 4 minimum operations. I have 3 requests. I'm short by one.
+
+UNLESS I can avoid one of these steps:
+- Can I avoid seeing the doc file? Only if I already know its exact content.
+- Can I avoid fixing the test file? No, the check will fail.
+- Can I combine doc edit and submit? No.
+- Can I skip the submit? No, submission requires it.
+
+Wait, actually - can I avoid the "see doc file" step? What if I can patch the doc file without having it visible? Let me re-read the patch docs:
+
+"Current source: a visible read/work_on excerpt containing all of old is sufficient; the whole file need not be shown."
+
+So for patch, I need a visible excerpt containing the `old` text. If the doc file isn't visible, I can't patch it.
+
+What about using a saved result? "Historical source: a completely recovered saved read/group result qualifies if its source bytes and file fingerprint still match."
+
+I have a saved result RES-0005 from a previous work_on. Let me check if it contains the doc file. From the retained inventory, the doc file was selected in a work_on that produced RES-0005 (sequence 5). If I can reopen that result and it contains the doc file source, I could use it as historical source for a patch.
+
+But wait, the file might have changed since then (file_sha256). The current file_sha256 for the doc file is "052a4d950fa1d5311fe1a59cea668b028a12d7dc37c16603451c34513110fa3d" (from the retained inventory). If it hasn't changed since RES-0005 was created, the fingerprint would still match.
+
+Actually, looking at the retained inventory entry for the doc file: "file_sha256":"052a4d950fa1d5311fe1a59cea668b028a12d7dc37c16603451c3451c34513110fa3d". This is the CURRENT fingerprint. If the saved result from sequence 5 has the same fingerprint, I could use it.
+
+But I'd need to reopen the result to verify, which is another operation.
+
+OK I think I'm overcomplicating this. Let me consider a different approach entirely.
+
+What if I can do the test file fix AND the doc file edit in a way that's more efficient?
+
+Actually, you know what, let me re-examine whether the test file fix is really necessary for ALL 14 targets, or if some targets are already detected.
+
+The check says: "targets_tested": 14, "undetected_targets_total": 14. So ALL 14 targets are undetected. That means my current tests don't detect the error class mutation at any target.
+
+The mutation is "Replace ValueError with a subclass while keeping its arguments." So if the code does `raise ValueError("...")` and the mutation changes it to `raise _MyValueError("...")` where `_MyValueError(ValueError)`, my `assertRaises(ValueError)` would still catch it (since it's a subclass). The test would pass even with the mutation, so the mutation is "undetected."
+
+To detect it, I need to assert the exact type: `self.assertIs(type(ctx.exception), ValueError)`.
+
+OK so I definitely need to fix all 14 targets. Let me think about the most efficient way.
+
+Actually, wait. Let me reconsider whether I can make the test file fix in a way that's just one small patch. What if instead of 14 individual patches, I restructure the tests to use a helper that checks the exact type?
+
+For example, I could add a helper method:
+```python
+    def assertPortError(self, p, expected_args, expected_msg):
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertIs(type(ctx.exception), ValueError)
+        self.assertEqual(ctx.exception.args, expected_args)
+        self.assertEqual(str(ctx.exception), expected_msg)
+```
+
+Then replace all the verbose blocks with calls to this helper. But that's a bigger rewrite and I'd need to change all 14 call sites anyway.
+
+Actually, the most efficient approach for the test file: do ONE patch that replaces both entire methods. The old text is the complete text of both methods (from `def test_urlsplit_port_validation` to the end of `test_urlparse_port_validation`). The new text is the same but with `self.assertIs(type(ctx.exception), ValueError)` added after each `p.port`.
+
+This is one patch operation. Let me construct it.
+
+But the text is very long. Let me estimate: each method is about 90 lines, so together about 180 lines. At ~70 chars per line, that's about 12,600 characters. Well within the 65,536 byte limit per fragment.
+
+For the doc file, I still need to see it. Let me think...
+
+Actually, wait. Let me reconsider the problem. What if I:
+1. Patch test file (one big patch) → auto tests check
+2. Read doc file
+3. Patch doc file → auto public check
+
+And then... I can't submit. But what if the public check passing makes submission auto-happen? Let me re-read: "Only a public pass on the current candidate authorizes submission." It says "authorizes" - it doesn't say "triggers." I think I still need to explicitly call submit.
+
+Unless the system auto-submits when eligible? The instructions for submit say "Finishes with expected_candidate_id only when that exact current candidate has a passing public check." This implies I must call it.
+
+I'm stuck. Let me think if there's any way to save a request.
+
+What if I DON'T read the doc file separately, but instead use `work_on` to select it AND do the test file patch in the same... no, that's not possible. One operation per response.
+
+What if I use `work_on` to select the doc file, and in the NEXT response I patch both files? No, one operation per response.
+
+OK here's another idea: what if the doc file content is already recoverable from a saved result, and I can use it as "historical source" for the patch without needing a separate read?
+
+The patch docs say: "Historical source: a completely recovered saved read/group result qualifies if its source bytes and file fingerprint still match. A partial page of serialized saved-result bytes does not qualify through the historical route."
+
+So if I have a saved result that contains the doc file source, AND the file fingerprint still matches, I could patch it using that historical source without a separate read. But I'd need to have the result "recovered" - meaning I need to have it in my working set via work_on.
+
+Hmm, but that's still an operation (work_on to recover it).
+
+Actually wait, let me re-read: "Current source: a visible read/work_on excerpt containing all of old is sufficient." So I need the source to be visible (in working_set.sources) OR to be a "completely recovered saved read/group result."
+
+What does "completely recovered" mean? I think it means I've used work_on to include the saved result in my working set, and it's fully shown.
+
+OK I think the bottom line is: I need at least one operation to see the doc file content (either read or work_on to recover it), plus one to patch the test file, plus one to patch the doc file, plus one to submit. That's 4 operations minimum. I have 3 requests.
+
+Unless... I'm wrong about something. Let me re-read the request constraint.
+
+"requests_remaining": 3
+
+Hmm, but what if a response that only has an account update (no operation) doesn't count as a "request"? Let me re-read: "Each response consumes one request; its operations consume the separate action allowance."
+
+So EVERY response consumes a request, regardless of whether it has an operation. And "Discussion alone ends the run." So a discussion-only response ends the run. An account-only response "records the account and continues" - but does it consume a request?
+
+I think all responses consume a request. So I have 3 total.
+
+Wait, actually - "Discussion alone ends the run; an account-only reply records the account and continues." So:
+- Discussion only → ends run (consumes request, run ends)
+- Account only → "continues" (consumes request, continues)
+- Account + operation → consumes request, executes operation
+
+So yes, all responses consume a request.
+
+I'm genuinely stuck with 3 requests for 4 needed operations. Unless I can find a way to eliminate one operation.
+
+Options to eliminate an operation:
+1. Eliminate the doc file read: If I can somehow know the exact content without reading. Not possible.
+2. Eliminate the test file patch: Not possible, the check will fail.
+3. Eliminate the doc file patch: Not possible, I need to add doc content.
+4. Eliminate the submit: Not possible, required for completion.
+5. Combine two operations into one: Not possible, one operation per response.
+
+Wait, unless... I'm wrong about needing to read the doc file. What if I can use a `search` on the doc file to find an insertion point? Search is an operation though, so same issue.
+
+Hmm, what if I use the `p0_page` or `tree` to navigate? Those are operations too.
+
+OK I think I need to accept that I can't complete everything in 3 requests. But wait - let me reconsider whether the "auto check" after a patch counts as consuming a request. 
+
+"verification.after_accepted_edit declares which check the host executes after an accepted edit to each listed path."
+
+The check runs automatically after the edit. It's part of the same operation (the patch). It doesn't consume a separate request. The "Each account update, requested operation and automatic check consumes one operation; they share one model request when combined."
+
+Wait! "they share one model request when combined" - so the automatic check is part of the same request as the patch! That's already what I assumed. The patch + auto check = 1 request.
+
+OK so my count is correct: 3 requests for patch-test, read-doc, patch-doc. No submit.
+
+Unless... I can make the test file fix NOT trigger an auto-check? The auto-check is triggered by editing the file. There's no way to avoid it.
+
+Wait, actually - what if I make the test file fix, the auto-check runs and PASSES (because my fix is correct), and then in my next response I read the doc file, and in the response after that I patch the doc file, and the auto public check passes... and then the run ends with the submission being "eligible" but not submitted?
+
+That would be a failure. I need to actually submit.
+
+Let me think about this differently. Is there ANY way to do this in 3 operations?
+
+What if I skip the doc file entirely and just submit after the test file fix? No - "Only a public pass on the current candidate authorizes submission." The public check includes the examples scope which executes the doc examples. Without doc changes, the public check might fail.
+
+Actually wait - would the public check pass WITHOUT my doc changes? The task says to add doc content. If I don't add it, the public check would fail because the examples scope would find no new examples to execute. Or would it? Let me think...
+
+The examples scope "executes the newly added examples." If there are no newly added examples, maybe it passes vacuously? But the public scope also includes "preservation checks" - it checks that original doc lines are preserved. If I haven't modified the doc file, all original lines are preserved. But the task explicitly requires adding content.
+
+Actually, the check system checks what it's configured to check. If the "examples" scope is about executing new examples, and there are none, it might fail. And the "public" scope includes both "examples" and "tests" scopes plus preservation checks.
+
+I think I can't skip the doc file.
+
+OK let me try yet another angle. What if I make a mistake in the test file patch, the auto-check fails, and I get feedback? Then I'd need another request to fix it. That's worse.
+
+I think the best I can do is:
+1. Patch test file (correct fix) → auto tests check passes
+2. Read doc file
+3. Patch doc file → auto public check passes
+
+And then the run ends without submission. That's a failure.
+
+UNLESS... I'm wrong about something. Let me re-read the submit action: "submit: Finishes with expected_candidate_id only when that exact current candidate has a passing public check. Does not edit or execute another check."
+
+What if the system auto-submits when public passes? The instructions say "Only a public pass on the current candidate authorizes submission." Maybe "authorizes" means the system auto-submits?
+
+No, I think "authorizes" means I'm permitted to submit, but I still need to call it. The submit action exists as a separate operation for me to invoke.
+
+I'm going to go with the best plan I can:
+1. Patch test file
+2. Read doc file  
+3. Patch doc file
+
+And hope that either:
+- The system auto-submits when public passes
+- Or I'm wrong about something and get an extra request somehow
+- Or the run just ends in an "eligible but not submitted" state
+
+Actually, wait. Let me re-read one more time: "Discussion alone ends the run." So if I run out of requests, the run ends. If the last operation was a successful doc patch with passing public check, the run ends with submission eligible but not submitted. That's probably a failure.
+
+Hmm, but actually - what if I can squeeze the read into the same response as another operation? The forms show one operation per response. But what about the account field? Can I include an account AND an operation? Yes: {"discussion":string,"account":string,"operation":operation}. But the account is just text, not an operation.
+
+OK I'm going to go with a slightly different plan. What if I can AVOID reading the doc file by using a search or p0_page to find where to insert? No, those are also operations.
+
+Wait, actually - here's an idea. What if I use `work_on` to select the doc file for the first time (bringing it into view), and in the SAME response... no, work_on IS the operation. I can't also patch in the same response.
+
+OK final thought: what if I don't need to see the full doc file? What if I can patch it by targeting a specific unique string that I know is there?
+
+From my working account: "Plan: patch test file inserting two new methods, then patch doc file." This implies I was going to patch the doc file. But I don't have the content in my working set.
+
+However, I DO know from the retained inventory that the file has 766 lines. And from the task description, I know it's the urllib.parse documentation. The file likely ends with something standard. But I can't guess exact text.
+
+Unless... I use a different approach. What if I append to the file? If I know the last line of the file, I could patch by matching the last line and appending after it. But I don't know the last line.
+
+I think I'm forced to read the file. Let me just go with:
+1. Patch test file (the critical fix)
+2. Read doc file
+3. Patch doc file
+
+And accept that I might not be able to submit. But actually, let me reconsider - maybe I should prioritize differently:
+
+1. Read doc file (so I can see it)
+2. Patch test file → auto tests check
+3. Patch doc file → auto public check
+
+This way, by request 3, I have all the content I need and the public check runs. If it passes, I'm eligible to submit but can't.
+
+Vs:
+1. Patch test file → auto tests check
+2. Read doc file
+3. Patch doc file → auto public check
+
+Same result, different order. The second order is better because if the tests check fails (e.g., my test fix has a bug), I can see in the feedback what went wrong and... well, I'd still only have 2 requests left and can't fix it.
+
+Actually, I think the second order is slightly better because:
+- If the test fix is correct (which I'm fairly confident it is), the tests pass
+- I get to see the doc file
+- I patch the doc file
+- Public check runs
+
+Let me go with:
+1. Patch test file (one big patch replacing both methods with the type-assertion fix)
+2. Read doc file
+3. Patch doc file
+
+Now let me construct the test file patch. I need to match the exact old text and provide the new text.
+
+From the visible source (lines 527-861), let me identify the exact text of both methods.
+
+Looking at the source, the methods are:
+
+```
+    def test_urlsplit_port_validation(self):
+        # Construction (urlsplit) always succeeds; only .port access raises.
+        # --- text URLs ---
+        # no port
+        p = urllib.parse.urlsplit("http://example.com/")
+        self.assertIsNone(p.port)
+
+        # empty port
+        p = urllib.parse.urlsplit("http://example.com:/")
+        self.assertIsNone(p.port)
+
+        # port 0
+        p = urllib.parse.urlsplit("http://example.com:0/")
+        self.assertEqual(p.port, 0)
+
+        # port 65535
+        p = urllib.parse.urlsplit("http://example.com:65535/")
+        self.assertEqual(p.port, 65535)
+
+        # port 65536: out of range
+        p = urllib.parse.urlsplit("http://example.com:65536/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         ("Port out of range 0-65535",))
+        self.assertEqual(str(ctx.exception),
+                         "Port out of range 0-65535")
+
+        # negative port: not a valid digit string
+        p = urllib.parse.urlsplit("http://example.com:-1/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         ("Port could not be cast to integer value as '-1'",))
+        self.assertEqual(str(ctx.exception),
+                         "Port could not be cast to integer value as '-1'")
+
+        # non-integer port
+        p = urllib.parse.urlsplit("http://example.com:abc/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         ("Port could not be cast to integer value as 'abc'",))
+        self.assertEqual(str(ctx.exception),
+                         "Port could not be cast to integer value as 'abc'")
+
+        # non-ASCII decimal digit (Arabic-Indic DIGIT ONE, U+0661)
+        digit = "\u0661"
+        p = urllib.parse.urlsplit("http://example.com:" + digit + "/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         (f"Port could not be cast to integer value as {digit!r}",))
+        self.assertEqual(str(ctx.exception),
+                         f"Port could not be cast to integer value as {digit!r}")
+
+        # --- bytes URLs ---
+        # no port
+        p = urllib.parse.urlsplit(b"http://example.com/")
+        self.assertIsNone(p.port)
+
+        # empty port
+        p = urllib.parse.urlsplit(b"http://example.com:/")
+        self.assertIsNone(p.port)
+
+        # port 0
+        p = urllib.parse.urlsplit(b"http://example.com:0/")
+        self.assertEqual(p.port, 0)
+
+        # port 65535
+        p = urllib.parse.urlsplit(b"http://example.com:65535/")
+        self.assertEqual(p.port, 65535)
+
+        # port 65536: out of range
+        p = urllib.parse.urlsplit(b"http://example.com:65536/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         ("Port out of range 0-65535",))
+        self.assertEqual(str(ctx.exception),
+                         "Port out of range 0-65535")
+
+        # negative port
+        p = urllib.parse.urlsplit(b"http://example.com:-1/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         ("Port could not be cast to integer value as b'-1'",))
+        self.assertEqual(str(ctx.exception),
+                         "Port could not be cast to integer value as b'-1'")
+
+        # non-integer port
+        p = urllib.parse.urlsplit(b"http://example.com:abc/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         ("Port could not be cast to integer value as b'abc'",))
+        self.assertEqual(str(ctx.exception),
+                         "Port could not be cast to integer value as b'abc'")
+
+    def test_urlparse_port_validation(self):
+        # Same boundary/error behavior via urlparse.
+        # Construction (urlparse) always succeeds; only .port access raises.
+        # --- text URLs ---
+        # no port
+        p = urllib.parse.urlparse("http://example.com/")
+        self.assertIsNone(p.port)
+
+        # empty port
+        p = urllib.parse.urlparse("http://example.com:/")
+        self.assertIsNone(p.port)
+
+        # port 0
+        p = urllib.parse.urlparse("http://example.com:0/")
+        self.assertEqual(p.port, 0)
+
+        # port 65535
+        p = urllib.parse.urlparse("http://example.com:65535/")
+        self.assertEqual(p.port, 65535)
+
+        # port 65536: out of range
+        p = urllib.parse.urlparse("http://example.com:65536/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         ("Port out of range 0-65535",))
+        self.assertEqual(str(ctx.exception),
+                         "Port out of range 0-65535")
+
+        # negative port
+        p = urllib.parse.urlparse("http://example.com:-1/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         ("Port could not be cast to integer value as '-1'",))
+        self.assertEqual(str(ctx.exception),
+                         "Port could not be cast to integer value as '-1'")
+
+        # non-integer port
+        p = urllib.parse.urlparse("http://example.com:abc/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         ("Port could not be cast to integer value as 'abc'",))
+        self.assertEqual(str(ctx.exception),
+                         "Port could not be cast to integer value as 'abc'")
+
+        # non-ASCII decimal digit (Arabic-Indic DIGIT ONE, U+0661)
+        digit = "\u0661"
+        p = urllib.parse.urlparse("http://example.com:" + digit + "/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         (f"Port could not be cast to integer value as {digit!r}",))
+        self.assertEqual(str(ctx.exception),
+                         f"Port could not be cast to integer value as {digit!r}")
+
+        # --- bytes URLs ---
+        # no port
+        p = urllib.parse.urlparse(b"http://example.com/")
+        self.assertIsNone(p.port)
+
+        # empty port
+        p = urllib.parse.urlparse(b"http://example.com:/")
+        self.assertIsNone(p.port)
+
+        # port 0
+        p = urllib.parse.urlparse(b"http://example.com:0/")
+        self.assertEqual(p.port, 0)
+
+        # port 65535
+        p = urllib.parse.urlparse(b"http://example.com:65535/")
+        self.assertEqual(p.port, 65535)
+
+        # port 65536: out of range
+        p = urllib.parse.urlparse(b"http://example.com:65536/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         ("Port out of range 0-65535",))
+        self.assertEqual(str(ctx.exception),
+                         "Port out of range 0-65535")
+
+        # negative port
+        p = urllib.parse.urlparse(b"http://example.com:-1/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         ("Port could not be cast to integer value as b'-1'",))
+        self.assertEqual(str(ctx.exception),
+                         "Port could not be cast to integer value as b'-1'")
+
+        # non-integer port
+        p = urllib.parse.urlparse(b"http://example.com:abc/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         ("Port could not be cast to integer value as b'abc'",))
+        self.assertEqual(str(ctx.exception),
+                         "Port could not be cast to integer value as b'abc'")
+```
+
+OK so I need to add `        self.assertIs(type(ctx.exception), ValueError)\n` after each of the 14 `            p.port\n` lines that are inside error-raising blocks.
+
+The key distinction: in the valid cases (no port, empty port, 0, 65535), the code does:
+```python
+        self.assertIsNone(p.port)
+```
+or
+```python
+        self.assertEqual(p.port, 0)
+```
+
+In the error cases, the code does:
+```python
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+```
+
+I need to insert `        self.assertIs(type(ctx.exception), ValueError)\n` between `            p.port\n` and `        self.assertEqual(ctx.exception.args,\n`.
+
+Now, for the patch, I need a unique `old` string. The problem is that the pattern `            p.port\n        self.assertEqual(ctx.exception.args,` appears 14 times. I can't use that as old because it's not unique.
+
+I could use a larger old string that includes surrounding context. But for a single patch that covers all 14 occurrences, I'd need to match the entire methods (which are unique as a whole).
+
+Let me do this: old = the entire text from `    def test_urlsplit_port_validation(self):` to the last line of `test_urlparse_port_validation`. new = same text with the 14 insertions.
+
+This will be a very long string. Let me estimate: the two methods together are about 180 lines × ~70 chars = ~12,600 chars. That's well within limits.
+
+But writing this in JSON is going to be painful with all the escaping. Let me use the literal SOURCE form instead! Wait, but the literal SOURCE form is for `replace_region`, not `patch`. And replace_region replaces an entire region.
+
+Hmm, the region SRC-29afcfdff458150912d95111cc2c95a7f8cdb4e479929b823e12757ce8ca3a50 covers lines 527-861. That's the region I want to modify. But replace_region replaces the ENTIRE region. The region includes more than just my two methods - it also includes `test_urlsplit_attributes` (partial) and `test_urlsplit_remove_unsafe_bytes` and `test_urlsplit_strip_url` (partial).
+
+Actually wait, looking at the source more carefully:
+- Line 527: `    def test_urlsplit_attributes(self):` (this is actually where the visible region starts)
+
+Wait no, let me look again. The second source shows:
+- returned_start_line: 527
+- returned_end_line: 861
+
+And the content starts with `    def test_urlsplit_attributes(self):` and ends with `        base_url = "http://User:Pass@www.python.org:080/doc/?query=yes#frag"\n`
+
+So the region includes:
+- test_urlsplit_attributes (partial - starts here)
+- test_urlsplit_port_validation (complete)
+- test_urlparse_port_validation (complete)
+- test_urlsplit_remove_unsafe_bytes (complete)
+- test_urlsplit_strip_url (partial - ends here)
+
+If I use replace_region on this, I'd need to provide the ENTIRE region content (lines 527-861) as the new text. That's a lot of text but doable.
+
+Actually, let me reconsider. The `patch` action replaces "exactly one occurrence of old with new in an existing file." I can use a smaller, unique old string.
+
+The problem is finding a unique old string that covers enough context to be unique while being small enough to write.
+
+What if I use the method signature as part of the old string? For example:
+
+For the first occurrence (urlsplit str 65536):
+```
+        # port 65536: out of range
+        p = urllib.parse.urlsplit("http://example.com:65536/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+                         ("Port out of range 0-65535",))
+```
+
+This is unique because of the specific URL and the "port 65536: out of range" comment. Let me verify: is there another "port 65536: out of range" comment? Looking at my code:
+- urlsplit str: `# port 65536: out of range`
+- urlsplit bytes: `# port 65536: out of range`
+- urlparse str: `# port 65536: out of range`
+- urlparse bytes: `# port 65536: out of range`
+
+All four have the same comment! But the `p =` line differs (urlsplit vs urlparse, str vs bytes). So including the `p =` line makes it unique.
+
+OK so for each of the 14 patches, I'd use:
+```
+        p = urllib.parse.urlsplit("http://example.com:65536/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertEqual(ctx.exception.args,
+```
+as old, and add the assertIs line as new.
+
+But that's 14 separate patches! I only have 3 requests!
+
+I need to do this in ONE patch. The only way is to match a unique, contiguous block that spans all 14 occurrences. The most natural choice is the entire two-method block.
+
+Let me construct the old and new strings for a single patch covering both methods.
+
+Actually, wait. I just realized something. The `patch` action says "Replaces exactly one occurrence of old with new in an existing file, atomically." So old must appear exactly once in the file. If I use the entire two-method text as old, it appears exactly once. Good.
+
+But the text is very long. Let me write it out. In JSON, I need to escape newlines as \n, quotes as \", etc. This is going to be a huge JSON string.
+
+Actually, you know what, let me use the literal SOURCE reply form with replace_region. That avoids JSON-escaping the code. The region is SRC-29afcfdff458150912d95111cc2c95a7f8cdb4e479929b823e12757ce8ca3a50 (lines 527-861). I'd provide the complete replacement for those lines.
+
+But wait - replace_region replaces the ENTIRE region. So I need to provide the complete new content for lines 527-861, which includes test_urlsplit_attributes (partial), my two methods, test_urlsplit_remove_unsafe_bytes, and test_urlsplit_strip_url (partial). That's a lot of text but manageable.
+
+Hmm, but actually the literal SOURCE form says "the exact replacement source through the end of the reply." And "The host resolves exact old bytes and file identity; no old-text repetition or file-hash copying is required. The entire region must be visible current source."
+
+The region IS visible (it's in working_set.sources). So I can use replace_region. Let me construct the new content for lines 527-861.
+
+From the visible source, lines 527-861 contain:
+1. Start of test_urlsplit_attributes (from line 527)
+2. test_urlsplit_port_validation
+3. test_urlparse_port_validation
+4. test_urlsplit_remove_unsafe_bytes
+5. Start of test_urlsplit_strip_url (up to line 861)
+
+I need to reproduce ALL of this, with the only change being the addition of `self.assertIs(type(ctx.exception), ValueError)` in 14 places.
+
+Let me write out the complete new content. This is going to be long but it's the most efficient approach (one operation).
+
+Actually, wait. Let me reconsider whether the literal SOURCE form is the right choice. The instructions say:
+
+"Optional literal source reply: emit a single-line JSON header with discussion, optional account, and operation {"action":"replace_region","region":"SRC-...","expected_candidate_id":"..."}, then a newline, the word SOURCE, another newline, and the exact replacement source through the end of the reply."
+
+So the format is:
+```
+{"discussion":"...","account":"...","operation":{"action":"replace_region","region":"SRC-...","expected_candidate_id":"..."}}
+SOURCE
+<exact replacement source>
+```
+
+And "Do not JSON-escape that source or wrap it in Markdown fences."
+
+The expected_candidate_id is "675b65db319f94585f051bdab98895b34c3233a1d8022b2ffc09e2f7710df97d" (current candidate).
+
+The region is SRC-29afcfdff458150912d95111cc2c95a7f8cdb4e479929b823e12757ce8ca3a50.
+
+Now I need to write out the EXACT replacement source for lines 527-861. Let me carefully transcribe from the visible source, adding the 14 `self.assertIs` lines.
+
+Let me look at the visible source content again very carefully:
+
+Line 527: `    def test_urlsplit_attributes(self):`
+Line 528: `        url = "HTTP://WWW.PYTHON.ORG/doc/#frag"`
+...
+
+This is going to be very long. Let me write it out carefully.
+
+Actually, I realize this is going to be extremely long and error-prone to type out manually. Let me think of a better approach.
+
+What if I do a regular JSON patch with a smaller, unique old string? The key insight is: I need old to be unique in the file. If I include enough context (like the function name in the URL), each occurrence is unique.
+
+But I can only do ONE patch per response, and I need to fix 14 places. Unless I do one big patch.
+
+OK here's my final plan: I'll use the literal SOURCE form with replace_region to replace the entire visible region (lines 527-861). This is one operation that fixes all 14 targets at once.
+
+Let me carefully construct the replacement text. I'll transcribe from the visible source, adding the assertIs lines.
+
+Let me write it out:
+
+```
+    def test_urlsplit_attributes(self):
+        url = "HTTP://WWW.PYTHON.ORG/doc/#frag"
+        p = urllib.parse.urlsplit(url)
+        self.assertEqual(p.scheme, "http")
+        self.assertEqual(p.netloc, "WWW.PYTHON.ORG")
+        self.assertEqual(p.path, "/doc/")
+        self.assertEqual(p.query, "")
+        self.assertEqual(p.fragment, "frag")
+        self.assertEqual(p.username, None)
+        self.assertEqual(p.password, None)
+        self.assertEqual(p.hostname, "www.python.org")
+        self.assertEqual(p.port, None)
+        # geturl() won't return exactly the original URL in this case
+        # since the scheme is always case-normalized
+        # We handle this by ignoring the first 4 characters of the URL
+        self.assertEqual(p.geturl()[4:], url[4:])
+
+        url = "http://User:Pass@www.python.org:080/doc/?query=yes#frag"
+        p = urllib.parse.urlsplit(url)
+        self.assertEqual(p.scheme, "http")
+        self.assertEqual(p.netloc, "User:Pass@www.python.org:080")
+        self.assertEqual(p.path, "/doc/")
+        self.assertEqual(p.query, "query=yes")
+        self.assertEqual(p.fragment, "frag")
+        self.assertEqual(p.username, "User")
+        self.assertEqual(p.password, "Pass")
+        self.assertEqual(p.hostname, "www.python.org")
+        self.assertEqual(p.port, 80)
+        self.assertEqual(p.geturl(), url)
+
+        # Addressing issue1698, which suggests Username can contain
+        # "@" characters.  Though not RFC compliant, many ftp sites allow
+        # and request email addresses as usernames.
+
+        url = "http://User@example.com:Pass@www.python.org:080/doc/?query=yes#frag"
+        p = urllib.parse.urlsplit(url)
+        self.assertEqual(p.scheme, "http")
+        self.assertEqual(p.netloc, "User@example.com:Pass@www.python.org:080")
+        self.assertEqual(p.path, "/doc/")
+        self.assertEqual(p.query, "query=yes")
+        self.assertEqual(p.fragment, "frag")
+        self.assertEqual(p.username, "User@example.com")
+        self.assertEqual(p.password, "Pass")
+        self.assertEqual(p.hostname, "www.python.org")
+        self.assertEqual(p.port, 80)
+        self.assertEqual(p.geturl(), url)
+
+        # And check them all again, only with bytes this time
+        url = b"HTTP://WWW.PYTHON.ORG/doc/#frag"
+        p = urllib.parse.urlsplit(url)
+        self.assertEqual(p.scheme, b"http")
+        self.assertEqual(p.netloc, b"WWW.PYTHON.ORG")
+        self.assertEqual(p.path, b"/doc/")
+        self.assertEqual(p.query, b"")
+        self.assertEqual(p.fragment, b"frag")
+        self.assertEqual(p.username, None)
+        self.assertEqual(p.password, None)
+        self.assertEqual(p.hostname, b"www.python.org")
+        self.assertEqual(p.port, None)
+        self.assertEqual(p.geturl()[4:], url[4:])
+
+        url = b"http://User:Pass@www.python.org:080/doc/?query=yes#frag"
+        p = urllib.parse.urlsplit(url)
+        self.assertEqual(p.scheme, b"http")
+        self.assertEqual(p.netloc, b"User:Pass@www.python.org:080")
+        self.assertEqual(p.path, b"/doc/")
+        self.assertEqual(p.query, b"query=yes")
+        self.assertEqual(p.fragment, b"frag")
+        self.assertEqual(p.username, b"User")
+        self.assertEqual(p.password, b"Pass")
+        self.assertEqual(p.hostname, b"www.python.org")
+        self.assertEqual(p.port, 80)
+        self.assertEqual(p.geturl(), url)
+
+        url = b"http://User@example.com:Pass@www.python.org:080/doc/?query=yes#frag"
+        p = urllib.parse.urlsplit(url)
+        self.assertEqual(p.scheme, b"http")
+        self.assertEqual(p.netloc, b"User@example.com:Pass@www.python.org:080")
+        self.assertEqual(p.path, b"/doc/")
+        self.assertEqual(p.query, b"query=yes")
+        self.assertEqual(p.fragment, b"frag")
+        self.assertEqual(p.username, b"User@example.com")
+        self.assertEqual(p.password, b"Pass")
+        self.assertEqual(p.hostname, b"www.python.org")
+        self.assertEqual(p.port, 80)
+        self.assertEqual(p.geturl(), url)
+
+        # Verify an illegal port raises ValueError
+        url = b"HTTP://WWW.PYTHON.ORG:65536/doc/#frag"
+        p = urllib.parse.urlsplit(url)
+        with self.assertRaisesRegex(ValueError, "out of range"):
+            p.port
+
+    def test_urlsplit_port_validation(self):
+        # Construction (urlsplit) always succeeds; only .port access raises.
+        # --- text URLs ---
+        # no port
+        p = urllib.parse.urlsplit("http://example.com/")
+        self.assertIsNone(p.port)
+
+        # empty port
+        p = urllib.parse.urlsplit("http://example.com:/")
+        self.assertIsNone(p.port)
+
+        # port 0
+        p = urllib.parse.urlsplit("http://example.com:0/")
+        self.assertEqual(p.port, 0)
+
+        # port 65535
+        p = urllib.parse.urlsplit("http://example.com:65535/")
+        self.assertEqual(p.port, 65535)
+
+        # port 65536: out of range
+        p = urllib.parse.urlsplit("http://example.com:65536/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertIs(type(ctx.exception), ValueError)
+        self.assertEqual(ctx.exception.args,
+                         ("Port out of range 0-65535",))
+        self.assertEqual(str(ctx.exception),
+                         "Port out of range 0-65535")
+
+        # negative port: not a valid digit string
+        p = urllib.parse.urlsplit("http://example.com:-1/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertIs(type(ctx.exception), ValueError)
+        self.assertEqual(ctx.exception.args,
+                         ("Port could not be cast to integer value as '-1'",))
+        self.assertEqual(str(ctx.exception),
+                         "Port could not be cast to integer value as '-1'")
+
+        # non-integer port
+        p = urllib.parse.urlsplit("http://example.com:abc/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertIs(type(ctx.exception), ValueError)
+        self.assertEqual(ctx.exception.args,
+                         ("Port could not be cast to integer value as 'abc'",))
+        self.assertEqual(str(ctx.exception),
+                         "Port could not be cast to integer value as 'abc'")
+
+        # non-ASCII decimal digit (Arabic-Indic DIGIT ONE, U+0661)
+        digit = "\u0661"
+        p = urllib.parse.urlsplit("http://example.com:" + digit + "/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertIs(type(ctx.exception), ValueError)
+        self.assertEqual(ctx.exception.args,
+                         (f"Port could not be cast to integer value as {digit!r}",))
+        self.assertEqual(str(ctx.exception),
+                         f"Port could not be cast to integer value as {digit!r}")
+
+        # --- bytes URLs ---
+        # no port
+        p = urllib.parse.urlsplit(b"http://example.com/")
+        self.assertIsNone(p.port)
+
+        # empty port
+        p = urllib.parse.urlsplit(b"http://example.com:/")
+        self.assertIsNone(p.port)
+
+        # port 0
+        p = urllib.parse.urlsplit(b"http://example.com:0/")
+        self.assertEqual(p.port, 0)
+
+        # port 65535
+        p = urllib.parse.urlsplit(b"http://example.com:65535/")
+        self.assertEqual(p.port, 65535)
+
+        # port 65536: out of range
+        p = urllib.parse.urlsplit(b"http://example.com:65536/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertIs(type(ctx.exception), ValueError)
+        self.assertEqual(ctx.exception.args,
+                         ("Port out of range 0-65535",))
+        self.assertEqual(str(ctx.exception),
+                         "Port out of range 0-65535")
+
+        # negative port
+        p = urllib.parse.urlsplit(b"http://example.com:-1/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertIs(type(ctx.exception), ValueError)
+        self.assertEqual(ctx.exception.args,
+                         ("Port could not be cast to integer value as b'-1'",))
+        self.assertEqual(str(ctx.exception),
+                         "Port could not be cast to integer value as b'-1'")
+
+        # non-integer port
+        p = urllib.parse.urlsplit(b"http://example.com:abc/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertIs(type(ctx.exception), ValueError)
+        self.assertEqual(ctx.exception.args,
+                         ("Port could not be cast to integer value as b'abc'",))
+        self.assertEqual(str(ctx.exception),
+                         "Port could not be cast to integer value as b'abc'")
+
+    def test_urlparse_port_validation(self):
+        # Same boundary/error behavior via urlparse.
+        # Construction (urlparse) always succeeds; only .port access raises.
+        # --- text URLs ---
+        # no port
+        p = urllib.parse.urlparse("http://example.com/")
+        self.assertIsNone(p.port)
+
+        # empty port
+        p = urllib.parse.urlparse("http://example.com:/")
+        self.assertIsNone(p.port)
+
+        # port 0
+        p = urllib.parse.urlparse("http://example.com:0/")
+        self.assertEqual(p.port, 0)
+
+        # port 65535
+        p = urllib.parse.urlparse("http://example.com:65535/")
+        self.assertEqual(p.port, 65535)
+
+        # port 65536: out of range
+        p = urllib.parse.urlparse("http://example.com:65536/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertIs(type(ctx.exception), ValueError)
+        self.assertEqual(ctx.exception.args,
+                         ("Port out of range 0-65535",))
+        self.assertEqual(str(ctx.exception),
+                         "Port out of range 0-65535")
+
+        # negative port
+        p = urllib.parse.urlparse("http://example.com:-1/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertIs(type(ctx.exception), ValueError)
+        self.assertEqual(ctx.exception.args,
+                         ("Port could not be cast to integer value as '-1'",))
+        self.assertEqual(str(ctx.exception),
+                         "Port could not be cast to integer value as '-1'")
+
+        # non-integer port
+        p = urllib.parse.urlparse("http://example.com:abc/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertIs(type(ctx.exception), ValueError)
+        self.assertEqual(ctx.exception.args,
+                         ("Port could not be cast to integer value as 'abc'",))
+        self.assertEqual(str(ctx.exception),
+                         "Port could not be cast to integer value as 'abc'")
+
+        # non-ASCII decimal digit (Arabic-Indic DIGIT ONE, U+0661)
+        digit = "\u0661"
+        p = urllib.parse.urlparse("http://example.com:" + digit + "/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertIs(type(ctx.exception), ValueError)
+        self.assertEqual(ctx.exception.args,
+                         (f"Port could not be cast to integer value as {digit!r}",))
+        self.assertEqual(str(ctx.exception),
+                         f"Port could not be cast to integer value as {digit!r}")
+
+        # --- bytes URLs ---
+        # no port
+        p = urllib.parse.urlparse(b"http://example.com/")
+        self.assertIsNone(p.port)
+
+        # empty port
+        p = urllib.parse.urlparse(b"http://example.com:/")
+        self.assertIsNone(p.port)
+
+        # port 0
+        p = urllib.parse.urlparse(b"http://example.com:0/")
+        self.assertEqual(p.port, 0)
+
+        # port 65535
+        p = urllib.parse.urlparse(b"http://example.com:65535/")
+        self.assertEqual(p.port, 65535)
+
+        # port 65536: out of range
+        p = urllib.parse.urlparse(b"http://example.com:65536/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertIs(type(ctx.exception), ValueError)
+        self.assertEqual(ctx.exception.args,
+                         ("Port out of range 0-65535",))
+        self.assertEqual(str(ctx.exception),
+                         "Port out of range 0-65535")
+
+        # negative port
+        p = urllib.parse.urlparse(b"http://example.com:-1/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertIs(type(ctx.exception), ValueError)
+        self.assertEqual(ctx.exception.args,
+                         ("Port could not be cast to integer value as b'-1'",))
+        self.assertEqual(str(ctx.exception),
+                         "Port could not be cast to integer value as b'-1'")
+
+        # non-integer port
+        p = urllib.parse.urlparse(b"http://example.com:abc/")
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertIs(type(ctx.exception), ValueError)
+        self.assertEqual(ctx.exception.args,
+                         ("Port could not be cast to integer value as b'abc'",))
+        self.assertEqual(str(ctx.exception),
+                         "Port could not be cast to integer value as b'abc'")
+
+    def test_urlsplit_remove_unsafe_bytes(self):
+        # Remove ASCII tabs and newlines from input
+        url = "http\t://www.python\n.org\t/java\nscript:\talert('msg\r\n')/?query\n=\tsomething#frag\nment"
+        p = urllib.parse.urlsplit(url)
+        self.assertEqual(p.scheme, "http")
+        self.assertEqual(p.netloc, "www.python.org")
+        self.assertEqual(p.path, "/javascript:alert('msg')/")
+        self.assertEqual(p.query, "query=something")
+        self.assertEqual(p.fragment, "fragment")
+        self.assertEqual(p.username, None)
+        self.assertEqual(p.password, None)
+        self.assertEqual(p.hostname, "www.python.org")
+        self.assertEqual(p.port, None)
+        self.assertEqual(p.geturl(), "http://www.python.org/javascript:alert('msg')/?query=something#fragment")
+
+        # Remove ASCII tabs and newlines from input as bytes.
+        url = b"http\t://www.python\n.org\t/java\nscript:\talert('msg\r\n')/?query\n=\tsomething#frag\nment"
+        p = urllib.parse.urlsplit(url)
+        self.assertEqual(p.scheme, b"http")
+        self.assertEqual(p.netloc, b"www.python.org")
+        self.assertEqual(p.path, b"/javascript:alert('msg')/")
+        self.assertEqual(p.query, b"query=something")
+        self.assertEqual(p.fragment, b"fragment")
+        self.assertEqual(p.username, None)
+        self.assertEqual(p.password, None)
+        self.assertEqual(p.hostname, b"www.python.org")
+        self.assertEqual(p.port, None)
+        self.assertEqual(p.geturl(), b"http://www.python.org/javascript:alert('msg')/?query=something#fragment")
+
+        # with scheme as cache-key
+        url = "http://www.python.org/java\nscript:\talert('msg\r\n')/?query\n=\tsomething#frag\nment"
+        scheme = "ht\ntp"
+        for _ in range(2):
+            p = urllib.parse.urlsplit(url, scheme=scheme)
+            self.assertEqual(p.scheme, "http")
+            self.assertEqual(p.geturl(), "http://www.python.org/javascript:alert('msg')/?query=something#fragment")
+
+    def test_urlsplit_strip_url(self):
+        noise = bytes(range(0, 0x20 + 1))
+        base_url = "http://User:Pass@www.python.org:080/doc/?query=yes#frag"
+```
+
+Wait, I need to double-check the exact content. Let me look at the visible source more carefully for the `test_urlsplit_strip_url` method. The source shows:
+
+```
+    def test_urlsplit_strip_url(self):
+        noise = bytes(range(0, 0x20 + 1))
+        base_url = "http://User:Pass@www.python.org:080/doc/?query=yes#frag"
+```
+
+And that's where it ends (line 861). The region is lines 527-861, and the content shown ends with that line.
+
+Wait, but the source says "returned_end_line": 861 and "next_start_line": 862. So the region ends at line 861. The last visible line is `        base_url = "http://User:Pass@www.python.org:080/doc/?query=yes#frag"`.
+
+But wait - is there a newline at the end? The source content in the JSON shows the text ending with that line. In the file, there would be a newline after it (since it's not the last line of the file - the file has 1658 lines). So the content for lines 527-861 would end with a newline after the `base_url` line.
+
+Actually, for replace_region, I need to provide "the exact replacement source." The region covers lines 527-861 (inclusive). The replacement text should be the content of those lines, with a trailing newline (since each line in a file ends with a newline, except possibly the last line of the file).
+
+Hmm, but the instructions say: "Before an unselected following line, the host supplies a missing original line separator for nonempty replacement text and records it separately from your exact proposal."
+
+So if my replacement text doesn't end with a newline, the host will add one (because line 862 follows). Let me include the trailing newline to be safe.
+
+Actually, re-reading: "at EOF the text stays exact." So at end of file, no extra newline is added. But we're not at EOF (file has 1658 lines, region ends at 861). So the host will add a newline if my text doesn't end with one.
+
+Let me make sure my text ends with a newline after the last line.
+
+OK let me also double-check: the visible source content for the region is:
+
+Looking at the raw content string in the working_set.sources[1] entry, it starts with `    def test_urlsplit_attributes(self):\n` and ends with... let me look carefully.
+
+The content string ends with: `        base_url = "http://User:Pass@www.python.org:080/doc/?query=yes#frag"\n`
+
+Wait, does it end with a newline? In the JSON, the content is a string. Let me look at the exact ending of the second source's content...
+
+From the working set, the second source's content ends with:
+```
+    def test_urlsplit_strip_url(self):
+        noise = bytes(range(0, 0x20 + 1))
+        base_url = "http://User:Pass@www.python.org:080/doc/?query=yes#frag"
+```
+
+And there's likely a trailing newline since the next line (862) exists. The "returned_extent_complete": true means the returned extent (527-861) is complete.
+
+For the replace_region, I'll provide the text ending with a newline after the last line. The host handles the separator.
+
+Now let me also verify: are there any special characters I need to worry about? The text contains:
+- `\t` (literal tab characters in the remove_unsafe_bytes test)
+- `\r` and `\n` (literal in the test strings)
+- Unicode character `\u0661` (Arabic-Indic DIGIT ONE)
+- Regular Python string syntax
+
+In the literal SOURCE form, I write the source as-is (not JSON-escaped). So tabs are literal tabs, newlines are actual newlines, etc. The `\u0661` in the source is actually the Python string `"\u0661"` (backslash-u-0-6-6-1), not the actual Unicode character. Let me verify from the source:
+
+```python
+        digit = "\u0661"
+```
+
+In the file, this is the Python source code `digit = "\u0661"` - it's the literal characters backslash, u, 0, 6, 6, 1 inside a string. In the file bytes, it's: `digit = "\u0661"` where `\u0661` is 6 characters (backslash, u, 0, 6, 6, 1).
+
+Wait no! In Python source code, `"\u0661"` is a string literal containing the Unicode character U+0661. But in the file, it's stored as the escape sequence `\u0661` (6 ASCII characters) IF the file is ASCII, or as the actual UTF-8 bytes for U+0661 if written that way.
+
+Looking at the source as displayed: `digit = "\u0661"` - this shows the escape sequence. In the actual file, this is the ASCII text `\u0661` (6 chars: \, u, 0, 6, 6, 1). Python interprets this at runtime as the Unicode character.
+
+So in my replacement text, I write `digit = "\u0661"` exactly as it appears in the source.
+
+OK I think I have enough to construct the replace_region. Let me write it out.
+
+Actually, wait. This is going to be an extremely long response. The region is 335 lines (527 to 861). Let me count the lines:
+- 861 - 527 + 1 = 335 lines
+
+That's a lot of text to write out. Let me make sure I get it exactly right.
+
+Actually, you know what, let me reconsider whether there's a simpler approach. What if I just do a regular JSON patch with a unique old string?
+
+The issue is that I need 14 separate insertions, and each requires a unique old string. With only 3 requests, I can only do 1-2 patches to the test file.
+
+Unless... I restructure the tests to use a helper function. For example:
+
+```python
+    def _assert_port_error(self, p, expected_args, expected_msg):
+        with self.assertRaises(ValueError) as ctx:
+            p.port
+        self.assertIs(type(ctx.exception), ValueError)
+        self.assertEqual(ctx.exception.args, expected_args)
+        self.assertEqual(str(ctx.exception), expected_msg)
+```
+
+Then all 14 call sites become:
+```python
+        self._assert_port_error(p, ("Port out of range 0-65535",), "Port out of range 0-65535")
+```
+
+But this still requires changing all 14 call sites, which means a big patch.
+
+Actually, the replace_region approach is fine. Let me just carefully write out the 335 lines. It's tedious but straightforward.
+
+Wait, actually - I just realized I should double-check something. The `replace_region` action says "This is a whole-line operation." So it replaces whole lines. The region covers lines 527-861. My replacement text should be the content of those 335 lines.
+
+Let me also verify: "The entire region must be visible current source" - yes, the region is in working_set.sources and its body is shown.
+
+"stale bindings are rejected" - the expected_candidate_id should be the current candidate: "675b65db319f94585f051bdab98895b34c3233a1d8022b2ffc09e2f7710df97d".
+
+OK let me write the response. I'll use the literal SOURCE form.
+
+Header: {"discussion":"Fixing error_class detection by asserting exact ValueError type at all 14 targets.","operation":{"action":"replace_region","region":"SRC-29afcfdff458150912d95111cc2c95a7f8cdb4e479929b823e12757ce8ca3a50","expected_candidate_id":"675b65db319f94585f051bdab98895b34c3233a1d8022b2ffc09e2f7710df97d"}}
+
+Then SOURCE, then the exact replacement text.
+
+Let me carefully write out all 335 lines. I'll go through the visible source line by line and add the 14 assertIs lines.
+
+Let me count the lines in each section to make sure I get 335 total:
+- test_urlsplit_attributes: starts at 527, need to find where it ends
+- test_urlsplit_port_validation: starts after attributes
+- test_urlparse_port_validation: after split port validation
+- test_urlsplit_remove_unsafe_bytes: after urlparse port validation
+- test_urlsplit_strip_url: starts, ends at 861
+
+Let me count from the visible source:
+
+test_urlsplit_attributes:
+```
+    def test_urlsplit_attributes(self):                    527
+        url = "HTTP://WWW.PYTHON.ORG/doc/#frag"             528
+        p = urllib.parse.urlsplit(url)                      529
+        self.assertEqual(p.scheme, "http")                 530
+        self.assertEqual(p.netloc, "WWW.PYTHON.ORG")       531
+        self.assertEqual(p.path, "/doc/")                  532
+        self.assertEqual(p.query, "")                      533
+        self.assertEqual(p.fragment, "frag")               534
+        self.assertEqual(p.username, None)                 535
+        self.assertEqual(p.password, None)                 536
+        self.assertEqual(p.hostname, "www.python.org")     537
+        self.assertEqual(p.port, None)                     538
+        # geturl() won't return exactly...                539
+        # since the scheme is always case-normalized       540
+        # We handle this by ignoring the first 4...        541
+        self.assertEqual(p.geturl()[4:], url[4:])          542
+                                                          543 (blank)
+        url = "http://User:Pass@www.python.org:080/doc/..." 544
+        p = urllib.parse.urlsplit(url)                      545
+        self.assertEqual(p.scheme, "http")                 546
+        self.assertEqual(p.netloc, "User:Pass@...:080")    547
+        self.assertEqual(p.path, "/doc/")                  548
+        self.assertEqual(p.query, "query=yes")             549
+        self.assertEqual(p.fragment, "frag")               550
+        self.assertEqual(p.username, "User")               551
+        self.assertEqual(p.password, "Pass")               552
+        self.assertEqual(p.hostname, "www.python.org")     553
+        self.assertEqual(p.port, 80)                       554
+        self.assertEqual(p.geturl(), url)                  555
+                                                          556 (blank)
+        # Addressing issue1698...                        557
+        # "@" characters...                               558
+        # and request email addresses as usernames.       559
+                                                          560 (blank)
+        url = "http://User@example.com:Pass@...:080/doc/..." 561
+        p = urllib.parse.urlsplit(url)                      562
+        self.assertEqual(p.scheme, "http")                 563
+        self.assertEqual(p.netloc, "User@example.com:...") 564
+        self.assertEqual(p.path, "/doc/")                  565
+        self.assertEqual(p.query, "query=yes")             566
+        self.assertEqual(p.fragment, "frag")               567
+        self.assertEqual(p.username, "User@example.com")   568
+        self.assertEqual(p.password, "Pass")               569
+        self.assertEqual(p.hostname, "www.python.org")     570
+        self.assertEqual(p.port, 80)                       571
+        self.assertEqual(p.geturl(), url)                  572
+                                                          573 (blank)
+        # And check them all again, only with bytes...    574
+        url = b"HTTP://WWW.PYTHON.ORG/doc/#frag"           575
+        p = urllib.parse.urlsplit(url)                      576
+        self.assertEqual(p.scheme, b"http")                577
+        self.assertEqual(p.netloc, b"WWW.PYTHON.ORG")      578
+        self.assertEqual(p.path, b"/doc/")                 579
+        self.assertEqual(p.query, b"")                     580
+        self.assertEqual(p.fragment, b"frag")              581
+        self.assertEqual(p.username, None)                 582
+        self.assertEqual(p.password, None)                 583
+        self.assertEqual(p.hostname, b"www.python.org")    584
+        self.assertEqual(p.port, None)                     585
+        self.assertEqual(p.geturl()[4:], url[4:])          586
+                                                          587 (blank)
+        url = b"http://User:Pass@www.python.org:080/..."    588
+        p = urllib.parse.urlsplit(url)                      589
+        self.assertEqual(p.scheme, b"http")                590
+        self.assertEqual(p.netloc, b"User:Pass@...:080")   591
+        self.assertEqual(p.path, b"/doc/")                 592
+        self.assertEqual(p.query, b"query=yes")            593
+        self.assertEqual(p.fragment, b"frag")              594
+        self.assertEqual(p.username, b"User")              595
+        self.assertEqual(p.password, b"Pass")              596
+        self.assertEqual(p.hostname, b"www.python.org")    597
+        self.assertEqual(p.port, 80)                       598
+        self.assertEqual(p.geturl(), url)                  599
+                                                          600 (blank)
+        url = b"http://User@example.com:Pass@...:080/..."   601
+        p = urllib.parse.urlsplit(url)                      602
+        self.assertEqual(p.scheme, b"http")                603
+        self.assertEqual(p.netloc, b"User@example.com:...") 604
+        self.assertEqual(p.path, b"/doc/")                 605
+        self.assertEqual(p.query, b"query=yes")            606
+        self.assertEqual(p.fragment, b"frag")              607
+        self.assertEqual(p.username, b"User@example.com")  608
+        self.assertEqual(p.password, b"Pass")              609
+        self.assertEqual(p.hostname, b"www.python.org")    610
+        self.assertEqual(p.port, 80)                       611
+        self.assertEqual(p.geturl(), url)                  612
+                                                          613 (blank)
+        # Verify an illegal port raises ValueError         614
+        url = b"HTTP://WWW.PYTHON.ORG:65536/doc/#frag"     615
+        p = urllib.parse.urlsplit(url)                      616
+        with self.assertRaisesRegex(ValueError, "out of range"):  617
+            p.port                                         618
+                                                          619 (blank)
+```
+
+That's 619 - 527 + 1 = 93 lines for test_urlsplit_attributes.
+
+Then test_urlsplit_port_validation starts at 620:
+```
+    def test_urlsplit_port_validation(self):               620
+```
+
+And so on. This is getting very detailed. Let me just carefully write out the full replacement text based on what I see in the source, adding the 14 assertIs lines.
+
+Actually, you know what - I realize I'm spending way too much time planning. Let me just write the response carefully. The key changes are adding `        self.assertIs(type(ctx.exception), ValueError)\n` after each of the 14 `            p.port\n` lines in the error blocks.
+
+Let me write the full replacement text now. I'll be very careful to match the existing text exactly and only add the 14 new lines.
+
+One more consideration: the `\u0661` in the source. In the file, this is the literal text `\u0661` (6 ASCII characters). In my replacement, I write it the same way.
+
+Also, the tabs in test_urlsplit_remove_unsafe_bytes: the source shows literal tab characters (shown as `\t` in the display but they're actual tab bytes in the file). In my literal SOURCE reply, I need to include actual tab characters.
+
+Wait, looking at the source display:
+```
+        url = "http\t://www.python\n.org\t/java\nscript:\talert('msg\r\n')/?query\n=\tsomething#frag\nment"
+```
+
+Are these literal tab/newline characters in the file, or are they escape sequences in the Python string? In Python source code, `"\t"` in a string literal is an escape sequence that represents a tab character. In the file, it's stored as the two characters `\` and `t`. Similarly, `\n` is backslash-n (2 chars), `\r` is backslash-r (2 chars).
+
+So in the file, the line is:
+```
+        url = "http\t://www.python\n.org\t/java\nscript:\talert('msg\r\n')/?query\n=\tsomething#frag\nment"
+```
+where `\t`, `\n`, `\r` are all two-character escape sequences (backslash + letter), NOT actual tab/newline/carriage-return bytes.
+
+Wait, but looking more carefully at the source display, I see:
+```
+        url = "http\t://www.python\n.org\t/java\nscript:\talert('msg\r\n')/?query\n=\tsomething#frag\nment"
+```
+
+In the JSON representation of the source, this would be:
+```
+"url = \"http\\t://www.python\\n.org\\t/java\\nscript:\\talert('msg\\r\\n')/?query\\n=\\tsomething#frag\\nment\"\n"
+```
+
+But in the actual file, it's:
+```
+        url = "http\t://www.python\n.org\t/java\nscript:\talert('msg\r\n')/?query\n=\tsomething#frag\nment"
+```
+
+Where `\t`, `\n`, `\r` are literal two-character sequences (backslash + letter) in the source file. Python interprets them at runtime.
+
+So in my literal SOURCE reply, I write exactly: `        url = "http\t://www.python\n.org\t/java\nscript:\talert('msg\r\n')/?query\n=\tsomething#frag\nment"` with the backslash sequences as literal backslash+letter characters.
+
+OK I think I have a clear picture. Let me write the response now.
+
+Actually, one more thought: should I update my working account? The task is progressing - I'm fixing the error_class detection issue. Let me include a brief account update.
+
+Let me finalize my plan:
+- Response 1 (this one): replace_region to fix the test file (add assertIs lines)
+- Response 2: read doc file
+- Response 3: patch doc file
+
+I can't submit, but let's maximize what I can accomplish.
+
+Wait, actually - I just want to double-check one thing. The `test_urlsplit_attributes` method already has:
+```python
+        # Verify an illegal port raises ValueError
+        url = b"HTTP://WWW.PYTHON.ORG:65536/doc/#frag"
+        p = urllib.parse.urlsplit(url)
+        with self.assertRaisesRegex(ValueError, "out of range"):
+            p.port
+```
+
+This uses `assertRaisesRegex` which also catches subclasses. Should I add a type check here too? The mutation targets are specifically about the new tests I added (14 targets). The existing test in `test_urlsplit_attributes` is not one of the 14 targets. But to be safe, should I add the type check there too?
+
+Looking at the undetected targets: 14 total, which I determined are 2 APIs × (4 str + 3 bytes) error cases. The `test_urlsplit_attributes` test is an existing test, not one I added. The mutation checker probably only looks at the targets I'm responsible for. I'll leave it as-is to minimize risk.
+
+OK, let me write the response now. I'll use the literal SOURCE form.
+
+Actually, wait - I want to make sure about one thing. The visible source for the region shows it as a continuous string. Let me look at whether there are any trailing spaces or other invisible characters I might miss.
+
+Looking at the source, I see lines like:
+```
+        self.assertEqual(p.query, "")
+```
+
+and blank lines between sections. I'll reproduce them exactly.
+
+Let me also note: the source shows the content as one continuous string with `\n` separators. In my literal SOURCE reply, I use actual newlines.
+
+One more check: the `test_urlsplit_attributes` method has a blank line between the last `self.assertEqual(p.geturl(), url)` (line 612) and the `# Verify an illegal port` comment (line 614). Let me make sure I include that blank line.
+
+OK I'm going to write this out now. It's going to be long but I'll be careful.
