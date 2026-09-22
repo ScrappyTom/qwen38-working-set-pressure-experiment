@@ -148,7 +148,7 @@ def main(case,version):
     save(output/'ANALYSIS_PROVENANCE.json',dict(case=case,version=version,
         analysis_source_sha256=sha256_file(Path(__file__)),
         replay_source_sha256=sha256_file(study.ROOT/'development/decision_interface/reference_repair/verify_reference.py'),
-        adaptation='Bind the original exact-replay verifier to repair_task.Task(case,version,replay_folder). Cumulative receipt counters retain five inherited requests and operations; new metrics cover this continuation only.',
+        adaptation='Bind the original exact-replay verifier to continuation_task.Task(version,replay_folder). Cumulative receipt counters retain five inherited requests and operations; new metrics cover this continuation only.',
         model_requests=0,checker_executions=0,tokenizer_requests=0))
     print(json.dumps(dict(verification=verification,totals=totals,artifact=assessment['artifact']),indent=2))
 
