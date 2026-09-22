@@ -1,0 +1,103 @@
+Let me analyze the current state. I've read all the source files and understand the problem:
+
+1. **The bug**: `DayWindow.contains()` in `windows.py` requires the *entire* shift to be inside `[start, end]`. For overnight shifts (e.g., 22:00 to 06:00 the next day), the shift spans two days, so it's never "contained" in a single day window. This means overnight shifts are completely excluded from both days' reports.
+
+2. **The fix**: Instead of requiring the whole shift to be within the window, we need to compute the **overlap** between the shift and the window, and only count the overlapping portion.
+
+The relevant code:
+- `windows.py`: `DayWindow.contains()` → needs to be changed to compute overlap
+- `reporting/daily.py`: `report_minutes()` uses `window.contains(shift)` and then adds `shift.duration_minutes` → needs to use overlap instead
+
+The fix plan:
+1. Replace `contains()` with an `overlap_minutes()` method on `DayWindow` that computes the overlap between `shift.start`/`shift.end` and `self.start`/`self.end` in minutes.
+2. In `report_minutes()`, replace the `contains` check with overlap computation, and only add the overlapping minutes.
+
+Let me think about the overlap calculation:
+- overlap_start = max(shift.start, window.start)
+- overlap_end = min(shift.end, window.end)
+- if overlap_start < overlap_end: overlap = (overlap_end - overlap_start).total_seconds() / 60.0
+- else: overlap = 0.0
+
+This handles:
+- Overnight shifts: a shift from 22:00 to 06:00 the next day will have partial overlap with each day
+- Shifts entirely within a day: full overlap (same as before for `contains`-true case)
+- Shifts entirely outside: zero overlap (correctly excluded)
+- Void shifts: still excluded by the status check
+- Fractional minutes: handled by using total_seconds() / 60.0
+
+Now let me plan the edits:
+
+**Edit 1: `windows.py`** - Replace `contains` method with `overlap_minutes`:
+
+```python
+    def overlap_minutes(self, shift: Shift) -> float:
+        """Minutes of the shift that fall within this window."""
+        start = max(shift.start, self.start)
+        end = min(shift.end, self.end)
+        if start >= end:
+            return 0.0
+        return (end - start).total_seconds() / 60.0
+```
+
+**Edit 2: `reporting/daily.py`** - Replace the `contains` check and full duration with overlap:
+
+```python
+def report_minutes(shifts: Iterable[Shift], window: DayWindow) -> dict[str, float]:
+    totals: dict[str, float] = {}
+    for shift in shifts:
+        if shift.status != "confirmed":
+            continue
+        minutes = window.overlap_minutes(shift)
+        if minutes <= 0.0:
+            continue
+        totals[shift.employee] = totals.get(shift.employee, 0.0) + minutes
+    return dict(sorted(totals.items()))
+```
+
+Wait, I need to be careful about the `minutes <= 0.0` check. The README says "Only time within that day contributes, including fractional minutes." So even a tiny overlap should count. Using `minutes <= 0.0` is correct - if there's zero overlap, skip. But what about negative? The overlap computation can't produce negative values since we check `start >= end`. So `minutes == 0.0` would be the right check, but `<= 0.0` is safe.
+
+Actually, let me reconsider. The original code checks `contains` and skips if not contained. The new code should skip if overlap is 0. Let me use `minutes == 0.0` to be precise. Actually `minutes <= 0.0` is fine and slightly more defensive.
+
+Now let me do the edits. I'll use `patch` for both files since I have the full source visible.
+
+For `windows.py` (file_sha256: `31768516afc033f5fe8c96a195f1b16cdf323359e9d1369c0a8db90e78c2880f`):
+
+Old:
+```
+    def contains(self, shift: Shift) -> bool:
+        """Whether the entire shift interval is inside this window."""
+        return self.start <= shift.start and shift.end <= self.end
+```
+
+New:
+```
+    def overlap_minutes(self, shift: Shift) -> float:
+        """Minutes of the shift that fall within this window."""
+        start = max(shift.start, self.start)
+        end = min(shift.end, self.end)
+        if start >= end:
+            return 0.0
+        return (end - start).total_seconds() / 60.0
+```
+
+For `reporting/daily.py` (file_sha256: `10a29a0b918482b736d5012dc6e333b9bdbd2b9f5ae32ff7977de2b83b47b450`):
+
+Old:
+```
+        if not window.contains(shift):
+            continue
+        minutes = shift.duration_minutes
+        totals[shift.employee] = totals.get(shift.employee, 0.0) + minutes
+```
+
+New:
+```
+        minutes = window.overlap_minutes(shift)
+        if minutes <= 0.0:
+            continue
+        totals[shift.employee] = totals.get(shift.employee, 0.0) + minutes
+```
+
+Let me do the first patch now.
+
+Current candidate: `b77c87956a3936ab169f80f5df55b4a2731b6015968fdebcb1e2a1095469c6ea`

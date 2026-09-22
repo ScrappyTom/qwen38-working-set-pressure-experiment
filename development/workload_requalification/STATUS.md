@@ -12,7 +12,7 @@ Historical successes remain preserved; the new-host column requires new evidence
 | Compiler incident repair and historical report | compiler_incident: one success, capacity/completion failures elsewhere | Pending |
 | Saved compiler report continuation/restart | saved_work_continuation: assisted completion | Pending |
 | Artifact-map repair | investigation_loop: two successful loops | Passed uncoached at 3107f3cf: correct one-line repair, public pass and submission, 20 requests/30 operations, 20.021 model-request minutes. Exact replay and source review pass; navigation/change-detail friction preserved. |
-| Shift-window ledger repair | shift_investigation: successful loop | Revised navigation/immediate-change package passes CPU and native qualification-002; shift preparation-001 passes at 4,644 initial input tokens. Prospective finite run next; no new-host model outcome yet. |
+| Shift-window ledger repair | shift_investigation: successful loop | Passed original task uncoached at 795fb292: 14 requests/22 operations, two edits, all 24 public cases passing and submission; 10.654 model-request minutes. Exact replay passes. Removal of standalone contains() remains an explicit compatibility limitation outside the original checked contract. |
 | Receipt-correction reporting | correction_investigation: successful loop | Original package qualified but unexposed. Follows shift with the prospectively qualified presentation; no new-host pass yet. |
 | URL-port tests/documentation, original entry | multiple interrupted/incomplete attempts | Pending fresh-entry regression |
 | URL-port preserved-work correction | coherent_diagnostics: reviewed checked submission | Passed for this entry at ec51de65 |

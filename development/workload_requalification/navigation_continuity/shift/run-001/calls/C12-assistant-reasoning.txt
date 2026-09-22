@@ -1,0 +1,67 @@
+Let me analyze the current state:
+
+1. I've already replaced `DayWindow.contains()` with `DayWindow.overlap_minutes()` in `windows.py` - that's done and accepted.
+
+2. Now I need to update `src/shiftledger/reporting/daily.py` to use `overlap_minutes` instead of `contains`. Currently it:
+   - Checks `if not window.contains(shift): continue` (which no longer exists)
+   - Uses `minutes = shift.duration_minutes` (full duration, not just overlap)
+
+I need to change it to:
+   - Use `minutes = window.overlap_minutes(shift)`
+   - Skip if minutes is 0 (or just check if minutes > 0)
+   - Only add the overlapping portion
+
+Let me look at the current daily.py:
+```python
+"""Aggregate confirmed staffing time for a daily report."""
+from collections.abc import Iterable
+
+from ..model import Shift
+from ..windows import DayWindow
+
+
+def report_minutes(shifts: Iterable[Shift], window: DayWindow) -> dict[str, float]:
+    totals: dict[str, float] = {}
+    for shift in shifts:
+        if shift.status != "confirmed":
+            continue
+        if not window.contains(shift):
+            continue
+        minutes = shift.duration_minutes
+        totals[shift.employee] = totals.get(shift.employee, 0.0) + minutes
+    return dict(sorted(totals.items()))
+```
+
+I need to change it to:
+```python
+"""Aggregate confirmed staffing time for a daily report."""
+from collections.abc import Iterable
+
+from ..model import Shift
+from ..windows import DayWindow
+
+
+def report_minutes(shifts: Iterable[Shift], window: DayWindow) -> dict[str, float]:
+    totals: dict[str, float] = {}
+    for shift in shifts:
+        if shift.status != "confirmed":
+            continue
+        minutes = window.overlap_minutes(shift)
+        if minutes <= 0.0:
+            continue
+        totals[shift.employee] = totals.get(shift.employee, 0.0) + minutes
+    return dict(sorted(totals.items()))
+```
+
+This:
+- Removes the `contains` check (replaced by overlap_minutes which returns 0 for no overlap)
+- Uses overlap_minutes to get only the time within the window
+- Skips zero/negative overlap (shift outside window)
+- Preserves void exclusion, offset handling, invalid-input rejection (those are in importing and windows)
+
+I have the current source visible. Let me patch daily.py.
+
+Current candidate: 3dc39b9d16143375f3dcff842e3d00e23e8b02ebff345b606761f84cc99550ae
+File sha256 for daily.py: 10a29a0b918482b736d5012dc6e333b9bdbd2b9f5ae32ff7977de2b83b47b450
+
+Let me do the patch.

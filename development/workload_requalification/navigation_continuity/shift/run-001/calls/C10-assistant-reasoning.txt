@@ -1,0 +1,53 @@
+Let me analyze the problem. The task is: a night shift was recorded and confirmed, but the following day's hours report omits its contribution. I need to repair daily reporting so it counts only time worked within the requested local day.
+
+Looking at the current source:
+
+1. **windows.py** - `DayWindow.contains()` checks if the *entire* shift is inside the window: `self.start <= shift.start and shift.end <= self.end`. This means an overnight shift that crosses midnight is NOT contained in either day's window, so it's dropped entirely.
+
+2. **reporting/daily.py** - `report_minutes()` uses `window.contains(shift)` and if it passes, adds the *full* `shift.duration_minutes`. This is wrong for shifts that partially overlap the day.
+
+The fix should:
+- Compute the overlap between the shift and the day window (in minutes), rather than requiring the whole shift to be inside.
+- Only add the overlapping portion, not the full duration.
+- Still exclude void shifts.
+- Still reject invalid inputs (handled in importing.py).
+- Preserve offset handling.
+
+Let me think about what I need to see:
+- `model.py` - to understand the Shift class (what fields it has, especially `start`, `end`, `duration_minutes`)
+- `importing.py` - to understand how shifts are parsed
+- `examples/overnight.csv` - to see the test data
+
+I already have:
+- `README.md` - describes the expected behavior
+- `api.py` - the public entry point
+- `reporting/daily.py` - the report function (the bug is here + in windows.py)
+- `windows.py` - the DayWindow with the `contains` method
+
+I need to see `model.py` to understand Shift's fields. Let me read it.
+
+Actually, looking at the current code more carefully:
+
+In `daily.py`:
+```python
+if not window.contains(shift):
+    continue
+minutes = shift.duration_minutes
+```
+
+This uses the full duration of the shift, not the overlap. And `window.contains()` requires the entire shift to be within the window.
+
+The fix:
+1. Instead of `window.contains(shift)` (which requires full containment), compute the overlap between `shift.start`/`shift.end` and `window.start`/`window.end`.
+2. Convert the overlap to minutes (potentially fractional).
+3. Add only those minutes.
+
+For `windows.py`, I might want to add a method like `overlap_minutes(shift)` or I could compute it in `daily.py` directly.
+
+Let me think about the design:
+- `window.start` and `window.end` are `datetime` objects with timezone info (fixed offset).
+- `shift.start` and `shift.end` are presumably also `datetime` objects.
+- The overlap is: `max(window.start, shift.start)` to `min(window.end, shift.end)`.
+- If `overlap_start < overlap_end`, the overlap in seconds is `(overlap_end - overlap_start).total_seconds()`, and minutes = seconds / 60.
+
+Let me read `model.py` to confirm the Shift structure.

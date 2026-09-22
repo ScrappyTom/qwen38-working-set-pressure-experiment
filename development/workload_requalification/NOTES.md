@@ -1,5 +1,34 @@
 # Running engineering and governance notes
 
+## 2026-09-22 — shift repair completes with a compatibility qualification
+
+The navigation_continuity shift run at 795fb292 closes with fourteen uncoached
+requests, twenty-two operations, two edits, an actual 24-case pass and checked
+submission. The saved overlap calculation is correct for the original task.
+Both actual edit diffs and refreshed source reached the following calls. All
+twenty-one nonterminal receipts and acquired sources arrived; no pressure or
+recovery occurred. Exact replay verifies 1,122 bindings and 336 custody records.
+
+Passing task checks do not establish preservation outside their scope. Qwen
+removed the source-documented contains method while adding overlap_minutes and
+updating its fixture caller. The original public contract/checker does not assert
+standalone contains compatibility, so preserve the task pass and this limitation
+separately. Do not retrospectively invent acceptance or call unnecessary API
+removal harmless merely because the report passes.
+
+The account sometimes states a hypothesis too confidently before its governing
+source arrives, then remains behind the latest work after editing. Actual source
+and version-bound feedback still support correct closure. Count useful use, not
+account updates alone. Repeated navigation also occurs with actionable paths
+visible; an expired full directory listing is not equivalent to losing its paths.
+One-operation-per-reply deliberation overlooks available grouped acquisition;
+retain that observation without assuming every single-file read was wasteful.
+
+Cost includes 639.251 seconds of model requests, 79.472 measured processing seconds
+and 819.594 task-loop seconds. The unprofiled remainder is host/loop time, not
+thinking. These settings/tasks differ from historical runs, preventing a controlled
+latency claim. Continue the next corpus entry rather than repeat this pass.
+
 ## 2026-09-22 — bounded navigation and immediate actual changes qualified
 
 The navigation_continuity package retains the existing recent-row limit, adds
