@@ -1,5 +1,16 @@
 # Experiment operating rules
 
+The receipt run at 76e078c4 ended on the explicitly permitted discussion-only
+form despite describing further work. Its five requests and five operations remain
+consumed. The action_lifecycle package qualifies an opt-in operational contract
+requiring an operation or explicit account update, with historical forms unchanged.
+Do not execute intended actions from prose or private thinking. The continuation
+retains the cumulative 24-request/72-operation envelope and begins at C06. Keep
+new-folder dispatch counts distinct from cumulative loop totals and account
+authorship. Check frozen first-input identity at the inherited request offset.
+Read its PLAN.md, PREPARATION_REVIEW.md and running NOTES.md; qualification is not
+yet a new model success. No change to task/checker/selection/reasoning is included.
+
 When porting a workload, preserve diagnostics before task-local reduction as well
 as in common capture. Check both the report's assessment and the subprocess outcome;
 a printed pass does not complete a crashed or timed-out check. Zero failure/error
