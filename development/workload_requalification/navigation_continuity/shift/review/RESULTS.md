@@ -51,6 +51,11 @@ actionable paths. C04-C09 repeatedly interpret one operation per reply as requir
 one file per request, despite the available grouped acquisition operation. The
 complete transcript review distinguishes these cases from useful first acquisition;
 we do not attribute every repeat to lost information or change the host mid-run.
+Grouped acquisition also has a different effect: work_on replaces the selection,
+whereas read retains previous sources. Batching while retaining earlier material
+would require selecting that material again. The host offers a multi-source route,
+but it is not a direct append-many equivalent of read; this record does not prove
+that every sequential read should have used it or isolate the interpretation cost.
 C11's claim to have read all source files is inaccurate: importer, example and
 initializers remained unread. Their unchanged bytes and the actual checker support
 the preservation assessment; the claim itself does not.
@@ -76,6 +81,10 @@ entry under the current host, not pressure continuity or failed-repair recovery.
 The remaining 100.871 task-loop seconds are outside model requests and measured
 reply processing; they are not model thinking and have not been profiled into
 individual host activities. Preparation, review and publication costs are separate.
+The subsequent [apparatus audit](HOST_COST_AUDIT.md) locates most of that remainder
+in post-response validation and between-call dispatch intervals. It does not isolate
+hashing time or establish an optimization. Native endpoint spans total 1.171 seconds
+and are largely already included in the processing timer, not additional cost.
 The accepted GPU margin remains advisory. Runtime closure verifies the owned server
 stopped and the port is free; no allocation failure or context exhaustion occurred.
 

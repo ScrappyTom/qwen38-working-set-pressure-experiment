@@ -1,5 +1,23 @@
 # Running engineering and governance notes
 
+## 2026-09-22 — narrative omission is an unsafe task-termination signal
+
+Receipt run at 76e078c4 ends after five requests/five operations. C05's complete
+final prose announces a README read but contains no operation. The reference,
+schema/grammar and runner explicitly allow discussion-only to terminate. This is
+faithful implementation of an inadequate operating contract, not missing delivery,
+private-draft permission or evidence that the prose expressed a desire to stop.
+All navigation arrived; no source, edit or check was acquired and no pressure
+occurred. Preserve the failed result and 96.828 model-request seconds.
+
+The earned next package narrows task-execution replies to an explicit operation
+or optional account update, leaving design dialogue and historical behavior intact.
+Qualify actual decoder/host/reference agreement, preserve checked submission and
+finite unsuccessful closure paths, and continue from the exact saved state with
+five dispatches/operations still charged. Do not mix batching, reasoning or source
+selection changes into that fix. An executable reply remains only a prerequisite
+for useful contribution, not evidence of it.
+
 ## 2026-09-22 — shift repair completes with a compatibility qualification
 
 The navigation_continuity shift run at 795fb292 closes with fourteen uncoached
@@ -23,6 +41,11 @@ account updates alone. Repeated navigation also occurs with actionable paths
 visible; an expired full directory listing is not equivalent to losing its paths.
 One-operation-per-reply deliberation overlooks available grouped acquisition;
 retain that observation without assuming every single-file read was wasteful.
+The host's grouped work_on replaces selection, while read retains it. Acquiring
+several files and keeping old support therefore requires repeating that support
+in the group; the offered route is not an append-many read. Include this host-side
+burden when interpreting the one-operation concern, rather than assigning it
+entirely to failure to notice a tool.
 
 Cost includes 639.251 seconds of model requests, 79.472 measured processing seconds
 and 819.594 task-loop seconds. The unprofiled remainder is host/loop time, not
