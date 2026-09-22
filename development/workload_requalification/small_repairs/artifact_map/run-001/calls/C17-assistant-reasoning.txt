@@ -1,0 +1,154 @@
+Let me analyze the task. The problem is:
+
+"An accepted edit to a Python artifact is followed by a failed reopen of the edited function. Investigate and repair this behavior while preserving unrelated source, unchanged-content behavior, later updates, and rejection of genuinely stale references."
+
+Let me understand the flow:
+
+1. `import_artifact` creates an Artifact from text
+2. `build_address_map` creates units (including function units for Python)
+3. `materialize_reopen` in reopen.py:
+   - Resolves the address
+   - Gets the artifact
+   - Calls `exact_text_for_unit(artifact, unit)` 
+   - Hashes it and compares to `unit.content_hash`
+   - If mismatch, returns BLOCKED
+
+Now let me look at `exact_text_for_unit`:
+```python
+def exact_text_for_unit(artifact: Artifact, unit: ArtifactUnit) -> str:
+    if unit.inline_text is not None:
+        return unit.inline_text
+    lines = artifact.text.splitlines()
+    return "\n".join(lines[unit.start_line - 1 : unit.end_line])
+```
+
+And `_make_unit`:
+```python
+def _make_unit(
+    artifact: Artifact,
+    address: str,
+    unit_kind: str,
+    title: str,
+    start_line: int,
+    end_line: int,
+    parent_address: str | None,
+    inline_text: str | None = None,
+) -> ArtifactUnit:
+    lines = artifact.text.splitlines()
+    text = inline_text if inline_text is not None else ("\n".join(lines[start_line - 1 : end_line]) if lines else artifact.text)
+    content_hash = sha256_text(text)
+    ...
+```
+
+So both `exact_text_for_unit` and `_make_unit` compute the text the same way for non-inline units: `"\n".join(lines[start_line - 1 : end_line])`.
+
+Wait, that looks consistent. Let me think about what happens after an "accepted edit."
+
+The task says "An accepted edit to a Python artifact is followed by a failed reopen of the edited function."
+
+So the scenario is:
+1. You have an artifact (Python file)
+2. You build the address map (units are created with content hashes)
+3. An edit is applied to the artifact (changing the text)
+4. You try to reopen the edited function
+5. The reopen fails
+
+But wait - if the edit changes the text, then `exact_text_for_unit` would compute a different hash than what's stored in `unit.content_hash`. That's *correct* behavior - the map is stale after an edit.
+
+But the task says "repair this behavior while preserving... rejection of genuinely stale references." So the issue is that a reopen that *should* succeed (for the edited function) is failing.
+
+Let me think about this differently. The scenario is:
+- An edit is "accepted" - meaning the artifact text was updated AND a new address map was built
+- Then a reopen of the edited function fails
+
+If a new address map was built after the edit, the content_hash should match the new text. So why would it fail?
+
+Wait, let me re-read the task: "An accepted edit to a Python artifact is followed by a failed reopen of the edited function."
+
+Maybe the issue is in how the edit is applied and how the new map is built. Let me look at the patching module.
+
+Actually, let me look at what files are available. I've already seen:
+- `src/addressable_information_layer/artifact_units.py` (full)
+- `src/addressable_information_layer/reopen.py` (full)
+
+I need to look at:
+- `patching.py` - how edits are applied
+- `records.py` - data structures
+- `content_log.py` - content logging
+- `hashing.py` - hashing functions
+
+Let me think about what could go wrong:
+
+In `exact_text_for_unit`:
+```python
+lines = artifact.text.splitlines()
+return "\n".join(lines[unit.start_line - 1 : unit.end_line])
+```
+
+In `_make_unit`:
+```python
+lines = artifact.text.splitlines()
+text = inline_text if inline_text is not None else ("\n".join(lines[start_line - 1 : end_line]) if lines else artifact.text)
+```
+
+These look the same for non-inline units. The slicing `lines[start_line - 1 : end_line]` is the same.
+
+Wait, but what about the "file" unit? For the file unit:
+```python
+root = _make_unit(artifact, "file", "file", artifact.path_or_name, 1, max(len(lines), 1), None)
+```
+
+And in `exact_text_for_unit`, for the file unit:
+```python
+lines = artifact.text.splitlines()
+return "\n".join(lines[0 : max(len(lines), 1)])
+```
+
+That's the whole file. OK.
+
+Now, the key question: what happens when an edit is applied? Let me look at patching.py to understand the edit flow.
+
+Actually, let me think about this more carefully. The task says the reopen fails after an "accepted edit." The key insight might be in how the artifact text is updated after an edit.
+
+Let me look at patching.py and content_log.py to understand the edit flow.
+
+Actually wait - I need to be more careful. Let me re-examine `exact_text_for_unit`:
+
+```python
+def exact_text_for_unit(artifact: Artifact, unit: ArtifactUnit) -> str:
+    if unit.inline_text is not None:
+        return unit.inline_text
+    lines = artifact.text.splitlines()
+    return "\n".join(lines[unit.start_line - 1 : unit.end_line])
+```
+
+And in `_make_unit`:
+```python
+lines = artifact.text.splitlines()
+text = inline_text if inline_text is not None else ("\n".join(lines[start_line - 1 : end_line]) if lines else artifact.text)
+content_hash = sha256_text(text)
+```
+
+These are consistent. The content_hash is computed from the same text that `exact_text_for_unit` would return.
+
+So if the artifact text changes (edit), and a new address map is built, the hashes should match. Unless...
+
+Wait, maybe the issue is that after an edit, the artifact is updated but the address map is NOT rebuilt, and then the reopen correctly identifies it as stale. But the task says this should NOT be stale - i.e., the edit was "accepted" and the map should reflect the new state.
+
+Or maybe the issue is the opposite: the edit changes line numbers, and the function that was at lines 10-20 is now at lines 12-22, but the old unit (from the old map) is used to look up text in the new artifact. In that case, the text at the old line range would be different, causing a hash mismatch.
+
+But that's "genuinely stale" - the task says to preserve "rejection of genuinely stale references."
+
+Hmm, let me re-read: "An accepted edit to a Python artifact is followed by a failed reopen of the edited function."
+
+I think the scenario is:
+1. Original artifact with function F at lines X-Y
+2. Edit is applied (accepted) - this changes the text
+3. New address map is built (or should be)
+4. Reopen of function F (using the new map's ref) fails
+
+If step 3 happens correctly, the reopen should work. So maybe the bug is that after an edit, the address map is NOT rebuilt, or it's rebuilt incorrectly.
+
+OR, maybe the issue is more subtle. Let me look at what "accepted edit" means in this codebase. Let me check patching.py.
+
+Let me look at the relevant files to understand the edit flow.

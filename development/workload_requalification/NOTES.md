@@ -1,5 +1,44 @@
 # Running engineering and governance notes
 
+## 2026-09-22 — a passing source repair still exposes presentation costs
+
+Artifact-map run-001 completes uncoached from the original candidate: twenty
+requests/thirty operations, one correct line changed, one actual public pass and
+submission. Exact replay verifies 31 native inputs, 458 custody records and all
+29 nonterminal receipts. Model-request time is 20.021 minutes; task-loop time is
+21.744. Twenty-four other files are unchanged. Minimum sampled free GPU memory
+is 266 MiB under the already accepted advisory-margin policy; no allocation failure
+or physical-context exhaustion is observed. This is a source-led repair, not
+pressure continuity or failed-repair recovery, and not a controlled speed comparison.
+
+Eleven tree calls include repeated pages. The next-input audit finds that recent
+rows omit previously returned file entries and outline coordinates while ample
+room remains. C16 explicitly notices a missing directory result. C09 nevertheless
+repeats navigation while a useful outline is fully visible. Preserve both facts:
+missing continuity is a demonstrated host presentation issue, but does not explain
+every choice or establish the benefit of a replacement policy.
+
+After the accepted patch, C19 sees repaired source, affected line intervals and
+bindings, but not the actual delta. Its full response repeatedly reconstructs
+what changed, then correctly requests a check. The account still describes an
+earlier acquisition need; the previous discussion is archived but not supplied.
+Do not diagnose recurrence of the incident: the response explicitly recognizes
+that the reported incident predates this session. The omitted exact change is
+mechanically known by the host; supplying it need not invent a semantic account.
+
+The prospective navigation_continuity plan keeps bounded discovered facts and
+immediate applied changes usable without restoring a growing history. Qualify
+capacity fallbacks, version applicability, exact retrieval and editing authority
+separately. In particular, EVT retrieves a proposal; it is not an existing applied-
+diff endpoint. Prospective full edit-result custody can make a diff recoverable
+through RES, with bounded display. Historical receipts must not be rewritten.
+
+Shift and receipt preparations remain valid historical engineering evidence but
+unexposed. Qualify and publish the changed presentation before their first calls.
+Do not rerun the completed artifact-map task solely to obtain another pass. The
+larger interpolation entry and corpus remain open. CPU preparation of a bounded
+source-discovery dialogue is not a consultation outcome or task completion.
+
 ## 2026-09-22 — interrupted-run continuation and inherited custody
 
 The corrected continuation is now closed at its frozen ten-request allowance.

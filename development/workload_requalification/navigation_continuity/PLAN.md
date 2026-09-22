@@ -4,6 +4,13 @@
 continues under its existing finite allowance. This is a prospective host change;
 it does not correct that attempt retrospectively or supply Qwen's next action.
 
+Completion update: the preserved attempt subsequently saved the correct one-line
+repair, passed its original public check and submitted in twenty requests. It also
+exposed the separate immediate-change omission below. No extra run is needed solely
+to obtain another artifact-map pass; qualify the prospective presentation and carry
+it into the next distinct source-repair task. Both findings remain in the success
+audit, with no claim that fixing them is necessary for this task to succeed.
+
 The actual inputs lose directory entries and outline coordinates when another
 operation replaces latest feedback. Recent activity retains the operation's path
 and offset, but not its returned locations or pagination facts. C04–C10 contain
@@ -46,6 +53,42 @@ source contextualization, search-result retention, payload format or reasoning
 allocation in this package. Search contexts have different overlap/size costs and
 remain a separate prospective question.
 
+## Addendum: report the actual immediate edit
+
+C19 received refreshed, repaired source plus an edit receipt containing line ranges
+and version identities, but no old/new text or diff. Its account still asked to
+inspect the edit implementation. The full response repeatedly asks what the prior
+edit changed and looks for a defect in the already repaired source before correctly
+requesting a check. It explicitly distinguishes the earlier incident; do not call
+this a new incident-attribution failure. The exact patch and applied diff were
+archived. Their absence from the ordinary input is independently verifiable; the
+share of deliberation caused by that absence is not established.
+
+Include a bounded rendering of the already stored applied diff with immediate
+accepted-edit feedback. Preserve its operation, before/after versions and exact
+archive handle. This reports what actually changed; it must not invent the model's
+reason, assert correctness, or turn the old side of a diff into edit-eligible
+current source. Rejected edits have no applied change. For literal replacement,
+report the actual saved change including any recorded host-supplied separator,
+without rewriting the original proposal.
+
+The current EVT route retrieves the proposed action, not the stored applied diff.
+Do not pretend those are the same access route. In the prospective session, put
+the exact applied diff in the successful edit result before that result is recorded;
+its RES handle then supports the existing paged exact-result retrieval. Shorten
+only the decision view. Keep the original proposal, raw result and independent
+diff custody distinct. Historical results remain byte-identical: a saved C19
+counterfactual may derive display from its already archived diff but must explicitly
+identify that derivation rather than claim the old RES contained the new field.
+
+Reuse the optional detail admission machinery: essential outcomes/control state
+first, immediate change detail next, recent navigation last. A full diff that
+cannot fit must be explicitly omitted with exact access, never silently clipped or
+allowed to block a previously feasible edit/recovery. Do not retain every historic
+diff indefinitely or add a semantic progress summary. Qualify this field separately
+on exact C19 and then together with navigation. Any later behavioral improvement
+belongs to the declared package; these are not isolated causal experiments.
+
 ## Qualification and execution
 
 First qualify exact archived C04–C10 and C16 states offline, showing which formerly
@@ -55,6 +98,8 @@ unchanged search behavior, long names/signatures, no source eligibility from nav
 and bounded growth with long archives. Exercise crowded input, complete rejection,
 selection replacement and real checked work; extra navigation must yield before
 it obstructs the control path. Identify actual input evidence for scripted choices.
+Also test exact immediate deltas for ordinary patches and literal replacements,
+rejected edits, separator handling, large omitted diffs and no extra edit authority.
 
 Use CPU tests first. Native qualification waits until the active runtime closes;
 it sends no completion requests. Independently inspect the resulting prompts and

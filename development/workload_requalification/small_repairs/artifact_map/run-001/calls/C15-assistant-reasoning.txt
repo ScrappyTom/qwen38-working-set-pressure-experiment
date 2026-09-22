@@ -1,0 +1,59 @@
+Let me analyze the task. The problem is: "An accepted edit to a Python artifact is followed by a failed reopen of the edited function."
+
+I need to find the bug that causes a reopen to fail after an accepted edit to a Python artifact. Let me trace through the code:
+
+1. `reopen.py` - `materialize_reopen` resolves an address, gets the artifact, calls `exact_text_for_unit`, computes `observed_hash = sha256_text(exact_text)`, and compares it to `unit.content_hash`. If they don't match, it returns BLOCKED with "exact unit hash mismatch; artifact map is stale".
+
+2. `artifact_units.py` - `exact_text_for_unit` extracts text from the artifact based on `unit.start_line` and `unit.end_line`:
+```python
+def exact_text_for_unit(artifact: Artifact, unit: ArtifactUnit) -> str:
+    if unit.inline_text is not None:
+        return unit.inline_text
+    lines = artifact.text.splitlines()
+    return "\n".join(lines[unit.start_line - 1 : unit.end_line])
+```
+
+3. `_unitize_python` creates units for Python files, using `ast.parse` to find functions and classes:
+```python
+for node in ast.walk(tree):
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        kind = "class" if isinstance(node, ast.ClassDef) else "function"
+        start = getattr(node, "lineno", 1)
+        end = getattr(node, "end_lineno", start)
+        address = f"{kind}:{node.name}"
+        unit = _make_unit(artifact, address, kind, node.name, start, end, "file")
+        units[unit.address] = unit
+        child_addresses.append(unit.address)
+```
+
+Now I need to understand how `_make_unit` computes `content_hash`. Let me look at the rest of the file. I've only seen lines 1-200 so far. The file has 459 lines. Let me read the rest to see `_make_unit` and the other helper functions.
+
+The key question is: when a Python file is edited (a function's content changes), the address map is rebuilt. The new address map should have the correct `content_hash` for the edited function. But if the reopen fails, it means `observed_hash != unit.content_hash`.
+
+Possible bugs:
+1. The `content_hash` is computed incorrectly in `_make_unit` - maybe it's hashing the wrong text.
+2. The `exact_text_for_unit` extracts text differently from how `content_hash` was computed.
+3. After an edit, the address map isn't being rebuilt properly.
+
+Let me look at how `_make_unit` computes the hash. I need to see more of the file. Let me read lines 200-459.
+
+Actually, wait - let me think about this more carefully. The `exact_text_for_unit` does:
+```python
+lines = artifact.text.splitlines()
+return "\n".join(lines[unit.start_line - 1 : unit.end_line])
+```
+
+This joins lines with `\n`. But `splitlines()` on text that ends with a newline won't include the trailing empty string. However, the key issue is: the text extracted is `"\n".join(lines[start-1:end])`.
+
+Now, in `_make_unit`, the `content_hash` is presumably computed from some text. If it's computed from the raw slice `artifact.text` (which includes newlines differently) vs. the re-joined lines, there could be a mismatch.
+
+Actually, let me think about what happens with `splitlines()`:
+- `"a\nb\nc".splitlines()` → `["a", "b", "c"]`
+- `"a\nb\nc\n".splitlines()` → `["a", "b", "c"]`
+- `"a\nb\n".splitlines()` → `["a", "b"]`
+
+So `splitlines()` removes trailing newlines. And `"\n".join(["a", "b", "c"])` → `"a\nb\nc"` (no trailing newline).
+
+Now, if `_make_unit` computes `content_hash` from a different extraction method than `exact_text_for_unit`, that's the bug.
+
+Let me read the rest of the file to see `_make_unit`.

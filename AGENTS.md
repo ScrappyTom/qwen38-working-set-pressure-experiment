@@ -1,5 +1,14 @@
 # Experiment operating rules
 
+The September 22 artifact-map regression completes uncoached at 3107f3cf: correct
+saved repair, actual public pass and checked submission. Its complete audit is in
+development/workload_requalification/small_repairs/artifact_map/review. Preserve
+both success and affordable navigation/change detail omitted from later inputs.
+The bounded follow-through is navigation_continuity/PLAN.md; qualify and freeze it
+before the unexposed shift/receipt runs. An exact archived proposal is not the same
+object as an applied diff. Do not claim a recovery route returns either without
+checking its actual payload. No extra artifact-map run is needed just for a pass.
+
 The September 22 interpolation continuation is closed without a contribution:
 ten replies/twelve acquisitions or account operations, no edits/checks/submission.
 Read development/workload_requalification/interpolation_revision/review before any successor.

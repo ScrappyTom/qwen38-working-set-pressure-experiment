@@ -1,0 +1,344 @@
+Let me analyze the situation. I've made a patch to `patching.py` (lines 110-112 were replaced). The task is about a failed reopen after an accepted edit to a Python artifact. Let me understand the problem:
+
+The issue is: "An accepted edit to a Python artifact is followed by a failed reopen of the edited function."
+
+Looking at the code:
+
+1. In `patching.py`, `apply_patch_preview` creates a new artifact and new address map after applying a patch. It returns `receipt, new_artifact, new_map`.
+
+2. In `reopen.py`, `materialize_reopen` resolves an address from `address_maps`, then gets the artifact from `artifacts`, extracts the exact text, and checks if the hash matches.
+
+3. In `artifact_units.py`, `exact_text_for_unit` extracts text using `lines[unit.start_line - 1 : unit.end_line]`.
+
+The problem: After a patch is applied in `apply_patch_preview`, the new artifact and new address map are created. But the caller needs to update their `artifacts` and `address_maps` dictionaries with the new versions. If they don't, then reopening with the new address map would still look up the old artifact (or vice versa).
+
+Wait, let me look more carefully. The patch was already applied (lines 110-112 in patching.py). Let me check what was changed.
+
+Looking at the current state of patching.py (after the patch was applied), lines 110-112:
+```
+    new_artifact = import_artifact(log, kind=artifact.kind, path_or_name=artifact.path_or_name, text=new_text)
+    new_map = build_address_map(new_artifact)
+```
+
+Wait, the patch replaced lines 110-112. Let me look at what the current content shows. The current patching.py is shown in full. Let me count lines...
+
+Actually, looking at the current content of patching.py, the file is 158 lines total. The patch was accepted and replaced lines 110-112. Let me look at what's around those lines in the current file.
+
+Looking at the `apply_patch_preview` function:
+- Line ~100: `lines = artifact.text.splitlines()`
+- Line ~101: `replacement = preview.proposed_text.splitlines()`
+- Line ~102: `new_lines = lines[: unit.start_line - 1] + replacement + lines[unit.end_line :]`
+- Line ~103: `trailing_newline = "\n" if artifact.text.endswith("\n") else ""`
+- Line ~104: `new_text = "\n".join(new_lines) + trailing_newline`
+- Line ~105: `new_artifact = import_artifact(log, kind=artifact.kind, path_or_name=artifact.path_or_name, text=new_text)`
+- Line ~106: `new_map = build_address_map(new_artifact)`
+
+Wait, I need to count more carefully. Let me look at the actual line numbers.
+
+Actually, the key issue from the task description: "An accepted edit to a Python artifact is followed by a failed reopen of the edited function."
+
+The problem could be:
+1. After applying a patch, the new artifact has different line numbers for functions (since lines were inserted/removed).
+2. The address map is rebuilt with the new artifact, so function addresses should have correct line ranges.
+3. But when reopening, if the caller still references the OLD artifact (because `artifacts` dict wasn't updated), the line ranges from the NEW map won't match the OLD artifact's text.
+
+OR the issue could be in how the patch is applied. Let me look at the line manipulation:
+
+```python
+lines = artifact.text.splitlines()
+replacement = preview.proposed_text.splitlines()
+new_lines = lines[: unit.start_line - 1] + replacement + lines[unit.end_line :]
+```
+
+This takes lines before `start_line-1`, adds the replacement, and adds lines from `end_line` onward. This looks correct for replacing the text of a unit.
+
+Wait, but there's a subtle issue. `artifact.text.splitlines()` splits by any line ending (including \r\n, \r, \n). But `"\n".join(new_lines)` joins with just \n. If the original text had \r\n line endings, this would change them. But that's probably not the main issue for a Python file.
+
+Let me think about what the actual bug might be. The task says the problem was "reported before this repair session" and I've already made one edit. Let me check what I changed.
+
+The patch replaced lines 110-112 in patching.py. Looking at the current file, let me count lines to find what's at 110-112.
+
+Actually, I should look at what the previous candidate was vs. the current one. The previous candidate was `0f67505a...` and the current is `23b5c179...`. The patch was on lines 110-112.
+
+Let me count lines in the current patching.py to figure out what was changed. Looking at the content:
+
+Line 1: `"""Patch-preview and in-memory apply helpers for bounded draft changes."""`
+Line 2: (empty)
+Line 3: `from __future__ import annotations`
+...
+
+Let me count more carefully by looking at the structure. The file has 158 lines.
+
+Actually, I realize I need to focus on what the bug is. Let me re-read the task:
+
+"An accepted edit to a Python artifact is followed by a failed reopen of the edited function."
+
+The flow is:
+1. A patch preview is created for a function unit
+2. The patch is applied (creating new_artifact and new_map)
+3. The caller updates their artifacts and address_maps
+4. Reopening the edited function fails
+
+The reopen logic:
+1. `resolve_address(address_maps, requested_ref_or_address)` - finds the unit
+2. `artifacts.get(unit.artifact_id)` - gets the artifact
+3. `exact_text_for_unit(artifact, unit)` - extracts text
+4. Compares `sha256_text(exact_text)` with `unit.content_hash`
+
+If the hash doesn't match, it's blocked with "exact unit hash mismatch; artifact map is stale".
+
+So the question is: why would the hash not match after a correct edit?
+
+In `_make_unit`:
+```python
+lines = artifact.text.splitlines()
+text = inline_text if inline_text is not None else ("\n".join(lines[start_line - 1 : end_line]) if lines else artifact.text)
+content_hash = sha256_text(text)
+```
+
+In `exact_text_for_unit`:
+```python
+def exact_text_for_unit(artifact: Artifact, unit: ArtifactUnit) -> str:
+    if unit.inline_text is not None:
+        return unit.inline_text
+    lines = artifact.text.splitlines()
+    return "\n".join(lines[unit.start_line - 1 : unit.end_line])
+```
+
+These look consistent. Both use `"\n".join(lines[start-1:end])`.
+
+Wait, but there's a difference! In `_make_unit`, the slice is `lines[start_line - 1 : end_line]`. In `exact_text_for_unit`, the slice is `lines[unit.start_line - 1 : unit.end_line]`. These are the same.
+
+Hmm, let me look at the `apply_patch_preview` function more carefully. After the edit, the new artifact is created with `import_artifact`. Let me look at what `import_artifact` does:
+
+```python
+def import_artifact(log: ContentLog, *, kind: str, path_or_name: str, text: str) -> Artifact:
+    blob = log.append_blob(text, media_type="text/plain", name=path_or_name)
+    artifact_id = stable_id("artifact", {"kind": kind, "path": path_or_name})
+    return Artifact(
+        artifact_id=artifact_id,
+        kind=kind,
+        path_or_name=path_or_name,
+        version_hash=blob.sha256,
+        blob_ref=blob.blob_ref,
+        text=text,
+    )
+```
+
+Wait! `artifact_id = stable_id("artifact", {"kind": kind, "path": path_or_name})`. This means the artifact_id is deterministic based on kind and path. So the new artifact will have the SAME artifact_id as the old one (since kind and path don't change). That's by design - it's a new version of the same artifact.
+
+But the `version_hash` is different (it's the blob's sha256, which is different because the text changed).
+
+Now in `apply_patch_preview`:
+- `new_artifact` has the same `artifact_id` but different `version_hash`
+- `new_map = build_address_map(new_artifact)` - the map uses `artifact.version_hash` in its computation
+
+In `materialize_reopen`:
+- It resolves the address from `address_maps` (the new map)
+- Gets the artifact from `artifacts` (which should be the new artifact, since same artifact_id)
+- Extracts text and compares hash
+
+This should work IF the caller properly updates `artifacts[artifact_id] = new_artifact` and `address_maps[artifact_id] = new_map`.
+
+But wait - the issue is that `apply_patch_preview` returns the new artifact and map, but doesn't update the dictionaries itself. The caller has to do that. That's fine by design.
+
+Let me think about what could go wrong in the reopen after a successful edit...
+
+Actually, let me look at this more carefully. The `resolve_address` function:
+
+```python
+def resolve_address(address_maps: dict[str, AddressMap], address_or_ref: str) -> ArtifactUnit | None:
+    for address_map in address_maps.values():
+        for unit in address_map.units.values():
+            if address_or_ref in {unit.address, unit.unit_id, unit.exact_ref}:
+                return unit
+    return None
+```
+
+And in `materialize_reopen`, after resolving, it checks:
+```python
+exact_text = exact_text_for_unit(artifact, unit)
+observed_hash = sha256_text(exact_text)
+if observed_hash != unit.content_hash:
+```
+
+So if the unit's `content_hash` was computed at build time from the correct text, and `exact_text_for_unit` extracts the same text, the hashes should match.
+
+Wait, let me look at `_unitize_python` more carefully:
+
+```python
+def _unitize_python(artifact: Artifact) -> dict[str, ArtifactUnit]:
+    lines = artifact.text.splitlines()
+    root = _make_unit(artifact, "file", "file", artifact.path_or_name, 1, max(len(lines), 1), None)
+    units = {root.address: root}
+    child_addresses: list[str] = []
+
+    try:
+        tree = ast.parse(artifact.text)
+    except SyntaxError:
+        return _with_children(units, root.address, child_addresses)
+
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            kind = "class" if isinstance(node, ast.ClassDef) else "function"
+            start = getattr(node, "lineno", 1)
+            end = getattr(node, "end_lineno", start)
+            address = f"{kind}:{node.name}"
+            unit = _make_unit(artifact, address, kind, node.name, start, end, "file")
+            units[unit.address] = unit
+            child_addresses.append(unit.address)
+
+    return _with_children(units, root.address, child_addresses)
+```
+
+This uses `ast.parse` to find function/class boundaries. The `lineno` and `end_lineno` are 1-based line numbers from the AST.
+
+Now, in `_make_unit`:
+```python
+text = "\n".join(lines[start_line - 1 : end_line]) if lines else artifact.text
+```
+
+For a function starting at line 5 and ending at line 10, this extracts lines[4:10], which is 6 lines (lines 5-10). That's correct.
+
+In `exact_text_for_unit`:
+```python
+return "\n".join(lines[unit.start_line - 1 : unit.end_line])
+```
+
+Same formula. So these should always agree.
+
+Hmm, so what's the actual bug? Let me re-read the task: "An accepted edit to a Python artifact is followed by a failed reopen of the edited function."
+
+Maybe the issue is in the patch application itself. Let me look at the line manipulation again:
+
+```python
+lines = artifact.text.splitlines()
+replacement = preview.proposed_text.splitlines()
+new_lines = lines[: unit.start_line - 1] + replacement + lines[unit.end_line :]
+```
+
+If the unit is a function from line 5 to line 10:
+- `lines[:4]` = lines 1-4
+- `replacement` = the new function text
+- `lines[10:]` = lines 11 onwards
+
+This seems correct. The function at lines 5-10 is replaced.
+
+But wait - what if the proposed text changes the number of lines? That's fine, the new artifact just has different total lines.
+
+Let me think about this differently. What if the issue is that after the edit, the address (e.g., "function:my_func") is the same, but the unit's `unit_id` changes (because the content hash changed, which changes the payload for stable_id). If the caller tries to reopen using the old `unit_id` or old `exact_ref`, it won't resolve in the new map.
+
+But that's expected behavior - the old reference is stale. The task says to preserve "rejection of genuinely stale references."
+
+Actually wait - I think I need to look at this from a different angle. Let me re-read: "An accepted edit to a Python artifact is followed by a failed reopen of the edited function."
+
+The key word is "the edited function." After editing function `foo`, you want to reopen function `foo`. The address would be "function:foo". In the new map, there should be a unit with address "function:foo" (assuming the function still exists with the same name after the edit).
+
+So the flow would be:
+1. Edit function `foo` in the artifact
+2. New artifact and map are created
+3. Caller updates their dictionaries
+4. Reopen "function:foo"
+5. `resolve_address` finds the unit in the new map
+6. `exact_text_for_unit` extracts the text
+7. Hash comparison
+
+If this fails, it means either:
+- The address doesn't resolve (the function was removed/renamed in the edit)
+- The hash doesn't match
+
+For the hash to not match, `exact_text_for_unit` must produce different text than what `_make_unit` used to compute the hash.
+
+Wait! I just realized something. Let me look at `_make_unit` again:
+
+```python
+def _make_unit(
+    artifact: Artifact,
+    address: str,
+    unit_kind: str,
+    title: str,
+    start_line: int,
+    end_line: int,
+    parent_address: str | None,
+    inline_text: str | None = None,
+) -> ArtifactUnit:
+    lines = artifact.text.splitlines()
+    text = inline_text if inline_text is not None else ("\n".join(lines[start_line - 1 : end_line]) if lines else artifact.text)
+    content_hash = sha256_text(text)
+```
+
+And `exact_text_for_unit`:
+```python
+def exact_text_for_unit(artifact: Artifact, unit: ArtifactUnit) -> str:
+    if unit.inline_text is not None:
+        return unit.inline_text
+    lines = artifact.text.splitlines()
+    return "\n".join(lines[unit.start_line - 1 : unit.end_line])
+```
+
+These are identical in their computation. Both handle `inline_text` the same way. Both use the same slice formula.
+
+Unless... the issue is that `artifact.text` changes between the time the map is built and the time the text is extracted. But that shouldn't happen if the artifact is immutable (frozen dataclass presumably).
+
+Wait, let me look at the `Artifact` definition. It's in `records.py` which I haven't seen. But from usage, it looks like it has fields: `artifact_id`, `kind`, `path_or_name`, `version_hash`, `blob_ref`, `text`.
+
+Hmm, I'm stuck on what the bug is. Let me look at the patch I already made. The patch replaced lines 110-112 in the OLD version of patching.py. Let me figure out what was there before.
+
+Actually, I can look at the history to see what was patched. Let me check the event.
+
+Wait, I already have the current state. The patch was accepted. Let me focus on what might still be wrong.
+
+Let me re-read the task: "An accepted edit to a Python artifact is followed by a failed reopen of the edited function. Investigate and repair this behavior while preserving unrelated source, unchanged-content behavior, later updates, and rejection of genuinely stale references."
+
+I've made one edit already. Now I need to run the public check to see if it passes, or if there are still issues.
+
+Actually, let me first check what my edit was. Let me look at the event.
+
+Actually, looking at the feedback: the patch replaced lines 110-112 in patching.py. The file went from some previous state to the current 158-line state.
+
+Let me think about what the original bug might have been. Let me look at the current code more carefully for any inconsistency.
+
+Actually, I wonder if the issue is in `apply_patch_preview`. After applying the patch, it creates `new_artifact` and `new_map`. But it returns them to the caller. The caller then needs to update their dictionaries. If the caller does:
+
+```python
+receipt, new_artifact, new_map = apply_patch_preview(...)
+if new_artifact:
+    artifacts[new_artifact.artifact_id] = new_artifact
+    address_maps[new_artifact.artifact_id] = new_map
+```
+
+Then reopening should work. But what if there's a bug in how the new text is constructed?
+
+Let me trace through an example:
+- Original text: "def foo():\n    return 1\n\ndef bar():\n    return 2\n"
+- Lines: ["def foo():", "    return 1", "", "def bar():", "    return 2"]
+- Function foo: start_line=1, end_line=2
+- We want to replace foo with "def foo():\n    return 3\n    return 4"
+- replacement = ["def foo():", "    return 3", "    return 4"]
+- new_lines = lines[:0] + ["def foo():", "    return 3", "    return 4"] + lines[2:]
+- = ["def foo():", "    return 3", "    return 4", "", "def bar():", "    return 2"]
+- new_text = "def foo():\n    return 3\n    return 4\n\ndef bar():\n    return 2\n"
+
+Then `build_address_map(new_artifact)`:
+- `ast.parse(new_text)` - finds foo at lines 1-3, bar at lines 5-6
+- For foo: _make_unit with start=1, end=3
+  - text = "\n".join(lines[0:3]) = "def foo():\n    return 3\n    return 4"
+  - content_hash = sha256_text("def foo():\n    return 3\n    return 4")
+
+Then `exact_text_for_unit(new_artifact, foo_unit)`:
+- lines = new_artifact.text.splitlines() = ["def foo():", "    return 3", "    return 4", "", "def bar():", "    return 2"]
+- return "\n".join(lines[0:3]) = "def foo():\n    return 3\n    return 4"
+
+These match! So the basic case works.
+
+Hmm, what about the trailing newline? The original text ends with "\n", so `trailing_newline = "\n"`. The new text is `"\n".join(new_lines) + "\n"`. But `splitlines()` on the new text would give the same lines (the trailing \n just means the last line has a newline ending, which splitlines handles).
+
+Wait, actually I need to be more careful. If `artifact.text = "a\nb\nc\n"`, then `artifact.text.splitlines()` = `["a", "b", "c"]`. And `"\n".join(["a", "b", "c"])` = `"a\nb\nc"`. Then `+ "\n"` = `"a\nb\nc\n"`. OK so that's consistent.
+
+But what if the text doesn't end with a newline? `artifact.text = "a\nb\nc"`. Then `trailing_newline = ""`. `new_text = "\n".join(new_lines) + ""`. If new_lines = ["a", "b", "c"], then new_text = "a\nb\nc". And splitlines() = ["a", "b", "c"]. Fine.
+
+I'm not finding an obvious bug in the current code. Let me check what my previous edit actually changed. Let me look at the event.
+
+Actually, let me just run the check to see what happens. If the check passes, great. If it fails, the error message will guide me.
+
+Let me run `check public` on the current candidate.
