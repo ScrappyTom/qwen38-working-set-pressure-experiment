@@ -1,0 +1,146 @@
+Let me analyze the current state:
+
+1. I need to add tests for InterpolationMissingOptionError obtained through real ConfigParser.get calls under both BasicInterpolation and ExtendedInterpolation (including cross-section reference for Extended).
+2. For each mode, cover: shallow copying, deep copying, and every available pickle protocol.
+3. Check exact exception class, arguments, option, section, reference and diagnostic text.
+4. Include raw=True retrieval of the unresolved value and a successful lookup once the referenced setting exists.
+5. Also need to extend Doc/library/configparser.rst with runnable examples.
+
+Let me look at what I have:
+- The test file (Lib/test/test_configparser.py) - I can see lines 800-2167
+- The configparser.py source - I can see lines 263-278 (InterpolationMissingOptionError class) and lines 390-429 (_interpolate_some method)
+
+Key facts from the source:
+- `InterpolationMissingOptionError(option, section, rawval, reference)` 
+- `args = (option, section, rawval, reference)`
+- `msg = "Bad value substitution: option {!r} in section {!r} contains an interpolation key {!r} which is not a valid option name. Raw value: {!r}".format(option, section, reference, rawval)`
+- `self.reference = reference`
+- `self.section = section` (from parent InterpolationError)
+- `self.option = option` (from parent InterpolationError)
+
+For BasicInterpolation: `%(name)s` syntax - the reference is the option name (optionxform'd)
+For ExtendedInterpolation: `${section:name}` syntax - the reference is the full "section:name" string (or just "name" if no section prefix)
+
+Wait, let me re-examine. Looking at the source:
+- BasicInterpolation's `_interpolate_some`: uses `%` syntax, `var = parser.optionxform(m.group(1))`
+- ExtendedInterpolation: I need to check how it handles references. Let me look at what I know.
+
+From the test file, I can see:
+- `ConfigParserTestCaseExtendedInterpolation` has `test_strange_options` which checks `cm.exception.reference` equals `'dollars:${sick'`
+- `test_other_errors` checks `InterpolationMissingOptionError` for various cases
+
+For ExtendedInterpolation, the `_interpolate_some` method handles `${section:name}` or `${name}` syntax. Let me think about what the reference would be...
+
+Looking at the existing test in `ConfigParserTestCaseExtendedInterpolation.test_strange_options`:
+```python
+self.assertEqual(cm.exception.reference, 'dollars:${sick')
+```
+
+So for Extended, the reference includes the section prefix and potentially parts of the name.
+
+Now I need to understand the structure:
+- 2 policies (BasicInterpolation, ExtendedInterpolation)
+- 10 operations (the lookup scenarios + copy/deepcopy/pickle)
+- Wait, looking at the verification criteria more carefully:
+
+From `required_paths`:
+- "real missing reference; cross-section for ExtendedInterpolation" with operations "copy" and policy "BasicInterpolation"
+- There are 20 total missing paths
+
+Let me re-read the verification:
+```
+"missing_paths":[{"lookup":"real missing reference; cross-section for ExtendedInterpolation","operation":"copy","policy":"BasicInterpolation"},{"lookup":"real missing reference; cross-section for ExtendedInterpolation","operation":"deepcopy","policy":"BasicInterpolation"}],"missing_paths_remaining":18,"missing_paths_shown":2,"missing_paths_total":20
+```
+
+So there are 20 required paths total: 2 policies × 10 operations. The operations seem to include: copy, deepcopy, pickle protocols (0-5 = 6 protocols), raw, successful_lookup... that's 10 operations.
+
+Wait: copy, deepcopy, pickle 0, pickle 1, pickle 2, pickle 3, pickle 4, pickle 5, raw, successful_lookup = 10 operations. Yes!
+
+And for detect targets: 2 policies × 8 transports = 16 targets. Transports: copy, deepcopy, pickle 0-5 = 8.
+
+Now let me think about what the tests need to do:
+
+For each policy (Basic, Extended):
+1. Create a ConfigParser with that interpolation
+2. Set up a config with a missing reference
+3. Call `get()` to trigger the real error
+4. Verify the exception:
+   - Exact class: `InterpolationMissingOptionError`
+   - args: (option, section, rawval, reference)
+   - option, section, reference attributes
+   - str/str(exception) diagnostic text
+5. For each transport (copy, deepcopy, pickle 0-5):
+   - Copy/deepcopy/pickle the exception
+   - Verify the copy has the same class, args, attributes, and diagnostic
+6. raw=True retrieval: get the raw value without interpolation
+7. Successful lookup: add the missing option and verify get() succeeds
+
+For BasicInterpolation:
+- Config: `[section]\nkey = %(missing)s`
+- get('section', 'key') → InterpolationMissingOptionError
+- option='key', section='section', rawval='%(missing)s', reference='missing'
+
+For ExtendedInterpolation (same section):
+- Config: `[section]\nkey = ${missing}`
+- get('section', 'key') → InterpolationMissingOptionError
+- option='key', section='section', rawval='${missing}', reference='missing'
+
+For ExtendedInterpolation (cross-section):
+- Config: `[other]\nkey = ${other:missing}`
+- get('other', 'key') → InterpolationMissingOptionError
+- option='key', section='other', rawval='${other:missing}', reference='other:missing'
+
+Wait, I need to be more careful about what the reference is for Extended interpolation. Let me look at the source more carefully.
+
+I don't have the ExtendedInterpolation._interpolate_some source visible. Let me check what I know from the tests:
+- `test_strange_options`: `cm.exception.reference` equals `'dollars:${sick'`
+
+Hmm, that's interesting. The reference is `'dollars:${sick'` not `'dollars:${sick}'`. Let me think about why...
+
+Actually, looking at the test more carefully:
+```python
+cf = self.fromstring("""
+    [dollars]
+    $var = $$value
+    $var2 = ${$var}
+    ${sick} = cannot interpolate me
+
+    [interpolated]
+    $other = ${dollars:$var}
+    $trying = ${dollars:${sick}}
+""")
+```
+
+So `${dollars:${sick}}` - the reference would be `dollars:${sick}` (without the closing brace because the parsing stops at the first `}`).
+
+Actually wait, let me re-read: `self.assertEqual(cm.exception.reference, 'dollars:${sick')` - yes, the reference is `dollars:${sick`.
+
+For my test, I'll use simpler cases:
+- Same section: `${missing}` → reference is `missing`
+- Cross-section: `${other:missing}` → reference is `other:missing`
+
+Now let me look at the existing test structure to understand where to add my tests. I see the file goes to line 2210. Let me read the end of the file to see what's there.
+
+Actually, I already have the file content from line 800 to 2167 (which is the region I read). The file has 2210 lines total. Let me read lines 2168-2210 to see what's at the end.
+
+Wait, I already read lines 2075-2210 in the latest operation. Let me check the working_set.sources... The third source is lines 800-2167. Let me read the remaining lines 2168-2210.
+
+Actually, looking at the latest_feedback, I read lines 2075-2210 and the region returned was 2075-2167. That's confusing. Let me check - the region_ref is SRC-baf521affae0afd70822737131129a9daea63e6a2eca22d3e3cc95e3d5525d16 with returned_start_line 2075 and returned_end_line 2167.
+
+Wait, that's the same range as the working_set source (800-2167). The file has 2210 lines. So I need to see lines 2168-2210.
+
+Let me first read the end of the file, and also check the Doc/library/configparser.rst file to understand what's there currently.
+
+Actually, let me plan my approach:
+1. Read the end of test_configparser.py (lines 2168-2210) to see what's there
+2. Read the Doc/library/configparser.rst to understand current content
+3. Write the test code
+4. Write the documentation additions
+
+Let me start by reading the end of the test file and the documentation file.
+
+Actually wait - I need to be strategic about my remaining actions. I have 75 actions remaining and 19 requests remaining. Let me be efficient.
+
+Let me read the end of the test file first, then the doc file, then write the tests.
+
+Actually, I realize I should first check what the end of the file looks like (lines 2168-2210) to know where to insert my tests. Let me do that.

@@ -1,0 +1,140 @@
+Let me analyze the current state:
+
+1. **Task**: Extend configparser exception coverage to missing interpolation references. Need to:
+   - Add tests in `Lib/test/test_configparser.py` for `InterpolationMissingOptionError` via real `ConfigParser.get` calls under both `BasicInterpolation` and `ExtendedInterpolation` (including cross-section reference in Extended)
+   - Cover shallow copy, deep copy, and every pickle protocol for each mode
+   - Check exact exception class, arguments, option, section, reference, and diagnostic text
+   - Include `raw=True` retrieval and successful lookup after adding the missing option
+   - Extend `Doc/library/configparser.rst` with runnable examples
+
+2. **Current state**: 
+   - The public check failed with: required_paths (20 missing), examples.execution, added_tests, legacy_public_acceptance
+   - The tests check is null (not yet run)
+   - I have the test file lines 800-2074 visible (the bulk of the file)
+   - I have configparser.py lines 263-278 (exception class) and 390-429 (interpolation code)
+
+3. **What I need to do**:
+   - I need to see the end of the test file (lines 2075-2210) to know where to add new tests
+   - I need to write comprehensive tests
+   - I need to add doc examples
+
+Let me first read the end of the test file to see what's there, then I'll write the tests.
+
+Looking at the test file structure, I can see:
+- `ExceptionPicklingTestCase` - has existing tests for pickling various exceptions
+- `ExceptionContextTestCase` - tests context suppression
+- `ConvertersTestCase` - last class visible
+
+The file is 2210 lines. I can see up to line 2074. Let me read the rest.
+
+Actually, wait - looking at the verification criteria more carefully:
+
+- **required_paths**: 20 missing paths = 2 policies × 10 operations
+  - Policies: BasicInterpolation, ExtendedInterpolation
+  - Operations: real missing reference; cross-section for ExtendedInterpolation
+  - The operations listed include: copy, deepcopy, and presumably pickle protocols, raw=True, successful lookup, etc.
+
+- **detect targets**: 2 policies × 8 transports = 16
+  - Transports: copy, deepcopy, and pickle protocols (0 through HIGHEST_PROTOCOL)
+  - Actually looking more carefully: "8 transports" per policy. That could be copy + deepcopy + 6 pickle protocols (0-5) = 8? Or copy + deepcopy + protocols 0 through HIGHEST_PROTOCOL (which is typically 5, so 6 protocols) = 8.
+
+Wait, let me re-read the criteria:
+- `detect.restored_class`: "Return a subclass after one declared mode/transport while keeping constructor state." - 16 targets
+- `detect.restored_diagnostic`: "Change the restored diagnostic after one declared mode/transport" - 16 targets
+- `detect.option`, `detect.section`, `detect.raw_value`, `detect.reference`: "Restore a changed X value" - these need detection
+
+So the tests need to:
+1. For each policy (BasicInterpolation, ExtendedInterpolation):
+   - Create a real ConfigParser with that interpolation
+   - Set up a config where a value references a missing option
+   - Call `get()` (not raw) to trigger `InterpolationMissingOptionError`
+   - Catch the exception and verify:
+     - Exact class: `configparser.InterpolationMissingOptionError`
+     - `e.args` matches expected
+     - `e.option`, `e.section`, `e.reference` match
+     - `str(e)` / diagnostic text matches
+   - Verify `raw=True` returns the unresolved value
+   - Add the missing option, then verify successful lookup
+   - For each transport (copy, deepcopy, pickle 0 through HIGHEST_PROTOCOL):
+     - Transport the exception
+     - Verify the transported exception still has correct type, args, attributes, message
+     - This is what detects restoration faults
+
+Let me think about what "8 transports" means. Looking at the detect criteria:
+- 16 targets = 2 policies × 8 transports
+- The transports are likely: copy, deepcopy, pickle protocol 0, 1, 2, 3, 4, 5 (HIGHEST_PROTOCOL is usually 5)
+
+Wait, actually `pickle.HIGHEST_PROTOCOL` in Python 3.11+ is 5. So protocols 0-5 = 6 protocols. Plus copy and deepcopy = 8 transports total. That makes sense!
+
+Now let me think about the test structure. I'll create a new test class:
+
+```python
+class InterpolationMissingOptionErrorTestCase(unittest.TestCase):
+    """Test InterpolationMissingOptionError via real ConfigParser.get calls."""
+    
+    def _basic_interpolation_setup(self):
+        """Set up a BasicInterpolation config with a missing reference."""
+        parser = configparser.ConfigParser(interpolation=configparser.BasicInterpolation())
+        parser.read_string("""
+[section]
+good = value
+missing_ref = %(does_not_exist)s
+""")
+        return parser
+    
+    def _extended_interpolation_setup(self):
+        """Set up an ExtendedInterpolation config with a missing reference."""
+        parser = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
+        parser.read_string("""
+[common]
+base = /opt
+[other]
+missing_cross = ${common:does_not_exist}/data
+""")
+        return parser
+```
+
+Wait, I need to be more careful. Let me re-read the requirements:
+
+"obtain InterpolationMissingOptionError through real ConfigParser.get calls under both BasicInterpolation and ExtendedInterpolation, including a missing cross-section reference in the latter"
+
+So for BasicInterpolation: a simple missing reference like `%(missing)s`
+For ExtendedInterpolation: a cross-section reference like `${other_section:missing_option}`
+
+"for each mode, cover shallow copying, deep copying and every available pickle protocol"
+"Check the exact exception class, arguments, option, section, reference and diagnostic text against the actual failing lookup."
+"Include raw=True retrieval of the unresolved value and a successful lookup once the referenced setting exists."
+
+Now let me think about the exact structure. The verification says:
+- 20 missing paths: 2 policies × 10 operations
+
+The 10 operations per policy are probably:
+1. copy (shallow copy of exception)
+2. deepcopy (deep copy of exception)
+3. pickle protocol 0
+4. pickle protocol 1
+5. pickle protocol 2
+6. pickle protocol 3
+7. pickle protocol 4
+8. pickle protocol 5
+9. raw=True retrieval
+10. successful lookup after adding option
+
+And the 16 detect targets: 2 policies × 8 transports (copy, deepcopy, pickle 0-5)
+
+Let me now read the end of the test file to see where to insert.
+
+Actually, I already have lines 800-2074. The file is 2210 lines. Let me read lines 2075-2210.
+
+Wait, I should check what's at the very end. Let me read the last portion.
+
+Actually, looking at the visible source, the last class I can see is `ConvertersTestCase` which ends around line 2074. The file has 2210 lines, so there's about 136 more lines. Let me read them.
+
+Let me plan my approach:
+1. Read lines 2075-2210 of the test file
+2. Write the new test class and insert it at the end (or before the last class)
+3. Write the doc examples
+4. Run tests
+5. Run public check
+
+Let me start by reading the end of the test file.

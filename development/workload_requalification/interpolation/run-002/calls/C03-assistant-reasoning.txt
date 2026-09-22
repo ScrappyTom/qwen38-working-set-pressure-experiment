@@ -1,0 +1,222 @@
+Let me analyze the current state:
+
+1. I need to add tests for `InterpolationMissingOptionError` via real `ConfigParser.get` calls under both `BasicInterpolation` and `ExtendedInterpolation`, including a missing cross-section reference in ExtendedInterpolation.
+2. For each mode, cover shallow copying, deep copying, and every available pickle protocol.
+3. Check exact exception class, arguments, option, section, reference, and diagnostic text against the actual failing lookup.
+4. Include `raw=True` retrieval of the unresolved value and a successful lookup once the referenced setting exists.
+5. Also need to extend `Doc/library/configparser.rst` with runnable examples.
+
+Current state:
+- The public check failed because:
+  - `required_paths`: 20 missing paths (real missing reference lookups with copy/deepcopy for Basic/Extended interpolation)
+  - `examples.execution`: No newly added executable examples were run
+  - `added_tests`: No tests added yet
+  - `legacy_public_acceptance`: Documentation not added preserving existing
+
+- I have the test file visible (lines 1-89 and 876-2210). The file is 2210 lines.
+- I have a small section of configparser.py (lines 1030-1070).
+
+I need to:
+1. First, understand the existing test structure better. I can see `ExceptionContextTestCase` which has `test_get_basic_interpolation` and `test_get_extended_interpolation` that use `parser.get()` to trigger `InterpolationMissingOptionError`.
+2. I need to add a new test class that:
+   - Uses real `ConfigParser.get` calls to get `InterpolationMissingOptionError`
+   - Tests under both BasicInterpolation (default ConfigParser) and ExtendedInterpolation
+   - For Extended, includes a cross-section reference (e.g., `${other_section:option}`)
+   - For each mode, covers: copy.copy, copy.deepcopy, and all pickle protocols
+   - Checks: exact exception class, args, option, section, reference, diagnostic text
+   - Includes raw=True retrieval
+   - Includes successful lookup after adding the missing option
+
+Let me think about what the tests need to look like. Looking at the existing `ExceptionContextTestCase`:
+
+```python
+def test_get_basic_interpolation(self):
+    parser = configparser.ConfigParser()
+    parser.read_string("""
+    [Paths]
+    home_dir: /Users
+    my_dir: %(home_dir1)s/lumberjack
+    my_pictures: %(my_dir)s/Pictures
+    """)
+    cm = self.assertRaises(configparser.InterpolationMissingOptionError)
+    with cm:
+        parser.get('Paths', 'my_dir')
+    self.assertIs(cm.exception.__suppress_context__, True)
+```
+
+So for BasicInterpolation (the default), the reference is `%(home_dir1)s` and `home_dir1` doesn't exist. The exception will have:
+- `option` = 'my_dir'
+- `section` = 'Paths'
+- `reference` = 'home_dir1'
+- `args` = ('my_dir', 'Paths', '%(home_dir1)s/lumberjack', 'home_dir1')
+
+For ExtendedInterpolation, the syntax is `${option}` for same-section and `${section:option}` for cross-section.
+
+Now let me think about what the check requires. The missing paths are:
+- "real missing reference; cross-section for ExtendedInterpolation" with operations copy, deepcopy for BasicInterpolation policy
+
+Wait, let me re-read: `{"lookup":"real missing reference; cross-section for ExtendedInterpolation","operation":"copy","policy":"BasicInterpolation"}`
+
+Hmm, that's odd. It says "cross-section for ExtendedInterpolation" but "policy":"BasicInterpolation". Let me re-read the criteria...
+
+Actually I think the criteria structure means:
+- The test must exercise a "real missing reference" lookup
+- For "cross-section for ExtendedInterpolation" specifically
+- With "operation":"copy" meaning the exception is tested via copy
+- Under "policy":"BasicInterpolation"
+
+Wait, that doesn't make sense. Let me re-read: "missing_paths" has 20 entries. The shown ones are:
+1. `{"lookup":"real missing reference; cross-section for ExtendedInterpolation","operation":"copy","policy":"BasicInterpolation"}`
+2. `{"lookup":"real missing reference; cross-section for ExtendedInterpolation","operation":"deepcopy","policy":"BasicInterpolation"}`
+
+And there are 18 more. So the 20 total paths include combinations of:
+- lookup types: "real missing reference" and "real missing reference; cross-section for ExtendedInterpolation"
+- operations: copy, deepcopy, pickle (each protocol)
+- policies: BasicInterpolation, ExtendedInterpolation
+
+Actually wait - "cross-section for ExtendedInterpolation" with policy "BasicInterpolation" seems contradictory. Maybe the lookup description is a category label and the policy is which interpolation mode the test runs under. Let me think...
+
+Actually, I think the structure might be:
+- For BasicInterpolation policy: test a real missing reference (like `%(nonexistent)s`)
+- For ExtendedInterpolation policy: test a real missing reference (like `${nonexistent}`) AND a cross-section missing reference (like `${other_section:nonexistent}`)
+
+And for each, test with: copy, deepcopy, pickle protocols
+
+Let me count: 
+- Basic: 1 lookup type × (copy + deepcopy + pickle_protocols) 
+- Extended: 2 lookup types (same-section + cross-section) × (copy + deepcopy + pickle_protocols)
+
+If pickle has protocols 0 through HIGHEST_PROTOCOL (which is typically 5 or 6 in modern Python, giving 6 or 7 protocols including 0), then:
+- Basic: 1 × (1 + 1 + N_protocols)
+- Extended: 2 × (1 + 1 + N_protocols)
+
+If there are 6 protocols (0-5): 
+- Basic: 1 × (1 + 1 + 6) = 8
+- Extended: 2 × (1 + 1 + 6) = 16
+Total: 24
+
+If there are 7 protocols (0-6):
+- Basic: 1 × (1 + 1 + 7) = 9
+- Extended: 2 × (1 + 1 + 7) = 18
+Total: 27
+
+Hmm, 20 total. Let me think differently. Maybe it's:
+- 2 policies × (copy + deepcopy) = 4
+- 2 policies × pickle protocols... 
+
+Actually 20 = could be 2 (policies) × (1 copy + 1 deepcopy + 8 pickle protocols)? No, that's 20 if there are 8 protocols.
+
+Or: 20 = could be split as:
+- Basic: copy, deepcopy, pickle_0 through pickle_5 = 8
+- Extended same-section: copy, deepcopy, pickle_0 through pickle_5 = 8  
+- Extended cross-section: copy, deepcopy = 2
+Wait that's 18.
+
+Or maybe:
+- Basic: copy, deepcopy, pickle 0-4 = 7
+- Extended: copy, deepcopy, pickle 0-4 = 7 (same-section)
+- Extended cross-section: copy, deepcopy, pickle 0-4 = 7
+Total: 21? Not quite.
+
+Actually I don't need to figure out the exact count. I need to write tests that cover all the required paths. Let me just write comprehensive tests that cover:
+- BasicInterpolation: real missing reference via `ConfigParser.get`
+- ExtendedInterpolation: real missing reference (same-section) via `ConfigParser.get`
+- ExtendedInterpolation: real missing reference (cross-section) via `ConfigParser.get`
+
+For each, test:
+- copy.copy
+- copy.deepcopy
+- pickle (all protocols)
+
+And check:
+- Exception class (type)
+- args
+- option
+- section
+- reference
+- Diagnostic text (str(exception) or message)
+
+Also include:
+- raw=True retrieval of the unresolved value
+- Successful lookup after adding the missing option
+
+Now, let me figure out where to insert the tests. The test file is 2210 lines. I should add a new test class. Looking at the structure, I'll add it after `ExceptionContextTestCase` or near the other exception-related tests.
+
+Let me look at what's already visible. I have lines 1-89 and 876-2210. The `ExceptionContextTestCase` class is visible in the 876-2210 range. Let me find where it ends and where I can insert.
+
+From the visible source (lines 876-2210), I can see:
+- `ExceptionContextTestCase` ends around where `ConvertersTestCase` begins
+- After that comes `BlatantOverrideConvertersTestCase`, then `MiscTestCase`, then `if __name__ == '__main__':`
+
+I'll add my new test class before `MiscTestCase` or after `ExceptionContextTestCase`. Let me place it after `ExceptionContextTestCase` since it's thematically related.
+
+Now, let me look at what the exception looks like. From the configparser source (which I've seen before), `InterpolationMissingOptionError` has:
+- `__init__(self, option, section, rawval, reference, source=None, lineno=None)`
+- `args = (option, section, rawval, reference)`
+- Properties: `option`, `section`, `reference`
+- `message` property that formats the diagnostic text
+
+The diagnostic message format is something like:
+"section 'Paths' contains an interpolation reference to 'home_dir1' which does not exist in section 'Paths'"
+
+Wait, let me check the actual format. Looking at the existing test:
+```python
+def test_interpolation_missing_value(self):
+    cf = self.get_interpolation_config()
+    e = self.get_error(cf, configparser.InterpolationMissingOptionError,
+                       "Interpolation Error", "name")
+    self.assertEqual(e.reference, "reference")
+    self.assertEqual(e.section, "Interpolation Error")
+    self.assertEqual(e.option, "name")
+```
+
+And from `CoverageOneHundredTestCase.test_interpolation_depth_error`:
+```python
+error = configparser.InterpolationDepthError('option', 'section', 'rawval')
+self.assertEqual(error.args, ('option', 'section', 'rawval'))
+```
+
+For `InterpolationMissingOptionError`, the args are `(option, section, rawval, reference)`.
+
+Let me check the diagnostic message. In configparser.py, the `message` property for `InterpolationMissingOptionError` is:
+```python
+@property
+def message(self):
+    return "section '{section}' contains an interpolation reference to '{reference}' which does not exist in section '{section}'"
+```
+
+Wait, that's not quite right. Let me think about what the actual message is. Looking at the configparser source code...
+
+Actually, I need to check the actual source. Let me look at what I know from the file. I have lines 1030-1070 of configparser.py visible, but that's the parser internals, not the exception classes.
+
+Let me search for the exception class in configparser.py to see its definition. Actually, I should just write the tests based on what I know about the exception and let the test run verify.
+
+For the default ConfigParser (BasicInterpolation), a missing reference like `%(home_dir1)s` would produce:
+- option: 'my_dir' (the option being looked up)
+- section: 'Paths'
+- rawval: '%(home_dir1)s/lumberjack'
+- reference: 'home_dir1'
+- args: ('my_dir', 'Paths', '%(home_dir1)s/lumberjack', 'home_dir1')
+
+For ExtendedInterpolation, `${home_dir1}` would produce:
+- option: 'my_dir'
+- section: 'Paths'  
+- rawval: '${home_dir1}/lumberjack'
+- reference: 'home_dir1'
+- args: ('my_dir', 'Paths', '${home_dir1}/lumberjack', 'home_dir1')
+
+For cross-section ExtendedInterpolation, `${other_section:home_dir1}` would produce:
+- reference: 'other_section:home_dir1'
+- args: ('my_dir', 'Paths', '${other_section:home_dir1}/lumberjack', 'other_section:home_dir1')
+
+Now for the diagnostic message, I need to check what `str()` or `message` gives. Let me look at the configparser source to find the message format.
+
+Actually, let me just read the relevant part of configparser.py to see the exception class definition. Let me search for it.
+
+Let me plan my next actions:
+1. Read the exception class definitions in configparser.py to get the exact message format
+2. Write the new test class
+3. Add it to the test file
+4. Then work on the documentation
+
+Let me first read the exception classes in configparser.py. They're likely near the top of the file.

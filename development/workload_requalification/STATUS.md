@@ -5,7 +5,7 @@ Historical successes remain preserved; the new-host column requires new evidence
 
 | Workload / entry | Historical evidence | New-host status |
 |---|---|---|
-| Configparser missing-interpolation tests and documentation | working_set_continuation, evidence_assembly, pending-contribution: incomplete | Native preparation 002 qualified; execution next |
+| Configparser missing-interpolation tests and documentation | working_set_continuation, evidence_assembly, pending-contribution: incomplete | Run-002 externally interrupted after 21 completed replies; audited, no edits. Corrected-report continuation in qualification. |
 | Configparser multiline-continuation backport, original source | configparser_backport: correct library only, no complete contribution | Pending |
 | Parser tests/docs from saved library repair | bounded_working_set: failed autonomous selection; assisted completion | Pending |
 | Parser-raised exception copying/pickling extension | uncoached_contribution and reasoning_allocation: mixed, including successes | Pending regression |
@@ -19,6 +19,8 @@ Historical successes remain preserved; the new-host column requires new evidence
 | Ecological import-boundary and verifier-safety repairs | Experiments 019/020: interrupted / eight passing 020 trajectories | Pending exact-case reconciliation and regression |
 | Earlier synthetic source and observation continuity tasks | Experiments 002-018: mixed; includes phase/restart/retrieval obligations | Pending exact-case reconciliation and regression |
 | Predecessor task corpus and non-task engineering qualifications | Local predecessor and experimental packages | Pending duplicate/unique reconciliation |
+| INC-042 export policy, two prepared worlds | Zero model calls; pressure prerequisite rejected | Engineering regression, not a historical failed model workload |
+| Embedded E017 historical-action marker recovery | Exposed development task absent from TASK.txt inventory | Pending recovery-entry regression |
 
 INVENTORY.json records discovered task texts and locations. Its untriaged entries
 are obligations to reconcile, not an exclusion list. Different contexts, seeds and
