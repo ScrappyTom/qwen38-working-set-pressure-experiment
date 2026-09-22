@@ -1,5 +1,19 @@
 # Experiment operating rules
 
+The September 22 interpolation continuation is closed without a contribution:
+ten replies/twelve acquisitions or account operations, no edits/checks/submission.
+Read development/workload_requalification/interpolation_revision/review before any successor.
+Do not repeat that exhausted checkpoint unchanged or confuse sound delivery with
+productive work. Its known combined model cost is 49.918 minutes plus the unknown
+original C22 cost. Preserve inherited task boundaries, consumed dispatches and raw
+observation bytes when resuming work; a new runtime does not reset them.
+
+Cross-task adapters must qualify the exact reply forms they advertise, preserve
+earned incident/session framing, and expose incomplete execution even if captured
+case results look successful. Verify prerequisite qualification against its actual
+source closure and saved outputs. The small-repair regressions use explicit public
+checks after edits; no automatic or combined check is offered by that configuration.
+
 The owner now extends the repair/qualify/run process to all other previously tested
 workloads. Follow development/workload_requalification/PLAN.md and STATUS.md.
 The URL-port completion below closes one entry, not this broader programme. Keep

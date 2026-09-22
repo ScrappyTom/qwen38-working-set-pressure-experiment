@@ -11,9 +11,9 @@ Historical successes remain preserved; the new-host column requires new evidence
 | Parser-raised exception copying/pickling extension | uncoached_contribution and reasoning_allocation: mixed, including successes | Pending regression |
 | Compiler incident repair and historical report | compiler_incident: one success, capacity/completion failures elsewhere | Pending |
 | Saved compiler report continuation/restart | saved_work_continuation: assisted completion | Pending |
-| Artifact-map repair | investigation_loop: two successful loops | Original candidate/task/checker ported; CPU and decoder qualification passed; full native preparation underway. |
-| Shift-window ledger repair | shift_investigation: successful loop | Original candidate/task/checker ported; CPU and decoder qualification passed; full native preparation underway. |
-| Receipt-correction reporting | correction_investigation: successful loop | Original candidate/task/checker ported; CPU and decoder qualification passed; full native preparation underway. |
+| Artifact-map repair | investigation_loop: two successful loops | Original candidate/task/checker ported; CPU, decoder and full native preparation passed. Live regression pending. |
+| Shift-window ledger repair | shift_investigation: successful loop | Original candidate/task/checker ported; CPU, decoder and full native preparation passed. Live regression pending. |
+| Receipt-correction reporting | correction_investigation: successful loop | Original candidate/task/checker ported; CPU, decoder and full native preparation passed. Live regression pending. |
 | URL-port tests/documentation, original entry | multiple interrupted/incomplete attempts | Pending fresh-entry regression |
 | URL-port preserved-work correction | coherent_diagnostics: reviewed checked submission | Passed for this entry at ec51de65 |
 | Ecological import-boundary and verifier-safety repairs | Experiments 019/020: interrupted / eight passing 020 trajectories | Pending exact-case reconciliation and regression |
