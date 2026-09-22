@@ -36,3 +36,11 @@ The sister-project review reinforces precise transition testing and source-backe
 revision, not a new evidence-packet abstraction. Search-address retention remains
 outside this package. No task, checker, sampling, reasoning or source-selection
 policy change is attributed to these report corrections.
+
+Preparation-002 qualifies the inherited-observation guard. Two focused tests reject
+changed undisplayed stream bytes and missing or extra observation files. Live
+attachment verifies and copies the exact sealed bytes; the preparation also binds
+every inherited observation. Its initial wire request, native rendering and all ten
+input counts match preparation-001 exactly. Zero completion requests were sent;
+the owned runtime closed and its port is free. Minimum sampled free GPU memory was
+451 MiB. This is the package selected for the ten-request live continuation.

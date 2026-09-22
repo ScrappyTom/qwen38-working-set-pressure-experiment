@@ -7,7 +7,7 @@ import operable_task
 from session import Session
 from working_set_exp.candidate import Candidate
 from working_set_exp.custody import ArtifactStore
-from working_set_exp.jsonutil import canonical_json_bytes, sha256_file
+from working_set_exp.jsonutil import canonical_json_bytes, sha256_bytes, sha256_file
 from working_set_exp.observations import ObservationStore
 
 ROOT, AREA = previous.ROOT, Path(__file__).resolve().parent
@@ -56,10 +56,24 @@ def snapshot(session):
     return value
 
 
+def verified_observation_files(root):
+    expected = {r['path'][len('observations/'):]:r
+                for r in previous.read(AUDIT)['files'] if r['path'].startswith('observations/')}
+    actual = {p.relative_to(root).as_posix():p for p in root.rglob('*') if p.is_file()}
+    assert set(actual) == set(expected), 'Inherited observation inventory differs from the interruption audit'
+    result = []
+    for name, path in sorted(actual.items()):
+        raw = path.read_bytes()
+        assert len(raw) == expected[name]['size_bytes'] and sha256_bytes(raw) == expected[name]['sha256'], name
+        result.append((name, raw))
+    return result
+
+
 def attach_observations(session, folder, log):
+    # Verify the exact bytes being copied, even when a shortened display is unchanged.
+    inherited = verified_observation_files(session.observations.root)
     store = ArtifactStore(folder)
-    artifacts = [store.put('observations/' + p.relative_to(session.observations.root).as_posix(), p.read_bytes())
-                 for p in sorted(session.observations.root.rglob('*')) if p.is_file()]
+    artifacts = [store.put('observations/' + name, raw) for name, raw in inherited]
     log.append('inherited_observations_copied', dict(source=session.observations.root.relative_to(ROOT).as_posix(),
         observations_not_reexecuted=True), artifacts)
     operable_task.attach_observations(session, folder, log)
@@ -68,7 +82,9 @@ def attach_observations(session, folder, log):
 def source_identities():
     paths = [*AREA.glob('*.py'), AREA/'PLAN.md', AREA/'SPEC.md', AREA/'SYSTEM.txt', AUDIT,
              OLD/(ENTRY+'-state.json'), OLD/(ENTRY+'-candidate.json'),
-             OLD/'calls/C22-wire-request.json', AREA/'cpu-qualification-001/SEAL.json']
+             OLD/'calls/C22-wire-request.json', AREA/'cpu-qualification-001/SEAL.json',
+             AREA/'tests/test_inherited.py',
+             *[p for p in (OLD/'observations').rglob('*') if p.is_file()]]
     return {**previous.source_identities(), **{p.relative_to(ROOT).as_posix():sha256_file(p) for p in paths}}
 
 

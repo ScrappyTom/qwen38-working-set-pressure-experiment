@@ -1,5 +1,25 @@
 # Running engineering and governance notes
 
+## 2026-09-22 — interrupted-run continuation and inherited custody
+
+The interpolation prefix is preserved, with 21 completed requests and one dispatched
+request lacking a saved response. Charge that dispatch; do not invent its cost,
+failure cause or normal runtime closure. The continuation retains 34 used operations
+and ten remaining requests, and preserves the original contribution's episode
+boundary rather than relabeling all inherited activity as prior work.
+
+Complete grouped requirements and receipt episode labels are qualified against
+actual captured checks and crowded inputs. Existing recent-history reduction makes
+the larger reports fit without changing source selection. Native preparation-002
+reproduces the original C22 input before correction and qualifies the corrected
+entry, feedback and scripted contribution path, without model inference.
+
+Inherited observations need verification when attached to the live run, including
+bytes absent from the shortened report. Bind the full inventory and verify the
+actual copied bytes. A correct report projection does not validate unseen raw data.
+Retain the first preparation and the independently corrected review claim: its CPU
+source hashes were not stale. Verification should settle such claims before reruns.
+
 ## 2026-09-16 — corpus expansion and interpolation portability
 
 The latest owner direction extends the repair/qualify/run cycle to the previously
