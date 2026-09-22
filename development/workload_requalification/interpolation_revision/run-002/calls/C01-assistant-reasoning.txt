@@ -1,0 +1,72 @@
+Let me analyze the current state:
+
+1. **Task**: Extend configparser exception coverage to missing interpolation references. Need to:
+   - Add tests in `Lib/test/test_configparser.py` that obtain `InterpolationMissingOptionError` through real `ConfigParser.get` calls under both `BasicInterpolation` and `ExtendedInterpolation`
+   - Cover copy, deepcopy, and pickle protocols (0-5) for each
+   - Cover raw=True retrieval and successful lookup after adding missing setting
+   - Check exact exception class, arguments, option, section, reference, diagnostic text
+   - Extend `Doc/library/configparser.rst` with runnable examples
+
+2. **Verification requirements**:
+   - 20 required_paths: 2 policies × 10 operations (copy, deepcopy, pickle:0-5, raw_bypass, resolved)
+   - 16 detect targets: 2 policies × 8 transports
+   - Tests must check exact restored class and diagnostic at each mode/transport
+   - Doc: runnable examples that pass examples check
+   - Legacy public acceptance must be preserved
+
+3. **Current state**:
+   - Test file is 2210 lines
+   - I can see lines 1-50 (imports, basic classes), 900-1110 (ConfigParserTestCase), 1770-1800 (pickle tests for InterpolationMissingOptionError), 2190-2210 (end of file)
+   - The existing test at line 1773 (`test_interpolationmissingoptionerror`) directly constructs the exception - this is NOT sufficient per task
+   - I need to understand the full structure to know where to add tests
+
+4. **What I need to do**:
+   - First, I need to understand the test file structure better - specifically where to add new test classes/methods
+   - I need to see what's around lines 50-900 (the bulk of the test file) to understand class hierarchy
+   - I need to see what's around lines 1110-1770 to understand the continuation
+
+Let me look at the structure. From what I can see:
+- Lines 1-50: imports, SortedDict, CfgParserTestCaseClass
+- Lines 900-1110: ConfigParserTestCase and related
+- Lines 1770-1800: Pickle/copy tests for interpolation errors
+- Lines 2190-2210: End of file (MiscTestCase, unittest.main())
+
+I need to understand:
+- What test class contains the pickle/copy tests at line 1770-1800?
+- What's the class hierarchy?
+- Where are the `get_error` and `get_interpolation_config` methods?
+
+Let me look at more of the file to understand the structure. I should read around lines 50-200 to see the BasicTestCase class and its helpers, and also around lines 1110-1200 to see what comes after the section I can see.
+
+Actually, let me think about what I need:
+
+From the verification criteria:
+- The tests need to be under both BasicInterpolation and ExtendedInterpolation
+- For each, need: copy, deepcopy, pickle:0-5, raw_bypass, resolved operations
+- The "transport_source" says: "For copy, deepcopy and pickle only: use the exception raised by a real BasicInterpolation missing-reference lookup" (and same for Extended)
+- The detect targets say: 16 targets (2 policies × 8 transports) - the 8 transports would be: copy, deepcopy, pickle:0-5... wait that's 7. Let me re-read.
+
+Actually from the missing_operations: "copy", "deepcopy", "pickle:0", "pickle:1", "pickle:2", "pickle:3", "pickle:4", "pickle:5", "raw_bypass", "resolved" - that's 10 operations per policy.
+
+The detect targets are 16 = 2 policies × 8 transports. The 8 transports for detection would be: copy, deepcopy, pickle:0-5 (that's 7) + one more? Or maybe it's copy, deepcopy, pickle:0, pickle:1, pickle:2, pickle:3, pickle:4, pickle:5 = 8. Yes, that's 8 transports per policy.
+
+Now, the key insight from the verification:
+- `detect.restored_class`: "Return a subclass after one declared mode/transport while keeping constructor state." - so after pickling/copying/deepcopying, the restored object must be exactly `InterpolationMissingOptionError`, not a subclass.
+- `detect.restored_diagnostic`: "Change the restored diagnostic after one declared mode/transport, leaving the original error unchanged." - so the repr/message must be correct after transport.
+- `detect.option`, `detect.section`, `detect.raw_value`, `detect.reference`: These check that the specific fields are correctly preserved.
+
+The "raw_value" in detect criteria likely refers to the "rawval" argument (the raw value being interpolated), not the raw=True parameter.
+
+So my tests need to:
+1. Create a ConfigParser with BasicInterpolation
+2. Have a section with a reference to a missing option
+3. Call get() to trigger the exception
+4. For the exception, verify: class, args, option, section, reference, raw value, message/repr
+5. Transport via copy.copy, copy.deepcopy, pickle protocol 0-5
+6. After each transport, verify the same attributes
+7. Also test raw=True to get the unresolved value
+8. Add the missing option and verify successful lookup
+
+Then repeat for ExtendedInterpolation with a cross-section reference.
+
+Let me first read more of the file to understand the structure. I'll look at lines 50-200 to see BasicTestCase and its helpers.

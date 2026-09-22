@@ -2,6 +2,29 @@
 
 ## 2026-09-22 — interrupted-run continuation and inherited custody
 
+The corrected continuation is now closed at its frozen ten-request allowance.
+Ten complete replies executed twelve operations (three reads, six searches and
+three account updates), with no edits, fresh checks or submission. Exact replay
+passes; the unchanged candidate remains the starting saved work. New model-request
+time is 17.739 minutes, bringing known completed-request time to 49.918 minutes;
+the original C22 cost remains unknown. Do not turn correct preservation into a
+successful contribution or automatically extend the exhausted request allowance.
+
+Direct input/output review finds correct use of the complete grouped requirements,
+but continued structural acquisition. Search replies carry function addresses without
+their bodies; some source excerpts omit their enclosing class header. Other relevant
+class headers were already visible, and the existing outline operation was unused.
+Qwen sends one regex-style query to literal search, then explicitly recognizes the
+mismatch. Preserve both the mistaken request and its recovery. A stronger claim that
+the zero result established absence of matching classes is not supported.
+
+The three small source-repair regressions remain next in the declared queue. Their
+portability work exposed an unsupported promised reply form, missing episode framing,
+stale prerequisite verification and incomplete-check status lost behind passing
+case observations. These are corrected before model exposure; see small_repairs/
+READINESS_NOTES.md. Keep the hard interpolation entry open. Do not generalize passes
+on smaller tasks into completion of that larger contribution.
+
 The interpolation prefix is preserved, with 21 completed requests and one dispatched
 request lacking a saved response. Charge that dispatch; do not invent its cost,
 failure cause or normal runtime closure. The continuation retains 34 used operations
