@@ -1,5 +1,16 @@
 # Experiment operating rules
 
+The receipt operational continuation at 1eb9f7c2 now completes uncoached: seven
+new replies/eleven operations, correct saved routing repair, 38-case public pass
+and checked submission. Read action_lifecycle/review. Combined with the preserved
+first attempt: twelve requests, sixteen operations and 7.091 model-request minutes.
+All nine nonterminal receipts arrive and exact replay passes. This closes the
+receipt entry, not pressure continuity or all workloads. The final model-authored
+account misquotes an old expression despite correct work; preserve that distinction.
+No further receipt retry or host patch is earned by this result. The next entry is
+original configparser, whose decoder/runtime qualification must explicitly adopt
+the operational contract before exposure; the old decoder proof is insufficient.
+
 The receipt run at 76e078c4 ended on the explicitly permitted discussion-only
 form despite describing further work. Its five requests and five operations remain
 consumed. The action_lifecycle package qualifies an opt-in operational contract

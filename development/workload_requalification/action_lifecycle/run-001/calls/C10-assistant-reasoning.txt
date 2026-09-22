@@ -1,0 +1,86 @@
+Let me analyze the problem. The task says: "After receipt corrections are imported, the stock report sometimes shows incorrect quantities for depot and item."
+
+Let me look at the code I have:
+
+1. `entries.py` - `contributions(change)` returns entries for a receipt revision transition:
+   - If `change.before` is not None and is active, it adds `(change.before, -change.before.units)` — removing the old contribution
+   - If `change.after` is active, it adds `(change.after, change.after.units)` — adding the new contribution
+
+2. `totals.py` - `Totals.apply(change)`:
+   - `destination = bucket(change.after)` — uses the AFTER receipt's bucket
+   - Then for each `(receipt, units)` in `contributions(change)`, it does `self._units[destination] += units`
+
+**HERE'S THE BUG!** In `totals.py`, the `apply` method computes `destination = bucket(change.after)` ONCE, then uses that SAME destination for ALL contributions. But a correction can change the depot or item! So if a correction changes the depot from "A" to "B", the old contribution (negative units for "A") should go to bucket A, and the new contribution should go to bucket B. But the code applies BOTH to the `change.after` bucket (which is B).
+
+So the fix is: in `totals.py`, instead of using a single `destination` for all contributions, use `bucket(receipt)` for each individual receipt in the contributions list.
+
+Let me verify this understanding:
+- `contributions(change)` can return up to 2 entries: `(change.before, -units)` and `(change.after, +units)`
+- If the correction changes depot/item, these two entries have DIFFERENT buckets
+- The bug: `totals.py` uses `bucket(change.after)` for both, so the negative (removing old) is applied to the new bucket instead of the old one
+
+The fix in `totals.py`:
+```python
+def apply(self, change: Change) -> None:
+    for receipt, units in contributions(change):
+        destination = bucket(receipt)
+        self._units[destination] = self._units.get(destination, 0) + units
+        if self._units[destination] == 0:
+            del self._units[destination]
+```
+
+This way each contribution is applied to its own receipt's bucket.
+
+Let me also check `entries.py` for correctness:
+- If `change.before` is not None and active: subtract old units from old bucket ✓
+- If `change.after` is active: add new units to new bucket ✓
+- If `change.after` is void: no addition ✓
+- If `change.before` is void: no subtraction ✓ (since it was never added)
+
+That looks correct. The only bug is in `totals.py` using a single destination.
+
+Now let me make the edit. I need to patch `src/dispatchledger/reporting/totals.py`. The current content is:
+
+```python
+"""Maintain the report while accepted revisions arrive."""
+from ..records import Change
+from .entries import bucket, contributions
+
+
+class Totals:
+    def __init__(self):
+        self._units: dict[tuple[str, str], int] = {}
+
+    def apply(self, change: Change) -> None:
+        destination = bucket(change.after)
+        for receipt, units in contributions(change):
+            self._units[destination] = self._units.get(destination, 0) + units
+            if self._units[destination] == 0:
+                del self._units[destination]
+
+    def rows(self) -> list[dict]:
+        return [{"depot": depot, "item": item, "units": units}
+                for (depot, item), units in sorted(self._units.items())]
+```
+
+I need to change:
+```python
+    def apply(self, change: Change) -> None:
+        destination = bucket(change.after)
+        for receipt, units in contributions(change):
+            self._units[destination] = self._units.get(destination, 0) + units
+            if self._units[destination] == 0:
+                del self._units[destination]
+```
+
+To:
+```python
+    def apply(self, change: Change) -> None:
+        for receipt, units in contributions(change):
+            destination = bucket(receipt)
+            self._units[destination] = self._units.get(destination, 0) + units
+            if self._units[destination] == 0:
+                del self._units[destination]
+```
+
+I'll use a patch operation. I have the file visible (whole file, 19 lines), file_sha256 is `e1bf5143cbc452f69ef8358c5ccf91dcf7537520e7780eb6c64611c8cca24072`, candidate is `cb2c2d7e160c4c829b71ae1a033d34e1416224bfab84d57477857c94a731f349`.

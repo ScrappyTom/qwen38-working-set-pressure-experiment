@@ -1,0 +1,34 @@
+Let me analyze the situation. I'm investigating a bug where the stock report sometimes shows incorrect quantities for depot and item after receipt corrections are imported.
+
+Looking at the `Totals.apply` method in `totals.py`:
+
+```python
+def apply(self, change: Change) -> None:
+    destination = bucket(change.after)
+    for receipt, units in contributions(change):
+        self._units[destination] = self._units.get(destination, 0) + units
+        if self._units[destination] == 0:
+            del self._units[destination]
+```
+
+The problem I can see: `destination` is computed once from `change.after` (the new state of the receipt). But then it iterates over `contributions(change)` which yields multiple `(receipt, units)` pairs. The `destination` should be based on the *before* state (what was previously contributed) for removal, and the *after* state for addition.
+
+Wait, let me think more carefully. A "Change" likely represents a transition from a previous receipt state to a new one. The `contributions` function probably yields the units to add/subtract. But the `destination` (depot, item pair) is computed from `change.after` only once.
+
+The issue: If a correction changes the depot or item of a receipt, the old contribution needs to be removed from the OLD depot/item pair, and the new contribution needs to be added to the NEW depot/item pair. But the code only uses `destination = bucket(change.after)` for all contributions in the loop.
+
+So if `contributions(change)` yields a negative delta for the old location and a positive delta for the new location, they're all being applied to `change.after`'s bucket. That's the bug!
+
+Let me look at what `contributions` returns. I need to read `entries.py` to understand the data flow.
+
+Actually wait - let me reconsider. The loop is:
+```python
+for receipt, units in contributions(change):
+    self._units[destination] = self._units.get(destination, 0) + units
+```
+
+All contributions are applied to the SAME `destination` (from `change.after`). If `contributions` yields `(old_receipt, -old_units)` and `(new_receipt, +new_units)`, then both would be applied to `change.after`'s bucket. The subtraction of the old units would be applied to the wrong bucket (the new one instead of the old one).
+
+So the fix would be to compute the destination per-receipt within the loop, or to have `contributions` yield the destination as well.
+
+Let me read `entries.py` to understand the data structures better.
