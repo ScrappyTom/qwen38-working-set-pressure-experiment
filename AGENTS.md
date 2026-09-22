@@ -1,5 +1,13 @@
 # Experiment operating rules
 
+When porting a workload, preserve diagnostics before task-local reduction as well
+as in common capture. Check both the report's assessment and the subprocess outcome;
+a printed pass does not complete a crashed or timed-out check. Zero failure/error
+counts need not mean success (for example, unittest unexpected success). Render the
+actual reason and identify the candidate or original defective program being tested.
+Verify every qualification input/output binding, including the success report and
+helpers used to reconstruct historical states, before the new model exposure.
+
 The September 22 artifact-map regression completes uncoached at 3107f3cf: correct
 saved repair, actual public pass and checked submission. Its complete audit is in
 development/workload_requalification/small_repairs/artifact_map/review. Preserve

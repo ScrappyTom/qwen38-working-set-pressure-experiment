@@ -1,0 +1,318 @@
+"""Saved-state/native qualification using the existing owned runtime and Loop.
+
+Default mode is CPU preflight. Native mode sends template/tokenizer requests only;
+the separately labelled reference route executes one real CPU public checker.
+No model completion, historical mutation, or resumed experimental allowance.
+"""
+from __future__ import annotations
+
+import argparse
+import copy
+import json
+from pathlib import Path
+import sys
+from types import SimpleNamespace
+
+import navigation as nav
+import navigation_task as study
+import repair_task as original
+import run_uncoached_contribution as runner
+from manage import RUNTIME, legacy, load_helper
+from working_set_exp.candidate import Candidate
+from working_set_exp.contribution_reply import completion_request_bytes
+from working_set_exp.custody import ArtifactStore, verify_records
+from working_set_exp.jsonutil import canonical_json_bytes, sha256_bytes, sha256_file
+from working_set_exp.observations import ObservationStore
+
+ROOT, AREA = original.ROOT, Path(__file__).resolve().parent
+OLD = original.AREA/'artifact_map/run-001'
+STATES = dict(C04='C03-O02', C05='C04-O01', C06='C05-O02', C07='C06-O01',
+              C08='C07-O02', C09='C08-O01', C10='C09-O02', C16='C15-O02', C19='C18-O01')
+RETAINED = dict(C04=3, C05=3, C06=5, C07=8, C08=9, C09=11, C10=12, C16=20)
+READ_BINDINGS = {}
+
+
+def read(path):
+    return json.loads(path.read_text(encoding='utf-8'))
+
+
+def stored(folder, name):
+    seal_path=folder/'RESPONSE_SEAL.json';seal=read(seal_path)
+    assert sha256_bytes(canonical_json_bytes(seal['files']))==seal['aggregate_sha256']
+    row,=[r for r in seal['files'] if r['path']==name]
+    path=folder/name
+    assert path.stat().st_size==row['size_bytes'] and sha256_file(path)==row['sha256'],name
+    READ_BINDINGS[seal_path.relative_to(ROOT).as_posix()]=sha256_file(seal_path)
+    READ_BINDINGS[path.relative_to(ROOT).as_posix()]=row['sha256']
+    return read(path)
+
+
+def restore(module, folder, stem, tag):
+    state=stored(folder,stem+'-state.json');raw=stored(folder,stem+'-candidate.json')
+    session=module.initial_session()
+    session.candidate=Candidate.create({r['path']:r['content_utf8'].encode() for r in raw['files']},
+                                       max_file_bytes=raw['max_file_bytes'])
+    for key,value in state.items():
+        if key!='candidate_id':setattr(session,key,copy.deepcopy(value))
+    session.diffs={int(k):v for k,v in session.diffs.items()}
+    if hasattr(session,'restored_control_fields'):
+        session.restored_control_fields=tuple(session.restored_control_fields)
+    if hasattr(session,'parked_source_regions'):
+        session.parked_source_regions=tuple(tuple(r) for r in session.parked_source_regions)
+    session.versions[session.candidate.candidate_id]=session.candidate
+    session.observations=ObservationStore(folder/'observations',replay=True)
+    assert canonical_json_bytes(module.snapshot(session))==canonical_json_bytes(state)
+    adapter=runner.Adapter(module)
+    adapter.preceding_feedback=stored(folder,stem+'-preceding-feedback.json')
+    expected=stored(folder,f'calls/{tag}-wire-request.json')
+    assert completion_request_bytes(adapter.request_for(session.view()))==(folder/f'calls/{tag}-wire-request.json').read_bytes(),tag
+    return session,adapter,expected
+
+
+class ReferenceProxy:
+    """Use the original historical task/system with the prospectively added contract."""
+    def __init__(self,module):self.module=module
+    def operating_reference(self):return self.module.operating_reference()+'\n\n'+nav.REFERENCE_ADDITION
+    def present_receipts(self,view,receipts):return nav.present_receipts(view,receipts)
+    def __getattr__(self,key):return getattr(self.module,key)
+
+
+def prospective(session, adapter, *, navigation=True, change=True, historical=False, task=None):
+    value=session.clone()
+    value.__class__=type('QualifiedNavigationSession',(nav.NavigationMixin,type(session)),{})
+    value.navigation_enabled=navigation
+    value.immediate_change_enabled=change
+    value.historical_diff_projection=historical
+    wrapped=runner.Adapter(task or ReferenceProxy(adapter.module))
+    wrapped.preceding_feedback=copy.deepcopy(adapter.preceding_feedback)
+    return value,wrapped
+
+
+def core(view):
+    value=copy.deepcopy(view)
+    for row in value.get('recent_activity',[]):row.pop('navigation',None)
+    if value.get('latest_feedback'):value['latest_feedback'].pop('applied_change',None)
+    return value
+
+
+def preflight():
+    base=original.Task('artifact_map',replay_folder=OLD)
+    cases=[]
+    for tag,stem in STATES.items():
+        session,adapter,expected=restore(base,OLD,'after/'+stem,tag)
+        cases.append((tag,session,adapter,expected))
+    # The current corrected interpolation host is a real crowded source selection.
+    # Keep its original task/report contracts and exact request accounting.
+    prior_area=ROOT/'development/workload_requalification/interpolation_revision'
+    for path in (prior_area,prior_area.parent/'interpolation'):
+        if str(path) not in sys.path:sys.path.append(str(path))
+    prior=load_helper('navigation_crowded_interpolation',str(prior_area/'interpolation_continuation.py'))
+    folder=prior_area/'run-002'
+    crowded=restore(prior.Task('002',replay_folder=folder),folder,'after/C07-O02','C08')
+    # The actual C18 public proposal supplies the reference edit; it is not a
+    # researcher-invented operation unsupported by the input being qualified.
+    route=restore(base,OLD,'after/C17-O02','C18')
+    for tag in ('C18','C19','C20'):stored(OLD,f'calls/{tag}-reply.json')
+    stored(OLD,'after/C18-O01-state.json')
+    diff=OLD/'diffs/EVT-0027.patch'
+    seal=read(OLD/'RESPONSE_SEAL.json');row,=[r for r in seal['files'] if r['path']=='diffs/EVT-0027.patch']
+    assert sha256_file(diff)==row['sha256'];READ_BINDINGS[diff.relative_to(ROOT).as_posix()]=row['sha256']
+    return cases,crowded,route
+
+
+def qualify(folder):
+    cases,crowded,route=preflight()
+    module=study.Task('artifact_map')
+    bound={**module.implementation_identities(),**crowded[1].module.source_identities(),**READ_BINDINGS}
+    # Include every executed helper, not a status claim detached from its code.
+    bound.update({p.relative_to(ROOT).as_posix():sha256_file(p) for p in AREA.glob('*.py')})
+    folder.mkdir(parents=True,exist_ok=False)
+    store=ArtifactStore(folder)
+    log=legacy.QualificationLog(folder/'records.jsonl','navigation-native-qualification',task_module=module)
+    rows=[];error=None;checks=0;runtime_health=None
+
+    def save(name,value):
+        artifact=store.put(name,canonical_json_bytes(value))
+        log.append('qualification_artifact',dict(name=name),[artifact])
+
+    try:
+        save('INPUT_BINDINGS.json',READ_BINDINGS)
+        server,model,_=module.runtime_paths()
+        with RUNTIME.owned_runtime(SimpleNamespace(server=server,model=model,output=folder),store,log) as url:
+            loop=runner.Loop(folder,store,log,url=url,task_module=runner.Adapter(module),
+                            source_check=lambda:module.verify_sources(bound))
+
+            def measure(adapter,view):
+                loop.task=adapter
+                return loop.measure(view)
+
+            def keep(name,session,adapter):
+                view=session.view();tokens=measure(adapter,view)
+                save(name+'-view.json',view);save(name+'-state.json',adapter.module.snapshot(session))
+                return tokens
+
+            for tag,session,baseline,expected in cases:
+                before=measure(baseline,session.view())
+                changed,adapter=prospective(session,baseline,historical=tag=='C19',task=module)
+                archive=canonical_json_bytes(session.pairs)
+                view=changed.view()
+                assert core(view)==session.view(),tag
+                assert canonical_json_bytes(changed.pairs)==archive
+                assert changed.candidate.candidate_id==session.candidate.candidate_id
+                assert changed.delivered_sources==session.delivered_sources
+                assert changed.checkers==session.checkers and changed.edit_checks==session.edit_checks
+                if tag in RETAINED:
+                    detail=next(r['navigation'] for r in view['recent_activity'] if r['sequence']==RETAINED[tag])
+                    assert detail['detail_status']=='complete_returned_navigation_page'
+                    assert detail['observed_page']['entries']
+                else:
+                    delta=view['latest_feedback']['applied_change']
+                    assert delta['diff_utf8']==session.diffs[27]
+                    assert 'applied_diff' not in session.pairs[26]['result']
+                    save('C19-historical-derivation.json',dict(original_result_unchanged=True,
+                        original_result_contains_applied_diff=False,actual_archived_diff_path='diffs/EVT-0027.patch',
+                        explanation='Qualification-only display derives the historical diff separately; no new field is inserted into original RES-0027.',detail=delta))
+                after=keep(tag+'-projected',changed,adapter)
+                assert after<=23808
+                rows.append(dict(case=tag,baseline_tokens=before,projected_tokens=after,
+                    added_tokens=after-before,baseline_wire_exact=True,nonprojection_fields_unchanged=True))
+                if tag=='C19':
+                    for label,nav_enabled,delta_enabled in [('navigation-only',True,False),('change-only',False,True)]:
+                        axis,a=prospective(session,baseline,navigation=nav_enabled,change=delta_enabled,historical=True,task=module)
+                        rows.append(dict(case='C19-'+label,tokens=keep('C19-'+label,axis,a),
+                                         note='Same new operating reference; isolated presentation axis, no behavior claim.'))
+
+            # A navigation address and a historical applied diff do not constitute
+            # exact currently delivered source. C10 has no acquired source bodies.
+            _,source,adapter,_=next(c for c in cases if c[0]=='C10')
+            denied,a=prospective(source,adapter,task=module)
+            denied.mark_delivered(denied.view());assert not denied.delivered_sources
+            target=module.legacy.TARGET;before=denied.candidate.candidate_id
+            result=denied.execute(dict(action='patch',path=target,old=module.legacy.BAD,new=module.legacy.GOOD,
+                expected_candidate_id=before,expected_file_sha256=denied.candidate.file_sha256(target)),lambda v:measure(a,v))
+            assert not result['accepted'] and denied.candidate.candidate_id==before
+            assert not denied.delivery_blocked
+            save('navigation-edit-authority-rejection.json',result)
+            rows.append(dict(case='navigation-does-not-authorize-edit',tokens=keep('authority-rejected',denied,a),accepted=False))
+
+            broad,baseline,_=crowded
+            baseline_tokens=measure(baseline,broad.view())
+            adjusted,a=prospective(broad,baseline)
+            candidate=adjusted.candidate.candidate_id
+            selection=copy.deepcopy(adjusted.ranges)
+            account=copy.deepcopy(adjusted.working_account())
+            check_state=copy.deepcopy(adjusted.check_state())
+            raw_count=measure(a,adjusted.view())
+            assert adjusted._fits_feedback(lambda v:measure(a,v))
+            fitted=keep('crowded-admitted',adjusted,a)
+            assert fitted<=23808 and not adjusted.delivery_blocked
+            initial_history_limit=adjusted.last.get('recent_activity_limit')
+            # Add actual navigation, then repeat the peak state's real class
+            # query. No task padding or invented source bytes create pressure.
+            transitions=[]
+            for name,op in [('tree',dict(action='tree',path='Lib/test',offset=0,limit=16)),
+                            ('outline',dict(action='p0_page',path='Lib/test/test_configparser.py',offset=0)),
+                            ('search',dict(action='search',path='Lib/test/test_configparser.py',query='class',offset=0,limit=16)),
+                            ('rejected-read',dict(action='read',path='missing.py',start_line=1,end_line=10))]:
+                a.preceding_feedback.clear()
+                adjusted.mark_delivered(adjusted.view())
+                outcome=adjusted.execute(op,lambda v:measure(a,v))
+                assert outcome['accepted'] is (name!='rejected-read')
+                assert not adjusted.delivery_blocked
+                assert adjusted.ranges==selection and adjusted.working_account()==account
+                assert adjusted.candidate.candidate_id==candidate and adjusted.check_state()==check_state
+                count=keep('crowded-'+name,adjusted,a);assert count<=23808
+                save('crowded-'+name+'-result.json',outcome)
+                # Compare full optional detail with its omission at this exact
+                # admitted essential-feedback/history arrangement. This does
+                # not execute another operation or alter the working session.
+                full=adjusted.clone();full.last=copy.deepcopy(full.last)
+                full.last[nav.SETTING]=6;full.last[nav.CHANGE_SETTING]=2
+                bare=full.clone();bare.navigation_enabled=False;bare.immediate_change_enabled=False
+                assert core(full.view())==bare.view()
+                full_count=keep('crowded-'+name+'-full-optional',full,a)
+                bare_count=keep('crowded-'+name+'-no-optional',bare,a)
+                transitions.append(dict(stage=name,tokens=count,presentation=adjusted.view()['presentation'],
+                    optional_navigation_setting=adjusted.last.get(nav.SETTING),
+                    optional_change_setting=adjusted.last.get(nav.CHANGE_SETTING),
+                    recent_activity_limit=adjusted.last.get('recent_activity_limit'),
+                    same_essential_feedback_full_optional_tokens=full_count,
+                    same_essential_feedback_no_optional_tokens=bare_count,
+                    optional_detail_yielded_for_native_capacity=(full_count>23808 and bare_count<=23808),
+                    source_selection_account_candidate_checks_unchanged=True,
+                    feedback_scope=adjusted.last.get('output_scope')))
+            # Already visible source supplies this declared researcher narrowing.
+            first=broad.view()['working_set']['sources'][0]
+            op=dict(action='work_on',sources=[dict(path=first['path'],start_line=first['returned_start_line'],
+                    end_line=first['returned_end_line'])],results=[])
+            a.preceding_feedback.clear()
+            outcome=adjusted.execute(op,lambda v:measure(a,v));assert outcome['accepted']
+            assert not adjusted.delivery_blocked and adjusted.candidate.candidate_id==candidate
+            assert not adjusted.recovery
+            save('crowded-replacement-result.json',outcome)
+            rows.append(dict(case='actual-crowded-interpolation',baseline_wire_exact=True,
+                source_state='C08; after/C07-O02; actual peak sent input',
+                baseline_tokens=baseline_tokens,unadmitted_projected_tokens=raw_count,fitted_tokens=fitted,
+                initial_recent_activity_limit=initial_history_limit,
+                native_optional_fallback_exercised=any(r['optional_detail_yielded_for_native_capacity'] for r in transitions),
+                transitions=transitions,replacement_tokens=keep('crowded-replacement',adjusted,a),
+                researcher_selected=True,model_requests=0,checks_executed=0,
+                no_historical_allowance_reopened=True))
+
+            # Separate complete-work route: actual prior public proposals, real
+            # current checker execution, no new Qwen outcome or evaluator coaching.
+            source,baseline,_=route
+            completed,a=prospective(source,baseline,task=module)
+            # This checkpoint precedes the original run's only checker. Do not
+            # copy that future observation into the new execution's directory.
+            assert not any(p['response'].get('action')=='check' for p in completed.pairs)
+            def preserved(record,artifacts):
+                log.append('check_observation_preserved',record,
+                    [{**r,'path':'observations/'+r['path']} for r in artifacts])
+            completed.observations=ObservationStore(folder/'observations',on_preserved=preserved)
+            outcomes=[]
+            for tag in ('C18','C19','C20'):
+                completed.mark_delivered(completed.view())
+                proposal=read(OLD/f'calls/{tag}-reply.json')
+                outcome=a.process_reply(completed,proposal,lambda v:measure(a,v),a.preceding_feedback)
+                assert all(r['result']['accepted'] for r in outcome['operations']),outcome
+                checks+=sum(r['action']['action']=='check' for r in outcome['operations'])
+                save('reference-'+tag+'-proposal.json',proposal);save('reference-'+tag+'-result.json',outcome)
+                count=keep('reference-'+tag,completed,a);assert count<=23808
+                outcomes.append(dict(stage=tag,tokens=count,operations=len(outcome['operations'])))
+                if tag=='C18':
+                    assert completed.pairs[-1]['result']['applied_diff']==completed.diffs[len(completed.pairs)]
+                    assert completed.view()['latest_feedback']['applied_change']['diff_utf8']==completed.diffs[len(completed.pairs)]
+            assert completed.submitted and checks==1
+            assert completed.candidate.candidate_id=='23b5c17999963faf7453c68a6b537ae6c447555f77eb0a835bfa659ad47e89aa'
+            rows.append(dict(case='actual-proposal-edit-check-submit',transitions=outcomes,
+                checked_submission=True,checks_executed=1,model_requests=0,
+                decision_basis='Actual C18 source shows the old assignment and map builder; next states supply actual edit and check results.'))
+            runtime_health=loop.health()
+            assert loop.sent==0
+            assert not any(r['record_type']=='invocation_started' for r in verify_records(folder/'records.jsonl',folder))
+    except BaseException as exc:
+        error=exc;save('FAILED.json',dict(type=type(exc).__name__,message=str(exc)))
+    finally:
+        save('RESULTS.json',dict(status='failed_preserved' if error else 'passed',cases=rows,
+            completion_requests=0,model_inference_calls=0,checks_executed=checks,
+            runtime_health=runtime_health,memory=RUNTIME.memory_stats(folder/'memory.csv'),
+            port_free=RUNTIME.port_free(RUNTIME.PORT)))
+        legacy.seal(folder,'failed_preserved' if error else 'qualified_no_model_inference',bound,completion_requests=0)
+    if error:raise error
+    print(json.dumps(dict(status='passed',cases=rows,checks_executed=checks,completion_requests=0),indent=2))
+
+
+if __name__=='__main__':
+    parser=argparse.ArgumentParser()
+    parser.add_argument('mode',choices=('preflight','native'),default='preflight',nargs='?')
+    parser.add_argument('--folder',default='native-qualification-002')
+    args=parser.parse_args()
+    if args.mode=='preflight':
+        cases,crowded,route=preflight()
+        print(json.dumps(dict(status='baseline_wires_exact',small_states=[c[0] for c in cases],
+            crowded_state='interpolation_revision/run-002 C08',reference_route='actual C18-C20',
+            completion_requests=0,native_requests=0,checks_executed=0)))
+    else:
+        if Path(args.folder).name!=args.folder:raise ValueError('Use a qualification directory name')
+        qualify(AREA/args.folder)

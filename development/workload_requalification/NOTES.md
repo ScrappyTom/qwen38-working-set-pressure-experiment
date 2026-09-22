@@ -1,5 +1,63 @@
 # Running engineering and governance notes
 
+## 2026-09-22 — bounded navigation and immediate actual changes qualified
+
+The navigation_continuity package retains the existing recent-row limit, adds
+only archived navigation facts, and supplies the immediate accepted edit's actual
+diff. Prospective edit results preserve that diff before display reduction. Exact
+proposals, applied changes and current-source eligibility remain distinct. Optional
+detail has both byte and complete-input admission limits, with zero-added-detail
+fallback. Twenty-three CPU tests and seven wrapper tests pass.
+
+Native qualification-001 passed but selected interpolation C09 (21,697 tokens),
+not the actual near-limit C08 (23,690). Direct invocation-record review corrected
+that remembered coordinate. Preserve its evidence and exact old helper/gate source.
+Qualification-002 starts from C08, admits the additional reference by reducing
+recent rows, then exercises recovery presentation, complete rejection and a
+selection replacement. No designated source, account, candidate or check is lost.
+This does not isolate optional-page-only fallback; that boundary remains CPU-tested.
+Do not manufacture padding or rename ordinary fit as an exercised pressure path.
+
+The separate actual-public-proposal replay preserves the same artifact-map repair,
+executes a new check and submits. Each native qualification uses one CPU checker,
+zero completions. Qualification-002 binds 503 files, 448 custody records and 53
+native inputs; closure passes with 463 MiB minimum sampled GPU headroom. The shift
+preparation subsequently starts empty at 4,644 tokens and completes its separately
+scripted five-operation path, including the unchanged failed and passing checks.
+These are feasibility results, not Qwen behavior. Original tasks, checker bytes,
+finite allowances and uncoached execution remain the prospective run contract.
+
+## 2026-09-22 — original parser observation portability
+
+The original configparser adapter is published at 59f1d1f1. The old checker
+discarded detailed observations before common capture could preserve them. The
+adapter preserves the complete computed report and test-runner diagnostic while
+retaining the original acceptance calculation. Qualification compares seven
+original/reference variants against both checkers, checks long and escaping-heavy
+streams and interrupted/malformed observations, and preserves every failed attempt.
+Twenty-one focused CPU tests pass; qualification-005's 82 source identities and
+195 saved outputs were independently rehashed. This is no new model outcome.
+
+A unittest run can be unsuccessful with zero failures/errors because an expected
+failure unexpectedly succeeds. Its actual runner diagnostic must remain available;
+counts alone do not explain that outcome. Similarly, a printed successful report
+cannot override a crashed, timed-out or otherwise incomplete subprocess. Keep the
+reported assessment and execution outcome distinct. Current tests failing against
+the original defective parser can be desired detection, not a current-candidate
+failure; state which program the observation concerns.
+
+Native input/decoder qualification and original-entry model execution remain open.
+No acceptance weakening, injected new task requirement or historical score change
+was introduced. The runtime wrapper will live separately so adding execution code
+does not invalidate the already frozen checker qualification source set.
+
+The navigation successor's wrapper review also caught a gate mismatch before
+exposure: the native package includes both implementation and saved-input bindings.
+Qualification must require the complete current implementation and verify every
+additional input, then carry those bindings into the run. Merely comparing the two
+sets for equality incorrectly rejects the richer legitimate package. The success
+report itself must belong to the verified output inventory.
+
 ## 2026-09-22 — a passing source repair still exposes presentation costs
 
 Artifact-map run-001 completes uncoached from the original candidate: twenty

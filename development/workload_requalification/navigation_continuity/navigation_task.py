@@ -1,0 +1,83 @@
+"""Original source tasks with bounded navigation and actual edit feedback."""
+from pathlib import Path
+
+import repair_task as original
+import navigation
+from working_set_exp.jsonutil import canonical_json_bytes, load_json_strict, sha256_bytes, sha256_file
+
+ROOT, AREA = original.ROOT, Path(__file__).resolve().parent
+NATIVE_QUALIFIED = AREA / 'native-qualification-002'
+
+
+class Session(navigation.NavigationMixin, original.Session):
+    pass
+
+
+def implementation_identities():
+    result = {}
+    for case in original.MODULES:
+        result.update(original.Task(case).source_identities())
+    paths = [*AREA.glob('*.py'), AREA / 'PLAN.md', AREA / 'SPEC.md',
+             *sorted((AREA / 'tests').glob('*.py')),
+             *sorted((AREA / 'cpu-qualification-002').glob('*.json')),
+             AREA / 'TESTS-006.log', AREA / 'WRAPPER-TESTS-001.log']
+    for case in original.MODULES:
+        paths += [AREA / case / 'SYSTEM.txt', AREA / case / 'SPEC.md']
+    result.update({p.relative_to(ROOT).as_posix(): sha256_file(p) for p in paths})
+    return result
+
+
+def qualification_bindings():
+    seal_path = NATIVE_QUALIFIED / 'SEAL.json'
+    seal = load_json_strict(seal_path.read_bytes())
+    assert seal['status'] == 'qualified_no_model_inference' and seal['completion_requests'] == 0
+    implementation = implementation_identities()
+    sources = seal['source_sha256']
+    assert all(sources.get(name) == digest for name, digest in implementation.items()), 'Native qualification source closure differs'
+    for name, digest in sources.items():
+        path = ROOT / name
+        assert path.resolve().is_relative_to(ROOT.resolve()), 'Source binding leaves repository'
+        assert sha256_file(path) == digest, name
+    assert sha256_bytes(canonical_json_bytes(seal['files'])) == seal['aggregate_sha256']
+    bindings = {**sources, seal_path.relative_to(ROOT).as_posix(): sha256_file(seal_path)}
+    names = []
+    for row in seal['files']:
+        path = NATIVE_QUALIFIED / row['path']
+        assert path.resolve().is_relative_to(NATIVE_QUALIFIED.resolve())
+        assert path.stat().st_size == row['size_bytes'] and sha256_file(path) == row['sha256'], row['path']
+        names.append(row['path'])
+        bindings[path.relative_to(ROOT).as_posix()] = row['sha256']
+    assert len(names) == len(set(names)) and 'FAILED.json' not in names and 'RESULTS.json' in names
+    result = load_json_strict((NATIVE_QUALIFIED / 'RESULTS.json').read_bytes())
+    assert result['status'] == 'passed' and result['completion_requests'] == 0 and result['checks_executed'] == 1
+    return bindings
+
+
+class Task(original.Task):
+    def __init__(self, case, version='001', replay_folder=None):
+        super().__init__(case, version, replay_folder)
+        self.original = original.Task(case, version, replay_folder)
+        self.AREA = AREA / case
+        self.PACKAGE, self.RUN = self.AREA / f'preparation-{version}', self.AREA / f'run-{version}'
+        self.MANIFEST = self.AREA / f'EXECUTION_MANIFEST-{version}.json'
+
+    def initial_session(self):
+        session = self.original.initial_session()
+        session.__class__ = Session
+        return session
+
+    def operating_reference(self):
+        return self.original.operating_reference() + '\n\n' + navigation.REFERENCE_ADDITION
+
+    def present_receipts(self, view, receipts):
+        return navigation.present_receipts(view, receipts)
+
+    def implementation_identities(self):
+        return implementation_identities()
+
+    def source_identities(self):
+        return {**implementation_identities(), **qualification_bindings()}
+
+
+def __getattr__(name):
+    return getattr(original, name)
