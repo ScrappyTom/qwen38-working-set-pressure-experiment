@@ -1,3 +1,16 @@
+# Saved-library contribution and open prose findings
+
+The uncoached saved_library_entry run at76e0f11a reaches checked submission in17
+requests/26new operations. Read its review/RESULTS.md and complete transcript audit.
+Five meaningful test methods are saved; the library and old tests are preserved;
+all25 nonterminal receipts arrive. The account supports one observed acquisition,
+but later drifts and remains stale; acceptance does not establish semantic truth.
+The prose still contains a false release marker and missing behavioral qualifications.
+Do not close the entry on its mechanical pass. Bind subsequent reviewer findings
+to1e665f84, preserve this result/cost, and label any correction reviewer-directed.
+No new mechanical host defect or recovery-mode benefit is established in this run.
+Retain47.382 model minutes and58.310 full-loop minutes, including apparatus overhead.
+
 # Qualified distinct saved-library entry
 
 saved_library_entry/PREPARATION_REVIEW.md qualifies the historical8ac73858 entry,

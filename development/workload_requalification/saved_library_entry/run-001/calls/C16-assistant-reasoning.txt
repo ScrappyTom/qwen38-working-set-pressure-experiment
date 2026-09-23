@@ -1,0 +1,193 @@
+Let me analyze the current state:
+
+1. **Task**: Add regression tests for MultilineContinuationError and documentation to the existing test module and doc file. The library already defines and raises MultilineContinuationError.
+
+2. **Current state**:
+   - The doc entry has been added to `Doc/library/configparser.rst` (lines 1381-1404, after ParsingError, before Footnotes rubric)
+   - Tests have been added to `Lib/test/test_configparser.py` (after test_missingsectionheadererror, before InlineCommentStrippingTestCase)
+   - Current candidate: `1e665f8485a4340c360dc94a8dcc9e6a98281affb38ebad4ed08aa10e0b4fd5c`
+   - The previous check (RES-0030) was for candidate `8ac73858f45e89ecb2df138e2accfdb105d0325ffc056e0bad7e9bf7e7c89a2d` which is NOT the current candidate - it's stale.
+
+3. **What's been done**:
+   - EVT-0054: Patch to test_configparser.py (added tests)
+   - EVT-0055: Patch to configparser.rst (added doc entry)
+
+4. **What I see in the working set**:
+   - The test file shows tests added: `test_multilinecontinuationerror_attributes`, `test_multilinecontinuationerror_read_string`, `test_multilinecontinuationerror_read_file`, `test_multilinecontinuationerror_valid_multiline`, `test_multilinecontinuationerror_valueless_no_continuation`
+   - The doc file shows the MultilineContinuationError exception documentation added
+   - The library shows MultilineContinuationError class at lines 327-339 (in the 320-360 range)
+
+5. **What I need to verify**:
+   - The tests look reasonable. Let me check them against the library code:
+     - `MultilineContinuationError(source, lineno, line)` - takes 3 args ✓
+     - Subclass of ParsingError ✓
+     - `.source`, `.lineno`, `.line` attributes ✓
+     - `.args = (source, lineno, line)` ✓
+     - Raised at line ~1060: `raise MultilineContinuationError(fpname, lineno, line)` ✓
+   - The `line` value: In the library code at line 1060, it passes `line` which is the raw line from `enumerate(fp, start=1)`. This means `line` includes the trailing newline character (since `fp` is a file-like object yielding lines with newlines). Wait, let me look more carefully.
+
+   Looking at the library code in the 1000-1070 range:
+   ```python
+   for lineno, line in enumerate(fp, start=1):
+   ```
+   
+   And at the raise:
+   ```python
+   raise MultilineContinuationError(fpname, lineno, line)
+   ```
+
+   So `line` is the raw line from the file iterator. For a file opened in text mode, lines include the trailing newline. For `read_string`, the string is wrapped in a StringIO-like object. Let me check... Actually, `read_string` uses `_read_str` which does something like:
+   ```python
+   def _read_str(self, string, source='<string>'):
+       self._validate_value_types...
+   ```
+   Actually I need to look at how read_string works. But the test asserts `exc.line == '  continuation\n'` which includes the newline. That makes sense if the line comes from iterating over a file-like object.
+
+   Wait, but for `read_string`, the input is `"[section]\nkey\n  continuation\n"`. If it's split into lines and iterated, the lines would be `'[section]\n'`, `'key\n'`, `'  continuation\n'`. So `line` would be `'  continuation\n'`. The test asserts this correctly.
+
+   For `read_file`, the file contains `"[section]\nkey\n  continuation\n"`. Reading lines gives the same. The test asserts `exc.line == '  continuation\n'`. Good.
+
+6. **Documentation accuracy check**:
+   The doc says:
+   - "Raised when an indented continuation line follows a valueless option (an option with no value, as permitted by ``allow_no_value=True``)."
+   - "This is a subclass of :exc:`!ParsingError`."
+   - "The constructor takes three arguments: ``source`` (the name of the source being parsed, or ``'<string>'`` for string input), ``lineno`` (the one-based line number of the offending continuation line), and ``line`` (the exact text of that line, including its trailing newline)."
+   - "All three values are stored as attributes of the same name and are preserved in ``args`` for pickling and copying."
+   - `.. versionadded:: 3.12`
+
+   Let me verify against the actual implementation:
+   - In the library: `MultilineContinuationError.__init__(self, source, lineno, line)` calls `ParsingError.__init__(self, source)` which sets `self.source = source`, then sets `self.lineno = lineno`, `self.line = line`, `self.args = (source, lineno, line)`. ✓
+   - It's raised with `fpname` as source. For `read_string`, the source is `'<string>'` (from the function signature `source='<string>'`). ✓
+   - The `line` includes trailing newline (from file iteration). ✓
+   - It's a subclass of ParsingError. ✓
+
+   Wait, I need to check the `source` attribute more carefully. `ParsingError.__init__` is called with `source`. Let me look at the ParsingError class. From the library code at lines 320-360, I can see:
+   ```python
+   (filename, lineno, line))
+   self.source = filename
+   self.lineno = lineno
+   self.line = line
+   self.args = (filename, lineno, line)
+   ```
+   This looks like the tail end of MissingSectionHeaderError.__init__ (lines 320-323 approximately). Then:
+   ```python
+   class MultilineContinuationError(ParsingError):
+       """Raised when a valueless option is followed by an indented line."""
+       def __init__(self, source, lineno, line):
+           ParsingError.__init__(self, source)
+           self.append(lineno, line)
+           self.lineno = lineno
+           self.line = line
+           self.args = (source, lineno, line)
+   ```
+
+   Wait, it calls `self.append(lineno, line)` AND sets `self.lineno` and `self.line`. The `append` method of ParsingError appends to `self.errors` list. Then it overrides `lineno` and `line` as standalone attributes (in addition to the errors list). And `args` is set to the three-argument tuple.
+
+   Actually, let me re-read. `ParsingError.__init__(self, source)` - I need to see what ParsingError.__init__ does. From the library code I can see lines 320-323 are the tail of MissingSectionHeaderError. The ParsingError class definition would be earlier. Let me check what I have.
+
+   From the code at lines 320-360:
+   ```
+   (filename, lineno, line))
+   self.source = filename
+   self.lineno = lineno
+   self.line = line
+   self.args = (filename, lineno, line)
+
+
+   class MultilineContinuationError(ParsingError):
+       """Raised when a valueless option is followed by an indented line."""
+
+       def __init__(self, source, lineno, line):
+           ParsingError.__init__(self, source)
+           self.append(lineno, line)
+           self.lineno = lineno
+           self.line = line
+           self.args = (source, lineno, line)
+   ```
+
+   I don't have the full ParsingError.__init__ visible. But from the test for ParsingError, I can see it has a `source` attribute, an `errors` list, and an `append` method. The doc says `ParsingError.__init__` takes `source` (previously `filename`).
+
+   Looking at the ParsingError entry in the doc:
+   ```
+   .. exception:: ParsingError
+
+      Exception raised when errors occur attempting to parse a file.
+
+      .. versionchanged:: 3.12
+         The ``filename`` attribute and :meth:`!__init__` constructor argument were
+         removed.  They have been available using the name ``source`` since 3.2.
+   ```
+
+   So `ParsingError.__init__(self, source)` sets `self.source = source` and initializes `self.errors = []`. The `append` method adds to errors.
+
+   Now for MultilineContinuationError:
+   - `ParsingError.__init__(self, source)` → sets `self.source = source`, `self.errors = []`
+   - `self.append(lineno, line)` → adds to `self.errors`
+   - `self.lineno = lineno` → standalone attribute
+   - `self.line = line` → standalone attribute
+   - `self.args = (source, lineno, line)` → the 3-tuple
+
+   The doc says "All three values are stored as attributes of the same name and are preserved in ``args`` for pickling and copying." This is accurate.
+
+   One thing to check: the doc says the `line` includes "its trailing newline." Let me verify this is correct. In the `read_file` path, `line` comes from `enumerate(fp, start=1)` where `fp` is the file object. File objects yield lines with trailing newlines (except possibly the last line if the file doesn't end with a newline). In `read_string`, the string is passed through some mechanism. Let me think about what happens with `read_string`.
+
+   Actually, I need to check how `read_string` works. It likely creates a StringIO or similar. Let me look at the test:
+   ```python
+   parser.read_string("[section]\nkey\n  continuation\n")
+   ```
+   The assertion is `exc.line == '  continuation\n'` which has the trailing newline. This would be correct if the string is split into lines preserving newlines.
+
+   But what if the string doesn't end with a newline? E.g., `"[section]\nkey\n  continuation"` (no trailing \n). In that case, the last line from iteration would be `'  continuation'` without a newline. The doc says "including its trailing newline" which might be slightly misleading for that edge case. However, in practice, configuration files and test inputs typically end with a newline. The doc's phrasing is a reasonable general description.
+
+   Actually, looking more carefully at the doc text: "``line`` (the exact text of that line, including its trailing newline)" - this is describing what `line` contains in the normal case. It's accurate for the common case.
+
+7. **Are the tests sufficient?**
+   The task requires:
+   - Tests that pass with the current repair ✓ (they should)
+   - Tests that expose the problem with the original parser ✓ (the original parser didn't have MultilineContinuationError at all - it would have silently accepted the continuation or raised a different error)
+   
+   Wait, actually I need to think about what the "original parser" did. The task says "The current library already defines and raises MultilineContinuationError." The original (pre-repair) parser presumably did NOT raise this exception - it might have silently accepted the continuation line, appended it to the valueless option's value (which is None), or raised a different error. The regression tests use `configparser.MultilineContinuationError` which wouldn't exist in the original parser, so the tests would fail with an AttributeError or NameError when trying to reference the class. That's sufficient to "detect the original defect."
+
+   Actually, let me reconsider. The task says "Added regressions must detect the original defect." If the original parser didn't have `MultilineContinuationError` as a class, then referencing `configparser.MultilineContinuationError` would raise AttributeError, which would cause the tests to fail/error. That's the expected failure mode.
+
+   But wait - there's a subtlety. The `read_string` and `read_file` tests use `assertRaises(configparser.MultilineContinuationError)`. If the class doesn't exist, you'd get an AttributeError before the assertRaises even executes. That's fine - it still "fails" which detects the original defect.
+
+   The attribute test directly constructs `configparser.MultilineContinuationError('src', 42, '  x\n')` - if the class doesn't exist, this is an immediate AttributeError. Good.
+
+   The `valid_multiline` and `valueless_no_continuation` tests are positive controls that should pass both before and after the fix (they test that valid configurations still work). These would pass on the original parser too, so they're not really regression tests for the defect - they're guards against over-correction. That's fine to include.
+
+8. **What still needs to be done?**
+   - The current candidate is `1e665f8485a4340c360dc94a8dcc9e6a98281affb38ebad4ed08aa10e0b4fd5c`
+   - The previous check was for an older candidate and is stale
+   - I need to run `check public` on the current candidate
+   - If it passes, I can submit
+
+   But wait - I should also verify the doc is accurate. Let me re-read the task requirements:
+   "Explain the triggering condition, exception inheritance and source/lineno/line attributes accurately, including relevant qualifications."
+
+   The doc says:
+   - Triggering condition: "Raised when an indented continuation line follows a valueless option (an option with no value, as permitted by ``allow_no_value=True``)." ✓
+   - Inheritance: "This is a subclass of :exc:`!ParsingError`." ✓
+   - source: "the name of the source being parsed, or ``'<string>'`` for string input" ✓
+   - lineno: "the one-based line number of the offending continuation line" ✓
+   - line: "the exact text of that line, including its trailing newline" ✓
+   - args preserved: "All three values are stored as attributes of the same name and are preserved in ``args`` for pickling and copying." ✓
+   - versionadded 3.12 ✓
+
+   One qualification I might want to add: the exception is only raised when `allow_no_value=True`. The doc already says "as permitted by ``allow_no_value=True``" which covers this.
+
+   Another qualification: the `line` attribute includes the trailing newline. This is stated. Good.
+
+   I think the documentation is accurate. Let me now run the public check.
+
+   Actually wait - I should also verify that the tests are correctly placed and won't interfere with existing tests. Looking at the test file content, the tests are inserted between `test_missingsectionheadererror` (which ends with the pickle loop) and the `InlineCommentStrippingTestCase` class. They're methods of the same test class that contains `test_parsingerror` and `test_missingsectionheadererror`. Let me check what class they're in.
+
+   From the visible content (lines 1808-1985), I can see:
+   - `test_parsingerror` method
+   - `test_missingsectionheadererror` method
+   - The new tests
+   - `class InlineCommentStrippingTestCase(unittest.TestCase):`
+
+   So the new tests are methods of whatever class contains `test_parsingerror` and `test_missingsectionheadererror`. That should be fine.
+
+   Let me now run the public check on the current candidate.

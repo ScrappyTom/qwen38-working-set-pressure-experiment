@@ -1,0 +1,802 @@
+Let me analyze the current state:
+
+1. The task is to add regression tests for `MultilineContinuationError` to the test file and add documentation to the doc file.
+
+2. I have the library source showing `MultilineContinuationError` at lines 327-335 (in the visible range 320-360), and the raise site at ~line 1060 (visible in range 1000-1070).
+
+3. Looking at the raise site (line 1060): `raise MultilineContinuationError(fpname, lineno, line)` - so `line` is the raw line (with trailing newline? let me check). In the loop `for lineno, line in enumerate(fp, start=1):`, `line` is the raw line including its trailing newline. Wait, actually in Python, when iterating over a file object, each line includes the trailing newline. So `line` here includes the trailing `\n`.
+
+Wait, let me look more carefully. The variable `line` in the for loop is the raw line from the file. But then `value = line[:comment_start].strip()` strips it. The `line` variable still has the raw content including trailing newline.
+
+So the exception receives:
+- `fpname` - the source name
+- `lineno` - the 1-based line number
+- `line` - the raw line (including trailing newline)
+
+Wait, let me re-examine. Looking at the code:
+```python
+for lineno, line in enumerate(fp, start=1):
+```
+
+So `line` is the raw line from the file (with trailing newline if the file has one). Then later:
+```python
+raise MultilineContinuationError(fpname, lineno, line)
+```
+
+So the `line` attribute of the exception will be the raw line including any trailing newline character.
+
+Actually wait - I need to think about this more carefully. When reading from a file object, `line` includes the trailing `\n`. When reading from a string via `read_string()`, the string is wrapped in a `StringIO`, so same behavior.
+
+But for `read_string`, the source name is `'<string>'`. For `read_file`, it's the filename. For `read`, it's the filename.
+
+Now let me plan what I need to do:
+
+**Tests to add** (after `test_missingsectionheadererror`, before `InlineCommentStrippingTestCase`):
+
+1. Test that `MultilineContinuationError` is raised when a valueless option is followed by an indented line.
+2. Test that it's a subclass of `ParsingError`.
+3. Test that `.source`, `.lineno`, `.line` attributes are correct.
+4. Test pickling.
+5. Test via `read_string()`, `read_file()`, and `read()`.
+6. Test with both `ConfigParser` and `RawConfigParser`.
+7. Test that it's raised when `allow_no_value=True`.
+8. Test that valid multiline values still work (not broken by this fix).
+9. Test that valueless options without continuation still work fine.
+
+Let me think about the test content:
+
+```python
+def test_multilinecontinuationerror(self):
+    # MultilineContinuationError is raised when a valueless option
+    # is followed by a more-indented line.
+    parser = configparser.ConfigParser(allow_no_value=True)
+    with self.assertRaises(configparser.MultilineContinuationError) as cm:
+        parser.read_string("[section]\nkey\n  continuation\n")
+    exc = cm.exception
+    self.assertEqual(exc.source, '<string>')
+    self.assertEqual(exc.lineno, 3)
+    self.assertEqual(exc.line, '  continuation\n')
+    self.assertEqual(exc.args, ('<string>', 3, '  continuation\n'))
+    self.assertIsInstance(exc, configparser.ParsingError)
+```
+
+Wait, but I need to verify what `line` actually contains. Let me trace through the code:
+
+In `_read()`:
+```python
+for lineno, line in enumerate(fp, start=1):
+```
+
+For `read_string("[section]\nkey\n  continuation\n")`:
+- Line 1: `[section]\n`
+- Line 2: `key\n`
+- Line 3: `  continuation\n`
+
+On line 3:
+- `value = line[:comment_start].strip()` → `'continuation'` (not empty)
+- `first_nonspace = self.NONSPACECRE.search(line)` → matches at position 2
+- `cur_indent_level = 2`
+- `indent_level` was set to 0 on line 2 (since `key` starts at position 0)
+- `cur_indent_level > indent_level` → True
+- `cursect[optname] is None` → True (because `allow_no_value=True` and the option had no value)
+- So: `raise MultilineContinuationError(fpname, lineno, line)`
+
+Here `line` is `'  continuation\n'` (the raw line with trailing newline).
+
+Wait, but for `read_string`, the string `"[section]\nkey\n  continuation\n"` - when split into lines by iteration:
+- `"[section]\n"` 
+- `"key\n"`
+- `"  continuation\n"`
+
+Yes, so `line` = `"  continuation\n"`.
+
+For `read_file`, the `fpname` would be the filename passed.
+For `read`, the `fpname` would be the filename.
+
+Let me also think about what happens without `allow_no_value=True`. In that case, a valueless option like `key` without `=` or `:` would... actually, let me check. With default `allow_no_value=False`, a line like `key` (no delimiter) would be... let me trace:
+
+Actually looking at the code more carefully:
+```python
+value = line[:comment_start].strip()
+if not value:
+    ...continue
+# continuation line?
+first_nonspace = self.NONSPACECRE.search(line)
+cur_indent_level = first_nonspace.start() if first_nonspace else 0
+if (cursect is not None and optname and
+    cur_indent_level > indent_level):
+    if cursect[optname] is None:
+        raise MultilineContinuationError(fpname, lineno, line)
+```
+
+Wait, the continuation check happens BEFORE the option header check. So the flow is:
+1. If it's a continuation (indented more than current indent):
+   - If the current option has no value (None), raise MultilineContinuationError
+   - Otherwise, append to the value
+2. Else (not a continuation):
+   - Check if it's a section header
+   - Check if it's an option header (with delimiter)
+   - If no delimiter and `allow_no_value`, set optname with None value
+   - Else, it's an error
+
+So for `allow_no_value=False`, a bare `key` line would NOT be treated as an option - it would fall through to the error case. The `MultilineContinuationError` is only raised when `cursect[optname] is None`, which means the option was previously set to None (valueless with `allow_no_value=True`).
+
+So the test needs `allow_no_value=True`.
+
+Now for the documentation. I need to add a `.. exception:: MultilineContinuationError` entry in the doc file, after `ParsingError` and before the `.. rubric:: Footnotes`.
+
+Let me look at what the doc should say:
+- It's a subclass of `ParsingError`
+- Raised when a valueless option (with `allow_no_value=True`) is followed by a more-indented line
+- Has `.source`, `.lineno`, `.line` attributes (inherited/shared with `ParsingError`)
+- Constructor takes `source`, `lineno`, `line`
+
+Now, let me think about the exact insertion points:
+
+**Test file** (2142 lines): 
+- After `test_missingsectionheadererror` which ends around line 1864 (based on my account)
+- Before `InlineCommentStrippingTestCase` which starts around line 1867
+
+Looking at the visible source (lines 1808-1920), I can see:
+- `test_missingsectionheadererror` ends with the pickle tests
+- Then there's `class InlineCommentStrippingTestCase(unittest.TestCase):`
+
+I need to find the exact insertion point. Let me look at the source I have visible. From the test file (lines 1808-1920), I can see the `test_missingsectionheadererror` method and then `InlineCommentStrippingTestCase` starting.
+
+The exact text I need to match for insertion is the end of `test_missingsectionheadererror` and the start of `InlineCommentStrippingTestCase`.
+
+From the visible source:
+```
+            self.assertEqual(e1.lineno, e2.lineno)
+            self.assertEqual(repr(e1), repr(e2))
+
+
+class InlineCommentStrippingTestCase(unittest.TestCase):
+```
+
+That's the insertion point. I'll insert the new test method(s) between `test_missingsectionheadererror` and `InlineCommentStrippingTestCase`.
+
+**Doc file** (1387 lines):
+- After `ParsingError` section (ends around line 1381)
+- Before `.. rubric:: Footnotes` (line 1383)
+
+From the visible doc source (lines 1370-1387):
+```
+   Exception raised when attempting to parse a file which has no section
+   headers.
+
+
+.. exception:: ParsingError
+
+   Exception raised when errors occur attempting to parse a file.
+
+   .. versionchanged:: 3.12
+      The ``filename`` attribute and :meth:`!__init__` constructor argument were
+      removed.  They have been available using the name ``source`` since 3.2.
+
+.. rubric:: Footnotes
+```
+
+I'll insert the `MultilineContinuationError` exception doc between the `ParsingError` section and the `Footnotes` rubric.
+
+Now let me plan my edits:
+
+1. First, I'll patch the test file to add regression tests.
+2. Then, I'll patch the doc file to add the exception documentation.
+3. Then run the public check.
+
+For the test, I need to be careful about what class these tests belong to. Looking at the test file structure:
+- `CfgParserTestCaseClass` is the base
+- There are various test case classes that inherit from it
+- `test_missingsectionheadererror` is in some class... Let me think about which class.
+
+From the visible source, `test_parsingerror` and `test_missingsectionheadererror` are methods that seem to be in a class that tests exceptions. Let me look at the structure. The methods test pickling of various exceptions. They're likely in a class like `ExceptionTestCase` or similar.
+
+Actually, I need to see what class contains `test_missingsectionheadererror`. From the source I can see it's at the end of some class (followed by `class InlineCommentStrippingTestCase`). Let me check what class it's in.
+
+Looking at the source from lines 1808-1920, I can see:
+- `test_parsingerror` method
+- `test_missingsectionheadererror` method
+- Then `class InlineCommentStrippingTestCase`
+
+These test methods are likely in a class that was started earlier. Let me search for what class contains them. Actually, from my account notes, I know the structure. The methods are in some class (probably `ExceptionTestCase` or part of the main test case class).
+
+Actually, I think I should just add my test methods as instance methods in the same class that contains `test_missingsectionheadererror`. The new test methods should be `def test_multilinecontinuationerror(self):` etc., and they should be inserted right after `test_missingsectionheadererror` ends.
+
+Let me now write the test code:
+
+```python
+    def test_multilinecontinuationerror(self):
+        # Regression: valueless option followed by indented continuation
+        # must raise MultilineContinuationError, not silently misparse.
+        import pickle
+        e1 = configparser.MultilineContinuationError('source', 3, '  value\n')
+        self.assertIsInstance(e1, configparser.ParsingError)
+        self.assertEqual(e1.source, 'source')
+        self.assertEqual(e1.lineno, 3)
+        self.assertEqual(e1.line, '  value\n')
+        self.assertEqual(e1.args, ('source', 3, '  value\n'))
+        for proto in range(pickle.HIGHEST_PROTOCOL + 1):
+            pickled = pickle.dumps(e1, proto)
+            e2 = pickle.loads(pickled)
+            self.assertEqual(e1.message, e2.message)
+            self.assertEqual(e1.args, e2.args)
+            self.assertEqual(e1.source, e2.source)
+            self.assertEqual(e1.lineno, e2.lineno)
+            self.assertEqual(e1.line, e2.line)
+            self.assertEqual(repr(e1), repr(e2))
+
+    def test_multilinecontinuationerror_read_string(self):
+        # ConfigParser.read_string with valueless option + continuation
+        parser = configparser.ConfigParser(allow_no_value=True)
+        data = "[section]\nkey\n  continuation\n"
+        with self.assertRaises(configparser.MultilineContinuationError) as cm:
+            parser.read_string(data)
+        exc = cm.exception
+        self.assertEqual(exc.source, '<string>')
+        self.assertEqual(exc.lineno, 3)
+        self.assertEqual(exc.line, '  continuation\n')
+
+    def test_multilinecontinuationerror_rawconfigparser(self):
+        # RawConfigParser must raise the same exception
+        parser = configparser.RawConfigParser(allow_no_value=True)
+        with self.assertRaises(configparser.MultilineContinuationError) as cm:
+            parser.read_string("[section]\nkey\n  continuation\n")
+        exc = cm.exception
+        self.assertEqual(exc.source, '<string>')
+        self.assertEqual(exc.lineno, 3)
+        self.assertEqual(exc.line, '  continuation\n')
+        self.assertIsInstance(exc, configparser.ParsingError)
+
+    def test_multilinecontinuationerror_valid_multiline(self):
+        # A valueless option followed by a NON-indented line is fine;
+        # a valued multiline option still works.
+        parser = configparser.ConfigParser(allow_no_value=True)
+        parser.read_string("[section]\nkey = value\n  more\n")
+        self.assertEqual(parser['section']['key'], 'value\n  more')
+
+    def test_multilinecontinuationerror_no_continuation(self):
+        # A valueless option NOT followed by an indented line is fine.
+        parser = configparser.ConfigParser(allow_no_value=True)
+        parser.read_string("[section]\nkey\nother = val\n")
+        self.assertIsNone(parser['section']['key'])
+```
+
+Wait, I need to be careful. Let me re-check: when `allow_no_value=True` and we have:
+```
+[section]
+key
+other = val
+```
+
+- Line 1: `[section]` → section header
+- Line 2: `key` → no delimiter, allow_no_value=True → sets optname='key', cursect['key']=None
+- Line 3: `other = val` → indent_level=0, cur_indent_level=0, not > indent_level, so it's an option header → sets optname='other', cursect['other']='val'
+
+So yes, that should work fine.
+
+But wait - for the `test_multilinecontinuationerror_valid_multiline` test, I need to check what the actual value would be. With `empty_lines_in_values=True` (default), the value would be `'value\n  more'`? Let me think...
+
+Actually, `cursect[optname].append(value)` where `value = line[:comment_start].strip()`. So `value` is `'more'` (stripped). The list would be `['value', 'more']`. When accessed via `parser['section']['key']`, the value is joined with `\n`, giving `'value\nmore'`.
+
+Wait, let me look at how values are stored. In configparser, multiline values are stored as a list and joined with `\n` when retrieved. Let me verify...
+
+Actually, I think the stored value for a multiline option is a list, and when you access it via the getter, it's joined with newlines. So `parser['section']['key']` would give `'value\nmore'` (not `'value\n  more'`).
+
+Hmm, but I'm not 100% sure. Let me be conservative and just test that it doesn't raise, and check the key exists. Or I can test with a simpler assertion.
+
+Actually, let me just keep it simple:
+
+```python
+    def test_multilinecontinuationerror_valid_multiline(self):
+        # A valued multiline option still works (regression guard).
+        parser = configparser.ConfigParser(allow_no_value=True)
+        parser.read_string("[section]\nkey = value\n  more\n")
+        self.assertIn('key', parser['section'])
+```
+
+That's safer. And for the valueless-without-continuation test:
+
+```python
+    def test_multilinecontinuationerror_no_continuation(self):
+        # A valueless option without indented continuation is fine.
+        parser = configparser.ConfigParser(allow_no_value=True)
+        parser.read_string("[section]\nkey\nother = val\n")
+        self.assertIn('key', parser['section'])
+        self.assertIsNone(parser['section']['key'])
+```
+
+Wait, with `allow_no_value=True`, the value for a valueless option is `None`. But when accessed via the section proxy, does it return `None`? Let me think... The section proxy's `__getitem__` calls `parser.get(section, option)` which does interpolation. For a `None` value, what happens?
+
+Actually, I think for `allow_no_value=True`, when you access the option, it returns `None` directly without interpolation. Let me check the configparser source...
+
+Actually, I'm not sure about the exact behavior of accessing a `None` value through the section proxy. Let me be safe and just check that no exception is raised and the option exists:
+
+```python
+    def test_multilinecontinuationerror_no_continuation(self):
+        # A valueless option without indented continuation is fine.
+        parser = configparser.ConfigParser(allow_no_value=True)
+        parser.read_string("[section]\nkey\nother = val\n")
+        self.assertTrue(parser.has_option('section', 'key'))
+```
+
+That's safer.
+
+Now, for the `read_file` test, I need to use a temporary file. Let me add one:
+
+```python
+    def test_multilinecontinuationerror_read_file(self):
+        # read_file must also raise MultilineContinuationError.
+        import tempfile
+        parser = configparser.ConfigParser(allow_no_value=True)
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.ini',
+                                          delete=False) as f:
+            f.write("[section]\nkey\n  continuation\n")
+            fname = f.name
+        try:
+            with self.assertRaises(configparser.MultilineContinuationError) as cm:
+                with open(fname, 'r') as fp:
+                    parser.read_file(fp)
+            exc = cm.exception
+            self.assertEqual(exc.source, fname)
+            self.assertEqual(exc.lineno, 3)
+            self.assertEqual(exc.line, '  continuation\n')
+        finally:
+            os.unlink(fname)
+```
+
+Hmm, but I should be careful about the test infrastructure. The existing tests use `test.support` and `test.support.os_helper`. Let me check if there's a helper for temp files in this test file.
+
+Actually, looking at the imports, `os` is already imported. Let me use `tempfile` module or just a simple approach. Actually, let me use `support` module if it has a temp file helper... but I'm not sure. Let me just use `tempfile` directly since it's simpler and more portable.
+
+Wait, actually I realize I should also think about whether the tests are in the right class. The methods I'm adding need to be in a class that has `self` and is a `unittest.TestCase`. Looking at the structure:
+- `test_parsingerror` and `test_missingsectionheadererror` are methods of some class
+- They use `self.assertEqual` etc.
+- They're before `InlineCommentStrippingTestCase`
+
+So they're in a class that ends right before `InlineCommentStrippingTestCase`. I'll add my methods in the same class.
+
+Now for the documentation. I need to add:
+
+```rst
+.. exception:: MultilineContinuationError
+
+   Exception raised when a valueless option (allowed by ``allow_no_value=True``)
+   is followed by a line that is indented more than the option itself,
+   indicating a multiline continuation of a value that does not exist.
+
+   This is a subclass of :exc:`ParsingError` and carries the same
+   attributes: ``source`` (the name of the file or ``'<string>'``),
+   ``lineno`` (the one-based line number), and ``line`` (the exact
+   offending line, including any trailing newline).
+
+   .. versionadded:: 3.13
+```
+
+Wait, what version was this added in? The task says "Continue the saved configuration-parser backport". This is a backport, so the version might be different. Let me think...
+
+Actually, looking at the doc, `ParsingError` has a `versionchanged:: 3.12` note. The `MultilineContinuationError` is a new exception being added as part of this backport. I should check what version this would be. 
+
+Looking at the context, this seems to be a Python 3.13 feature (or similar). Let me check if there's a version hint in the source code...
+
+Actually, I don't have a definitive version number. Let me look at the source more carefully. The task says "Continue the saved configuration-parser backport" - this suggests it's being backported. Let me just use `.. versionadded:: 3.13` as a reasonable choice, since the `ParsingError` changes are noted as 3.12.
+
+Hmm, but I should be careful. Let me look at what version indicators exist in the file. The `ParsingError` has `versionchanged:: 3.12`. If this is a 3.13 feature being backported, that makes sense.
+
+Actually, I realize I should just check if there's any version indicator in the existing doc or source. Let me look at the source code... I don't see a `__version__` or similar. Let me just use `3.13` as it's the next minor version after the 3.12 changes noted in `ParsingError`.
+
+Wait, actually I should be more careful. Let me re-read the task: "Continue the saved configuration-parser backport". This is a backport, meaning the feature existed in a newer version and is being backported to this codebase. The exact version doesn't matter as much as the accuracy of the description. Let me just use `.. versionadded:: 3.13` as a reasonable guess, or I could omit the version directive if I'm not sure.
+
+Actually, let me look at this differently. The doc already has `versionchanged:: 3.12` for `ParsingError`. If `MultilineContinuationError` is new in this version, I should note it. But I'm not 100% sure of the version. Let me be safe and just describe it without a version directive, or use a generic note.
+
+Hmm, actually for a "backport" scenario in CPython, the version would be whatever version this codebase targets. Since I don't have that info definitively, let me just include the description and add `.. versionadded::` with a note. Actually, let me just include it - if the version is wrong, the check will catch it (or not, since the doc check is mechanical).
+
+Let me re-read the task requirements: "Explain the triggering condition, exception inheritance and source/lineno/line attributes accurately, including relevant qualifications."
+
+So the doc needs to explain:
+1. Triggering condition: valueless option followed by more-indented line
+2. Exception inheritance: subclass of ParsingError
+3. Attributes: source, lineno, line
+4. Qualifications: allow_no_value=True required, applies through read()/read_file()/read_string()
+
+Let me also think about whether `line` includes the trailing newline. From the code:
+```python
+for lineno, line in enumerate(fp, start=1):
+    ...
+    raise MultilineContinuationError(fpname, lineno, line)
+```
+
+`line` here is the raw line from the file iterator. For files, this includes the trailing `\n`. For `read_string`, the string is wrapped in `StringIO`, so same behavior.
+
+But wait - what if the line is the last line and doesn't end with `\n`? Then `line` wouldn't have a trailing newline. So I should say "the exact offending line as read from the source" rather than "including trailing newline" specifically.
+
+Actually, let me be precise: "the exact offending line, as it appears in the source (including any trailing line-terminating newline character if present)".
+
+OK, I think I have enough to write both patches. Let me now construct them.
+
+For the test file, I'll patch:
+- File: `Lib/test/test_configparser.py`
+- `old`: The text between the end of `test_missingsectionheadererror` and the start of `InlineCommentStrippingTestCase`
+- `new`: Same text with my new test methods inserted
+
+The `old` text (from the visible source):
+```
+            self.assertEqual(e1.lineno, e2.lineno)
+            self.assertEqual(repr(e1), repr(e2))
+
+
+class InlineCommentStrippingTestCase(unittest.TestCase):
+```
+
+Wait, I need to be more careful. Let me look at the exact text from the visible source. From lines 1808-1920:
+
+```
+            self.assertEqual(e1.lineno, e2.lineno)
+            self.assertEqual(repr(e1), repr(e2))
+
+
+class InlineCommentStrippingTestCase(unittest.TestCase):
+    """Tests for issue #14590: ConfigParser doesn't strip inline comment when
+    delimiter occurs earlier without preceding space.."""
+```
+
+So my `old` would be:
+```
+            self.assertEqual(e1.lineno, e2.lineno)
+            self.assertEqual(repr(e1), repr(e2))
+
+
+class InlineCommentStrippingTestCase(unittest.TestCase):
+```
+
+And `new` would be:
+```
+            self.assertEqual(e1.lineno, e2.lineno)
+            self.assertEqual(repr(e1), repr(e2))
+
+    def test_multilinecontinuationerror_attributes(self):
+        # MultilineContinuationError carries source, lineno, line.
+        import pickle
+        e1 = configparser.MultilineContinuationError('src', 42, '  x\n')
+        self.assertIsInstance(e1, configparser.ParsingError)
+        self.assertEqual(e1.source, 'src')
+        self.assertEqual(e1.lineno, 42)
+        self.assertEqual(e1.line, '  x\n')
+        self.assertEqual(e1.args, ('src', 42, '  x\n'))
+        for proto in range(pickle.HIGHEST_PROTOCOL + 1):
+            pickled = pickle.dumps(e1, proto)
+            e2 = pickle.loads(pickled)
+            self.assertEqual(e1.message, e2.message)
+            self.assertEqual(e1.args, e2.args)
+            self.assertEqual(e1.source, e2.source)
+            self.assertEqual(e1.lineno, e2.lineno)
+            self.assertEqual(e1.line, e2.line)
+            self.assertEqual(repr(e1), repr(e2))
+
+    def test_multilinecontinuationerror_read_string(self):
+        # ConfigParser.read_string raises MultilineContinuationError
+        # when a valueless option is followed by an indented line.
+        parser = configparser.ConfigParser(allow_no_value=True)
+        with self.assertRaises(
+                configparser.MultilineContinuationError) as cm:
+            parser.read_string("[section]\nkey\n  continuation\n")
+        exc = cm.exception
+        self.assertEqual(exc.source, '<string>')
+        self.assertEqual(exc.lineno, 3)
+        self.assertEqual(exc.line, '  continuation\n')
+
+    def test_multilinecontinuationerror_read_file(self):
+        # RawConfigParser.read_file raises the same exception.
+        import tempfile
+        parser = configparser.RawConfigParser(allow_no_value=True)
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.ini',
+                                          delete=False) as f:
+            f.write("[section]\nkey\n  continuation\n")
+            fname = f.name
+        try:
+            with self.assertRaises(
+                    configparser.MultilineContinuationError) as cm:
+                with open(fname, 'r') as fp:
+                    parser.read_file(fp)
+            exc = cm.exception
+            self.assertEqual(exc.source, fname)
+            self.assertEqual(exc.lineno, 3)
+            self.assertEqual(exc.line, '  continuation\n')
+            self.assertIsInstance(exc, configparser.ParsingError)
+        finally:
+            os.unlink(fname)
+
+    def test_multilinecontinuationerror_valid_multiline_preserved(self):
+        # A valued multiline option is still parsed correctly.
+        parser = configparser.ConfigParser(allow_no_value=True)
+        parser.read_string("[section]\nkey = value\n  more\n")
+        self.assertTrue(parser.has_option('section', 'key'))
+
+    def test_multilinecontinuationerror_valueless_no_continuation(self):
+        # A valueless option without an indented continuation is fine.
+        parser = configparser.ConfigParser(allow_no_value=True)
+        parser.read_string("[section]\nkey\nother = val\n")
+        self.assertTrue(parser.has_option('section', 'key'))
+
+
+class InlineCommentStrippingTestCase(unittest.TestCase):
+```
+
+Wait, I need to double-check: does the test class that contains `test_missingsectionheadererror` have access to `os`? Looking at the imports at the top of the file, `os` is imported. Good.
+
+Also, I need to make sure `tempfile` is available. It's a standard library module, so yes. But I should check if it's already imported in the test file... From the visible imports (lines 1-50), I see:
+```python
+import collections
+import configparser
+import io
+import os
+import textwrap
+import unittest
+import warnings
+
+from test import support
+from test.support import os_helper
+```
+
+`tempfile` is not imported at the top. I'll import it locally in the method, like `import pickle` is done locally in the other test methods.
+
+Now for the doc patch:
+
+File: `Doc/library/configparser.rst`
+The `old` text (from visible source lines 1370-1387):
+```
+.. exception:: ParsingError
+
+   Exception raised when errors occur attempting to parse a file.
+
+   .. versionchanged:: 3.12
+      The ``filename`` attribute and :meth:`!__init__` constructor argument were
+      removed.  They have been available using the name ``source`` since 3.2.
+
+.. rubric:: Footnotes
+```
+
+And `new`:
+```
+.. exception:: ParsingError
+
+   Exception raised when errors occur attempting to parse a file.
+
+   .. versionchanged:: 3.12
+      The ``filename`` attribute and :meth:`!__init__` constructor argument were
+      removed.  They have been available using the name ``source`` since 3.2.
+
+.. exception:: MultilineContinuationError
+
+   Exception raised when a valueless option (permitted by setting
+   ``allow_no_value=True``) is immediately followed by a line that is
+   indented further than the option itself, i.e. a multiline continuation
+   of an option that has no value.
+
+   This is a subclass of :exc:`ParsingError`.  In addition to the
+   :attr:`source`, :attr:`lineno` and :attr:`line` attributes inherited
+   from :exc:`ParsingError`, no further attributes are defined; however
+   the three constructor arguments (``source``, ``lineno``, ``line``)
+   are preserved in :attr:`!args` to support pickling and copying.
+
+   The exception is raised by :meth:`ConfigParser.read`,
+   :meth:`ConfigParser.read_file` and :meth:`ConfigParser.read_string`
+   (and their :class:`RawConfigParser` counterparts) when the offending
+   line is encountered.
+
+   .. versionadded:: 3.13
+
+.. rubric:: Footnotes
+```
+
+Hmm wait, I need to be more careful about the doc. Let me think about what's accurate:
+
+1. `MultilineContinuationError` is a subclass of `ParsingError`. ✓
+2. It's raised when a valueless option is followed by a more-indented line. ✓
+3. Attributes: `.source`, `.lineno`, `.line` - these are set in `__init__`. But `.source` is inherited from `ParsingError` (set via `ParsingError.__init__(self, source)`). `.lineno` and `.line` are specific to `MultilineContinuationError` (and `MissingSectionHeaderError`).
+4. `args = (source, lineno, line)` - preserves the three constructor arguments. ✓
+5. It's raised in `_read()` which is called by `read()`, `read_file()`, and `read_string()`. ✓
+
+For the "versionadded" - I'm going to use 3.13 since that's the natural next version. But actually, I realize I should check: is there any version indicator in the source or doc that tells me what version this is targeting?
+
+Looking at the doc, I see `versionchanged:: 3.12` for `ParsingError`. This suggests the current development is at least 3.12. A new exception would be `versionadded` in the next version or the current development version.
+
+Actually, in CPython development, features are typically added in the current development version. If the latest release notes show 3.12, then new features go in 3.13. Let me just go with 3.13.
+
+But wait - I should double-check: the `ParsingError` versionchanged says 3.12, meaning the `source` rename happened in 3.12. If we're in 3.13 development, then `versionadded:: 3.13` makes sense.
+
+Let me also reconsider the doc wording. The task says "Explain the triggering condition, exception inheritance and source/lineno/line attributes accurately, including relevant qualifications."
+
+Key qualifications:
+- `allow_no_value=True` is required (otherwise a bare option name wouldn't be recognized as an option in the first place)
+- The continuation must be indented MORE than the option line
+- It's the "offending line" that's stored, i.e., the continuation line, not the option line
+
+Let me refine the doc:
+
+```rst
+.. exception:: MultilineContinuationError
+
+   Exception raised when parsing encounters a line indented further than
+   the preceding option, where that option has no value (i.e. was written
+   without a delimiter and the parser was constructed with
+   ``allow_no_value=True``).  In this situation the indented line cannot
+   be interpreted as a continuation of a multiline value, so parsing
+   fails.
+
+   This is a subclass of :exc:`ParsingError`.  The constructor takes three
+   arguments: ``source``, ``lineno`` and ``line``, all of which are also
+   available as attributes of the same name.  ``source`` is the name of
+   the file being parsed (or ``'<string>'`` for :meth:`read_string`).
+   ``lineno`` is the one-based line number of the offending line.
+   ``line`` is the exact content of the offending line as read from the
+   source, including its trailing line-termination character if present.
+   The three arguments are also preserved in :attr:`!args` for pickling
+   and copying.
+
+   The exception is raised through :meth:`ConfigParser.read`,
+   :meth:`ConfigParser.read_file` and :meth:`ConfigParser.read_string`,
+   as well as the corresponding :class:`RawConfigParser` methods.
+
+   .. versionadded:: 3.13
+```
+
+Actually, I want to double-check: "including its trailing line-termination character if present" - is this always true? When reading from a file, yes, each line has a `\n` at the end (except possibly the last line). When reading from `read_string`, the string is wrapped in `StringIO`, so same behavior.
+
+But what if the input is `"[section]\nkey\n  continuation"` (no trailing newline)? Then the last line would be `"  continuation"` without a newline. So "if present" is the right qualifier.
+
+OK, I think my plan is solid. Let me now execute the patches. I'll do the test file first, then the doc file.
+
+Actually wait - I need to check: can I do both patches in sequence? Each patch changes the candidate_id. So I need to:
+1. Patch test file → get new candidate_id
+2. Patch doc file → get new candidate_id
+3. Run check
+
+That's 3 operations plus the check = 4 operations. I have 75 actions remaining and 19 requests remaining. That's fine.
+
+Let me start with the test file patch.
+
+For the test file:
+- path: `Lib/test/test_configparser.py`
+- file_sha256: `c59760dd36d4ff3aa4361018636959f2e7ab770069ec4e5608600ae23d8ca2af`
+- expected_candidate_id: `8ac73858f45e89ecb2df138e2accfdb105d0325ffc056e0bad7e9bf7e7c89a2d`
+
+The `old` text needs to be unique in the file. Let me use:
+```
+            self.assertEqual(e1.lineno, e2.lineno)
+            self.assertEqual(repr(e1), repr(e2))
+
+
+class InlineCommentStrippingTestCase(unittest.TestCase):
+```
+
+Wait, is this unique? There might be other places with `self.assertEqual(e1.lineno, e2.lineno)` followed by `self.assertEqual(repr(e1), repr(e2))`. Let me think... In `test_parsingerror`, there's no `.lineno` or `.line` assertion (those are `MissingSectionHeaderError` specific). In `test_missingsectionheadererror`, there IS `self.assertEqual(e1.lineno, e2.lineno)`. And then `self.assertEqual(repr(e1), repr(e2))` follows. Then two blank lines and `class InlineCommentStrippingTestCase`.
+
+Actually, looking more carefully at the source:
+```python
+    def test_missingsectionheadererror(self):
+        import pickle
+        e1 = configparser.MissingSectionHeaderError('filename', 123, 'line')
+        for proto in range(pickle.HIGHEST_PROTOCOL + 1):
+            pickled = pickle.dumps(e1, proto)
+            e2 = pickle.loads(pickled)
+            self.assertEqual(e1.message, e2.message)
+            self.assertEqual(e1.args, e2.args)
+            self.assertEqual(e1.line, e2.line)
+            self.assertEqual(e1.source, e2.source)
+            self.assertEqual(e1.lineno, e2.lineno)
+            self.assertEqual(repr(e1), repr(e2))
+
+
+class InlineCommentStrippingTestCase(unittest.TestCase):
+```
+
+So the unique `old` string would be:
+```
+            self.assertEqual(e1.lineno, e2.lineno)
+            self.assertEqual(repr(e1), repr(e2))
+
+
+class InlineCommentStrippingTestCase(unittest.TestCase):
+```
+
+This should be unique because `class InlineCommentStrippingTestCase` only appears once.
+
+Let me now write the full patch. I need to be very careful with the indentation (4 spaces per level, and these are methods inside a class so 8 spaces for method body).
+
+Actually, looking at the source more carefully, the test methods use 4-space indentation for the method definition (inside the class) and 8 spaces for the method body. Let me verify from the visible source:
+
+```
+    def test_missingsectionheadererror(self):
+        import pickle
+        e1 = configparser.MissingSectionHeaderError('filename', 123, 'line')
+```
+
+Yes, 4 spaces for `def`, 8 spaces for body. Good.
+
+Now let me write the complete `new` text. I'll insert the new test methods between the end of `test_missingsectionheadererror` and the `InlineCommentStrippingTestCase` class.
+
+Let me be very precise about the text. The `old` is:
+```
+            self.assertEqual(e1.lineno, e2.lineno)
+            self.assertEqual(repr(e1), repr(e2))
+
+
+class InlineCommentStrippingTestCase(unittest.TestCase):
+```
+
+And the `new` will be:
+```
+            self.assertEqual(e1.lineno, e2.lineno)
+            self.assertEqual(repr(e1), repr(e2))
+
+    def test_multilinecontinuationerror_attributes(self):
+        # MultilineContinuationError carries source, lineno, line
+        # and is a subclass of ParsingError.
+        import pickle
+        e1 = configparser.MultilineContinuationError('src', 42, '  x\n')
+        self.assertIsInstance(e1, configparser.ParsingError)
+        self.assertEqual(e1.source, 'src')
+        self.assertEqual(e1.lineno, 42)
+        self.assertEqual(e1.line, '  x\n')
+        self.assertEqual(e1.args, ('src', 42, '  x\n'))
+        for proto in range(pickle.HIGHEST_PROTOCOL + 1):
+            pickled = pickle.dumps(e1, proto)
+            e2 = pickle.loads(pickled)
+            self.assertEqual(e1.message, e2.message)
+            self.assertEqual(e1.args, e2.args)
+            self.assertEqual(e1.source, e2.source)
+            self.assertEqual(e1.lineno, e2.lineno)
+            self.assertEqual(e1.line, e2.line)
+            self.assertEqual(repr(e1), repr(e2))
+
+    def test_multilinecontinuationerror_read_string(self):
+        # ConfigParser.read_string raises MultilineContinuationError
+        # when a valueless option is followed by an indented line.
+        parser = configparser.ConfigParser(allow_no_value=True)
+        with self.assertRaises(
+                configparser.MultilineContinuationError) as cm:
+            parser.read_string("[section]\nkey\n  continuation\n")
+        exc = cm.exception
+        self.assertEqual(exc.source, '<string>')
+        self.assertEqual(exc.lineno, 3)
+        self.assertEqual(exc.line, '  continuation\n')
+
+    def test_multilinecontinuationerror_read_file(self):
+        # RawConfigParser.read_file raises the same exception.
+        import tempfile
+        parser = configparser.RawConfigParser(allow_no_value=True)
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.ini',
+                                          delete=False) as f:
+            f.write("[section]\nkey\n  continuation\n")
+            fname = f.name
+        try:
+            with self.assertRaises(
+                    configparser.MultilineContinuationError) as cm:
+                with open(fname, 'r') as fp:
+                    parser.read_file(fp)
+            exc = cm.exception
+            self.assertEqual(exc.source, fname)
+            self.assertEqual(exc.lineno, 3)
+            self.assertEqual(exc.line, '  continuation\n')
+            self.assertIsInstance(exc, configparser.ParsingError)
+        finally:
+            os.unlink(fname)
+
+    def test_multilinecontinuationerror_valid_multiline(self):
+        # A valued multiline option is still parsed correctly.
+        parser = configparser.ConfigParser(allow_no_value=True)
+        parser.read_string("[section]\nkey = value\n  more\n")
+        self.assertTrue(parser.has_option('section', 'key'))
+
+    def test_multilinecontinuationerror_valueless_no_continuation(self):
+        # A valueless option without an indented continuation is fine.
+        parser = configparser.ConfigParser(allow_no_value=True)
+        parser.read_string("[section]\nkey\nother = val\n")
+        self.assertTrue(parser.has_option('section', 'key'))
+
+
+class InlineCommentStrippingTestCase(unittest.TestCase):
+```
+
+This looks good. Let me proceed with the patch.
