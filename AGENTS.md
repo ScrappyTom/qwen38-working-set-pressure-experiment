@@ -1,3 +1,14 @@
+# Exception-transport acquisition stop
+
+Read exception_transport/review/RESULTS.md and the complete transcript/host audits.
+The47ad07d7 attempt drained normally after13requests/18operations, with no edits,
+checks or submission. Preserve the adaptive stop and11.132model-minute cost.
+All17 nonterminal receipts arrive. Repeated searches follow omitted match locations;
+recent query/handles are not their result. The account also dropped a useful location.
+Qualify search_continuity's bounded exact projection before continuation. A repeated
+still-visible header and account-only turns are separate findings, not proven fixed.
+Keep the consumed13/18 and remaining11/54; no allowance reset or live coaching.
+
 # Qualified exception-transport regression
 
 exception_transport/PREPARATION_REVIEW.md qualifies the distinct historicalfbfc4f7a
