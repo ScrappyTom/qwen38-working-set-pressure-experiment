@@ -1,3 +1,14 @@
+# Qualified distinct saved-library entry
+
+saved_library_entry/PREPARATION_REVIEW.md qualifies the historical8ac73858 entry,
+not the newly completed original-source backport. Preserve32 historical actions and
+five source versions, with new contribution counters0/0 and32requests/96operations.
+The old check has no new full observation and is not current-check authority under
+the adapted definition. Actual failure feedback supplies3 versus4 before the scripted
+correction; reference proposals remain outside model input. Four entry checks and
+17 scripted operations/two checks establish feasibility, not autonomous selection.
+Run uncoached under standing authority, preserving chronology presentation snapshots.
+
 # Qualified optional recovery chronology
 
 recovery_chronology/RESULTS.md qualifies the priority-preserving opt-in successor.
