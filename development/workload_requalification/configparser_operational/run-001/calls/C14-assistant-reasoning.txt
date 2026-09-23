@@ -1,0 +1,192 @@
+Let me analyze the situation. I need to:
+
+1. Backport a MultilineContinuationError to the configparser module
+2. The bug: when `allow_no_value=True`, a valueless option followed by a continuation line causes an AttributeError (because `cursect[optname]` is `None`, and calling `.append()` on `None` fails)
+3. Fix: Add `MultilineContinuationError(ParsingError)` with `source`, `lineno`, `line` attributes
+4. Check in `_read` before `.append()` to detect this case
+5. Add to `__all__`, test file, and Doc
+6. Keep existing tests intact
+7. Added regressions must pass with the repaired module and expose the problem with the original module
+
+Let me look at the specific bug in `_read`:
+
+```python
+if (cursect is not None and optname and
+    cur_indent_level > indent_level):
+    cursect[optname].append(value)
+```
+
+When `allow_no_value=True` and we have a valueless option, `cursect[optname]` is set to `None`. Then if a continuation line follows, `cursect[optname].append(value)` would fail because `None` has no `.append()` method.
+
+The fix should:
+1. Check if `cursect[optname]` is `None` before calling `.append()`
+2. If it is `None`, raise `MultilineContinuationError` with `source`, `lineno`, `line` attributes
+
+Let me plan the changes:
+
+**In `Lib/configparser.py`:**
+
+1. Add `MultilineContinuationError` class after `MissingSectionHeaderError`:
+```python
+class MultilineContinuationError(ParsingError):
+    """Raised when a continuation line follows a valueless option."""
+
+    def __init__(self, source, lineno, line):
+        super().__init__(
+            f'{source!r}: line {lineno}: '
+            f'continuation line {line!r} is invalid for a valueless option')
+        self.source = source
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+```
+
+Wait, let me think about the message. Looking at the pattern of other exceptions:
+- `MissingSectionHeaderError`: 'File contains no section headers.\nfile: %r, line: %d\n%r'
+- `ParsingError.append`: '\n\t[line %2d]: %s'
+
+The task says "give a useful message". Let me look at what makes sense. The error should identify that a continuation line was found for a valueless option.
+
+2. Add `"MultilineContinuationError"` to `__all__`
+
+3. In `_read`, change the continuation check:
+```python
+if (cursect is not None and optname and
+    cur_indent_level > indent_level):
+    if cursect[optname] is None:
+        raise MultilineContinuationError(fpname, lineno, line)
+    cursect[optname].append(value)
+```
+
+Wait, but I need to be careful. The `line` here - what exactly should it be? Let me look at the context. In the `_read` method, `line` is the raw line from the file, and `value` is the stripped version. Looking at `MissingSectionHeaderError`, it uses `line` (the raw line). Let me use `line` to be consistent.
+
+Actually wait, let me re-read the task: "The exception should identify the supplied source, one-based line number and exact offending line through source, lineno and line attributes"
+
+So the attributes are `source`, `lineno`, and `line`. Let me look at what `line` means in context - it's the raw line from the file (the continuation line that's offending).
+
+Now let me also think about the message. Let me make it clear:
+```
+"Source contains parsing errors: {source!r}"  # from ParsingError.__init__
+```
+
+Actually wait, `ParsingError.__init__` sets the message to `f'Source contains parsing errors: {source!r}'` and then `append` adds more. But for `MultilineContinuationError`, it's a single specific error, not a collection. Let me look at `MissingSectionHeaderError` for the pattern:
+
+```python
+class MissingSectionHeaderError(ParsingError):
+    def __init__(self, filename, lineno, line):
+        Error.__init__(
+            self,
+            'File contains no section headers.\nfile: %r, line: %d\n%r' %
+            (filename, lineno, line))
+        self.source = filename
+        self.lineno = lineno
+        self.line = line
+        self.args = (filename, lineno, line)
+```
+
+So it bypasses `ParsingError.__init__` and calls `Error.__init__` directly. Let me follow the same pattern:
+
+```python
+class MultilineContinuationError(ParsingError):
+    """Raised when a continuation line follows a valueless option.
+
+    This can only occur when `allow_no_value` is True, in which case a
+    valueless option is stored as `None` rather than a list of lines,
+    making continuation lines impossible.
+    """
+
+    def __init__(self, source, lineno, line):
+        Error.__init__(
+            self,
+            'Continuation line is not allowed for a valueless option: '
+            'source: %r, line: %d, offending line: %r' % (source, lineno, line))
+        self.source = source
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+```
+
+Hmm, let me reconsider the message. Let me make it more specific and useful. The key info:
+- It's a continuation line (indented line after an option)
+- The option has no value (valueless, allow_no_value=True)
+- The source, line number, and the offending line
+
+Let me go with:
+```
+'Continuation line is invalid for a valueless option. '
+'source: %r, line number: %d, offending line: %r'
+```
+
+Actually, let me look at what the CPython upstream fix uses. I don't have access to that, but let me think about what's most natural. The task says "give a useful message." Let me keep it descriptive:
+
+```python
+class MultilineContinuationError(ParsingError):
+    """Raised when a multiline continuation is found for a valueless option.
+
+    This occurs when `allow_no_value` is True and an indented continuation
+    line follows an option that has no value.
+    """
+
+    def __init__(self, source, lineno, line):
+        Error.__init__(
+            self,
+            f'Continuation line for valueless option is not supported. '
+            f'source: {source!r}, line: {lineno}, offending line: {line!r}')
+        self.source = source
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+```
+
+Now for the `_read` method change, the current code at the continuation check is:
+
+```python
+                # continuation line?
+                first_nonspace = self.NONSPACECRE.search(line)
+                cur_indent_level = first_nonspace.start() if first_nonspace else 0
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    cursect[optname].append(value)
+```
+
+I need to add a check before `.append()`:
+
+```python
+                # continuation line?
+                first_nonspace = self.NONSPACECRE.search(line)
+                cur_indent_level = first_nonspace.start() if first_nonspace else 0
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    if cursect[optname] is None:
+                        raise MultilineContinuationError(fpname, lineno, line)
+                    cursect[optname].append(value)
+```
+
+Now for the test file, I need to add regression tests. Let me think about what tests to add:
+
+1. Test that `read_string` with `allow_no_value=True` and a valueless option followed by continuation raises `MultilineContinuationError`
+2. Test the same via `read_file`
+3. Test the same via `read` (file read)
+4. Test that the exception has correct `source`, `lineno`, `line` attributes
+5. Test that `ConfigParser` also raises it (not just `RawConfigParser`)
+6. Test that the exception is a `ParsingError`
+7. Test that the exception is picklable/copyable
+
+Let me now read the rest of the test file to understand the structure better before writing tests.
+
+Actually, I have the first 100 lines of the test file. Let me read more to understand the test structure, particularly how they test errors and how the test classes are organized.
+
+Let me also check the Doc directory to understand what documentation needs updating.
+
+Let me first read more of the test file to see the structure, and then the Doc.
+
+Actually, let me plan my approach:
+1. Read more of the test file (to see where to add tests and understand patterns)
+2. Read the Doc file
+3. Make the library change
+4. Make the test changes
+5. Make the doc changes
+6. Run the check
+7. Submit
+
+Let me start by reading more of the test file and the doc.

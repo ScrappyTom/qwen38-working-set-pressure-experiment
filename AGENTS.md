@@ -1,5 +1,15 @@
 # Experiment operating rules
 
+The original configparser operational attempt at6b9da26a is closed at40requests/
+60operations without a pass. Read configparser_operational/review: recovery delivered
+usable excerpts and saved work, but the final edit regressed exact raw-line behavior.
+The diagnostic adapter showed only1of3 failures, inspection2of3, then standing
+verification reverted to1; raw custody is not usable diagnostic access. Preserve
+the attempt and qualify diagnostic_continuity/PLAN.md before another exposure.
+The scope includes measured apparatus I/O overhead, without weakening hash checks.
+Model-authored expectations, independent contract observations and task requirements
+remain distinct. Neither an accepted edit nor an account establishes correctness.
+
 The original configparser entry is prospectively qualified in
 development/workload_requalification/configparser_operational. Its eight CPU tests
 and native rehearsal preserve the original acceptance and empty entry; reference

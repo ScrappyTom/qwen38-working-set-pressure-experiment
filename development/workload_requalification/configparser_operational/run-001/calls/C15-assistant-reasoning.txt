@@ -1,0 +1,150 @@
+Let me analyze the current state:
+
+1. I have the full `Lib/configparser.py` source visible (1333 lines)
+2. I have the first 274 lines of `Lib/test/test_configparser.py` visible (2142 total lines)
+3. I need to:
+   - Add `MultilineContinuationError` class to configparser.py
+   - Add it to `__all__`
+   - Modify `_read` to raise it instead of the AttributeError
+   - Add regression tests to the test file
+   - Update documentation
+
+Let me plan the changes:
+
+**In configparser.py:**
+1. Add `MultilineContinuationError` to `__all__`
+2. Add the `MultilineContinuationError` class (deriving from `ParsingError`)
+3. In the `_read` method, where continuation lines are handled, check if `cursect[optname]` is `None` before calling `.append(value)` and raise the new error
+
+The bug: when `allow_no_value=True`, a valueless option sets `cursect[optname] = None`. If a continuation line follows, the code does `cursect[optname].append(value)` which calls `None.append(value)` → AttributeError.
+
+The fix: before `cursect[optname].append(value)`, check if `cursect[optname]` is `None` and raise `MultilineContinuationError`.
+
+**MultilineContinuationError class:**
+- Derives from `ParsingError`
+- Has `source`, `lineno`, `line` attributes
+- Constructor preserves those three arguments for pickling
+- Gives a useful message
+
+Let me look at how `MissingSectionHeaderError` is structured as a model:
+```python
+class MissingSectionHeaderError(ParsingError):
+    """Raised when a key-value pair is found before any section header."""
+
+    def __init__(self, filename, lineno, line):
+        Error.__init__(
+            self,
+            'File contains no section headers.\nfile: %r, line: %d\n%r' %
+            (filename, lineno, line))
+        self.source = filename
+        self.lineno = lineno
+        self.line = line
+        self.args = (filename, lineno, line)
+```
+
+So `MultilineContinuationError` should be similar:
+```python
+class MultilineContinuationError(ParsingError):
+    """Raised when a multiline continuation line is found after a valueless option."""
+
+    def __init__(self, source, lineno, line):
+        Error.__init__(
+            self,
+            f"Multiline continuation found for valueless option at line {lineno} in source {source!r}\n{line!r}")
+        self.source = source
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+```
+
+Wait, let me think about the message. It should be useful. Let me look at what CPython upstream actually did for this. The CPython fix (gh-105735) added:
+
+```python
+class MultilineContinuationError(ParsingError):
+    """Raised when a continuation line is found for a valueless option."""
+
+    def __init__(self, source, lineno, line):
+        Error.__init__(
+            self,
+            f"Continuation line found for valueless option at line {lineno} in source {source!r}.\n{line!r}")
+        self.source = source
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+```
+
+Actually let me think about what makes sense. The error should identify:
+- The supplied source
+- One-based line number
+- Exact offending line
+
+Let me write a reasonable message. Looking at the pattern of other errors in this file, I'll use:
+
+```python
+class MultilineContinuationError(ParsingError):
+    """Raised when a multiline continuation line is found for a valueless option.
+
+    This can only happen when `allow_no_value` is True.
+    """
+
+    def __init__(self, source, lineno, line):
+        Error.__init__(
+            self,
+            'Multiline continuation for valueless option. '
+            f'source: {source!r}, line: {lineno}, offending line: {line!r}')
+        self.source = source
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+```
+
+Now for the `_read` method, the continuation handling code is:
+```python
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    cursect[optname].append(value)
+```
+
+I need to add a check:
+```python
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    if cursect[optname] is None:
+                        raise MultilineContinuationError(fpname, lineno, line)
+                    cursect[optname].append(value)
+```
+
+Now let me plan the edits:
+
+1. **Add to `__all__`**: Add `"MultilineContinuationError"` to the tuple
+2. **Add class**: After `MissingSectionHeaderError`
+3. **Modify `_read`**: Add the check before `.append()`
+4. **Test file**: Add regression tests
+5. **Documentation**: Update Doc
+
+Let me start with the configparser.py edits. I'll use patch for each change.
+
+For `__all__`, current text is:
+```python
+__all__ = ("NoSectionError", "DuplicateOptionError", "DuplicateSectionError",
+           "NoOptionError", "InterpolationError", "InterpolationDepthError",
+           "InterpolationMissingOptionError", "InterpolationSyntaxError",
+           "ParsingError", "MissingSectionHeaderError",
+           "ConfigParser", "RawConfigParser",
+           "Interpolation", "BasicInterpolation",  "ExtendedInterpolation",
+           "LegacyInterpolation", "SectionProxy", "ConverterMapping",
+           "DEFAULTSECT", "MAX_INTERPOLATION_DEPTH")
+```
+
+I need to add `"MultilineContinuationError"` after `"MissingSectionHeaderError"`.
+
+For the class, I'll add it after the `MissingSectionHeaderError` class.
+
+For `_read`, I need to find the continuation check.
+
+Let me start making the edits. First, let me do the `__all__` patch.
+
+Current candidate: f32256765ff11d4a353900e33ec9b503255cd4718ea344f77e17311a84391170
+File sha for configparser.py: 8d822edd41d1085e0c697f1926f3f98e5c7889b4072361ae88726464b37f6460
+
+Let me make the first edit to `__all__`:

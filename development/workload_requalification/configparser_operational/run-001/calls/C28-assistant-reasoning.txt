@@ -1,0 +1,391 @@
+Let me understand the current state:
+
+1. Task: Backport MultilineContinuationError to configparser (Python 3.12)
+2. Library change is DONE - class added, __all__ updated, _read raises it for None values
+3. REMAINING:
+   - Add regression tests to test_configparser.py
+   - Update documentation
+   - Run check + submit
+
+Let me look at what I have:
+- Candidate: 234c487ff45f9fcf0c2c4f3a194ff0c11693e1f6a4b6f4d69d386c5809aa3edd
+- Lib/configparser.py: sha 1174577520b5840450e2c6ca9956fa67feb4257402f25f49712bbd337284619c, 1351 lines
+- Lib/test/test_configparser.py: sha c59760dd36d4ff3aa4361018636959f2e7ab770069ec4e5608600ae23d8ca2af, 2142 lines
+
+I can see the end of test_configparser.py (lines 2085-2142). The file ends with:
+- MiscTestCase class with test__all__
+- `if __name__ == '__main__':` and `unittest.main()`
+
+I need to:
+1. Add regression tests for MultilineContinuationError
+2. Update documentation (Doc/ directory)
+3. Run check
+4. Submit
+
+Let me first add the regression tests. I need to add them before the MiscTestCase or at an appropriate location in the test file. Let me think about what tests to add:
+
+The tests should verify:
+- MultilineContinuationError is raised when allow_no_value=True and a continuation line follows a valueless option
+- The exception has source, lineno, and line attributes
+- The exception is derived from ParsingError
+- It works through read(), read_file(), and read_string()
+- It works for both ConfigParser and RawConfigParser
+- Valid multiline values still work
+- Valueless options without continuations still work
+
+Let me add tests. I'll add a new test class before MiscTestCase. Let me craft the patch.
+
+Looking at the end of the file, I see:
+```python
+class MiscTestCase(unittest.TestCase):
+    def test__all__(self):
+        support.check__all__(self, configparser, not_exported={"Error"})
+
+
+if __name__ == '__main__':
+    unittest.main()
+```
+
+I'll add the new test class before MiscTestCase. Let me craft the old text and new text for the patch.
+
+Actually, let me think about what the MultilineContinuationError looks like in the library. Based on the account, it was added. Let me check what I know:
+- Class MultilineContinuationError derived from ParsingError
+- Has source, lineno, line attributes
+- Constructor preserves those three arguments for pickling/copying
+- Useful message
+
+The error is raised when allow_no_value=True and a valueless option is followed by a continuation line (a line starting with whitespace followed by more text).
+
+Let me write the tests. I'll add them as a new test class. Let me insert before `class MiscTestCase`:
+
+```python
+class MultilineContinuationErrorTests(unittest.TestCase):
+    """Tests for MultilineContinuationError when allow_no_value=True."""
+
+    INPUT = "[service]\noptional_flag\n    continuation\n"
+
+    def _make_parser(self, **kwargs):
+        kwargs.setdefault('allow_no_value', True)
+        return configparser.ConfigParser(**kwargs)
+
+    def _make_raw_parser(self, **kwargs):
+        kwargs.setdefault('allow_no_value', True)
+        return configparser.RawConfigParser(**kwargs)
+
+    def test_error_raised_read_string(self):
+        parser = self._make_parser()
+        with self.assertRaises(configparser.MultilineContinuationError) as cm:
+            parser.read_string(self.INPUT)
+        self.assertIn('service', str(cm.exception))
+        self.assertEqual(cm.exception.line, '    continuation')
+        self.assertEqual(cm.exception.lineno, 3)
+
+    def test_error_raised_read_string_raw(self):
+        parser = self._make_raw_parser()
+        with self.assertRaises(configparser.MultilineContinuationError):
+            parser.read_string(self.INPUT)
+
+    def test_error_attributes(self):
+        parser = self._make_parser()
+        with self.assertRaises(configparser.MultilineContinuationError) as cm:
+            parser.read_string(self.INPUT)
+        exc = cm.exception
+        self.assertEqual(exc.lineno, 3)
+        self.assertEqual(exc.line, '    continuation')
+        self.assertIsInstance(exc, configparser.ParsingError)
+
+    def test_error_is_parsing_error(self):
+        self.assertTrue(issubclass(configparser.MultilineContinuationError,
+                                    configparser.ParsingError))
+
+    def test_valid_multiline_still_works(self):
+        parser = self._make_parser()
+        text = "[sec]\nkey = first line\n    second line\n"
+        parser.read_string(text)
+        self.assertEqual(parser.get('sec', 'key'), 'first line second line')
+
+    def test_valueless_option_without_continuation(self):
+        parser = self._make_parser()
+        text = "[sec]\nflag\n"
+        parser.read_string(text)
+        self.assertIsNone(parser.get('sec', 'flag', raw=True))
+```
+
+Wait, I need to be careful. The `line` attribute should be the exact offending line. The input is:
+```
+[service]
+optional_flag
+    continuation
+```
+
+So line 1: `[service]`
+Line 2: `optional_flag`
+Line 3: `    continuation`
+
+The lineno should be 3 (one-based line number of the continuation line).
+
+Now for the `source` attribute - what does it contain? Based on the task: "identify the supplied source, one-based line number and exact offending line through source, lineno and line attributes". So `source` is the name/source of where the input came from. When using read_string, it might be empty or some identifier. Let me not be too specific about the source attribute value since it might vary.
+
+Actually, let me be more careful. The task says "identify the supplied source". For read_string, the source might be something like an empty string or the string itself. Let me just check that the attributes exist and have reasonable types, without being too specific about source.
+
+Actually wait - I should look at what the library change actually did. Let me read the relevant part of configparser.py to see the exact exception class definition. But I'm in a capacity-limited state. Let me check what I have selected.
+
+From the retained inventory:
+- Lib/configparser.py lines 1-1351 (whole file) - selected but not shown in full
+- Lib/test/test_configparser.py lines 1-371 - selected but not shown
+- Lib/test/test_configparser.py lines 2085-2142 - selected and shown in full
+
+I can see the end of the test file. Let me just add the tests there. I'll insert before MiscTestCase.
+
+Let me use the patch operation. The old text needs to be unique. Let me use:
+
+```
+class MiscTestCase(unittest.TestCase):
+```
+
+That should be unique in the file. I'll replace it with the new test class followed by MiscTestCase.
+
+Actually, I need to be more careful. Let me think about what the `source` attribute actually contains. For `read_string`, it's probably an empty string or maybe "read_string". Let me just assert it's a string and move on.
+
+Wait, I should also check - does `read_file` work differently? For file-based reads, source would be the filename. For `read_string`, it might be empty or None. Let me be conservative and just check `lineno` and `line` attributes precisely, and just check `source` exists.
+
+Let me also think about pickling/copying. The task says "preserve those three constructor arguments for copying/pickling". So the constructor takes (source, lineno, line) and the attributes are stored as instance attributes. Let me test that.
+
+Let me write the patch:
+
+old:
+```
+class MiscTestCase(unittest.TestCase):
+    def test__all__(self):
+        support.check__all__(self, configparser, not_exported={"Error"})
+```
+
+new:
+```
+class MultilineContinuationErrorTests(unittest.TestCase):
+    """Tests for MultilineContinuationError raised on continuation after valueless option."""
+
+    INPUT = "[service]\noptional_flag\n    continuation\n"
+
+    def _make_parser(self, **kwargs):
+        kwargs.setdefault('allow_no_value', True)
+        return configparser.ConfigParser(**kwargs)
+
+    def _make_raw_parser(self, **kwargs):
+        kwargs.setdefault('allow_no_value', True)
+        return configparser.RawConfigParser(**kwargs)
+
+    def test_error_raised_read_string(self):
+        parser = self._make_parser()
+        with self.assertRaises(configparser.MultilineContinuationError) as cm:
+            parser.read_string(self.INPUT)
+        exc = cm.exception
+        self.assertEqual(exc.lineno, 3)
+        self.assertEqual(exc.line, '    continuation')
+
+    def test_error_raised_read_string_raw(self):
+        parser = self._make_raw_parser()
+        with self.assertRaises(configparser.MultilineContinuationError):
+            parser.read_string(self.INPUT)
+
+    def test_error_is_parsing_error_subclass(self):
+        self.assertTrue(issubclass(configparser.MultilineContinuationError,
+                                    configparser.ParsingError))
+
+    def test_error_attributes(self):
+        parser = self._make_parser()
+        with self.assertRaises(configparser.MultilineContinuationError) as cm:
+            parser.read_string(self.INPUT)
+        exc = cm.exception
+        self.assertEqual(exc.lineno, 3)
+        self.assertEqual(exc.line, '    continuation')
+        # source should be a string
+        self.assertIsInstance(exc.source, str)
+
+    def test_error_pickling(self):
+        import copyreg
+        parser = self._make_parser()
+        with self.assertRaises(configparser.MultilineContinuationError) as cm:
+            parser.read_string(self.INPUT)
+        exc = cm.exception
+        pickled = __import__('pickle').dumps(exc)
+        unpickled = __import__('pickle').loads(pickled)
+        self.assertEqual(unpickled.lineno, exc.lineno)
+        self.assertEqual(unpickled.line, exc.line)
+        self.assertEqual(unpickled.source, exc.source)
+
+    def test_valid_multiline_still_works(self):
+        parser = self._make_parser()
+        text = "[sec]\nkey = first line\n    second line\n"
+        parser.read_string(text)
+        self.assertEqual(parser.get('sec', 'key'), 'first line second line')
+
+    def test_valueless_option_without_continuation(self):
+        parser = self._make_parser()
+        text = "[sec]\nflag\n"
+        parser.read_string(text)
+        self.assertIsNone(parser.get('sec', 'flag', raw=True))
+
+    def test_read_file(self):
+        parser = self._make_parser()
+        import tempfile
+        with tempfile.NamedTemporaryFile('w', suffix='.ini', delete=False) as f:
+            f.write(self.INPUT)
+            fname = f.name
+        try:
+            with self.assertRaises(configparser.MultilineContinuationError):
+                parser.read(fname)
+        finally:
+            os.unlink(fname)
+
+
+class MiscTestCase(unittest.TestCase):
+    def test__all__(self):
+        support.check__all__(self, configparser, not_exported={"Error"})
+```
+
+Wait, I need to be careful about the `source` attribute. What does the library actually set it to? Let me think...
+
+For `read_string`, the source is typically the string itself or an empty string. Actually, looking at the CPython source, when you use `read_string`, the source parameter passed to `_read` is typically the string content itself or empty. Let me not be too specific.
+
+Actually, I realize I should check what the actual implementation looks like. Let me read the relevant part of configparser.py to see the MultilineContinuationError class and where it's raised. But I'm in a capacity-limited state and I only have limited visibility.
+
+Let me just be conservative in my tests - check lineno and line precisely (those are clearly defined by the task), and just check that source is a string attribute. For pickling, I'll just test that it can be pickled and the attributes survive.
+
+Actually, let me reconsider. The task says "identify the supplied source, one-based line number and exact offending line through source, lineno and line attributes". So:
+- source: the supplied source (for read_string, it might be the string itself or empty)
+- lineno: one-based line number
+- line: exact offending line
+
+For `read_string`, the "supplied source" is... hmm. In CPython's implementation, `read_string` calls `_read` with the filename parameter being the string content or an empty string. Let me just check that `source` is a string and not assert its exact value.
+
+Wait, actually for `read_file`, the source would be the filename. For `read_string`, it might be empty or the content. Let me just assert it's a string.
+
+Let me also think about whether `raw=True` is the right way to get None for valueless options. Actually, for valueless options with `allow_no_value=True`, the value stored is `None`. To retrieve it, I think you need `parser.get('sec', 'flag', raw=True)` or maybe just `parser['sec']['flag']`. Actually, I'm not sure `get` works with `raw=True` for None values. Let me use `parser['sec']['flag']` instead, or just check `has_option`.
+
+Actually, let me simplify. For the valueless option test, I'll just check that `has_option` returns True and the value is None when accessed directly.
+
+Hmm, but `parser.get()` might not work well with None values. Let me just check `has_option` returns True and move on. Or I can access the internal dict.
+
+Let me simplify the tests to be robust:
+
+```python
+class MultilineContinuationErrorTests(unittest.TestCase):
+    """Tests for MultilineContinuationError."""
+
+    INPUT = "[service]\noptional_flag\n    continuation\n"
+
+    def test_error_raised_read_string(self):
+        parser = configparser.ConfigParser(allow_no_value=True)
+        with self.assertRaises(configparser.MultilineContinuationError) as cm:
+            parser.read_string(self.INPUT)
+        self.assertEqual(cm.exception.lineno, 3)
+        self.assertEqual(cm.exception.line, '    continuation')
+
+    def test_error_raised_raw(self):
+        parser = configparser.RawConfigParser(allow_no_value=True)
+        with self.assertRaises(configparser.MultilineContinuationError):
+            parser.read_string(self.INPUT)
+
+    def test_error_is_parsing_error(self):
+        self.assertTrue(issubclass(
+            configparser.MultilineContinuationError,
+            configparser.ParsingError))
+
+    def test_error_has_source_attribute(self):
+        parser = configparser.ConfigParser(allow_no_value=True)
+        with self.assertRaises(configparser.MultilineContinuationError) as cm:
+            parser.read_string(self.INPUT)
+        self.assertIsInstance(cm.exception.source, str)
+
+    def test_valid_multiline_value_still_works(self):
+        parser = configparser.ConfigParser(allow_no_value=True)
+        text = "[sec]\nkey = first line\n    second line\n"
+        parser.read_string(text)
+        self.assertEqual(parser.get('sec', 'key'), 'first line second line')
+
+    def test_valueless_option_no_continuation(self):
+        parser = configparser.ConfigParser(allow_no_value=True)
+        parser.read_string("[sec]\nflag\n")
+        self.assertTrue(parser.has_option('sec', 'flag'))
+
+    def test_read_file_raises(self):
+        parser = configparser.ConfigParser(allow_no_value=True)
+        import tempfile
+        fd, fname = tempfile.mkstemp(suffix='.ini')
+        try:
+            with os.fdopen(fd, 'w') as f:
+                f.write(self.INPUT)
+            with self.assertRaises(configparser.MultilineContinuationError):
+                parser.read(fname)
+        finally:
+            os.unlink(fname)
+```
+
+This looks good. Let me now write the patch. The old text needs to be exactly as it appears in the file and be unique.
+
+Looking at the visible source (lines 2085-2142), I can see:
+```python
+class MiscTestCase(unittest.TestCase):
+    def test__all__(self):
+        support.check__all__(self, configparser, not_exported={"Error"})
+
+
+if __name__ == '__main__':
+    unittest.main()
+```
+
+This is at the end of the file. Let me use `class MiscTestCase(unittest.TestCase):` as part of my old text to ensure uniqueness.
+
+Actually, I need to be very precise. Let me use:
+
+old:
+```
+class MiscTestCase(unittest.TestCase):
+    def test__all__(self):
+        support.check__all__(self, configparser, not_exported={"Error"})
+```
+
+This should be unique. Let me replace it with the new test class plus MiscTestCase.
+
+Now, I also need to handle the documentation. The task says "update the reference documentation to explain the behavior and new exception." I need to find the documentation file. It's probably in Doc/ somewhere. Let me check what files exist.
+
+But wait - I have limited requests (13 remaining, and I need to: add tests (1 patch), add doc (1 patch), run check (1), possibly fix issues (several), and submit (1). Let me be efficient.
+
+Let me first add the tests, then figure out the doc.
+
+Actually, let me think about the `source` attribute more carefully. When you call `read_string(data)`, internally it likely calls `_read(data, fp_name)` where `fp_name` might be empty string or the data itself. Let me look at what makes sense.
+
+In CPython 3.12, `read_string` does:
+```python
+def read_string(self, string, source='<string>'):
+    ...
+    self._read(source, file_wrapper)
+```
+
+So the source would be `'<string>'` by default. But the MultilineContinuationError is raised inside `_read`, so the `source` parameter passed to `_read` would be what gets stored.
+
+Actually, I realize I should just check what the actual implementation does. But I'm capacity-limited. Let me just assert that `source` is a string and move on. The tests should be robust enough.
+
+Wait, actually there's a subtlety. Let me re-read the task: "identify the supplied source, one-based line number and exact offending line through source, lineno and line attributes". So `source` identifies where the input came from. For `read_string`, it's `'<string>'` by default. For `read_file`, it's the filename.
+
+Let me adjust my test to check that `source` is a string (I won't check its exact value to be safe).
+
+OK let me just go with my test plan. Let me write the patch now.
+
+One more thought: I should make sure the `os` module is already imported in the test file. Looking at the visible source (lines 1-40 of test_configparser.py), I can see:
+```python
+import collections
+import configparser
+import io
+import os
+import textwrap
+import unittest
+import warnings
+```
+
+Yes, `os` is already imported. Good.
+
+Now for the doc update, I need to find the doc file. It's probably `Doc/library/configparser.rst` or similar. Let me handle that after the test patch.
+
+Let me write the test patch now.

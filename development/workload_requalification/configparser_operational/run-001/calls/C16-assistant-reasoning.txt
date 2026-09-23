@@ -1,0 +1,159 @@
+Let me analyze the current state:
+
+1. **Task**: Backport a MultilineContinuationError to configparser. The bug: when `allow_no_value=True`, a valueless option followed by a continuation line causes an `AttributeError` (because `cursect[optname]` is `None`, and `.append()` fails on `None`).
+
+2. **What's been done so far** (from recent_activity):
+   - Tree listing of Lib/test
+   - Account recorded
+   - Read test file lines 1-100
+   - Account recorded
+   - Read test file lines 100-300
+   - Patch: Added `"MultilineContinuationError"` to `__all__` in Lib/configparser.py (accepted, candidate now `031dc6a4...`)
+
+3. **Current state**:
+   - `Lib/configparser.py` is fully visible (1334 lines) with the `__all__` entry added
+   - `Lib/test/test_configparser.py` is partially visible (lines 1-274 of 2142)
+   - The `MultilineContinuationError` class still needs to be **defined** in the source (only added to `__all__`)
+   - The actual error-raising logic in `_read` still needs to be added
+   - Tests need to be added
+   - Documentation needs to be updated
+
+4. **What I need to do**:
+   - Define `MultilineContinuationError(ParsingError)` class with `source`, `lineno`, `line` attributes
+   - Add the check in `_read` method: when `allow_no_value=True` and `cursect[optname] is None` and a continuation line is encountered, raise `MultilineContinuationError`
+   - Add regression tests to the test file
+   - Update documentation (Doc/)
+
+Let me look at the current state of the configparser source more carefully:
+
+The `_read` method has this continuation logic:
+```python
+                # continuation line?
+                first_nonspace = self.NONSPACECRE.search(line)
+                cur_indent_level = first_nonspace.start() if first_nonspace else 0
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    cursect[optname].append(value)
+```
+
+The bug: when `allow_no_value=True` and an option has no value (e.g., just `optional_flag` with no `=` or `:`), `cursect[optname]` is set to `None`. Then if the next line is indented (a continuation), `cursect[optname].append(value)` calls `None.append(value)` which raises `AttributeError`.
+
+The fix should be: before calling `.append()`, check if `cursect[optname]` is `None`, and if so, raise `MultilineContinuationError`.
+
+Now let me plan the `MultilineContinuationError` class:
+```python
+class MultilineContinuationError(ParsingError):
+    """Raised when a continuation line follows a valueless option."""
+
+    def __init__(self, source, lineno, line):
+        Error.__init__(
+            self,
+            'Continuation line found for a valueless option.\nfile: %r, line: %d\n%r' %
+            (source, lineno, line))
+        self.source = source
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+```
+
+This follows the pattern of `MissingSectionHeaderError` which also has `source`, `lineno`, `line` attributes and derives from `ParsingError`.
+
+For the `_read` method fix, I need to change:
+```python
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    cursect[optname].append(value)
+```
+to:
+```python
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    if cursect[optname] is None:
+                        raise MultilineContinuationError(fpname, lineno, line)
+                    cursect[optname].append(value)
+```
+
+Wait, let me re-read the task requirements:
+- "Reject this unsupported continuation with a public MultilineContinuationError derived from ParsingError."
+- "The exception should identify the supplied source, one-based line number and exact offending line through source, lineno and line attributes"
+- "preserve those three constructor arguments for copying/pickling"
+- "give a useful message"
+- "Make the behavior consistent through read(), read_file() and read_string(), for ConfigParser and RawConfigParser."
+
+Since `read()`, `read_file()`, and `read_string()` all call `_read()`, and `ConfigParser` inherits from `RawConfigParser`, the fix in `_read` and the class definition covers all cases.
+
+Now let me figure out what I need to do next. I have the full configparser.py visible. I need to:
+
+1. Add the `MultilineContinuationError` class definition (after `MissingSectionHeaderError`)
+2. Add the check in `_read` method
+3. Read more of the test file to find where to add tests
+4. Add tests
+5. Update documentation
+
+Let me start with the class definition. I'll use patch to add it after the `MissingSectionHeaderError` class.
+
+Looking at the source, `MissingSectionHeaderError` ends around line 213 (the `self.args = (filename, lineno, line)` line), followed by:
+```python
+# Used in parser getters to indicate the default behaviour when a specific
+# option is not found it to raise an exception. Created to enable `None` as
+# a valid fallback value.
+_UNSET = object()
+```
+
+Let me find the exact text to anchor my patch. The `MissingSectionHeaderError` class:
+
+```python
+class MissingSectionHeaderError(ParsingError):
+    """Raised when a key-value pair is found before any section header."""
+
+    def __init__(self, filename, lineno, line):
+        Error.__init__(
+            self,
+            'File contains no section headers.\nfile: %r, line: %d\n%r' %
+            (filename, lineno, line))
+        self.source = filename
+        self.lineno = lineno
+        self.line = line
+        self.args = (filename, lineno, line)
+```
+
+I need to add after this class, before the `_UNSET` comment.
+
+Let me look at the exact text. From the source:
+```
+        self.source = filename
+        self.lineno = lineno
+        self.line = line
+        self.args = (filename, lineno, line)
+
+
+# Used in parser getters to indicate the default behaviour when a specific
+# option is not found it to raise an exception. Created to enable `None` as
+# a valid fallback value.
+_UNSET = object()
+```
+
+I'll patch to insert the new class between the `MissingSectionHeaderError` and the `_UNSET` comment.
+
+For the `_read` method fix, I need to change the continuation line handling. The relevant code:
+```python
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    cursect[optname].append(value)
+```
+
+Should become:
+```python
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    if cursect[optname] is None:
+                        raise MultilineContinuationError(fpname, lineno, line)
+                    cursect[optname].append(value)
+```
+
+Let me do these two patches. I have the full file visible so I can use patch directly.
+
+Current candidate: `031dc6a45f2420df7280230764ac30170def27f5f0db52fe37995c4a668bb08d`
+File sha: `ce124971bcf9653b590c4e83a2637dde143e9de72c01867b0dacdffb56e7765e`
+
+Let me do the first patch: add the class definition.

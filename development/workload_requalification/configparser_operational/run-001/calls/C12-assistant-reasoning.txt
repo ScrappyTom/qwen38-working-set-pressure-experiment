@@ -1,0 +1,316 @@
+Let me analyze the situation. I have the full `Lib/configparser.py` source visible. I need to:
+
+1. Understand the bug: When `allow_no_value=True`, a valueless option followed by a continuation line raises an internal `AttributeError`. Let me trace through the code.
+
+Looking at `_read()`:
+- When `allow_no_value=True` and we encounter a valueless option like `optional_flag` (no `=` or `:`), the `OPTCRE_NV` matches with `value` being `None`.
+- In the option handling code:
+```python
+mo = self._optcre.match(value)
+if mo:
+    optname, vi, optval = mo.group('option', 'vi', 'value')
+    ...
+    if optval is not None:
+        optval = optval.strip()
+        cursect[optname] = [optval]
+    else:
+        # valueless option handling
+        cursect[optname] = None
+```
+
+So for a valueless option, `cursect[optname] = None`.
+
+Now, the next line is a continuation line (indented deeper). The continuation check:
+```python
+first_nonspace = self.NONSPACECRE.search(line)
+cur_indent_level = first_nonspace.start() if first_nonspace else 0
+if (cursect is not None and optname and
+    cur_indent_level > indent_level):
+    cursect[optname].append(value)
+```
+
+Here's the bug! `cursect[optname]` is `None` (because the option was valueless), and calling `.append(value)` on `None` raises `AttributeError: 'NoneType' object has no attribute 'append'`.
+
+So the fix needs to:
+1. Detect this case: a continuation line follows a valueless option
+2. Raise a `MultilineContinuationError` (a new public exception derived from `ParsingError`)
+
+The exception should:
+- Be derived from `ParsingError`
+- Have `source`, `lineno`, and `line` attributes (one-based line number and exact offending line)
+- Preserve those three constructor arguments for copying/pickling (i.e., `self.args = (source, lineno, line)`)
+- Give a useful message
+
+Let me think about where to add the exception class. It should be a public exception, so it should be added to `__all__` and defined near the other exceptions.
+
+Now let me think about the implementation:
+
+1. Add `MultilineContinuationError` class after `MissingSectionHeaderError`:
+
+```python
+class MultilineContinuationError(ParsingError):
+    """Raised when a continuation line follows a valueless option."""
+
+    def __init__(self, source, lineno, line):
+        Error.__init__(
+            self,
+            f"Cannot add continuation line to valueless option. "
+            f"File: {source!r}, line: {lineno}\n{line!r}")
+        self.source = source
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+```
+
+Wait, let me look at how `MissingSectionHeaderError` is structured for consistency:
+
+```python
+class MissingSectionHeaderError(ParsingError):
+    """Raised when a key-value pair is found before any section header."""
+
+    def __init__(self, filename, lineno, line):
+        Error.__init__(
+            self,
+            'File contains no section headers.\nfile: %r, line: %d\n%r' %
+            (filename, lineno, line))
+        self.source = filename
+        self.lineno = lineno
+        self.line = line
+        self.args = (filename, lineno, line)
+```
+
+So I should follow the same pattern. Let me use a similar style.
+
+2. Add it to `__all__`:
+```python
+__all__ = ("NoSectionError", "DuplicateOptionError", "DuplicateSectionError",
+           "NoOptionError", "InterpolationError", "InterpolationDepthError",
+           "InterpolationMissingOptionError", "InterpolationSyntaxError",
+           "ParsingError", "MissingSectionHeaderError",
+           "ConfigParser", "RawConfigParser",
+           ...
+```
+
+I need to add `"MultilineContinuationError"` to this tuple.
+
+3. In `_read()`, the continuation line check needs to handle the case where `cursect[optname]` is `None`:
+
+Currently:
+```python
+if (cursect is not None and optname and
+    cur_indent_level > indent_level):
+    cursect[optname].append(value)
+```
+
+I need to add a check: if `cursect[optname]` is `None` (valueless option), raise `MultilineContinuationError`.
+
+Let me think about the exact location. The continuation check happens at:
+```python
+# continuation line?
+first_nonspace = self.NONSPACECRE.search(line)
+cur_indent_level = first_nonspace.start() if first_nonspace else 0
+if (cursect is not None and optname and
+    cur_indent_level > indent_level):
+    cursect[optname].append(value)
+```
+
+I should change this to:
+```python
+# continuation line?
+first_nonspace = self.NONSPACECRE.search(line)
+cur_indent_level = first_nonspace.start() if first_nonspace else 0
+if (cursect is not None and optname and
+    cur_indent_level > indent_level):
+    if cursect[optname] is None:
+        raise MultilineContinuationError(fpname, lineno, line)
+    cursect[optname].append(value)
+```
+
+Wait, but there's a subtlety. After the continuation check, there's an `else` branch for section headers and options. Let me re-read the structure:
+
+```python
+# continuation line?
+first_nonspace = self.NONSPACECRE.search(line)
+cur_indent_level = first_nonspace.start() if first_nonspace else 0
+if (cursect is not None and optname and
+    cur_indent_level > indent_level):
+    cursect[optname].append(value)
+# a section header or option header?
+else:
+    indent_level = cur_indent_level
+    ...
+```
+
+So the structure is: if continuation → append; else → handle as section/option. The `raise` will propagate up since we're in a try block. Let me check... actually looking more carefully:
+
+```python
+try:
+    for lineno, line in enumerate(fp, start=1):
+        ...
+        # continuation line?
+        first_nonspace = self.NONSPACECRE.search(line)
+        cur_indent_level = first_nonspace.start() if first_nonspace else 0
+        if (cursect is not None and optname and
+            cur_indent_level > indent_level):
+            cursect[optname].append(value)
+        # a section header or option header?
+        else:
+            ...
+finally:
+    self._join_multiline_values()
+```
+
+So if I raise in the try block, the `finally` block will still execute `_join_multiline_values()`, and then the exception will propagate. That's fine - the exception will propagate out of `_read()`.
+
+Actually wait, I need to be more careful. The `raise` inside the `try` block will trigger the `finally` block, then the exception propagates. That's the desired behavior - we want to raise `MultilineContinuationError` to the caller.
+
+But wait, there's also the `# So sections can't start with a continuation line` comment and `optname = None` in the section header handling. Let me make sure the logic is correct.
+
+Actually, looking again at the flow:
+- If a section header is found, `optname = None`
+- So after a section header, `optname` is `None`, and the continuation check `optname` will be falsy, so it won't enter the continuation branch
+- If an option is found, `optname` is set to the option name
+- On the next line, if it's indented deeper, it's a continuation
+
+So the bug is: after a valueless option (where `cursect[optname] = None`), the next indented line is treated as a continuation, and `cursect[optname].append(value)` is called on `None`.
+
+My fix: check if `cursect[optname]` is `None` before appending.
+
+Now let me also think about whether the error should be raised immediately or collected like other parsing errors. Looking at the task description: "Reject this unsupported continuation with a public MultilineContinuationError derived from ParsingError." This suggests it should be raised (not collected). And since it's derived from ParsingError, it's a specific, immediate error rather than a collected one.
+
+Looking at `MissingSectionHeaderError` - it's raised immediately in the same way. So I'll do the same.
+
+Now, let me plan my edits:
+
+1. Add `MultilineContinuationError` to `__all__`
+2. Add the `MultilineContinuationError` class after `MissingSectionHeaderError`
+3. Fix the continuation check in `_read()` to raise the new exception
+
+Then I need to:
+4. Add regression tests to the test file
+5. Update the documentation
+
+Let me first check what test file and doc file exist. I saw `Lib/test` in the tree. Let me look at that.
+
+Actually, let me first make the library changes, then look at the test file and doc.
+
+Let me plan the patches:
+
+**Patch 1: Add to `__all__`**
+
+Old:
+```
+           "ParsingError", "MissingSectionHeaderError",
+```
+
+New:
+```
+           "ParsingError", "MissingSectionHeaderError",
+           "MultilineContinuationError",
+```
+
+Wait, I need to be more precise. Let me look at the `__all__` tuple:
+
+```python
+__all__ = ("NoSectionError", "DuplicateOptionError", "DuplicateSectionError",
+           "NoOptionError", "InterpolationError", "InterpolationDepthError",
+           "InterpolationMissingOptionError", "InterpolationSyntaxError",
+           "ParsingError", "MissingSectionHeaderError",
+           "ConfigParser", "RawConfigParser",
+           "Interpolation", "BasicInterpolation",  "ExtendedInterpolation",
+           "LegacyInterpolation", "SectionProxy", "ConverterMapping",
+           "DEFAULTSECT", "MAX_INTERPOLATION_DEPTH")
+```
+
+I'll add `"MultilineContinuationError",` after `"MissingSectionHeaderError",`.
+
+**Patch 2: Add the exception class**
+
+After `MissingSectionHeaderError` class, before the `_UNSET` line. Let me add:
+
+```python
+class MultilineContinuationError(ParsingError):
+    """Raised when a continuation line follows a valueless option.
+
+    A valueless option (accepted when ``allow_no_value`` is true) cannot
+    have a continuation line, because there is no value to extend.
+    """
+
+    def __init__(self, source, lineno, line):
+        Error.__init__(
+            self,
+            'Cannot add continuation line to valueless option.\n'
+            f'File: {source!r}, line: {lineno}\n{line!r}')
+        self.source = source
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+```
+
+Wait, I should use the same style as `MissingSectionHeaderError` which uses `%` formatting:
+
+```python
+class MissingSectionHeaderError(ParsingError):
+    """Raised when a key-value pair is found before any section header."""
+
+    def __init__(self, filename, lineno, line):
+        Error.__init__(
+            self,
+            'File contains no section headers.\nfile: %r, line: %d\n%r' %
+            (filename, lineno, line))
+        self.source = filename
+        self.lineno = lineno
+        self.line = line
+        self.args = (filename, lineno, line)
+```
+
+Let me follow the same pattern:
+
+```python
+class MultilineContinuationError(ParsingError):
+    """Raised when a continuation line follows a valueless option.
+
+    A valueless option (accepted when ``allow_no_value`` is true) cannot
+    have a continuation line because there is no value to extend.
+    """
+
+    def __init__(self, source, lineno, line):
+        Error.__init__(
+            self,
+            'Cannot add continuation line to valueless option.\n'
+            'File: %r, line: %d\n%r' % (source, lineno, line))
+        self.source = source
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+```
+
+**Patch 3: Fix the continuation check**
+
+Old:
+```python
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    cursect[optname].append(value)
+```
+
+New:
+```python
+                if (cursect is not None and optname and
+                    cur_indent_level > indent_level):
+                    if cursect[optname] is None:
+                        raise MultilineContinuationError(fpname, lineno, line)
+                    cursect[optname].append(value)
+```
+
+Now let me start implementing. I'll do the patches one at a time.
+
+Actually, let me think about the message. The task says "give a useful message". Let me make it informative:
+
+"Cannot add continuation line to valueless option."
+"File: %r, line: %d"
+"%r"
+
+That's pretty good. Let me proceed.
+
+Let me start with the first patch - adding to `__all__`.
