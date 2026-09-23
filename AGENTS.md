@@ -1,3 +1,13 @@
+# Qualified diagnostic continuation
+
+The diagnostic_continuity preparation002 is qualified; read its PREPARATION_REVIEW.md.
+Keep original40requests/60operations consumed and closed. The separately frozen
+continuation begins C41 with16new requests/48new operations. Its actual initial
+work and incorrect account are preserved, with old verification inapplicable.
+No evaluator check, reference correction or coaching enters the run. All actual
+captured failures now have bounded direct access; verify their use, not just receipt
+presence. Scripted checked completion remains feasibility, not model performance.
+
 # Experiment operating rules
 
 The original configparser operational attempt at6b9da26a is closed at40requests/

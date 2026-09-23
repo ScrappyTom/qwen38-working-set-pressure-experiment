@@ -25,3 +25,5 @@ new checks. Source revision737c4a42 preserves the failing code. The two measured
 counterfactuals nevertheless show all three live failures at15,785 tokens and
 retention after search at14,371. Initial continuation input was14,668 tokens.
 Correct the scripted reply, preserve001, and rerun qualification in002.
+
+Preparation002 passes fourteen native trials and the complete scripted correction/check/submission route; zero model completions. Read PREPARATION_REVIEW.md for the input-dependency audit and limits. Initial continuation retains actual flawed work and account; no evaluator check is supplied. Freeze and publish before uncoached dispatch.
