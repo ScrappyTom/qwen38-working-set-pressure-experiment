@@ -1,3 +1,13 @@
+# Qualified optional recovery chronology
+
+recovery_chronology/RESULTS.md qualifies the priority-preserving opt-in successor.
+Recent rows fit in two actual saved recovery inputs with no other field changes;
+recorded check/submission outcomes replay unchanged. This is availability evidence,
+not a behavioral improvement. Preserve recovery_recent_count in successor snapshots.
+Optional history must not displace already-admitted feedback, source or change detail.
+Bind future reviewer findings to the reviewed candidate when known; unchanged task
+text is not a new observation of later edits. No automatic semantic resolution.
+
 # Completed original backport and temporal presentation follow-through
 
 The original entry now closes with the separately frozen reviewer-directed prose
