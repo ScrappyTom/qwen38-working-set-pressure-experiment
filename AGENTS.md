@@ -1,3 +1,12 @@
+# Qualified transport closure follow-through
+
+transport_closure/PREPARATION_REVIEW.md qualifies the exact19097704 checkpoint
+with24requests/34operations retained and an explicit two-request/four-operation
+extension(max26/38). Three CPU checks and two native inputs pass; actual CHK0073
+is preserved,not rerun. First input18825. No task/reference/settings change or
+reviewer suggestion enters. Publish then run uncoached under standing direction.
+Do not relabel the prior request-exhausted attempt as completed within24.
+
 # Search continuation: real correction, closure still open
 
 search_continuity/review/RESULTS.md preserves the520dd799 continuation:11 new
