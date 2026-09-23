@@ -1,0 +1,133 @@
+"""Qualify/run one preserved entry with no coaching or implicit inference."""
+import argparse,copy,json
+from types import SimpleNamespace
+import transport_task as study
+import qualify_capture as fixtures
+import difflib
+import run_uncoached_contribution as runner
+from manage import RUNTIME,legacy
+from working_set_exp.custody import ArtifactStore
+from working_set_exp.contribution_reply import completion_request_bytes
+from working_set_exp.jsonutil import canonical_json_bytes,sha256_bytes,sha256_file
+
+
+def prepare(module):
+    folder=module.PACKAGE;folder.mkdir(exist_ok=False)
+    bound=module.source_identities();store=ArtifactStore(folder)
+    log=legacy.QualificationLog(folder/'records.jsonl','exception-transport-preparation',task_module=module)
+    session,adapter=module.initial_session(),runner.Adapter(module)
+    trials=[];initial=None;error=None;checks=0
+    try:
+        proof=study.previous.previous.previous.decoder_reuse_bindings()
+        request=adapter.request_for(session.view())
+        old=study.read(study.previous.previous.previous.DECODER/'wire-request.json')
+        assert {k:v for k,v in request.items() if k!='messages'}=={k:v for k,v in old.items() if k!='messages'}
+        store.put('decoder-reuse.json',canonical_json_bytes(dict(cases=31,bindings=proof,completion_requests=0)))
+        module.attach_observations(session,folder,log)
+        server,model,_=module.runtime_paths()
+        with RUNTIME.owned_runtime(SimpleNamespace(server=server,model=model,output=folder),store,log) as url:
+            loop=runner.Loop(folder,store,log,url=url,task_module=adapter,source_check=lambda:module.verify_sources(bound))
+            assert loop.measure(session.view())<=23808
+            selected=loop.cache[sha256_bytes(canonical_json_bytes(request))]
+            initial={k:selected[k] for k in ('prompt_tokens','request_sha256','native_sha256','wire_request_sha256')}
+            loop.snapshot(session,'starting');store.put('initial-wire-request.json',completion_request_bytes(request))
+            original=dict(session.candidate.file_map)
+            def action(tag,operation,why):
+                nonlocal checks
+                before=session.view();session.mark_delivered(before)
+                store.put(tag+'-input.json',canonical_json_bytes(before));store.put(tag+'-basis.txt',why.encode())
+                if operation['action']=='check':checks+=1;assert checks<=2
+                result=module.process_reply(session,dict(discussion='Evaluator-scripted engineering qualification.',operation=operation),loop.measure,adapter.preceding_feedback)
+                assert all(o['result']['accepted'] for o in result['operations']),result
+                count=loop.measure(session.view());assert count<=23808 and not session.delivery_blocked
+                assert session.candidate.file_map['Lib/configparser.py']==original['Lib/configparser.py']
+                store.put(tag+'-outcome.json',canonical_json_bytes(result));store.put(tag+'-view.json',canonical_json_bytes(session.view()))
+                trials.append(dict(stage=tag,tokens=count,action=operation['action']))
+                return result['operations'][-1]['result']
+            target=fixtures.TARGET
+            baseline=original[target].decode()
+            reference=fixtures.candidates()[1][1].file_map[target].decode()
+            matcher=difflib.SequenceMatcher(a=baseline.splitlines(True),b=reference.splitlines(True),autojunk=False)
+            changes=[r for r in matcher.get_opcodes() if r[0]!='equal']
+            assert len(changes)==1 and changes[0][0]=='insert'
+            _,a,b,c,d=changes[0];assert a==b
+            insertion=''.join(reference.splitlines(True)[c:d])
+            anchor=''.join(baseline.splitlines(True)[a-2:a])
+            assert baseline.count(anchor)==1
+            def locate(tag,path,query):
+                result=action(tag,dict(action='search',path=path,query=query,offset=0,limit=16),
+                    'Task symbol or evaluator proposal identifies the query; actual search returns coordinates. No guessed line is supplied.')
+                assert result['regions'];return result['regions'][0]
+            test_region=locate('test-anchor',target,anchor.strip())
+            class_region=locate('exception-source','Lib/configparser.py','class MultilineContinuationError')
+            parent_region=locate('parent-source','Lib/configparser.py','class ParsingError')
+            parent=action('parent-definition',dict(action='read',path='Lib/configparser.py',
+                start_line=parent_region['match_line'],end_line=parent_region['match_line']+39),
+                'The exception visibly inherits ParsingError; its initializer and append method establish the diagnostic message.')['source']['region_ref']
+            # The historical saved test already demonstrates the parser constructor
+            # configuration and raw-line expectation immediately before the anchor.
+            tests=action('saved-test-context',dict(action='read',path=target,
+                start_line=max(1,test_region['match_line']-30),end_line=test_region['end_line']),
+                'Read the existing exception regression around the actual located anchor, including constructor configuration.')['source']['region_ref']
+            action('contribution-group',dict(action='work_on_exact',regions=[tests,parent,class_region['region_ref']],results=[]),
+                'Assemble exact returned source references. This is assisted feasibility, never the actor initial group.')
+            wrong=insertion.replace('            copied = copy.copy(exc)\n',
+                '            copied = copy.copy(exc)\n            self.assertEqual(copied.source, source + ".wrong")\n')
+            assert wrong!=insertion
+            def patch(tag,old,new):
+                assert any(old in row['content'] for row in session.view()['working_set']['sources'] if row['path']==target)
+                return action(tag,dict(action='patch',path=target,old=old,new=new,
+                    expected_candidate_id=session.candidate.candidate_id,expected_file_sha256=session.candidate.file_sha256(target)),
+                    'The exact old text is visible; this evaluator proposal remains outside initial actor input.')
+            patch('save-provisional-tests',anchor,anchor+wrong)
+            # Include plausible broad acquisition before real verification. These
+            # requests may be paged; their actual extents/outcomes remain recorded.
+            action('broad-library',dict(action='read',path='Lib/configparser.py',start_line=1,end_line=len(original['Lib/configparser.py'].splitlines())),
+                'Engineering broad-reading stress, not a claim that whole-library reading is necessary.')
+            action('broad-tests',dict(action='read',path=target,start_line=1,end_line=len(session.candidate.file_map[target].splitlines())),
+                'Exercise a broad selected state before check feedback; inspect returned extents, not requested completeness.')
+            failed=action('observe-current-failure',dict(action='check',check_id='public',expected_candidate_id=session.candidate.candidate_id),
+                'Actual execution distinguishes the deliberately provisional expectation from saved implementation behavior.')
+            assert not failed['passed']
+            report=session.view()['verification']['checks']['public']['assessment']
+            assert 'edited_suite.execution' in report['failed_criteria']
+            diagnostic=next(r for r in report['criteria'] if r['criterion']=='edited_suite.execution')['diagnostic_access']
+            detail=action('inspect-failure',diagnostic,
+                'The actual failed scope supplies its exact detail address; no evaluator-provided expected value substitutes for it.')
+            assert any('test.cfg' in r['text'] and '.wrong' in r['text'] for r in detail['entries']),detail
+            repair=locate('correction-anchor',target,'self.assertEqual(copied.source, source + ".wrong")')
+            action('narrow-after-feedback',dict(action='work_on_exact',regions=[repair['region_ref'],parent,class_region['region_ref']],results=[]),
+                'Actual search locates the failed authored expectation; exact source references make a bounded correction group.')
+            patch('correct-observed-source','            self.assertEqual(copied.source, source + ".wrong")\n','')
+            assert session.candidate.file_map[target].decode()==reference
+            passed=action('check-complete',dict(action='check',check_id='public',expected_candidate_id=session.candidate.candidate_id),
+                'The corrected successor must pass current suites and detect each declared injected restoration fault.')
+            assert passed['passed']
+            report=session.view()['verification']['checks']['public']['assessment']
+            assert not report['failed_criteria']
+            faults=[r for r in report['criteria'] if r['criterion'].startswith('restoration_fault.')]
+            assert len(faults)==4 and all(r['met'] and r['comparison_failure_is_expected'] for r in faults)
+            action('submit',dict(action='submit',expected_candidate_id=session.candidate.candidate_id),
+                'Actual current public pass and independently reviewed evaluator contribution support scripted submission.')
+            assert session.submitted
+            assert all(session.candidate.file_map[path]==content for path,content in original.items() if path!=target)
+            loop.snapshot(session,'scripted-final');module.verify_sources(bound)
+    except BaseException as exc:
+        error=exc;study.save(folder,'FAILED.json',dict(type=type(exc).__name__,message=str(exc)))
+    finally:
+        study.save(folder,'QUALIFICATION.json',dict(initial=initial,trials=trials,completion_requests=0,checks_executed=checks,
+            inherited_operations=39,new_allowance=True,memory=RUNTIME.memory_stats(folder/'memory.csv'),port_free=RUNTIME.port_free(RUNTIME.PORT)))
+        legacy.seal(folder,'failed_preserved' if error else 'qualified_no_model_inference',bound,completion_requests=0)
+    if error:raise error
+    study.save(module.AREA,module.MANIFEST.name,dict(actor=module.ACTOR,seed=module.SEED,maximum_requests=study.MAX_REQUESTS,maximum_operations=study.MAX_OPERATIONS,
+        source_sha256=bound,preparation_seal_sha256=sha256_file(folder/'SEAL.json'),preparation_package=folder.name,initial=initial,
+        owner_direction=study.OWNER_DIRECTION,starting_candidate=study.STARTING_ID,inherited_operations=39,
+        no_live_coaching=True,automatic_retry=False))
+    runner.verify_package(module)
+    print(json.dumps(dict(status='qualified',initial=initial,trials=trials),indent=2))
+
+if __name__=='__main__':
+    p=argparse.ArgumentParser();p.add_argument('mode',choices=('prepare','run'));p.add_argument('--version',default='001')
+    args=p.parse_args();module=study.Task(args.version)
+    if args.mode=='prepare':prepare(module)
+    else:runner.run_once(SimpleNamespace(owner_direction=study.OWNER_DIRECTION,manifest_sha256=sha256_file(module.MANIFEST)),module)

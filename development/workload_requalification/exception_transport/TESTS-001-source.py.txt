@@ -1,0 +1,104 @@
+import copy,json,sys,tempfile,unittest
+from pathlib import Path
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+import transport_task as task
+import transport_reports as reports
+from working_set_exp.jsonutil import canonical_json_bytes
+
+AREA=task.AREA
+class FakeStore:
+    def __init__(self,report,record):
+        self.tmp=tempfile.TemporaryDirectory();self.path=Path(self.tmp.name);self.record=record
+        (self.path/'stdout.bin').write_bytes(canonical_json_bytes(report) if isinstance(report,dict) else report)
+        (self.path/'stderr.bin').write_bytes(b'')
+    def read(self,handle):return self.record
+    def directory(self,handle):return self.path
+    def close(self):self.tmp.cleanup()
+
+class Entry(unittest.TestCase):
+    def test_original_entry_new_contract_and_exact_history(self):
+        session=task.Task().initial_session();candidate,state=task.historical.starting_work()
+        self.assertEqual(session.candidate,candidate);self.assertEqual(session.pairs,state['pairs'])
+        self.assertEqual((session.requests_used,session.calls_used,session.starting_archive_length),(0,0,39))
+        self.assertEqual((session.request_limit,session.call_limit),(24,72))
+        self.assertFalse(session.ranges or session.saved or session.working_account())
+        self.assertEqual(session.task.encode(),(task.historical.AREA/'TASK.txt').read_bytes())
+        v=session.view();check=v['verification']['checks']['public']
+        self.assertTrue(check['passed'] and check['candidate_matches'])
+        self.assertFalse(check['check_definition_matches'] or check['applies_to_current'])
+        self.assertFalse(v['verification']['submission']['eligible'])
+        self.assertIn('assessment_unavailable',check)
+        self.assertTrue(all(r['episode']=='prior_work' for r in v['recent_activity']))
+        for pair in session.pairs:
+            for field in ('candidate_id','previous_candidate_id','checked_candidate_id'):
+                if field in pair['result']:self.assertIn(pair['result'][field],session.versions)
+        self.assertEqual(len(session.versions),9)
+    def test_decoder_and_reference_meanings(self):
+        new,old=task.Task(),task.previous.Task()
+        self.assertEqual(new.reply_schema(),old.reply_schema())
+        self.assertEqual(new.response_constraints(),old.response_constraints())
+        text=new.operating_reference()
+        self.assertNotIn('There are no injected fault targets',text)
+        self.assertIn('not a current-library failure',text)
+        self.assertIn('edits do not trigger checks',text)
+        self.assertEqual(new.snapshot(new.initial_session())['recovery_recent_count'],0)
+
+class Projection(unittest.TestCase):
+    def setUp(self):
+        root=AREA/'capture-qualification-001/historical_checked_work/adapted/observations/CHK-0001'
+        self.report=json.loads((root/'stdout.bin').read_bytes());self.record=json.loads((root/'outcome.json').read_bytes())
+    def assess(self,report=None,record=None):
+        store=FakeStore(report if report is not None else self.report,record or self.record)
+        self.addCleanup(store.close)
+        return store,reports.assessment(store,'CHK-0001')
+    def test_expected_fault_failures_are_detection(self):
+        _,value=self.assess();self.assertTrue(value['passed']);self.assertEqual(value['failed_criteria'],[])
+        faults=[r for r in value['criteria'] if r['criterion'].startswith('restoration_fault.')]
+        self.assertEqual(len(faults),4);self.assertTrue(all(r['met'] and r['comparison_failure_is_expected'] for r in faults))
+        self.assertFalse(value['diagnostic_details']);self.assertTrue(value['diagnostic_records'])
+    def test_long_escaped_primary_diagnostics_are_fair_and_exact(self):
+        full=copy.deepcopy(self.report);full['passed']=False
+        for scope in reports.SUITES[:3]:
+            row=full[scope];row.update(successful=False,failures=5,errors=0,
+                details=[dict(test=scope+str(i),trace=('quoted " slash \\ unicode Ω\n'*600)+str(i)) for i in range(5)])
+        record=dict(self.record,passed=False,returncode=1)
+        store,value=self.assess(full,record);view=reports.overview(value)
+        self.assertEqual([r['criterion'] for r in view['diagnostics'][:3]],['saved_suite.execution','edited_suite.execution','contract.execution'])
+        self.assertLessEqual(len(canonical_json_bytes(view['diagnostics'])),6144)
+        self.assertTrue(view['diagnostics_remaining']>0)
+        recovered={};offset=0
+        while True:
+            page=reports.inspect_check(store,'CHK-0001',offset)
+            for r in page['entries']:
+                key=r['criterion'],r['diagnostic_index'],r['field']
+                body=recovered.setdefault(key,bytearray());self.assertEqual(len(body),r['start_byte'])
+                body.extend(r['text'].encode());self.assertEqual(len(body),r['end_byte'])
+            if page['next_offset'] is None:break
+            offset=page['next_offset']
+        for scope in reports.SUITES[:3]:
+            for i,d in enumerate(full[scope]['details']):
+                for field in ('test','trace'):self.assertEqual(bytes(recovered[(scope+'.execution',i,field)]),d[field].encode())
+    def test_failed_execution_is_not_a_printed_pass(self):
+        for changes in [dict(passed=False,returncode=2,termination='completed'),
+                        dict(passed=False,returncode=None,termination='timeout'),
+                        dict(passed=False,capture_complete=False,termination='output_limit')]:
+            with self.subTest(changes=changes):
+                _,value=self.assess(record=dict(self.record,**changes))
+                self.assertFalse(value['passed']);self.assertIn('public_execution',value['failed_criteria'])
+    def test_unsupported_report_keeps_raw_access(self):
+        full=copy.deepcopy(self.report);full['transports']['complete']=False
+        _,value=self.assess(full);self.assertFalse(value['assessment_available']);self.assertIn('raw_access',value)
+        _,value=self.assess(b'{broken');self.assertFalse(value['assessment_available'])
+    def test_unexpected_success_is_not_silently_redefined(self):
+        full=copy.deepcopy(self.report);r=full['restoration_faults']['lost_errors']
+        r.update(successful=False,failures=0,errors=0,details=[],runner_output='UNEXPECTED SUCCESS')
+        self.assertTrue(reports.supported_shape(full))
+        _,value=self.assess(full)
+        fault=next(r for r in value['criteria'] if r['criterion']=='restoration_fault.lost_errors')
+        self.assertTrue(fault['met']);self.assertFalse(fault['suite_successful'])
+    def test_checker_binding_and_offset_reject_cleanly(self):
+        store,_=self.assess()
+        with self.assertRaises(ValueError):reports.assessment(store,'CHK-0001',{'checker_sha256':'wrong'})
+        with self.assertRaises(ValueError):reports.inspect_check(store,'CHK-0001',-1)
+
+if __name__=='__main__':unittest.main()

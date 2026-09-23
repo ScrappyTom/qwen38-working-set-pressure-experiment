@@ -1,3 +1,16 @@
+# Qualified exception-transport regression
+
+exception_transport/PREPARATION_REVIEW.md qualifies the distinct historicalfbfc4f7a
+entry:39 prior actions,nine source versions,empty selection,and original task bytes.
+Preserve24requests/72operations and unchanged medium/uncapped runtime; run uncoached
+under standing authority after publishing preparation002. Ten CPU equivalence cases,
+eight focused checks and16 native scripted operations qualify acceptance/reporting
+and an actual broad-state recovery transition. These are not model outcomes.
+Current-suite failures and injected-fault detection remain separate; direct review
+must verify exact attribute assertions and unrelated-test preservation. Preserve the
+failed001 anchor script and initial mistaken overview-size test. Do not conflate the
+historical not-successful fault predicate with a stronger failure/error-only rule.
+
 # Completed saved-library prose correction
 
 saved_library_prose/review/RESULTS.md closes the distinct saved-library entry with
