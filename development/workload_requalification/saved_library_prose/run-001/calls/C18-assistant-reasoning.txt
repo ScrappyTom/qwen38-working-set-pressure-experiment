@@ -1,0 +1,377 @@
+Let me analyze the reviewer's findings about the documentation:
+
+1. **Exception entry needs to distinguish relative greater indentation from indentation alone, and account for blank/comment processing.** Looking at the parser code (lines 1000-1070), the check is:
+```python
+if (cursect is not None and optname and
+    cur_indent_level > indent_level):
+```
+This checks `cur_indent_level > indent_level` — strictly greater. So it's "relative greater indentation" compared to the indent level of the current option line, not just "an indented line". The `indent_level` is set when processing the option line (the previous non-continuation line). Also, blank/comment lines are processed separately (they `continue` before reaching the continuation check), so blank lines and comment lines don't trigger this error. The current doc says "an indented continuation line follows a valueless option" — it should be more precise about "greater indentation than the option line" and mention that blank/comment lines are handled separately (they don't count as continuations).
+
+2. **The source marker for string input is a default, not a replacement for a supplied source name. The raw offending line may lack a final newline.** Looking at the implementation:
+- In `read_string`, the default source name is `'<string>'` — but if a `source` parameter is provided (or in `read_file` the filename is used), that's what's stored. So `'<string>'` is a default for string input, not a guaranteed value.
+- The `line` attribute: looking at the parser code, `line` comes from `enumerate(fp, start=1)` where `fp` yields lines. The raw line from file iteration includes the trailing newline IF the file has one, but the last line of a file may not have a trailing newline. So "including its trailing newline" is inaccurate — it may or may not have one.
+
+Let me look at what the current doc says:
+```
+   The constructor takes three arguments: ``source`` (the name of the
+   source being parsed, or ``'<string>'`` for string input), ``lineno``
+   (the one-based line number of the offending continuation line), and
+   ``line`` (the exact text of that line, including its trailing
+   newline).  All three values are stored as attributes of the same
+   name and are preserved in ``args`` for pickling and copying.
+```
+
+Problems:
+- "or ``'<string>'`` for string input" — this implies it's always `'<string>'`, but it's a default. The source marker can be a supplied source name.
+- "including its trailing newline" — the raw offending line may lack a final newline (e.g., last line of a file without trailing newline).
+
+3. **Remove `.. versionadded:: 3.12`** — this is incorrect/unsupported. The backport assignment doesn't require a release-history claim.
+
+Now let me plan the fixes:
+
+1. Fix the description to distinguish "relative greater indentation" from "indentation alone" and account for blank/comment processing.
+2. Fix the source description: `'<string>'` is a default, not a replacement for a supplied source name.
+3. Fix the line description: the raw offending line may lack a final newline.
+4. Remove `.. versionadded:: 3.12`.
+
+Let me look at the current doc text more carefully (from the region shown, lines 1370-1408):
+
+```
+.. exception:: MultilineContinuationError
+
+   Raised when an indented continuation line follows a valueless option
+   (an option with no value, as permitted by ``allow_no_value=True``).
+   This is a subclass of :exc:`!ParsingError`.
+
+   The constructor takes three arguments: ``source`` (the name of the
+   source being parsed, or ``'<string>'`` for string input), ``lineno``
+   (the one-based line number of the offending continuation line), and
+   ``line`` (the exact text of that line, including its trailing
+   newline).  All three values are stored as attributes of the same
+   name and are preserved in ``args`` for pickling and copying.
+
+   .. attribute:: source
+
+   .. attribute:: lineno
+
+   .. attribute:: line
+
+   .. versionadded:: 3.12
+```
+
+Now let me think about what the correct text should be:
+
+For finding 1: The parser checks `cur_indent_level > indent_level` where `indent_level` is the indentation of the current option line. So it's specifically that the continuation line has greater indentation than the option line it follows. Blank lines and comment lines are processed before the continuation check (they either get appended to the value or reset indent_level, then `continue`), so they don't trigger this error.
+
+The current text says "an indented continuation line follows a valueless option". More precisely: a line with greater indentation than the option line follows a valueless option. And blank/comment lines are handled separately (they don't trigger this).
+
+For finding 2: 
+- `source`: The doc says "the name of the source being parsed, or ``'<string>'`` for string input". The issue is that `'<string>'` is a *default* — you can supply a different source name. In `read_string`, the method signature is `read_string(string, source_name='...')` or similar. Let me check... Actually, looking at the test:
+```python
+parser.read_string("[section]\nkey\n  continuation\n")
+exc = cm.exception
+self.assertEqual(exc.source, '<string>')
+```
+So `'<string>'` is the default. But in `read_file`, the filename is used. And `read_string` might accept a source name. Let me look at the parser code more carefully.
+
+From the code visible (lines 1000-1070), I see `fpname` is used: `raise MultilineContinuationError(fpname, lineno, line)`. The `fpname` comes from the reading method. In `read_string`, it would be the source name (default `'<string>'`), in `read_file` it would be the filename.
+
+So the doc should say: `source` (the name of the source being parsed; defaults to ``'<string>'`` for string input when no source name is supplied). Or similar phrasing.
+
+For `line`: "the exact text of that line" — but "including its trailing newline" is wrong because the last line of a file might not have a trailing newline. It should just say "the exact text of that line" without claiming it always includes a trailing newline. Or "the raw text of the offending line as encountered during parsing" without the trailing newline claim.
+
+For finding 3: Remove `.. versionadded:: 3.12`.
+
+Let me now craft the replacement. I need to use the patch action with the exact old text and new text.
+
+The old text (from the doc region, lines 1370-1408, the MultilineContinuationError section):
+
+```
+.. exception:: MultilineContinuationError
+
+   Raised when an indented continuation line follows a valueless option
+   (an option with no value, as permitted by ``allow_no_value=True``).
+   This is a subclass of :exc:`!ParsingError`.
+
+   The constructor takes three arguments: ``source`` (the name of the
+   source being parsed, or ``'<string>'`` for string input), ``lineno``
+   (the one-based line number of the offending continuation line), and
+   ``line`` (the exact text of that line, including its trailing
+   newline).  All three values are stored as attributes of the same
+   name and are preserved in ``args`` for pickling and copying.
+
+   .. attribute:: source
+
+   .. attribute:: lineno
+
+   .. attribute:: line
+
+   .. versionadded:: 3.12
+```
+
+New text should:
+1. Say "greater indentation" relative to the option line, not just "an indented continuation line"
+2. Mention that blank lines and comment lines are processed separately (they don't trigger this error)
+3. Say `source` defaults to `'<string>'` for string input (not "or '<string>' for string input" which implies replacement)
+4. Say `line` is the raw text of the offending line (remove "including its trailing newline" since it may lack one)
+5. Remove `.. versionadded:: 3.12`
+
+Let me draft:
+
+```
+.. exception:: MultilineContinuationError
+
+   Raised when a line with greater indentation than the preceding option
+   line follows a valueless option (an option with no value, as
+   permitted by ``allow_no_value=True``).  Blank lines and comment lines
+   are processed separately and do not trigger this exception.
+   This is a subclass of :exc:`!ParsingError`.
+
+   The constructor takes three arguments: ``source`` (the name of the
+   source being parsed, defaulting to ``'<string>'`` for string input
+   when no source name is supplied), ``lineno`` (the one-based line
+   number of the offending continuation line), and ``line`` (the raw
+   text of the offending line).  All three values are stored as
+   attributes of the same name and are preserved in ``args`` for
+   pickling and copying.
+
+   .. attribute:: source
+
+   .. attribute:: lineno
+
+   .. attribute:: line
+```
+
+Wait, let me reconsider the wording. The reviewer says:
+- "distinguish relative greater indentation from indentation alone" — so I need to say the line has greater indentation than the option line, not just "an indented line"
+- "account for blank/comment processing" — blank/comment lines are handled before the continuation check, so they don't trigger this error
+
+Let me also re-read the parser code to be precise:
+
+```python
+# continuation line?
+first_nonspace = self.NONSPACECRE.search(line)
+cur_indent_level = first_nonspace.start() if first_nonspace else 0
+if (cursect is not None and optname and
+    cur_indent_level > indent_level):
+    if cursect[optname] is None:
+        raise MultilineContinuationError(fpname, lineno, line)
+    cursect[optname].append(value)
+```
+
+So:
+- `cur_indent_level` is the indentation of the current line
+- `indent_level` was set to the indentation of the last "structural" line (section header or option)
+- The check is `cur_indent_level > indent_level` — strictly greater
+- It only fires when `cursect[optname] is None` — i.e., the option is valueless
+
+And before this check:
+```python
+if not value:
+    # handle empty lines (either append '' or reset indent_level)
+    continue
+```
+And comment lines: after stripping, `value` would be empty, so they fall into the `if not value` branch and `continue`. So yes, blank/comment lines are handled before the continuation check and don't trigger the error.
+
+Actually wait — let me re-read. After comment stripping:
+```python
+value = line[:comment_start].strip()
+if not value:
+    ...
+    continue
+```
+So if the line is entirely a comment (after stripping), `value` is empty, and we `continue` without reaching the continuation check. Similarly for blank lines. So blank/comment lines don't trigger MultilineContinuationError.
+
+Now for the "relative greater indentation" — the key distinction is:
+- The line must have indentation *greater than* the option line's indentation (not just be indented at all)
+- This is because `indent_level` tracks the indentation of the current option/section line
+
+So "a line indented more deeply than the option line" or "a line with greater indentation than the preceding option line" is the correct phrasing.
+
+Let me also think about whether "preceding option line" is accurate. The `indent_level` is set when a non-continuation line is processed. So it's the indentation of the last structural line (which in this context would be the option line). Yes, "the preceding option line" works.
+
+Now let me write the patch. I need to use the file's sha256 and the current candidate id.
+
+File: Doc/library/configparser.rst
+file_sha256: f762aef9df12ce00eec2b7fee25a8c0a677f099f700a70120245083d65633854
+candidate_id: 1e665f8485a4340c360dc94a8dcc9e6a98281affb38ebad4ed08aa10e0b4fd5c
+
+The old text I need to match exactly. Let me be careful with the exact whitespace from the source shown:
+
+From the region (lines 1370-1408), the MultilineContinuationError section starts at some point. Let me identify the exact text:
+
+```
+.. exception:: MultilineContinuationError
+
+   Raised when an indented continuation line follows a valueless option
+   (an option with no value, as permitted by ``allow_no_value=True``).
+   This is a subclass of :exc:`!ParsingError`.
+
+   The constructor takes three arguments: ``source`` (the name of the
+   source being parsed, or ``'<string>'`` for string input), ``lineno``
+   (the one-based line number of the offending continuation line), and
+   ``line`` (the exact text of that line, including its trailing
+   newline).  All three values are stored as attributes of the same
+   name and are preserved in ``args`` for pickling and copying.
+
+   .. attribute:: source
+
+   .. attribute:: lineno
+
+   .. attribute:: line
+
+   .. versionadded:: 3.12
+```
+
+This should be unique in the file. Let me construct the patch.
+
+Actually, I realize I should double-check: is the `.. versionadded:: 3.12` line followed by the Footnotes section? Looking at the region, yes:
+
+```
+   .. versionadded:: 3.12
+
+.. rubric:: Footnotes
+```
+
+So my old text should end with `.. versionadded:: 3.12` and the new text should not include it.
+
+Let me also make sure about blank/comment processing wording. The reviewer says "account for blank/comment processing" — meaning the doc should explain that blank lines and comment lines are handled (processed/continued over) and thus don't trigger this error. Let me phrase it naturally.
+
+Let me write the final patch:
+
+Old:
+```
+.. exception:: MultilineContinuationError
+
+   Raised when an indented continuation line follows a valueless option
+   (an option with no value, as permitted by ``allow_no_value=True``).
+   This is a subclass of :exc:`!ParsingError`.
+
+   The constructor takes three arguments: ``source`` (the name of the
+   source being parsed, or ``'<string>'`` for string input), ``lineno``
+   (the one-based line number of the offending continuation line), and
+   ``line`` (the exact text of that line, including its trailing
+   newline).  All three values are stored as attributes of the same
+   name and are preserved in ``args`` for pickling and copying.
+
+   .. attribute:: source
+
+   .. attribute:: lineno
+
+   .. attribute:: line
+
+   .. versionadded:: 3.12
+```
+
+New:
+```
+.. exception:: MultilineContinuationError
+
+   Raised when a line indented more deeply than the preceding option
+   line follows a valueless option (an option with no value, as
+   permitted by ``allow_no_value=True``).  Blank lines and comment
+   lines are processed before the continuation check and do not
+   trigger this exception.  This is a subclass of
+   :exc:`!ParsingError`.
+
+   The constructor takes three arguments: ``source`` (the name of the
+   source being parsed, defaulting to ``'<string>'`` for string input
+   when no source name is supplied), ``lineno`` (the one-based line
+   number of the offending continuation line), and ``line`` (the raw
+   text of the offending line, which may lack a final newline).
+   All three values are stored as attributes of the same name and
+   are preserved in ``args`` for pickling and copying.
+
+   .. attribute:: source
+
+   .. attribute:: lineno
+
+   .. attribute:: line
+```
+
+This addresses all three findings:
+1. "indented more deeply than the preceding option line" distinguishes relative greater indentation from just "an indented line". "Blank lines and comment lines are processed before the continuation check and do not trigger this exception" accounts for blank/comment processing.
+2. "defaulting to ``'<string>'`` for string input when no source name is supplied" makes it clear it's a default, not a replacement. "the raw text of the offending line, which may lack a final newline" fixes the trailing newline claim.
+3. `.. versionadded:: 3.12` is removed.
+
+Let me verify the exact text from the source one more time. Looking at the region content:
+
+```
+.. exception:: MultilineContinuationError\n\n   Raised when an indented continuation line follows a valueless option\n   (an option with no value, as permitted by ``allow_no_value=True``).\n   This is a subclass of :exc:`!ParsingError`.\n\n   The constructor takes three arguments: ``source`` (the name of the\n   source being parsed, or ``'<string>'`` for string input), ``lineno``\n   (the one-based line number of the offending continuation line), and\n   ``line`` (the exact text of that line, including its trailing\n   newline).  All three values are stored as attributes of the same\n   name and are preserved in ``args`` for pickling and copying.\n\n   .. attribute:: source\n\n   .. attribute:: lineno\n\n   .. attribute:: line\n\n   .. versionadded:: 3.12\n
+```
+
+Wait, I need to be careful about the exact line endings. The source shows:
+- Line: `   .. versionadded:: 3.12`
+- Then a blank line (or directly the `.. rubric:: Footnotes`)
+
+Looking at the region content more carefully:
+```
+   .. attribute:: line
+
+   .. versionadded:: 3.12
+
+.. rubric:: Footnotes
+```
+
+So after `.. versionadded:: 3.12` there's a blank line, then `.. rubric:: Footnotes`. My old text should include the `.. versionadded:: 3.12` line. The blank line after it is part of the structure. Let me include it in my old text to be safe, or not? Actually, the patch matches exactly one occurrence. Let me just match through `.. versionadded:: 3.12` and the new text will end with `.. attribute:: line` followed by a newline. The blank line before `.. rubric:: Footnotes` should remain.
+
+Actually, let me be more careful. The old text I'm matching:
+```
+.. exception:: MultilineContinuationError
+
+   Raised when an indented continuation line follows a valueless option
+   (an option with no value, as permitted by ``allow_no_value=True``).
+   This is a subclass of :exc:`!ParsingError`.
+
+   The constructor takes three arguments: ``source`` (the name of the
+   source being parsed, or ``'<string>'`` for string input), ``lineno``
+   (the one-based line number of the offending continuation line), and
+   ``line`` (the exact text of that line, including its trailing
+   newline).  All three values are stored as attributes of the same
+   name and are preserved in ``args`` for pickling and copying.
+
+   .. attribute:: source
+
+   .. attribute:: lineno
+
+   .. attribute:: line
+
+   .. versionadded:: 3.12
+```
+
+And my new text:
+```
+.. exception:: MultilineContinuationError
+
+   Raised when a line indented more deeply than the preceding option
+   line follows a valueless option (an option with no value, as
+   permitted by ``allow_no_value=True``).  Blank lines and comment
+   lines are processed before the continuation check and do not
+   trigger this exception.  This is a subclass of
+   :exc:`!ParsingError`.
+
+   The constructor takes three arguments: ``source`` (the name of the
+   source being parsed, defaulting to ``'<string>'`` for string input
+   when no source name is supplied), ``lineno`` (the one-based line
+   number of the offending continuation line), and ``line`` (the raw
+   text of the offending line, which may lack a final newline).
+   All three values are stored as attributes of the same name and
+   are preserved in ``args`` for pickling and copying.
+
+   .. attribute:: source
+
+   .. attribute:: lineno
+
+   .. attribute:: line
+```
+
+This removes the `.. versionadded:: 3.12` line and the blank line after it (since the blank line before `.. rubric:: Footnotes` will remain as-is). Wait, actually if I end my old text at `.. versionadded:: 3.12` and my new text ends at `.. attribute:: line`, then the file will have:
+```
+   .. attribute:: line
+<blank line>
+.. rubric:: Footnotes
+```
+
+That's correct! The blank line between the exception block and the rubric is preserved because it was after my match region.
+
+Let me finalize the patch action.

@@ -1,3 +1,16 @@
+# Completed saved-library prose correction
+
+saved_library_prose/review/RESULTS.md closes the distinct saved-library entry with
+reviewer-directed, uncoached correction at98860482: three new requests/five operations,
+accurate revised docs, all non-doc bytes preserved, actual current pass and submission.
+Combined20requests/31operations and57.193 model minutes; keep32older archival actions
+separate. Exact replay and all-output review pass. Account claims of implementation
+verification exceed the source actually acquired for one supplied fact; preserve that
+qualification without inventing a new failure or feature. No recovery transition was
+exercised. Continue to exception_transport preparation, not another prose retry.
+The prior run's recorded apparatus intervals earn isolated profiling, not silent
+removal of source checks. See saved_library_entry/review/APPARATUS_REVIEW.md.
+
 # Qualified saved-library prose correction
 
 saved_library_prose/PREPARATION_REVIEW.md qualifies the exact1e665f84 checkpoint
