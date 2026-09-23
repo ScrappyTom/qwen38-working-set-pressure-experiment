@@ -1,3 +1,13 @@
+# Qualified saved-library prose correction
+
+saved_library_prose/PREPARATION_REVIEW.md qualifies the exact1e665f84 checkpoint
+and version-bound reviewer assignment. Preserve17requests/26operations plus32older
+archived actions; declare eight new requests/24operations, beginningC18. Three
+checkpoint tests and five native scripted operations pass with one actual check,
+zero model calls and exact non-documentation preservation. Run under standing
+authority without coaching; independently review the resulting prose. Supplied
+review findings must remain distinct from autonomous discovery.
+
 # Saved-library contribution and open prose findings
 
 The uncoached saved_library_entry run at76e0f11a reaches checked submission in17
