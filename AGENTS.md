@@ -1,3 +1,14 @@
+# Qualified exact recent search projection
+
+search_continuity/PREPARATION_REVIEW.md qualifies the opt-in continuation from the
+13-request/18-operation transport stop. Preserve the remaining11requests/54operations,
+medium uncapped settings and exact task/candidate/account. Native first input12529;
+five saved-input comparisons,one actual scripted check/submission and broad-search
+continuity to23644tokens pass,with zero model calls. Recent search detail shares the
+existing optional budget; it is historical navigation,not source-edit authority.
+Preserve failed preparation001's script error and the unrelated resident-read repeat.
+Publish before running; no live coaching or claim that a feasible route is behavior.
+
 # Exception-transport acquisition stop
 
 Read exception_transport/review/RESULTS.md and the complete transcript/host audits.

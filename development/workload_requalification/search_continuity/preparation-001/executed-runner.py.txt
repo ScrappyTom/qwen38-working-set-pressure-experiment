@@ -1,0 +1,133 @@
+"""Qualify projection and same-task continuation without resetting its allowance."""
+import argparse
+import copy
+import difflib
+import json
+from types import SimpleNamespace
+import bootstrap
+import search_task as study
+import search_navigation as projection
+import qualify_capture as fixtures
+import run_continuity as driver
+from manage import RUNTIME, legacy
+from working_set_exp.custody import ArtifactStore
+from working_set_exp.contribution_reply import completion_request_bytes
+from working_set_exp.jsonutil import canonical_json_bytes, sha256_bytes, sha256_file
+
+driver.controller.INHERITED_REQUESTS, driver.controller.INHERITED_OPERATIONS = 13,18
+runner = driver.runner
+
+
+def prepare(module):
+    folder = module.PACKAGE; folder.mkdir(exist_ok=False)
+    bound = module.source_identities(); store = ArtifactStore(folder)
+    log = legacy.QualificationLog(folder/'records.jsonl', 'search-continuity-preparation', task_module=module)
+    session, adapter = module.initial_session(), runner.Adapter(module)
+    initial, rows, error, checks = None, [], None, 0
+    try:
+        old_request = study.read(study.OLD/'calls/C13-wire-request.json')
+        request = adapter.request_for(session.view())
+        assert {k:v for k,v in request.items() if k!='messages'} == {k:v for k,v in old_request.items() if k!='messages'}
+        proof = study.previous.previous.previous.previous.decoder_reuse_bindings()
+        store.put('decoder-reuse.json', canonical_json_bytes(dict(cases=31,bindings=proof,completion_requests=0)))
+        module.attach_observations(session,folder,log)
+        server,model,_ = module.runtime_paths()
+        with RUNTIME.owned_runtime(SimpleNamespace(server=server,model=model,output=folder),store,log) as url:
+            loop = runner.Loop(folder,store,log,url=url,task_module=adapter,source_check=lambda:module.verify_sources(bound))
+            assert loop.measure(session.view()) <= 23808
+            selected = loop.cache[sha256_bytes(canonical_json_bytes(request))]
+            initial = {k:selected[k] for k in driver.controller.INITIAL_KEYS}
+            loop.snapshot(session,'starting')
+            store.put('initial-wire-request.json',completion_request_bytes(request))
+            # Native comparisons use exact archived inputs, not reconstructed diagnosis.
+            for tag,stem in {'C04':'C03-O01','C07':'C06-O02','C10':'C09-O01','C11':'C10-O02','C12':'C11-O01'}.items():
+                wire = study.read(study.OLD/f'calls/{tag}-wire-request.json')
+                user = json.loads(wire['messages'][-1]['content']); view=user['workspace']
+                pairs = study.read(study.OLD/f'after/{stem}-state.json')['pairs']
+                base = runner.Adapter(study.previous.Task('002'))
+                base.preceding_feedback = copy.deepcopy(user['preceding_operation_feedback'])
+                assert completion_request_bytes(base.request_for(view)) == (study.OLD/f'calls/{tag}-wire-request.json').read_bytes()
+                loop.task=base; before=loop.measure(view)
+                new_adapter=runner.Adapter(module)
+                new_adapter.preceding_feedback=copy.deepcopy(base.preceding_feedback)
+                changed=projection.project(view,pairs,session.candidate)
+                stripped=copy.deepcopy(changed); original=copy.deepcopy(view)
+                for value in (stripped,original):
+                    for row in value['recent_activity']:row.pop('navigation',None)
+                assert stripped==original
+                loop.task=new_adapter; after=loop.measure(changed); assert after<=23808
+                store.put(tag+'-projected-view.json',canonical_json_bytes(changed))
+                rows.append(dict(stage=tag,baseline_tokens=before,projected_tokens=after,added_tokens=after-before,
+                                 only_navigation_and_reference_changed=True))
+            loop.task=adapter
+            original=dict(session.candidate.file_map)
+            def action(target, target_adapter, tag, operation, basis):
+                nonlocal checks
+                loop.task=target_adapter
+                view=target.view(); target.mark_delivered(view)
+                store.put(tag+'-input.json',canonical_json_bytes(view));store.put(tag+'-basis.txt',basis.encode())
+                if operation['action']=='check':checks+=1
+                out=module.process_reply(target,dict(discussion='Researcher-scripted engineering qualification.',operation=operation),
+                                         loop.measure,target_adapter.preceding_feedback)
+                assert all(o['result']['accepted'] for o in out['operations']),out
+                count=loop.measure(target.view());assert count<=23808 and not target.delivery_blocked
+                store.put(tag+'-outcome.json',canonical_json_bytes(out));store.put(tag+'-view.json',canonical_json_bytes(target.view()))
+                rows.append(dict(stage=tag,tokens=count,operations=len(out['operations'])))
+                print(tag,count,flush=True)
+                return out['operations'][-1]['result']
+            # Reference work tests the same edit/check boundary, not autonomous design.
+            target=fixtures.TARGET; baseline=original[target].decode()
+            reference=fixtures.candidates()[1][1].file_map[target].decode()
+            changes=[r for r in difflib.SequenceMatcher(a=baseline.splitlines(True),b=reference.splitlines(True),autojunk=False).get_opcodes() if r[0]!='equal']
+            assert len(changes)==1 and changes[0][0]=='insert'
+            _,a,b,c,d=changes[0];anchor=''.join(baseline.splitlines(True)[a-2:a])
+            insertion=''.join(reference.splitlines(True)[c:d]);assert baseline.count(anchor)==1
+            found=action(session,adapter,'locate-reference-anchor',dict(action='search',path=target,query=anchor.strip(),offset=0,limit=8),
+                         'The historical public reference proposal identifies this anchor; its code is evaluator-supplied, never actor input. Search obtains exact coordinates.')
+            region=found['regions'][0]
+            action(session,adapter,'read-reference-context',dict(action='read',path=target,start_line=max(1,region['match_line']-30),end_line=region['end_line']),
+                   'The actual search locates the existing regression and insertion context; obtain exact source before the reference edit.')
+            assert any(anchor in r['content'] for r in session.view()['working_set']['sources'] if r['path']==target)
+            action(session,adapter,'save-reference-tests',dict(action='patch',path=target,old=anchor,new=anchor+insertion,
+                   expected_candidate_id=session.candidate.candidate_id,expected_file_sha256=session.candidate.file_sha256(target)),
+                   'Reference tests already independently qualified for this contract; this route qualifies their execution with the new presentation, not model authorship or discovery.')
+            assert session.candidate.file_map[target].decode()==reference
+            checked=action(session,adapter,'check-reference-successor',dict(action='check',check_id='public',expected_candidate_id=session.candidate.candidate_id),
+                           'Run the unchanged actual coverage checker on the saved successor.')
+            assert checked['passed']
+            action(session,adapter,'submit-reference',dict(action='submit',expected_candidate_id=session.candidate.candidate_id),
+                   'The actual current check passes; no pass is inferred from the authored proposal alone.')
+            assert session.submitted and all(session.candidate.file_map[p]==v for p,v in original.items() if p!=target)
+            loop.snapshot(session,'scripted-final')
+            # A separate broad-selection branch checks optional detail priority.
+            broad=module.initial_session(); broad_adapter=runner.Adapter(module)
+            for tag,op,basis in [
+                ('broad-library',dict(action='read',path='Lib/configparser.py',start_line=1,end_line=0),'Declared engineering broad-acquisition stress; not necessary task reading.'),
+                ('broad-tests',dict(action='read',path=target,start_line=1,end_line=0),'Acquire a real large page under the existing paging policy; inspect actual extents.'),
+                ('broad-search',dict(action='search',path='Lib/configparser.py',query='MultilineContinuationError',offset=0,limit=8),'Task symbol supplies the query; test delivery of actual coordinates beside broad evidence.'),
+                ('after-search-account',dict(action='record_account',text=broad.working_account()['text']),'Preserve the already-authored account while the preceding search moves to recent navigation. No new semantic interpretation supplied.')]:
+                action(broad,broad_adapter,tag,op,basis)
+            assert broad.candidate.candidate_id==study.previous.STARTING_ID
+            loop.snapshot(broad,'broad-final')
+            module.verify_sources(bound)
+    except BaseException as exc:
+        error=exc;study.save(folder,'FAILED.json',dict(type=type(exc).__name__,message=str(exc)))
+    finally:
+        study.save(folder,'QUALIFICATION.json',dict(initial=initial,trials=rows,completion_requests=0,checks_executed=checks,
+            inherited_requests=13,inherited_operations=18,maximum_new_requests=11,maximum_new_operations=54,
+            memory=RUNTIME.memory_stats(folder/'memory.csv'),port_free=RUNTIME.port_free(RUNTIME.PORT)))
+        legacy.seal(folder,'failed_preserved' if error else 'qualified_no_model_inference',bound,completion_requests=0)
+    if error:raise error
+    study.save(module.AREA,module.MANIFEST.name,dict(actor=module.ACTOR,seed=module.SEED,maximum_requests=24,maximum_operations=72,
+        source_sha256=bound,preparation_seal_sha256=sha256_file(folder/'SEAL.json'),preparation_package=folder.name,initial=initial,
+        owner_direction=study.OWNER_DIRECTION,inherited_requests=13,inherited_operations=18,maximum_new_requests=11,maximum_new_operations=54,
+        no_live_coaching=True,automatic_retry=False))
+    runner.verify_package(module)
+    print(json.dumps(dict(status='qualified',initial=initial,trials=rows,completion_requests=0)),flush=True)
+
+
+if __name__=='__main__':
+    p=argparse.ArgumentParser();p.add_argument('mode',choices=('prepare','run'));p.add_argument('--version',default='001')
+    args=p.parse_args();module=study.Task(args.version)
+    if args.mode=='prepare':prepare(module)
+    else:runner.run_once(SimpleNamespace(owner_direction=study.OWNER_DIRECTION,manifest_sha256=sha256_file(module.MANIFEST)),module)

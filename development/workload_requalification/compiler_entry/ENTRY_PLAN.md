@@ -46,3 +46,21 @@ selection or continuity. Reconcile exact phase text/setup/counters before portin
 No implementation, model request, checker execution or completed qualification is
 claimed by this plan. Native capture/group capacity must be measured with the exact
 new decision view, not inferred from old event-frame failures.
+
+## Confirmed legacy access boundary
+
+scripts/run_compiler_incident.py reconstructs OBS-0001 through OBS-0003 from exact
+canonical capture records and verifies their candidate, size and digest against
+observations.json. src/working_set_exp/tools.py already defines the historical
+reopen_observation(handle) operation; it retrieves those bytes without execution.
+Its old stage and22k wrapper constraints must not be blindly transplanted.
+
+Prefer qualifying this existing acquisition meaning on the new host before adding
+new vocabulary. An actual accepted capture acquisition can produce an ordinary new
+RES receipt, which existing explicit saved-result grouping can retain. This avoids
+inventing earlier actions or extending edit-eligible source with fixture captures.
+The initial capture inventory must expose the original labels/scope and addresses,
+and state that they are incident evidence about the original candidate, not checks
+of a later repair. Any added reply form requires native decoder qualification.
+Exact whole-record/group fit and a truthful bounded fallback remain to be measured.
+This is a design candidate, not an implemented or qualified bridge.
