@@ -78,7 +78,7 @@ def prepare(module):
                 store.put(tag+'-input-view.json',canonical_json_bytes(view))
                 store.put(tag+'-justification.txt',justification.encode())
                 session.mark_delivered(view)
-                result=module.process_reply(session,dict(operation=operation),loop.measure,adapter.preceding_feedback)
+                result=module.process_reply(session,dict(discussion='Researcher-scripted engineering qualification.',operation=operation),loop.measure,adapter.preceding_feedback)
                 assert all(r['result']['accepted'] for r in result['operations']),result
                 count=loop.measure(session.view());assert count<=23808 and not session.delivery_blocked
                 store.put(tag+'-outcome.json',canonical_json_bytes(result))

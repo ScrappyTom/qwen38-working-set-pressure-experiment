@@ -16,3 +16,12 @@ three live diagnostics and preservation of the old adapter. The overview fills
 a bounded serialized-detail allowance by measured bytes rather than a fixed
 one/two-diagnostic count; complete next-input admission remains the host's job.
 Scope outcomes remain compact and visible. Native qualification is still pending.
+
+Native preparation001 preserves a runner-fixture failure: the scripted reply
+omitted the discussion field required by the operational schema, and validation
+stopped before any new check. This is the preparation apparatus, not Qwen or a
+host operation defect. The runtime closed, with zero completion requests and zero
+new checks. Source revision737c4a42 preserves the failing code. The two measured
+counterfactuals nevertheless show all three live failures at15,785 tokens and
+retention after search at14,371. Initial continuation input was14,668 tokens.
+Correct the scripted reply, preserve001, and rerun qualification in002.
