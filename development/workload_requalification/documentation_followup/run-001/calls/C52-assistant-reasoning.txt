@@ -1,0 +1,481 @@
+Let me analyze the situation:
+
+1. The public check has passed on candidate `7fc13aa1d10ec3b0f452cddc800236524a168c4d3610d00ee3f6dcc20214513d`.
+2. The task is to fix documentation for MultilineContinuationError - specifically two issues:
+   - The parenthetical equates a continuation line with any line beginning with whitespace. The parser's indentation and blank/comment handling make that description too broad.
+   - `allow_no_value` is a constructor option, not a public attribute; its attribute role is misleading.
+
+3. Looking at the current documentation (from the source at lines 1360-1408):
+
+```
+.. exception:: MultilineContinuationError
+
+   Exception raised when a continuation line (a non-blank, non-comment
+   line whose indentation is greater than that of the preceding option)
+   follows an option that has no value.  This condition is only possible
+   when the ``allow_no_value`` constructor option is ``True``.  Subclass
+   of :exc:`ParsingError`.
+
+   Instances provide the following attributes:
+
+   ``source``
+      The name of the file or string source being parsed.
+
+   ``lineno``
+      The one-based line number of the offending continuation line.
+
+   ``line``
+      The exact content of the offending continuation line.
+```
+
+Now let me look at the actual parser code to understand what constitutes a "continuation line":
+
+From the parser code (lines 1010-1075):
+```python
+# continuation line?
+first_nonspace = self.NONSPACECRE.search(line)
+cur_indent_level = first_nonspace.start() if first_nonspace else 0
+if (cursect is not None and optname and
+    cur_indent_level > indent_level):
+    if cursect[optname] is None:
+        raise MultilineContinuationError(
+            fpname, lineno, line)
+    cursect[optname].append(value)
+```
+
+Key observations:
+1. A "continuation line" is determined by:
+   - `cur_indent_level > indent_level` where `indent_level` is set when the option header line was processed (it's the indentation of the option header line's first non-space character)
+   - The line must be in a section with an active option (`cursect is not None and optname`)
+   - The line must not be blank/comment (those are handled earlier in the loop and `continue`)
+
+2. So the current doc says "a non-blank, non-comment line whose indentation is greater than that of the preceding option" - but `indent_level` is set to `cur_indent_level` of the *option header line* (the line that starts with the option name). So "that of the preceding option" is accurate - it means the indentation of the option's header line.
+
+Wait, let me re-read the reviewer's concerns:
+- "The parenthetical equates a continuation line with any line beginning with whitespace." 
+
+Looking at the current text: "a non-blank, non-comment line whose indentation is greater than that of the preceding option"
+
+Actually, looking more carefully at the code:
+- `indent_level` is set to `cur_indent_level` when a non-continuation line is processed (i.e., a section header or option header)
+- A continuation line has `cur_indent_level > indent_level`
+- The value of the continuation line is `line[:comment_start].strip()` - so it's the stripped content
+- The line that triggers the error is the raw `line` (with its newline, etc.)
+
+Wait, let me re-read the reviewer's concern more carefully:
+"The parenthetical equates a continuation line with any line beginning with whitespace. The parser's indentation and blank/comment handling make that description too broad."
+
+The current doc says: "a non-blank, non-comment line whose indentation is greater than that of the preceding option"
+
+Actually, I think the issue is subtler. Let me look at what "indentation is greater than that of the preceding option" means. In the code:
+- When an option header is found, `indent_level = cur_indent_level` (the indentation of the option header line)
+- A subsequent line is a continuation if its indentation > `indent_level`
+
+So "that of the preceding option" correctly refers to the option header line's indentation. But the reviewer says the parenthetical "equates a continuation line with any line beginning with whitespace." 
+
+Hmm, wait. Let me re-read the current text more carefully:
+
+"a non-blank, non-comment line whose indentation is greater than that of the preceding option"
+
+I think the reviewer's point might be that this is actually accurate for the *general* definition of continuation, but the specific issue is about what makes it raise MultilineContinuationError vs. just being a continuation. The error only happens when `cursect[optname] is None` (i.e., the option has no value / is valueless). 
+
+Actually wait, let me re-read the full sentence: "Exception raised when a continuation line (a non-blank, non-comment line whose indentation is greater than that of the preceding option) follows an option that has no value."
+
+So the structure is:
+- Main clause: "Exception raised when a continuation line ... follows an option that has no value"
+- Parenthetical: defines what a continuation line is
+
+The reviewer says the parenthetical is "too broad" because "the parser's indentation and blank/comment handling make that description too broad."
+
+Hmm, but the parenthetical says "a non-blank, non-comment line whose indentation is greater than that of the preceding option." Let me think about what's wrong with this...
+
+Actually, I think the issue might be more nuanced. Let me look at the code again:
+
+```python
+value = line[:comment_start].strip()
+if not value:
+    # handle blank lines
+    continue
+# continuation line?
+first_nonspace = self.NONSPACECRE.search(line)
+cur_indent_level = first_nonspace.start() if first_nonspace else 0
+```
+
+So `cur_indent_level` is the position of the first non-space character in the raw line. And `indent_level` is the same measurement for the option header line.
+
+A line is a continuation if:
+1. It's not blank after stripping (i.e., has content)
+2. It's not a comment (the comment handling strips it)
+3. Its first non-space character is at a position > the option header's first non-space character position
+
+Actually wait, I think the parenthetical IS accurate. Let me re-read the reviewer's concern:
+
+"The parenthetical equates a continuation line with any line beginning with whitespace."
+
+Hmm, maybe the issue is that "indentation is greater than that of the preceding option" could be misread as "any line that begins with whitespace" (since having greater indentation implies it begins with whitespace). But actually, a line with the *same* indentation as the option header wouldn't be a continuation - it would be treated as a new option or section header.
+
+Actually, I think I'm overthinking this. Let me re-read the task description:
+
+"The reviewer found two issues in the exception entry:
+- The parenthetical equates a continuation line with any line beginning with whitespace. The parser's indentation and blank/comment handling make that description too broad.
+- allow_no_value is a constructor option, not a public attribute; its attribute role is misleading."
+
+For issue 1: The current parenthetical says "a non-blank, non-comment line whose indentation is greater than that of the preceding option". The reviewer says this "equates a continuation line with any line beginning with whitespace." 
+
+Wait, I think I need to understand the reviewer's point better. The phrase "indentation is greater than that of the preceding option" - if the preceding option has 0 indentation (which is the common case for `key = value`), then any line with indentation > 0 (i.e., any line beginning with whitespace) would be a continuation. The reviewer is saying this makes it sound like *any* indented line is a continuation, when in reality it's specifically about being indented more than the *option header line*.
+
+But actually, that IS what the code does. If the option header is `key = value` (0 indent), then a line with 1+ spaces of indent is a continuation. If the option header itself is indented (say 4 spaces), then a continuation must be indented more than 4 spaces.
+
+Hmm, let me think about this differently. Maybe the issue is that the description doesn't accurately capture what happens. Let me look at the test:
+
+```python
+INPUT = "[service]\noptional_flag\n    continuation\n"
+```
+
+Here:
+- `[service]` is a section header (indent 0)
+- `optional_flag` is an option header with no value (indent 0, so `indent_level = 0`)
+- `    continuation` has indent 4 > 0, so it's a continuation line
+
+The error is raised because `cursect[optname] is None` (the option has no value).
+
+So the parenthetical description "a non-blank, non-comment line whose indentation is greater than that of the preceding option" is actually accurate. The "preceding option" here means the option header line.
+
+Wait, but what does "that of the preceding option" mean grammatically? "indentation is greater than that of the preceding option" - "that" refers to "indentation", so it's "indentation is greater than the indentation of the preceding option." This seems correct.
+
+Let me reconsider the reviewer's concern. Maybe the issue is that the parenthetical is trying to define what a "continuation line" is in general, but in the parser, a continuation line has a very specific meaning that depends on context (being after an option in the same section, having more indentation than the option header, etc.). The parenthetical as written might be too broad because:
+1. It doesn't mention that the line must be in the same section
+2. It doesn't mention that it must follow an option (not a section header)
+3. "non-blank, non-comment" is necessary but not sufficient - the line also needs to be processed (not skipped by other logic)
+
+Actually, I think I need to just focus on making the description more accurate and specific. Let me look at what the code actually does:
+
+A line is treated as a continuation (and can trigger MultilineContinuationError) when:
+1. We're in a section (`cursect is not None`)
+2. There's an active option (`optname` is set)
+3. The line's indentation (position of first non-space char) is strictly greater than the option header's indentation
+4. The line is not blank (after stripping inline comments)
+5. The line is not a full-line comment
+6. The option's value is None (valueless)
+
+For the documentation, I think the key corrections are:
+1. The parenthetical should be more precise about what makes a line a continuation in the parser's logic
+2. `allow_no_value` should be described as a constructor option, not as an attribute
+
+Let me look at the current text again:
+```
+.. exception:: MultilineContinuationError
+
+   Exception raised when a continuation line (a non-blank, non-comment
+   line whose indentation is greater than that of the preceding option)
+   follows an option that has no value.  This condition is only possible
+   when the ``allow_no_value`` constructor option is ``True``.  Subclass
+   of :exc:`ParsingError`.
+```
+
+For issue 2, the current text says "when the ``allow_no_value`` constructor option is ``True``" - this actually already says "constructor option"! So maybe the issue is elsewhere. Let me re-read...
+
+Oh wait, I see. The task says "allow_no_value is a constructor option, not a public attribute; its attribute role is misleading." Maybe in the original documentation (before my previous edit), it said something like "when the allow_no_value attribute is True" and my previous edit already fixed it to say "constructor option". Let me check what the current state is.
+
+Looking at the current source (lines 1360-1408), the text says:
+"when the ``allow_no_value`` constructor option is ``True``"
+
+So it already says "constructor option". Good. But the reviewer's concern was about the original text. Since my previous edit (EVT-0074) already addressed this, maybe the current text is fine on that point.
+
+Wait, but the task says "The reviewer found two issues in the exception entry" and asks me to "correct the entry so it accurately describes the supported behavior, including the exact offending line."
+
+Let me re-read the task: "Inspect the relevant existing source/documentation as needed and correct the entry so it accurately describes the supported behavior, including the exact offending line."
+
+So the issues to fix are:
+1. The parenthetical definition of continuation line is too broad/inaccurate
+2. Something about allow_no_value's role being misleading
+
+For issue 1, looking at the current parenthetical: "a non-blank, non-comment line whose indentation is greater than that of the preceding option"
+
+The reviewer says this "equates a continuation line with any line beginning with whitespace." I think the point is:
+- In the common case where options start at column 0, any line beginning with whitespace (i.e., any indented line) would match "indentation greater than that of the preceding option"
+- But that's not quite right - it's specifically about being indented MORE than the option header line
+- Also, the description doesn't account for the fact that blank lines and comment lines are handled separately (they're skipped before the continuation check)
+
+Actually, I think the reviewer's point is more specific. Let me re-read: "The parenthetical equates a continuation line with any line beginning with whitespace. The parser's indentation and blank/comment handling make that description too broad."
+
+I think the reviewer is saying:
+- The way it's phrased, "indentation is greater than that of the preceding option" sounds like "the line is indented" (i.e., begins with whitespace)
+- But in reality, the comparison is specifically between the line's first-nonspace position and the option header's first-nonspace position
+- Also, blank lines and comment lines don't reach this check (they're handled earlier and `continue`d)
+
+So the parenthetical should be more precise. Let me think about how to phrase this better:
+
+"a non-blank, non-comment line whose first non-whitespace character appears at a column further right than the first non-whitespace character of the option's header line"
+
+Or maybe: "an indented, non-blank, non-comment line that appears after an option header and whose indentation exceeds that of the option header line"
+
+Hmm, but actually I realize the issue might be even simpler. Let me re-read the current text:
+
+"Exception raised when a continuation line (a non-blank, non-comment line whose indentation is greater than that of the preceding option) follows an option that has no value."
+
+The problem with "that of the preceding option" - "the preceding option" is ambiguous. Does it mean:
+- The option that precedes this line (i.e., the option header line)?
+- The indentation level of the preceding option (as in, the indentation of the option's value)?
+
+I think "the preceding option" is meant to refer to the option header line. But the phrasing "indentation is greater than that of the preceding option" could be read as "the line's indentation is greater than the option's indentation" which is a bit vague.
+
+Let me think about what would be a more accurate description:
+
+A continuation line in the parser is a line that:
+- Is not blank (after comment stripping)
+- Is not a comment
+- Has its first non-space character at a position strictly to the right of the first non-space character in the option header line
+- Appears while the parser is in the "continuation" state (i.e., after an option has been seen, before a new section/option header)
+
+For the documentation, I think the key fix for the parenthetical is to make it clear that the comparison is with the *option header line's* indentation, not just "the preceding option" generically.
+
+Now, for issue 2 about `allow_no_value`: The current text says "This condition is only possible when the ``allow_no_value`` constructor option is ``True``." This seems accurate. But the reviewer said "allow_no_value is a constructor option, not a public attribute; its attribute role is misleading." 
+
+Wait, maybe the issue is that the text implies it's an attribute of the parser instance? Let me look... No, it says "constructor option" which is correct. Maybe the reviewer's concern was about the original text and my previous edit already fixed it.
+
+Actually, let me re-read the task more carefully: "The reviewer found two issues in the exception entry" - these are the issues in the CURRENT state of the documentation. Let me look at what's currently there:
+
+```
+   Exception raised when a continuation line (a non-blank, non-comment
+   line whose indentation is greater than that of the preceding option)
+   follows an option that has no value.  This condition is only possible
+   when the ``allow_no_value`` constructor option is ``True``.  Subclass
+   of :exc:`ParsingError`.
+```
+
+Hmm, for issue 2, "when the ``allow_no_value`` constructor option is ``True``" - this is actually fine. It correctly identifies it as a constructor option. Unless the reviewer is objecting to the phrasing "is ``True``" which might imply it's checking an attribute value rather than a constructor parameter.
+
+Actually, I wonder if the issue is that the sentence structure "This condition is only possible when the ``allow_no_value`` constructor option is ``True``" could be misread as "the allow_no_value attribute is True" (reading "constructor option" as a modifier of "option" rather than as a compound noun meaning "option passed to the constructor").
+
+Let me think about what wording would be unambiguous:
+"This condition can only occur when the parser was created with the ``allow_no_value`` parameter set to ``True``."
+
+Or: "This condition only arises if the parser was constructed with ``allow_no_value=True``."
+
+OK so let me now think about what the corrected text should be. Let me also consider "including the exact offending line" from the task - the `line` attribute. The current doc says:
+
+```
+   ``line``
+      The exact content of the offending continuation line.
+```
+
+Looking at the code:
+```python
+raise MultilineContinuationError(fpname, lineno, line)
+```
+
+And in the test:
+```python
+self.assertEqual(cm.exception.line, '    continuation\n')
+```
+
+So `line` includes the trailing newline and the leading whitespace. "The exact content of the offending continuation line" - is this accurate? It's the raw line from the file/string, including leading whitespace and trailing newline. "Exact content" seems right, but maybe "the raw line, including any leading whitespace and trailing newline" would be more precise.
+
+Actually, looking at the test: `self.assertEqual(cm.exception.line, '    continuation\n')` - yes, it includes the leading spaces and the trailing newline. So "The exact content of the offending continuation line" is accurate but maybe could be more explicit.
+
+Let me now draft the corrected documentation entry:
+
+```
+.. exception:: MultilineContinuationError
+
+   Exception raised when a continuation line follows an option that has
+   no value.  A continuation line, in this context, is a non-blank,
+   non-comment line whose first non-whitespace character is indented
+   further than the first non-whitespace character of the option's
+   header line.  This condition can only occur when the parser was
+   created with the ``allow_no_value`` parameter set to ``True``.
+   Subclass of :exc:`ParsingError`.
+
+   Instances provide the following attributes:
+
+   ``source``
+      The name of the file or string source being parsed.
+
+   ``lineno``
+      The one-based line number of the offending continuation line.
+
+   ``line``
+      The raw content of the offending continuation line, including
+      any leading whitespace and trailing newline.
+```
+
+Wait, let me reconsider. The reviewer said:
+1. "The parenthetical equates a continuation line with any line beginning with whitespace."
+2. "allow_no_value is a constructor option, not a public attribute; its attribute role is misleading."
+
+For #1, I need to make sure the description doesn't sound like "any line with whitespace at the start." The key distinction is that it's about the *relative* indentation compared to the option header.
+
+For #2, I need to make sure `allow_no_value` is clearly identified as a constructor parameter, not an attribute. The current text says "constructor option" which should be fine, but maybe the phrasing "is ``True``" makes it sound like an attribute check. Let me use "parameter" instead.
+
+Also, the task says "correct the entry so it accurately describes the supported behavior, including the exact offending line." The "including the exact offending line" part might mean I should make sure the `line` attribute description is accurate.
+
+Let me look at what `line` actually contains in the code path:
+
+In `_read`:
+```python
+for lineno, line in enumerate(fp, start=1):
+    ...
+    raise MultilineContinuationError(fpname, lineno, line)
+```
+
+So `line` is the raw line from iterating the file object, which includes the trailing newline. In the test with `read_string`, the input is `"[service]\noptional_flag\n    continuation\n"` and the error's line is `'    continuation\n'`.
+
+So "The exact content of the offending continuation line" is accurate. But maybe I should be more specific: "The raw line as read from the source, including leading whitespace and trailing line ending."
+
+Actually, let me keep it simple and accurate. The current description "The exact content of the offending continuation line" is fine. The reviewer didn't specifically flag this as wrong.
+
+Let me focus on the two specific issues:
+
+1. Fix the parenthetical to not equate continuation with "any line beginning with whitespace"
+2. Fix the `allow_no_value` description to clearly be a constructor parameter, not an attribute
+
+Here's my proposed replacement for the MultilineContinuationError section:
+
+```
+.. exception:: MultilineContinuationError
+
+   Exception raised when a continuation line follows an option that has
+   no value.  In the parser, a continuation line is a non-blank,
+   non-comment line whose indentation (the position of its first
+   non-whitespace character) exceeds that of the option header line.
+   This condition can only arise when the parser was created with the
+   ``allow_no_value`` parameter set to ``True``.  Subclass
+   of :exc:`ParsingError`.
+
+   Instances provide the following attributes:
+
+   ``source``
+      The name of the file or string source being parsed.
+
+   ``lineno``
+      The one-based line number of the offending continuation line.
+
+   ``line``
+      The exact content of the offending continuation line.
+```
+
+Hmm, let me reconsider the phrasing. "In the parser, a continuation line is..." - this is a bit informal for documentation. Let me try:
+
+"Exception raised when a continuation line follows an option that has no value.  A continuation line, as determined by the parser, is a non-blank, non-comment line whose first non-whitespace character is indented beyond that of the option's header line.  This condition can only arise when the parser is constructed with the ``allow_no_value`` parameter set to ``True``.  Subclass of :exc:`ParsingError`."
+
+Actually, I want to be careful about line length (512 bytes max per line) and keeping it clean. Let me also think about whether "beyond" is the right word vs "further than" or "greater than".
+
+In the code: `cur_indent_level > indent_level` - strictly greater. So "exceeds" or "is greater than" is correct.
+
+Let me also reconsider: the reviewer said the parenthetical "equates a continuation line with any line beginning with whitespace." I think the fix is to make it clear that:
+- It's not just "a line with whitespace" but specifically "a line whose first non-space character is further indented than the option header's first non-space character"
+- This is a relative comparison, not an absolute "has whitespace" check
+
+Let me write my final version:
+
+```
+.. exception:: MultilineContinuationError
+
+   Exception raised when a continuation line follows an option that has
+   no value.  In the parser's line-processing logic, a continuation line
+   is a non-blank, non-comment line whose first non-whitespace character
+   is indented further than the first non-whitespace character of the
+   option's header line.  This condition can only arise when the parser
+   was created with the ``allow_no_value`` parameter set to ``True``.
+   Subclass of :exc:`ParsingError`.
+
+   Instances provide the following attributes:
+
+   ``source``
+      The name of the file or string source being parsed.
+
+   ``lineno``
+      The one-based line number of the offending continuation line.
+
+   ``line``
+      The exact content of the offending continuation line.
+```
+
+Wait, I need to check: does "option's header line" make sense? In INI format, an option line looks like `key = value`. The "header line" would be that line. Actually, in configparser terminology, I think it's just called an "option line" or the line containing the option name. Let me check the code...
+
+In the code, `indent_level = cur_indent_level` is set when processing a section header or option header (the `else` branch after the continuation check). So `indent_level` tracks the indentation of the most recent section/option header line.
+
+I think "option's header line" is clear enough. Or I could say "the line introducing the option" or "the option's defining line."
+
+Actually, let me look at how configparser docs refer to this elsewhere. The standard terminology in configparser docs is just "option" for the `key = value` line. So maybe "the option line" or "the line defining the option."
+
+Let me go with "the line introducing the option" - no, that's awkward. Let me just say "the option's header line" - it's clear enough in context.
+
+Hmm, actually re-reading the original: "whose indentation is greater than that of the preceding option" - I think "the preceding option" refers to the option (i.e., the key=value line), and "that" refers to "indentation." So it's saying "the line's indentation > the option's indentation." The issue is that "the preceding option" is a bit vague - does it mean the option's value line? The option's key? The whole option line?
+
+I think "the option's header line" is clearer. Let me finalize:
+
+```
+.. exception:: MultilineContinuationError
+
+   Exception raised when a continuation line follows an option that has
+   no value.  A continuation line, as determined by the parser, is a
+   non-blank, non-comment line whose first non-whitespace character is
+   indented further than the first non-whitespace character of the line
+   introducing the option.  This condition can only arise when the
+   parser was created with the ``allow_no_value`` parameter set to
+   ``True``.  Subclass of :exc:`ParsingError`.
+
+   Instances provide the following attributes:
+
+   ``source``
+      The name of the file or string source being parsed.
+
+   ``lineno``
+      The one-based line number of the offending continuation line.
+
+   ``line``
+      The exact content of the offending continuation line.
+```
+
+This addresses both issues:
+1. The description of a continuation line is now specific: it's about the relative position of the first non-whitespace character, not just "has whitespace"
+2. `allow_no_value` is described as a parameter used at creation time ("was created with the ... parameter set to"), making it clear it's a constructor parameter, not an instance attribute
+
+Now I need to make the edit. Let me identify the exact old text and new text for the patch.
+
+The old text (from the current source, lines 1360-1408):
+```
+.. exception:: MultilineContinuationError
+
+   Exception raised when a continuation line (a non-blank, non-comment
+   line whose indentation is greater than that of the preceding option)
+   follows an option that has no value.  This condition is only possible
+   when the ``allow_no_value`` constructor option is ``True``.  Subclass
+   of :exc:`ParsingError`.
+```
+
+The new text:
+```
+.. exception:: MultilineContinuationError
+
+   Exception raised when a continuation line follows an option that has
+   no value.  A continuation line, as determined by the parser, is a
+   non-blank, non-comment line whose first non-whitespace character is
+   indented further than the first non-whitespace character of the line
+   introducing the option.  This condition can only arise when the
+   parser was created with the ``allow_no_value`` parameter set to
+   ``True``.  Subclass of :exc:`ParsingError`.
+```
+
+Now, I need to use the patch action. I have:
+- path: "Doc/library/configparser.rst"
+- expected_candidate_id: "7fc13aa1d10ec3b0f452cddc800236524a168c4d3610d00ee3f6dcc20214513d"
+- expected_file_sha256: "69a66f9b0880b507bfc4c18a3acd895d07897356aa0e8cfbfac51cd992fbe80c"
+
+Let me construct the old text carefully from the visible source. Looking at the source content for lines 1360-1408:
+
+```
+.. exception:: MultilineContinuationError
+
+   Exception raised when a continuation line (a non-blank, non-comment
+   line whose indentation is greater than that of the preceding option)
+   follows an option that has no value.  This condition is only possible
+   when the ``allow_no_value`` constructor option is ``True``.  Subclass
+   of :exc:`ParsingError`.
+```
+
+This should be unique in the file. Let me use a patch to replace it.
+
+Actually, I should also update my account. Let me include that with the operation.

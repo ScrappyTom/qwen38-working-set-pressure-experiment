@@ -1,0 +1,83 @@
+Let me analyze the current state:
+
+1. The task is a documentation review follow-up on the MultilineContinuationError backport.
+2. The previous contribution has a current passing public check (on candidate `fea5a86923cfb6ba9ca275ac0428b95f395371d04bedf7d7580644532f31dd77`).
+3. The reviewer found two issues in the exception entry:
+   - The parenthetical equates a continuation line with any line beginning with whitespace (too broad)
+   - `allow_no_value` is a constructor option, not a public attribute; its attribute role is misleading
+
+4. Looking at the latest patch (EVT-0074), the edit already changed the documentation to:
+```
+   Exception raised when a continuation line (a non-blank, non-comment
+   line whose indentation is greater than that of the preceding option)
+   follows an option that has no value.  This condition is only possible
+   when the ``allow_no_value`` constructor option is ``True``.  Subclass
+   of :exc:`ParsingError`.
+```
+
+This already addresses both issues:
+- Instead of "a line beginning with whitespace", it now says "a non-blank, non-comment line whose indentation is greater than that of the preceding option"
+- Instead of ":attr:`!allow_no_value` is ``True``", it now says "the ``allow_no_value`` constructor option is ``True``"
+
+The current candidate is `7fc13aa1d10ec3b0f452cddc800236524a168c4d3610d00ee3f6dcc20214513d` (after the patch).
+
+The public check was run on the PREVIOUS candidate (`fea5a86923cfb6ba9ca275ac0428b95f395371d04bedf7d7580644532f31dd77`) and passed. Now I need to run the public check on the current candidate (`7fc13aa1d10ec3b0f452cddc800236524a168c4d3610d00ee3f6dcc20214513d`).
+
+Wait, let me re-read the verification. The check says:
+- `applies_to_current`: false
+- The check was on candidate `fea5a86923cfb6ba9ca275ac0428b95f395371d04bedf7d7580644532f31dd77`
+- The current candidate is `7fc13aa1d10ec3b0f452cddc800236524a168c4d3610d00ee3f6dcc20214513d`
+
+So I need to run the public check on the current candidate. Let me do that.
+
+But wait - let me first verify the documentation is accurate by reviewing the parser code. Looking at the parser source (SRC-4f8cf5d80f084397c60f2a4530cab06a1581367870f20306df677b544b1a340e):
+
+```python
+# continuation line?
+first_nonspace = self.NONSPACECRE.search(line)
+cur_indent_level = first_nonspace.start() if first_nonspace else 0
+if (cursect is not None and optname and
+    cur_indent_level > indent_level):
+    if cursect[optname] is None:
+        raise MultilineContinuationError(
+            fpname, lineno, line)
+```
+
+So a continuation line is:
+- A non-blank line (blank lines are handled earlier and `continue`)
+- A non-comment line (comment lines are handled: if `line.strip().startswith(prefix)` then `comment_start = 0`, making `value = ''`, which is then skipped as empty)
+- Wait, let me re-read. The comment handling sets `comment_start = 0` for full-line comments. Then `value = line[:comment_start].strip()` would be `line[:0].strip()` = `''`. So it's treated as empty.
+
+Actually wait, let me trace through more carefully:
+1. `comment_start = sys.maxsize` initially
+2. Inline comments are stripped
+3. Full-line comments: `for prefix in self._comment_prefixes: if line.strip().startswith(prefix): comment_start = 0; break`
+4. If `comment_start == sys.maxsize`, set to None
+5. `value = line[:comment_start].strip()`
+6. If not value: handle empty line case and `continue`
+
+So for a full-line comment, `comment_start = 0`, `value = ''`, and it continues (skips). So comments are skipped.
+
+For a continuation line, the check is:
+- `cur_indent_level > indent_level` where `cur_indent_level` is the position of the first non-space character in the line
+- And the preceding option's value is None (`cursect[optname] is None`)
+
+So the description "a non-blank, non-comment line whose indentation is greater than that of the preceding option" is accurate.
+
+Wait, but what does "indentation is greater than that of the preceding option" mean exactly? `indent_level` is set to `cur_indent_level` of the last non-continuation line (section header or option header). So it's the indentation of the preceding option line, not just any preceding line.
+
+Actually, looking more carefully: `indent_level` is updated in the `else` branch (when it's NOT a continuation):
+```python
+else:
+    indent_level = cur_indent_level
+```
+
+So `indent_level` tracks the indentation of the most recent section header or option header. The continuation check is `cur_indent_level > indent_level`.
+
+The doc says "whose indentation is greater than that of the preceding option" - this is essentially correct. The `indent_level` is the indentation of the preceding option (or section header, but in context it's the option that has no value).
+
+Actually, I should be more precise. The `indent_level` is set to the indentation of the last line that was NOT a continuation (i.e., a section header or option header). In the context of the error, it's the option that has no value. So "preceding option" is accurate in this context.
+
+The documentation looks correct. Now I need to run the public check on the current candidate.
+
+Let me run the check.

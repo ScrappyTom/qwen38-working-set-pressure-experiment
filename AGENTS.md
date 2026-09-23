@@ -1,3 +1,16 @@
+# Completed original backport and temporal presentation follow-through
+
+The original entry now closes with the separately frozen reviewer-directed prose
+follow-up at516e1cde. Read documentation_followup/review/RESULTS.md: accurate docs,
+unchanged library/tests, actual current pass and submission; five new requests/eight
+operations. Preserve54/81 cumulative and107.164 model minutes, including the original
+failed attempt. C52 reapplies original findings to already-correct prose and causes
+an extra edit/check. Before diagnosing that as model indecision, inspect review-finding
+version scope and recovery's unconditional omission of recent activity. Qualify
+any correction separately; do not silently endorse or rewrite model accounts.
+Next distinct corpus entry: saved_library_entry/PLAN.md. Do not replace its actual
+historical candidate with the newly completed backport or count this pass twice.
+
 # Diagnostic-continuity outcome and remaining documentation
 
 At9e39f9ce, Qwen completes an uncoached checked correction in nine new requests/
