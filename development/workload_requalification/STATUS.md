@@ -6,7 +6,7 @@ Historical successes remain preserved; the new-host column requires new evidence
 | Workload / entry | Historical evidence | New-host status |
 |---|---|---|
 | Configparser missing-interpolation tests and documentation | working_set_continuation, evidence_assembly, pending-contribution: incomplete | Corrected-report continuation at c3d6da70 exhausted its ten remaining requests without edits/checks/submission. Exact replay passes; discovery/selection follow-up remains open. |
-| Configparser multiline-continuation backport, original source | configparser_backport: correct library only, no complete contribution | Observation/report adapter published at 59f1d1f1; original acceptance unchanged, 21 CPU tests and qualification-005 pass. Native/runtime integration remains open; no new model exposure. |
+| Configparser multiline-continuation backport, original source | configparser_backport: correct library only, no complete contribution | Observation/report adapter published at 59f1d1f1; original acceptance unchanged, 21 CPU tests and qualification-005 pass. Operational adapter now passes eight CPU tests and native information-path qualification (two real checks, zero completions); original empty-entry live preparation is in configparser_operational. No new model outcome yet. |
 | Parser tests/docs from saved library repair | bounded_working_set: failed autonomous selection; assisted completion | Pending |
 | Parser-raised exception copying/pickling extension | uncoached_contribution and reasoning_allocation: mixed, including successes | Pending regression |
 | Compiler incident repair and historical report | compiler_incident: one success, capacity/completion failures elsewhere | Pending |

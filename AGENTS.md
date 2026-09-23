@@ -1,5 +1,14 @@
 # Experiment operating rules
 
+The original configparser entry is prospectively qualified in
+development/workload_requalification/configparser_operational. Its eight CPU tests
+and native rehearsal preserve the original acceptance and empty entry; reference
+work remains evaluator-only. Use its operational reply contract and sealed initial
+request, not the old discussion-only decoder. The broad-state rehearsal delivered
+rejections and search before exact replacement but never entered recovery mode.
+Do not describe it as a model success or capacity-rejection recovery. Read the
+preparation review and retain the 40-request/80-operation uncoached envelope.
+
 The receipt operational continuation at 1eb9f7c2 now completes uncoached: seven
 new replies/eleven operations, correct saved routing repair, 38-case public pass
 and checked submission. Read action_lifecycle/review. Combined with the preserved
