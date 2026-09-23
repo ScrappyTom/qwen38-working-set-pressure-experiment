@@ -1,3 +1,15 @@
+# Diagnostic-continuity outcome and remaining documentation
+
+At9e39f9ce, Qwen completes an uncoached checked correction in nine new requests/
+13operations (49/73 cumulative). Read diagnostic_continuity/review/RESULTS.md.
+Keep the actual independent-failure -> account/artifact revision -> passing-check
+cycle distinct from scripted feasibility. All12 nonterminal receipts arrive and
+exact replay passes. The final upstream-pass claim does not prove old test text
+preservation; direct byte review does. Documentation's broad continuation definition
+and constructor-option labeling remain open. Follow documentation_followup/PLAN.md;
+its supplied review findings are reviewer-directed assignment input, not autonomous
+discovery and not live coaching. Do not claim the full corpus is complete.
+
 # Qualified diagnostic continuation
 
 The diagnostic_continuity preparation002 is qualified; read its PREPARATION_REVIEW.md.
