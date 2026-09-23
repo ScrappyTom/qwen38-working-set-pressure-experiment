@@ -1,3 +1,15 @@
+# Completed exception-transport entry with extra closure opportunity
+
+transport_closure/review/RESULTS.md closes this distinct entry atf5b7d2ce. Qwen
+receives the actual pass,updates its account and submits unchanged correct tests
+in one extra request/two operations. Preserve original24-request exhaustion;
+combined25/36,54.010model minutes,71.205loop minutes. Exact replay and direct
+assertion/preservation review pass. No live coaching,new check or pressure event.
+Legacy closure check_opportunities uses the current cap for inherited checks;
+do not treat it as original per-event allowance or sufficient model decisions.
+Continue compiler_entry/ENTRY_PLAN.md and apparatus_profile/PLAN.md separately.
+No additional interface feature is earned simply by earlier long responses.
+
 # Qualified transport closure follow-through
 
 transport_closure/PREPARATION_REVIEW.md qualifies the exact19097704 checkpoint

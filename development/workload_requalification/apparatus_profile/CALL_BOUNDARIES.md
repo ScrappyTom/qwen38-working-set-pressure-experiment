@@ -35,3 +35,15 @@ change. No neutral-optimization claim follows just from identical happy-path inp
 This inventory is incomplete by design and authorizes no weaker checks in an active
 run. Historical evidence, current implementation and private runtime identities all
 remain in their existing verification closure until a successor is qualified.
+
+## Continuation measurement boundary
+
+The transport closure reuses check_opportunities over all this-task pairs with its
+new38-operation cap,so inherited check rows receive different opportunity arithmetic
+than their original72-operation run. The field already says action allowance only,
+but does not preserve per-event caps or model-request constraints. Exact wire records
+retain those facts. A future reporting repair should derive historical opportunity
+from each actual input and reply contract,or clearly restrict the old metric to its
+current-cap counterfactual. Do not rewrite closed records or mistake this for a
+checker/execution defect. The reviewer also assumed a combined reply that the current
+interface lacks; that independent mistake is preserved in the search transcript audit.
