@@ -1,3 +1,16 @@
+# Search continuation: real correction, closure still open
+
+search_continuity/review/RESULTS.md preserves the520dd799 continuation:11 new
+requests/16operations,cumulative24/34,corrected tests and a current public pass,
+but no submission before the request limit. All14nonterminal receipts arrive;
+exact replay/direct assertion review pass. Preserve the uncoached failure->fix->
+check cycle and52.801combined model minutes. Final pass has not reached a model.
+Do not confuse action-only check_opportunities with remaining adaptive requests.
+The reviewer wrongly assumed an older combined edit/check form; actual reference
+requires separate replies. Keep that correction. Any closure continuation must be
+separately frozen,retain24/34,and label its extra opportunity. No new host patch
+is earned solely by lengthy speculation. Accounts remain authored,not certified.
+
 # Qualified exact recent search projection
 
 search_continuity/PREPARATION_REVIEW.md qualifies the opt-in continuation from the
