@@ -1,3 +1,22 @@
+# Qualified E20 full-contract continuation
+
+ecological_contract_continuation preparation001 qualifies10selectedCPUchecks,
+44nativeforms,6actualinputs/5scripteddecisions and2real combinedpublicchecks:
+actual submittedcandidate9/12failszero; separate correctedreference12/12passes.
+0completions;1219sourcebindings/263sealedfiles/63custodyrecords, old439sources
+and748runartifacts exact. Publish before one uncoached13newrequest continuation
+with32absolute requests/72ops. Reopen currentjob explicitly; preserve oldsubmit,
+oldgrades/checks/coverage/account/selection. Oldpass definition is inapplicable.
+Keep mediumuncapped/q4/56576/noMTP, exactguards/format and actor-selected work.
+No coaching/referencegroup/repair/retry/silentextension/private-draft execution.
+Review all actual input/fullthinking/final/source/outcomes/artifact; replay then
+account then postseal originalhidden/separateprobe. Probe executionstatus and
+its3failedcases are distinctrecords of one observedexecution, not4independent
+behavioral defects. Current job requires its own registered pass; oldsubmitted
+checkpoint cannot reclose it. Historicalcoverage remains satisfied, not a fresh
+inspection/comprehension claim. After fullreference, informationtransition and
+freshwork precede another exposure-only task. Original pressure/corpus remainopen.
+
 # Closed E20 source entry; full zero-count contract remains open
 
 ecological_import_entry/review/RESULTS-001.md preserves19requests/28operations,

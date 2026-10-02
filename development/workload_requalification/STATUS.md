@@ -1,5 +1,13 @@
 # Workload requalification ledger
 
+E20 contract-completion continuation is now qualified, not yet run:10CPUchecks,
+44nativeforms,6inputs/5scripteddecisions, actual newcheckfailure→savedcorrection→
+currentpass/submission;0completions. Original run remains gradedpass/fullcontract
+open. Newjob explicitly reopens submittedwork,32absolute requests/72ops,13new
+requests. Oldpass is inapplicable to originalpublic+unchanged12caseprobe definition.
+Publish preparation before one uncoachedattempt. Controlled informationtransition
+and freshwork retain priority after fullcontract closure.
+
 E20source run001 under8335f6f7 is closed but fullcontract remainsopen:19requests/
 28ops, eleven complete originals beforefirstmutation, actor-chosen recovery and
 originalpublic+hiddenpass/submission. All27nonterminaloutcomes arrive; exactreplay
