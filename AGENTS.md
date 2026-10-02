@@ -1,3 +1,16 @@
+# Qualified original compiler capture bridge
+
+compiler_entry/PREPARATION_REVIEW.md qualifies the exact original six-file entry
+and three historical captures on the current host. Preserve original task/checker,
+historical OBS bindings and no capture editing authority. Ten CPU tests,36native
+grammar cases,39native inputs and4actual scripted checks pass with zero inference.
+Keep failed preparation001's independent-history diff collision and exact source;
+qualified002 scopes its scripted snapshots without changing production custody.
+Publish before one uncoached40-request/100-operation attempt,medium uncapped.
+No duplicate approval, coaching, oracle report, silent retry or allowance reset.
+Review exact inputs/thinking/replies/receipts and artifacts; a feasible route is
+not model evidence. Original pressure/restart obligations remain separate.
+
 # Completed exception-transport entry with extra closure opportunity
 
 transport_closure/review/RESULTS.md closes this distinct entry atf5b7d2ce. Qwen

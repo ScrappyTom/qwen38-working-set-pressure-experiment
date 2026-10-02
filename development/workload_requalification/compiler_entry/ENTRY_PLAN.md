@@ -1,8 +1,9 @@
 # Compiler entries: preserve the capture world and separate obligations
 
 Read development/compiler_incident/TASK.txt, its sealed preparation001 and the
-current host tool/session code before choosing an adapter. This is future offline
-planning only; the exception-transport model run is active and unchanged.
+current host tool/session code before choosing an adapter. The exception-transport
+entry is now closed. PLAN.md and SPEC.md define the new adapter qualification;
+historical planning below remains its rationale, not a model result.
 
 The original candidate is28441db41e7ca5385feb03c96574fed32acfc4d67e7e608c93572fe06ed8033d.
 Three separately preserved observations accompany it: OBS0001 input calculation
