@@ -1,5 +1,28 @@
 # Running engineering and governance notes
 
+## 2026-10-02 — complete task scope and honest source prerequisites
+
+The fresh E19 observation rerun completed with all four required source bodies
+before its first mutation, correct work and newly executed current verification.
+Its optional account retained a stale pending read; actual sources and effects
+guided later work. Keep this account limitation without claiming benefit from
+persistence or requiring an update after every operation. The original run's
+correct graded artifact but omitted task inspection remains unchanged.
+
+The next E20 source task explicitly requires continuous complete eleven-file
+inspection. A minimum excerpt per path cannot express that obligation. Credit
+actual dispatch, merge exact version-bound intervals, keep historical coverage
+through release and separate current editing authority. A merged displayed page
+may have several acquisition carriers; preservation must not demand a nonexistent
+single receipt for its complete span. Keep the resident inventory compact and
+the exact proof in stored material. A barrier enforces exposure, not understanding.
+
+Preserve frozen public/hidden verdicts and report known task-contract gaps
+separately; passing graders must not silently close the max_files=0 requirement.
+Qualify actual source/control/diagnostic transitions before inference. Publish
+the plan before implementation and qualification before exposure; final readiness
+precedes freezing. Functional success does not replace pressure evidence.
+
 ## 2026-09-22 — narrative omission is an unsafe task-termination signal
 
 Receipt run at 76e078c4 ends after five requests/five operations. C05's complete

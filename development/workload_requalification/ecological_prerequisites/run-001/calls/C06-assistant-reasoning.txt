@@ -1,0 +1,94 @@
+Let me analyze the current state:
+
+1. I've read all four required files: summary_graph.py, summaries.py, records.py, and policy.py
+2. The OBS-0002 has been retrieved showing two failures:
+   - `collection_stale_when_graph_ids_differ`: expected true, got false
+   - `missing_artifact_ids_direction`: expected "summary without map", got "map without summary"
+
+3. Looking at `summary_graph.py`, specifically the `summary_graph_status` function:
+
+```python
+def summary_graph_status(
+    summaries: dict[str, SummaryNode],
+    graph: SummaryGraph,
+    address_maps: dict[str, AddressMap],
+) -> dict[str, Any]:
+    stale_artifact_summary_ids = stale_summaries(summaries, address_maps)
+    current_summary_ids = sorted(summary.summary_id for summary in summaries.values())
+    graph_summary_ids = sorted(graph.artifact_summary_ids)
+    collection_stale = bool(stale_artifact_summary_ids) and current_summary_ids != graph_summary_ids
+    if graph.collection_summary is not None:
+        collection_stale = collection_stale or sorted(graph.collection_summary.input_hashes) != graph_summary_ids
+    missing_artifact_ids = sorted(artifact_id for artifact_id in address_maps if artifact_id not in summaries)
+    return {
+        "graph_id": graph.graph_id,
+        "unit_summary_count": len(graph.unit_summary_ids),
+        "artifact_summary_count": len(summaries),
+        "stale_artifact_summary_ids": stale_artifact_summary_ids,
+        "collection_summary_id": graph.collection_summary.summary_id if graph.collection_summary else None,
+        "collection_stale": collection_stale,
+        "missing_artifact_ids": missing_artifact_ids,
+    }
+```
+
+The task says:
+- `collection_stale` should be true when:
+  - any artifact summary is stale, OR
+  - the current artifact-summary IDs differ from the graph IDs, OR
+  - the collection's input IDs differ
+
+- `missing_artifact_ids` must list summary artifacts that lack an address map, in deterministic order.
+
+Current issues:
+
+1. `collection_stale`: The current code uses `and` between `bool(stale_artifact_summary_ids)` and `current_summary_ids != graph_summary_ids`. It should be `or` — the collection is stale if ANY of the conditions are true:
+   - any artifact summary is stale
+   - current artifact-summary IDs differ from graph IDs
+   - collection's input IDs differ (from graph's artifact summary IDs)
+
+   So the fix is:
+   ```python
+   collection_stale = bool(stale_artifact_summary_ids) or current_summary_ids != graph_summary_ids
+   if graph.collection_summary is not None:
+       collection_stale = collection_stale or sorted(graph.collection_summary.input_hashes) != graph_summary_ids
+   ```
+
+   Wait, let me re-read the requirement more carefully. The task says: "collection_stale is true when any artifact summary is stale, when the current artifact-summary IDs differ from the graph IDs, or when the collection's input IDs differ."
+
+   So it's three OR conditions:
+   1. any artifact summary is stale → `bool(stale_artifact_summary_ids)`
+   2. current artifact-summary IDs differ from graph IDs → `current_summary_ids != graph_summary_ids`
+   3. collection's input IDs differ → `sorted(graph.collection_summary.input_hashes) != graph_summary_ids` (when collection_summary exists)
+
+   The current code has `and` for conditions 1 and 2, which is wrong. It should be `or`.
+
+2. `missing_artifact_ids`: The current code is:
+   ```python
+   missing_artifact_ids = sorted(artifact_id for artifact_id in address_maps if artifact_id not in summaries)
+   ```
+   This lists artifacts in `address_maps` that are NOT in `summaries`. But the task says it should "list summary artifacts that lack an address map" — i.e., artifacts in `summaries` that are NOT in `address_maps`.
+
+   The test failure confirms this: "expected 'summary without map', got 'map without summary'"
+
+   So the fix is:
+   ```python
+   missing_artifact_ids = sorted(artifact_id for artifact_id in summaries if artifact_id not in address_maps)
+   ```
+
+Now I need to make these edits to `summary_graph.py`. The file is already visible (SRC-7717f7d184108a182884366bdf1dd5d7faa7ad92144e36469dcc91c4ed1b9dd6), candidate is `476f83a90c40b0897e1ab5d6bc00bbb52cf3a4fe60cc11c1dd47ab3da85d0172`, and the file sha is `70a00edd8c48d40609aa912c524895bb8799c7270af5687210097715370e4d23`.
+
+Let me do two patches:
+
+Patch 1: Change `and` to `or` in the collection_stale line:
+old: `    collection_stale = bool(stale_artifact_summary_ids) and current_summary_ids != graph_summary_ids`
+new: `    collection_stale = bool(stale_artifact_summary_ids) or current_summary_ids != graph_summary_ids`
+
+Patch 2: Change the missing_artifact_ids direction:
+old: `    missing_artifact_ids = sorted(artifact_id for artifact_id in address_maps if artifact_id not in summaries)`
+new: `    missing_artifact_ids = sorted(artifact_id for artifact_id in summaries if artifact_id not in address_maps)`
+
+Both are in summary_graph.py. Let me do them one at a time since each patch changes the candidate.
+
+Actually wait - I need to be careful. After the first patch, the candidate_id will change. Let me do the first patch first, then use the new candidate_id for the second.
+
+Let me start with patch 1.

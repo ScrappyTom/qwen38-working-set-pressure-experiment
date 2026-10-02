@@ -1,3 +1,22 @@
+# Completed E19 observation entry; next complete-coverage workload
+
+ecological_prerequisites/review/RESULTS-001.md closes fresh uncoached run001 under
+1c0c9776:9requests/12operations, all4complete named sources before EVT-0009,
+correct two-line repair/currentpublicpass/submission and separate post-sealhiddenpass.
+All24otherfiles exact; all11nonterminal operation outcomes across8replies arrive.
+Replay460sources/201custody/14checkpoints and direct complete-input/output/artifact
+review pass. Preserve10.965modelminutes/11.799loopminutes, stale finalaccount and
+original6-request missed-inspection outcome. No pressure, turnover, failedcheck,
+isolated policy/account benefit or further host feature is established.
+Publish ecological_next/PLAN.md before task-local E20source adapter/continuous
+actual-dispatch coverage:11files fromline1throughtrueEOF, cumulative throughrelease,
+separate currentedit authority/comprehension; compactview and exactstored witnesses.
+Merged displayed pages may need multiple acquisition carriers. Qualify native
+information paths/completejourney and publish before fresh inference; no coaching,
+silent retry/extension or oldsource changes. Preserve original public/hidden grades
+and separately evaluate known max_files=0contractgap post-seal. E20OBS, pressure
+and wider corpus remain open; functional entry does not replicate oldR50/X25.
+
 # Qualified E19 first-mutation exposure policy
 
 ecological_prerequisites/PREPARATION_REVIEW-001.md qualifies the task-local
