@@ -1,6 +1,6 @@
 # Prospective E20 saved-work information transition
 
-Status: proposed, unqualified, and unexposed. This plan is a single controlled diagnostic after the full-contract reference continuation closes. No implementation, tests, checks, native requests, or model exposure are authorized by this document alone. Publish the plan before implementation; qualify the actual native inputs and transitions before any live comparison. Fresh work follows this diagnostic. The deferred E20 observation workload does not take priority.
+Status: revised prospective plan under the owner's standing repair/qualify/run direction; unqualified and unexposed. This is one controlled diagnostic after the full-contract reference continuation closes. Publish this revision before implementation; qualify and publish the actual native inputs and transitions before the live comparison. This document does not reopen a consumed historical allowance. Fresh work follows this diagnostic. The deferred E20 observation workload does not take priority.
 
 ## Question and exact starting work
 
@@ -58,3 +58,17 @@ Inspect every actual sent input, complete returned response, accepted/rejected o
 A correct direct action without an account rewrite is useful success and supplies no account-maintenance benefit evidence. The account repeats material also present in the task, while `saved_runs.py` remains exact in both inputs; therefore this pair cannot identify the account's causal benefit. The absence of the importer body in B is a declared presentation difference, not proof of natural pressure or independent model assembly. One matched diagnostic supports a local comparison, not a general reliability or speed estimate.
 
 After closure and direct review, use fresh work to qualify any supported lesson. Do not turn this checkpoint comparison into another series of exposure-only tasks or import additional memory architecture without an earned deficiency.
+
+## October 2 preparation refinements
+
+The supplied review of 35232710 is applied prospectively. The full-contract C21 account correctly names the count comparison but omits its decisive pre-append placement; C22 replaces it with supported closure status. Freshness, factuality, and fitness for a later question are separate. Preserve all those records and the C16 account unchanged; do not add an account-maintenance requirement to either condition.
+
+Use a thin task adapter over the original E20 session, not the nineteen-request submitted-work wrapper. Both entries start before submission at 16 requests/24 operations, with the original task plus the common newly registered full-check scope, eight remaining requests, 48 remaining operations, and the same checkpoint-specific annotation. Neither entry claims a prior submission or thirteen new opportunities. Clear preceding-call editing authority in both setup states; only the new actual dispatch establishes current authority, while cumulative inspection/history remain intact.
+
+Name these qualification cases: complete rendered-input isolation; absent-importer edit rejection after release/restoration, ordinary reacquisition, then ordinary acceptance; exact inherited handle identity in both branches; separate branch-local observations and new payloads; and separate outcomes for successful acquisition and a rejected companion account. Historical-account retrieval must not designate it current. Record the setup outside actor history and allowance.
+
+Evaluate two stages separately: immediate embedded-artifact correction using exact saved-runs source present in both inputs; then the unresolved zero-count requirement, including reacquisition in B. Chronology repair is not contract satisfaction. Report preservation of size/event behavior, embedded correction, zero-count correction, and consumption of a current full-contract pass. Reacquisition for discovery and reacquisition solely for edit eligibility are both legitimate but are different evidence.
+
+Keep a small evaluator-side decision trace: required distinction, actual input support, requested operation, executed/rejected effect and subsequent delivery, artifact consequence. Do not ask Qwen to fill it out. The source-release condition also removes competing material; neither success nor failure isolates account usefulness. One pair is a local diagnostic, not a reliability estimate.
+
+Characterize the runtime in the separate `apparatus_qualification/PLAN.md` before either behavioral exposure. Freeze one runtime policy for both conditions; no tuning between them. Preserve RAM/shared-GPU telemetry limitations and do not infer spill from the 53 MiB sample alone. If stable completion is possible but throughput remains unexplained, report costs with that limitation and make no causal speed claim.

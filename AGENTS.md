@@ -1,3 +1,21 @@
+# Revised C16 information-transition qualification
+
+Read ecological_information_transition/PLAN.md and its separate
+apparatus_qualification/PLAN.md. Keep the completed E20 lineage unchanged.
+Implement one thin two-condition C16 adapter under standing owner authority;
+both entries16requests/24ops, limits24/72, before submission. Do not borrow the
+later nineteen-request reopened-job annotation. Preserve the actual stale
+account and knownzero defect; no mandatory account or semantic repair supplied.
+Qualify full initial-wire isolation, release/restoration/current-edit authority,
+ordinary reacquisition, inherited/branch-local identity and independent companion
+outcomes. Evaluate embedded correction and zero-count repair separately; a stale
+marker correction is not contract satisfaction. Account freshness/factuality/use
+are distinct. Keep evaluator decision support trace outside actor input.
+Qualify slowprefill separately with bounded matched inputs and RAM/shared-GPU
+monitoring; no asserted spill or runtime tuning. Publish preparation before the
+uncoached pair, fixed settings/allowances/no retry. Direct full input/output and
+artifact review precedes interpretation; freshwork follows one closed diagnostic.
+
 # Closed E20 full-contract reference; next information transition
 
 ecological_contract_continuation/review/RESULTS-001.md closes the uncoached new
