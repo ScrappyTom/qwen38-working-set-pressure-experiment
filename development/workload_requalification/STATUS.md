@@ -14,7 +14,7 @@ Historical successes remain preserved; the new-host column requires new evidence
 | Artifact-map repair | investigation_loop: two successful loops | Passed uncoached at 3107f3cf: correct one-line repair, public pass and submission, 20 requests/30 operations, 20.021 model-request minutes. Exact replay and source review pass; navigation/change-detail friction preserved. |
 | Shift-window ledger repair | shift_investigation: successful loop | Passed original task uncoached at 795fb292: 14 requests/22 operations, two edits, all 24 public cases passing and submission; 10.654 model-request minutes. Exact replay passes. Removal of standalone contains() remains an explicit compatibility limitation outside the original checked contract. |
 | Receipt-correction reporting | correction_investigation: successful loop | Passed in the uncoached operational-contract continuation at 1eb9f7c2: seven new requests/eleven operations, correct two-line routing repair, all 38 public cases passing and checked submission. Original five-request stop preserved; combined twelve requests/sixteen operations and 7.091 model-request minutes. Exact replay passes; final account misquotes one old expression without affecting the saved repair. |
-| URL-port tests/documentation, original entry | multiple interrupted/incomplete attempts | Uncoached url_port_entry run002 under e93051ec ends at original20requests/30operations with one saved test and actual failed tests check, no docs/public pass/submission. Normal73tests/required paths pass, six faults detected, exact-class sensitivity missing. All19 nonterminal outcomes delivered; final feedback fits16663tokens but has no further request. Exact replay/direct artifact review pass;57.171model minutes/60.204loop minutes. Model-chosen capacity recovery works; no new mechanical defect is established. Publish separately bounded url_port_continuation/PLAN.md, retaining20/30 with explicit16extra requests(max36) and unchanged60operation limit, before adapter/native qualification and uncoached correction/completion. Original outcome and prior saved-correction success remain distinct. |
+| URL-port tests/documentation, original entry | multiple interrupted/incomplete attempts | Original e93051ec run002 exhausts20requests/30operations with saved tests and actual failed exact-class sensitivity; preserve57.171model minutes and incomplete outcome. Separately qualified uncoached continuation under d71e9b98 uses12new requests/17operations, corrects exact-class coverage, saves accurate focused docs/examples, receives actual current public pass and submits. Combined32/47,154.083model minutes/160.474loop minutes. All16new nonterminal outcomes delivered; direct complete input/output/observation/artifact review and exact replay pass. Narrow-reference/body containment wording and four rejected drafts remain recorded; no new mechanical defect or isolated account/pressure/efficiency benefit is established. Entry closed with explicit extra opportunity, not within its original budget. |
 | URL-port preserved-work correction | coherent_diagnostics: reviewed checked submission | Passed for this entry at ec51de65 |
 | Ecological source/observation repairs | Experiments 019/020: interrupted / eight passing 020 trajectories | ecological/ENTRY_MAP.md reconciles four contracts and original inspection/observation obligations; one E19 entry was never exposed. Task adapters/regressions remain pending; functional passes must not silently close pressure obligations or the known zero-file-count gap. |
 | Earlier synthetic source and observation continuity tasks | Experiments 002-018: mixed; includes phase/restart/retrieval obligations | Pending exact-case reconciliation and regression |
@@ -22,12 +22,14 @@ Historical successes remain preserved; the new-host column requires new evidence
 | INC-042 export policy, two prepared worlds | Zero model calls; pressure prerequisite rejected | Engineering regression, not a historical failed model workload |
 | Embedded E017 historical-action marker recovery | Exposed development task absent from TASK.txt inventory | Pending recovery-entry regression |
 
-The URL saved-failure continuation is separately qualified under published plan
-e61dadd1: exact20/30 ancestry, max36requests/60operations, unchanged task and
-settings. First16664tokens; six selected CPU tests,13native inputs, reused31form
-proof and2scripted checks,0inference. Scripted correction/docs/submission remains
-evaluator evidence. Publish preparation before C21-onward exposure; the original
-run outcome remains incomplete until separately reviewed continuation work.
+The URL saved-failure continuation is complete and separately reviewed. Preserve
+its original20-request failure and explicit extra opportunity; complete work is
+not evidence of economy. The next ecological_source_entry/PLAN.md preserves the
+exact fresh E19-SOURCE-REOPEN candidate/task/public/hidden, with no inherited work
+or semantic source selection. Publish before implementation; qualify/publish
+before inference. Its new functional entry cannot close original R50/X25 pressure
+or observation obligations. E19 named-source inspection and target edit guards
+remain different requirements; do not add E20's every-line rule silently.
 
 INVENTORY.json records discovered task texts and locations. Its untriaged entries
 are obligations to reconcile, not an exclusion list. Different contexts, seeds and

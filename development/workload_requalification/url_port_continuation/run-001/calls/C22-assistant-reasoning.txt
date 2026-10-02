@@ -1,0 +1,1105 @@
+Let me understand the current state:
+
+1. I'm working on extending regression tests and documentation for port access on urlsplit/urlparse results.
+2. The tests check is failing on criterion "detect.error_class" - the injected fault replaces the real ValueError with a subclass of ValueError, and my tests need to detect this (i.e., they must NOT pass when a ValueError subclass is raised instead of ValueError itself).
+3. My current tests use `self.assertRaises(ValueError)` which would catch subclasses too. To detect the error class change, I need to use `assertIs(type(ctx.exception), ValueError)` after each `assertRaises` block.
+
+The issue is that my `test_port_boundary_and_errors` test method uses `self.assertRaises(ValueError)` but doesn't check that the exception is exactly `ValueError` (not a subclass). The fix is to add `self.assertIs(type(ctx.exception), ValueError)` after each `assertRaises` block.
+
+Let me look at my current test code in the visible source (lines 527-824 of test_urlparse.py). I can see `test_port_boundary_and_errors` starting around line 700+. Let me look at it carefully:
+
+```python
+    def test_port_boundary_and_errors(self):
+        """Regression tests for port access on urlsplit and urlparse results."""
+        for parse in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            # --- str URLs ---
+            # No port: construction succeeds, port is None
+            p = parse("http://example.com/")
+            self.assertEqual(p.port, None)
+            # Empty port: construction succeeds, port is None
+            p = parse("http://example.com:/:/")
+            self.assertEqual(p.port, None)
+            # Port 0: accepted boundary
+            p = parse("http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            # Port 65535: accepted boundary
+            p = parse("http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            # Port 65536: out of range
+            p = parse("http://example.com:65536/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port out of range 0-65535",))
+            # Negative port: not a valid digit string
+            p = parse("http://example.com:-1/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as '-1'",))
+            # Noninteger port
+            p = parse("http://example.com:abc/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as 'abc'",))
+            # Non-ASCII decimal digit (Arabic-Indic digit 1)
+            na_digit = "\u0661"
+            p = parse("http://example.com:" + na_digit + "/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           (f"Port could not be cast to integer value as {na_digit!r}",))
+
+            # --- bytes URLs ---
+            # No port
+            p = parse(b"http://example.com/")
+            self.assertEqual(p.port, None)
+            # Empty port
+            p = parse(b"http://example.com:/:/ ")
+            self.assertEqual(p.port, None)
+            # Port 0
+            p = parse(b"http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            # Port 65535
+            p = parse(b"http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            # Port 65536: out of range
+            p = parse(b"http://example.com:65536/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port out of range 0-65535",))
+            # Negative port
+            p = parse(b"http://example.com:-1/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as b'-1'",))
+            # Noninteger port
+            p = parse(b"http://example.com:abc/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as b'abc'",))
+```
+
+I need to add `self.assertIs(type(ctx.exception), ValueError)` after each `assertRaises(ValueError)` block. This will ensure that if someone replaces `ValueError` with a subclass (like `class MyValueError(ValueError)`), the test will fail because `type(ctx.exception)` would be `MyValueError`, not `ValueError`.
+
+Now, the previous patch was rejected because the old text wasn't found (match count 0). I need to look at the current file content more carefully to find the exact text to patch.
+
+Looking at the visible source (lines 527-824), I can see the `test_port_boundary_and_errors` method. The file has 1531 lines total.
+
+Let me construct the patch. I need to add `self.assertIs(type(ctx.exception), ValueError)` after each `assertRaises` block. The pattern in the code is:
+
+```python
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args, ...)
+```
+
+I need to insert `self.assertIs(type(ctx.exception), ValueError)` between the `p.port` line and the `self.assertEqual` line.
+
+Since the previous patch failed (old_not_found), I need to find the exact current text. Let me use the visible source to construct the patch.
+
+Looking at the source, the first occurrence is:
+
+```
+            p = parse("http://example.com:65536/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port out of range 0-65535",))
+```
+
+I need to change this to:
+```
+            p = parse("http://example.com:65536/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertIs(type(ctx.exception), ValueError)
+            self.assertEqual(ctx.exception.args,
+                           ("Port out of range 0-65535",))
+```
+
+But wait - there are multiple occurrences of similar patterns. The issue is that `patch` replaces exactly ONE occurrence. I need to be careful about which text I target.
+
+Actually, let me think about this differently. The `with self.assertRaises(ValueError) as ctx:\n                p.port` pattern appears multiple times. But the surrounding context makes each one unique.
+
+Let me look at the exact text more carefully from the source:
+
+First error case (port 65536, str):
+```
+            p = parse("http://example.com:65536/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port out of range 0-65535",))
+```
+
+Second error case (negative port, str):
+```
+            p = parse("http://example.com:-1/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as '-1'",))
+```
+
+Third (noninteger, str):
+```
+            p = parse("http://example.com:abc/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as 'abc'",))
+```
+
+Fourth (non-ASCII digit, str):
+```
+            p = parse("http://example.com:" + na_digit + "/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           (f"Port could not be cast to integer value as {na_digit!r}",))
+```
+
+Fifth (port 65536, bytes):
+```
+            p = parse(b"http://example.com:65536/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port out of range 0-65535",))
+```
+
+Sixth (negative port, bytes):
+```
+            p = parse(b"http://example.com:-1/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as b'-1'",))
+```
+
+Seventh (noninteger, bytes):
+```
+            p = parse(b"http://example.com:abc/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as b'abc'",))
+```
+
+So I have 7 places where I need to add `self.assertIs(type(ctx.exception), ValueError)`.
+
+Each `patch` call handles one occurrence. But I have limited actions (28 remaining). Let me think about whether I can do this more efficiently.
+
+Actually, I could do a single patch that covers the entire method, replacing it with the version that has all the `assertIs` calls added. But that might be risky with exact matching.
+
+Alternatively, I could target each unique block. The key is that each block is unique because the surrounding lines differ.
+
+Wait, let me reconsider. The `with self.assertRaises(ValueError) as ctx:\n                p.port\n            self.assertEqual` pattern - the `p.port` line is the same each time, but the preceding line and the following lines differ. So I can use:
+
+For the first one:
+old:
+```
+            p = parse("http://example.com:65536/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port out of range 0-65535",))
+```
+
+new:
+```
+            p = parse("http://example.com:65536/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertIs(type(ctx.exception), ValueError)
+            self.assertEqual(ctx.exception.args,
+                           ("Port out of range 0-65535",))
+```
+
+This is unique because the `p = parse("http://example.com:65536/")` line is unique.
+
+But wait - the bytes version has `p = parse(b"http://example.com:65536/")` which is different.
+
+Let me count: 7 patches needed. I have 28 actions remaining. That should be fine.
+
+Actually, wait. Let me reconsider. Maybe I should use `replace_region` instead. But that replaces the entire region, and I'd need the whole region visible. The source region SRC-2bf88295f0e03731f0e4a0ef3ba325116a4bd3f199a2b3aa813fe1d224918274 covers lines 527-824, which is shown in full. I could replace the entire `test_port_boundary_and_errors` method in one shot using `replace_region`.
+
+But actually, `replace_region` replaces the COMPLETE observed source region. The region is lines 527-824 of the file, which includes multiple test methods. That's too broad.
+
+Let me just do 7 individual patches. Each one is small and targeted.
+
+Actually, let me reconsider the approach. Instead of 7 separate patches, I could do one larger patch that covers a contiguous block. Let me look at the structure:
+
+The method `test_port_boundary_and_errors` spans from its `def` line to just before `test_attributes_bad_scheme`. Let me see if I can capture the whole method in one patch.
+
+Looking at the source, the method starts with:
+```
+    def test_port_boundary_and_errors(self):
+        """Regression tests for port access on urlsplit and urlparse results."""
+```
+
+And ends with:
+```
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as b'abc'",))
+```
+
+Then the next method starts:
+```
+    def test_attributes_bad_scheme(self):
+```
+
+So the full method is from `    def test_port_boundary_and_errors(self):` to the last `self.assertEqual...` line before `    def test_attributes_bad_scheme`.
+
+I could do one big patch replacing the entire method body. Let me construct it.
+
+The old text would be the entire method. The new text would be the same but with `self.assertIs(type(ctx.exception), ValueError)` added after each `p.port` line in the assertRaises blocks.
+
+Let me write this out carefully. The old text (from the source):
+
+```
+    def test_port_boundary_and_errors(self):
+        """Regression tests for port access on urlsplit and urlparse results."""
+        for parse in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            # --- str URLs ---
+            # No port: construction succeeds, port is None
+            p = parse("http://example.com/")
+            self.assertEqual(p.port, None)
+            # Empty port: construction succeeds, port is None
+            p = parse("http://example.com:/:/")
+            self.assertEqual(p.port, None)
+            # Port 0: accepted boundary
+            p = parse("http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            # Port 65535: accepted boundary
+            p = parse("http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            # Port 65536: out of range
+            p = parse("http://example.com:65536/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port out of range 0-65535",))
+            # Negative port: not a valid digit string
+            p = parse("http://example.com:-1/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as '-1'",))
+            # Noninteger port
+            p = parse("http://example.com:abc/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as 'abc'",))
+            # Non-ASCII decimal digit (Arabic-Indic digit 1)
+            na_digit = "\u0661"
+            p = parse("http://example.com:" + na_digit + "/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           (f"Port could not be cast to integer value as {na_digit!r}",))
+
+            # --- bytes URLs ---
+            # No port
+            p = parse(b"http://example.com/")
+            self.assertEqual(p.port, None)
+            # Empty port
+            p = parse(b"http://example.com:/:/ ")
+            self.assertEqual(p.port, None)
+            # Port 0
+            p = parse(b"http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            # Port 65535
+            p = parse(b"http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            # Port 65536: out of range
+            p = parse(b"http://example.com:65536/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port out of range 0-65535",))
+            # Negative port
+            p = parse(b"http://example.com:-1/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as b'-1'",))
+            # Noninteger port
+            p = parse(b"http://example.com:abc/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as b'abc'",))
+```
+
+And the new text adds `            self.assertIs(type(ctx.exception), ValueError)` after each `                p.port` line.
+
+Wait, but I need to be careful about the indentation. The `with` block is indented with 12 spaces (3 levels of 4), `p.port` is at 16 spaces (4 levels), and the `self.assertEqual` is at 12 spaces. So the `self.assertIs` should also be at 12 spaces.
+
+Let me construct the new text:
+
+```
+    def test_port_boundary_and_errors(self):
+        """Regression tests for port access on urlsplit and urlparse results."""
+        for parse in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            # --- str URLs ---
+            # No port: construction succeeds, port is None
+            p = parse("http://example.com/")
+            self.assertEqual(p.port, None)
+            # Empty port: construction succeeds, port is None
+            p = parse("http://example.com:/:/")
+            self.assertEqual(p.port, None)
+            # Port 0: accepted boundary
+            p = parse("http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            # Port 65535: accepted boundary
+            p = parse("http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            # Port 65536: out of range
+            p = parse("http://example.com:65536/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertIs(type(ctx.exception), ValueError)
+            self.assertEqual(ctx.exception.args,
+                           ("Port out of range 0-65535",))
+            # Negative port: not a valid digit string
+            p = parse("http://example.com:-1/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertIs(type(ctx.exception), ValueError)
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as '-1'",))
+            # Noninteger port
+            p = parse("http://example.com:abc/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertIs(type(ctx.exception), ValueError)
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as 'abc'",))
+            # Non-ASCII decimal digit (Arabic-Indic digit 1)
+            na_digit = "\u0661"
+            p = parse("http://example.com:" + na_digit + "/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertIs(type(ctx.exception), ValueError)
+            self.assertEqual(ctx.exception.args,
+                           (f"Port could not be cast to integer value as {na_digit!r}",))
+
+            # --- bytes URLs ---
+            # No port
+            p = parse(b"http://example.com/")
+            self.assertEqual(p.port, None)
+            # Empty port
+            p = parse(b"http://example.com:/:/ ")
+            self.assertEqual(p.port, None)
+            # Port 0
+            p = parse(b"http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            # Port 65535
+            p = parse(b"http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            # Port 65536: out of range
+            p = parse(b"http://example.com:65536/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertIs(type(ctx.exception), ValueError)
+            self.assertEqual(ctx.exception.args,
+                           ("Port out of range 0-65535",))
+            # Negative port
+            p = parse(b"http://example.com:-1/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertIs(type(ctx.exception), ValueError)
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as b'-1'",))
+            # Noninteger port
+            p = parse(b"http://example.com:abc/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertIs(type(ctx.exception), ValueError)
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as b'abc'",))
+```
+
+This is a big patch but should work as a single atomic replacement. The old text is unique because it's the entire method.
+
+But wait - I need to make sure the old text matches EXACTLY what's in the file. The previous patch failed with "old_not_found", which means my previous attempt didn't match. Let me be very careful about the exact content.
+
+Looking at the source displayed, I can see the exact text. Let me trace through it carefully. The source shows:
+
+```
+    def test_port_boundary_and_errors(self):
+        """Regression tests for port access on urlsplit and urlparse results."""
+        for parse in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            # --- str URLs ---
+            # No port: construction succeeds, port is None
+            p = parse("http://example.com/")
+            self.assertEqual(p.port, None)
+            # Empty port: construction succeeds, port is None
+            p = parse("http://example.com:/:/")
+            self.assertEqual(p.port, None)
+            # Port 0: accepted boundary
+            p = parse("http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            # Port 65535: accepted boundary
+            p = parse("http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            # Port 65536: out of range
+            p = parse("http://example.com:65536/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port out of range 0-65535",))
+```
+
+Hmm, but I'm reading this from the JSON-displayed source. The actual bytes might have subtle differences. Let me use a smaller, more targeted patch to be safe.
+
+Actually, let me think about this differently. The previous patch failed. I don't know what the previous patch's old text was (it was in the rejected action). But the current file is what I see in the source. Let me just do the patch with the exact text I can see.
+
+Let me try a smaller, targeted approach. Instead of replacing the whole method, let me just target one unique small section at a time. But that would require 7 patches. With 28 actions remaining, that's fine.
+
+Actually, let me try a different approach. Let me target the entire method in one patch. The key is to get the old text exactly right. Let me look at the source very carefully.
+
+From the displayed source (which is the actual current source bytes), the method is:
+
+```
+    def test_port_boundary_and_errors(self):
+        """Regression tests for port access on urlsplit and urlparse results."""
+        for parse in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            # --- str URLs ---
+            # No port: construction succeeds, port is None
+            p = parse("http://example.com/")
+            self.assertEqual(p.port, None)
+            # Empty port: construction succeeded, port is None
+```
+
+Wait, I need to be very precise. Let me re-read the source content character by character from the JSON.
+
+The content field shows:
+```
+    def test_port_boundary_and_errors(self):\n        \"\"\"Regression tests for port access on urlsplit and urlparse results.\"\"\"\n        for parse in (urllib.parse.urlsplit, urllib.parse.urlparse):\n            # --- str URLs ---\n            # No port: construction succeeds, port is None\n            p = parse(\"http://example.com/\")\n            self.assertEqual(p.port, None)\n            # Empty port: construction succeeds, port is None\n            p = parse(\"http://example.com:/:/\")\n            self.assertEqual(p.port, None)\n            # Port 0: accepted boundary\n            p = parse(\"http://example.com:0/\")\n            self.assertEqual(p.port, 0)\n            # Port 65535: accepted boundary\n            p = parse(\"http://example.com:65535/\")\n            self.assertEqual(p.port, 65535)\n            # Port 65536: out of range\n            p = parse(\"http://example.com:65536/\")\n            with self.assertRaises(ValueError) as ctx:\n                p.port\n            self.assertEqual(ctx.exception.args,\n                           (\"Port out of range 0-65535\",))\n            # Negative port: not a valid digit string\n            p = parse(\"http://example.com:-1/\")\n            with self.assertRaises(ValueError) as ctx:\n                p.port\n            self.assertEqual(ctx.exception.args,\n                           (\"Port could not be cast to integer value as '-1'\",))\n            # Noninteger port\n            p = parse(\"http://example.com:abc/\")\n            with self.assertRaises(ValueError) as ctx:\n                p.port\n            self.assertEqual(ctx.exception.args,\n                           (\"Port could not be cast to integer value as 'abc'\",))\n            # Non-ASCII decimal digit (Arabic-Indic digit 1)\n            na_digit = \"\\u0661\"\n            p = parse(\"http://example.com:\" + na_digit + \"/\")\n            with self.assertRaises(ValueError) as ctx:\n                p.port\n            self.assertEqual(ctx.exception.args,\n                           (f\"Port could not be cast to integer value as {na_digit!r}\",))\n\n            # --- bytes URLs ---\n            # No port\n            p = parse(b\"http://example.com/\")\n            self.assertEqual(p.port, None)\n            # Empty port\n            p = parse(b\"http://example.com:/:/ \")\n            self.assertEqual(p.port, None)\n            # Port 0\n            p = parse(b\"http://example.com:0/\")\n            self.assertEqual(p.port, 0)\n            # Port 65535\n            p = parse(b\"http://example.com:65535/\")\n            self.assertEqual(p.port, 65535)\n            # Port 65536: out of range\n            p = parse(b\"http://example.com:65536/\")\n            with self.assertRaises(ValueError) as ctx:\n                p.port\n            self.assertEqual(ctx.exception.args,\n                           (\"Port out of range 0-65535\",))\n            # Negative port\n            p = parse(b\"http://example.com:-1/\")\n            with self.assertRaises(ValueError) as ctx:\n                p.port\n            self.assertEqual(ctx.exception.args,\n                           (\"Port could not be cast to integer value as b'-1'\",))\n            # Noninteger port\n            p = parse(b\"http://example.com:abc/\")\n            with self.assertRaises(ValueError) as ctx:\n                p.port\n            self.assertEqual(ctx.exception.args,\n                           (\"Port could not be cast to integer value as b'abc'\",))\n
+```
+
+OK so I can see the exact content. Let me construct a patch. I'll target a unique section. 
+
+Actually, the simplest approach: I'll target the whole method from `    def test_port_boundary_and_errors(self):` through the last line before the next method. The old text is unique.
+
+But this is a very long string. Let me make sure it's under the 65,536 byte limit. It's roughly 2500 characters, so well within limits.
+
+Let me construct the old and new text carefully. I'll use the exact text from the source.
+
+Old (the entire method):
+```
+    def test_port_boundary_and_errors(self):
+        """Regression tests for port access on urlsplit and urlparse results."""
+        for parse in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            # --- str URLs ---
+            # No port: construction succeeds, port is None
+            p = parse("http://example.com/")
+            self.assertEqual(p.port, None)
+            # Empty port: construction succeeds, port is None
+            p = parse("http://example.com:/:/")
+            self.assertEqual(p.port, None)
+            # Port 0: accepted boundary
+            p = parse("http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            # Port 65535: accepted boundary
+            p = parse("http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            # Port 65536: out of range
+            p = parse("http://example.com:65536/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port out of range 0-65535",))
+            # Negative port: not a valid digit string
+            p = parse("http://example.com:-1/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as '-1'",))
+            # Noninteger port
+            p = parse("http://example.com:abc/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as 'abc'",))
+            # Non-ASCII decimal digit (Arabic-Indic digit 1)
+            na_digit = "\u0661"
+            p = parse("http://example.com:" + na_digit + "/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           (f"Port could not be cast to integer value as {na_digit!r}",))
+
+            # --- bytes URLs ---
+            # No port
+            p = parse(b"http://example.com/")
+            self.assertEqual(p.port, None)
+            # Empty port
+            p = parse(b"http://example.com:/:/ ")
+            self.assertEqual(p.port, None)
+            # Port 0
+            p = parse(b"http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            # Port 65535
+            p = parse(b"http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            # Port 65536: out of range
+            p = parse(b"http://example.com:65536/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port out of range 0-65535",))
+            # Negative port
+            p = parse(b"http://example.com:-1/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as b'-1'",))
+            # Noninteger port
+            p = parse(b"http://example.com:abc/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as b'abc'",))
+```
+
+New (same but with assertIs added):
+```
+    def test_port_boundary_and_errors(self):
+        """Regression tests for port access on urlsplit and urlparse results."""
+        for parse in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            # --- str URLs ---
+            # No port: construction succeeds, port is None
+            p = parse("http://example.com/")
+            self.assertEqual(p.port, None)
+            # Empty port: construction succeeds, port is None
+            p = parse("http://example.com:/:/")
+            self.assertEqual(p.port, None)
+            # Port 0: accepted boundary
+            p = parse("http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            # Port 65535: accepted boundary
+            p = parse("http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            # Port 65536: out of range
+            p = parse("http://example.com:65536/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertIs(type(ctx.exception), ValueError)
+            self.assertEqual(ctx.exception.args,
+                           ("Port out of range 0-65535",))
+            # Negative port: not a valid digit string
+            p = parse("http://example.com:-1/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertIs(type(ctx.exception), ValueError)
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as '-1'",))
+            # Noninteger port
+            p = parse("http://example.com:abc/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertIs(type(ctx.exception), ValueError)
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as 'abc'",))
+            # Non-ASCII decimal digit (Arabic-Indic digit 1)
+            na_digit = "\u0661"
+            p = parse("http://example.com:" + na_digit + "/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertIs(type(ctx.exception), ValueError)
+            self.assertEqual(ctx.exception.args,
+                           (f"Port could not be cast to integer value as {na_digit!r}",))
+
+            # --- bytes URLs ---
+            # No port
+            p = parse(b"http://example.com/")
+            self.assertEqual(p.port, None)
+            # Empty port
+            p = parse(b"http://example.com:/:/ ")
+            self.assertEqual(p.port, None)
+            # Port 0
+            p = parse(b"http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            # Port 65535
+            p = parse(b"http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            # Port 65536: out of range
+            p = parse(b"http://example.com:65536/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertIs(type(ctx.exception), ValueError)
+            self.assertEqual(ctx.exception.args,
+                           ("Port out of range 0-65535",))
+            # Negative port
+            p = parse(b"http://example.com:-1/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertIs(type(ctx.exception), ValueError)
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as b'-1'",))
+            # Noninteger port
+            p = parse(b"http://example.com:abc/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertIs(type(ctx.exception), ValueError)
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as b'abc'",))
+```
+
+Wait, but I need to be careful about what comes after this method. Looking at the source, after the method there's:
+```
+    def test_attributes_bad_scheme(self):
+```
+
+So my old text should end with the last line of the method, and I should NOT include the next method's def line. Let me check: does the old text end with a newline? In the source, after the last `self.assertEqual(...)` line, there's a newline, then `    def test_attributes_bad_scheme(self):`.
+
+Actually, I need to be more careful. The `patch` operation replaces exactly one occurrence of `old` with `new`. The `old` text needs to be unique in the file. The entire method is definitely unique.
+
+But I need to be precise about whether there's a trailing newline. In the source display, I see the method ends with:
+```
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as b'abc'",))
+```
+
+And then the next line is:
+```
+    def test_attributes_bad_scheme(self):
+```
+
+So there's a newline between them. My old text should include everything from `    def test_port_boundary_and_errors(self):` up to and including the last `)` line, but NOT the newline before the next method (or should I include it?).
+
+Actually, for the patch to work, I just need the `old` text to be an exact substring of the file. The replacement will replace that exact substring. If my `old` text doesn't include the trailing newline, then after replacement, the new text will be followed by whatever was after the old text (the newline + next method). That's fine.
+
+But wait - I need to make sure the `old` text is exact. Let me look at the source more carefully. In the JSON, the content is displayed with actual newlines and indentation. Let me trace through it.
+
+Looking at the source content for test_urlparse.py (lines 527-824), I can see the method. The indentation is 4 spaces per level:
+- Method def: 4 spaces
+- Method body: 8 spaces
+- For loop body: 12 spaces
+- With block body: 16 spaces
+
+Let me construct the patch carefully. I'll use a slightly smaller unique section to reduce risk.
+
+Actually, you know what, let me just do it as a single big patch. The method is clearly unique in the file. Let me be very precise about the text.
+
+From the source, here's what I see (I'll mark each line):
+
+Line: `    def test_port_boundary_and_errors(self):`
+Line: `        """Regression tests for port access on urlsplit and urlparse results."""`
+Line: `        for parse in (urllib.parse.urlsplit, urllib.parse.urlparse):`
+Line: `            # --- str URLs ---`
+Line: `            # No port: construction succeeds, port is None`
+Line: `            p = parse("http://example.com/")`
+Line: `            self.assertEqual(p.port, None)`
+Line: `            # Empty port: construction succeeds, port is None`
+Line: `            p = parse("http://example.com:/:/")`
+Line: `            self.assertEqual(p.port, None)`
+Line: `            # Port 0: accepted boundary`
+Line: `            p = parse("http://example.com:0/")`
+Line: `            self.assertEqual(p.port, 0)`
+Line: `            # Port 65535: accepted boundary`
+Line: `            p = parse("http://example.com:65535/")`
+Line: `            self.assertEqual(p.port, 65535)`
+Line: `            # Port 65536: out of range`
+Line: `            p = parse("http://example.com:65536/")`
+Line: `            with self.assertRaises(ValueError) as ctx:`
+Line: `                p.port`
+Line: `            self.assertEqual(ctx.exception.args,`
+Line: `                           ("Port out of range 0-65535",))`
+Line: `            # Negative port: not a valid digit string`
+Line: `            p = parse("http://example.com:-1/")`
+Line: `            with self.assertRaises(ValueError) as ctx:`
+Line: `                p.port`
+Line: `            self.assertEqual(ctx.exception.args,`
+Line: `                           ("Port could not be cast to integer value as '-1'",))`
+Line: `            # Noninteger port`
+Line: `            p = parse("http://example.com:abc/")`
+Line: `            with self.assertRaises(ValueError) as ctx:`
+Line: `                p.port`
+Line: `            self.assertEqual(ctx.exception.args,`
+Line: `                           ("Port could not be cast to integer value as 'abc'",))`
+Line: `            # Non-ASCII decimal digit (Arabic-Indic digit 1)`
+Line: `            na_digit = "\u0661"`
+Line: `            p = parse("http://example.com:" + na_digit + "/")`
+Line: `            with self.assertRaises(ValueError) as ctx:`
+Line: `                p.port`
+Line: `            self.assertEqual(ctx.exception.args,`
+Line: `                           (f"Port could not be cast to integer value as {na_digit!r}",))`
+Line: (empty line)
+Line: `            # --- bytes URLs ---`
+Line: `            # No port`
+Line: `            p = parse(b"http://example.com/")`
+Line: `            self.assertEqual(p.port, None)`
+Line: `            # Empty port`
+Line: `            p = parse(b"http://example.com:/:/ ")`
+Line: `            self.assertEqual(p.port, None)`
+Line: `            # Port 0`
+Line: `            p = parse(b"http://example.com:0/")`
+Line: `            self.assertEqual(p.port, 0)`
+Line: `            # Port 65535`
+Line: `            p = parse(b"http://example.com:65535/")`
+Line: `            self.assertEqual(p.port, 65535)`
+Line: `            # Port 65536: out of range`
+Line: `            p = parse(b"http://example.com:65536/")`
+Line: `            with self.assertRaises(ValueError) as ctx:`
+Line: `                p.port`
+Line: `            self.assertEqual(ctx.exception.args,`
+Line: `                           ("Port out of range 0-65535",))`
+Line: `            # Negative port`
+Line: `            p = parse(b"http://example.com:-1/")`
+Line: `            with self.assertRaises(ValueError) as ctx:`
+Line: `                p.port`
+Line: `            self.assertEqual(ctx.exception.args,`
+Line: `                           ("Port could not be cast to integer value as b'-1'",))`
+Line: `            # Noninteger port`
+Line: `            p = parse(b"http://example.com:abc/")`
+Line: `            with self.assertRaises(ValueError) as ctx:`
+Line: `                p.port`
+Line: `            self.assertEqual(ctx.exception.args,`
+Line: `                           ("Port could not be cast to integer value as b'abc'",))`
+
+OK this is getting very long. Let me just do the patch. The key concern is: does the source use 4-space indentation? Yes, looking at the source it's clearly 4-space indentation.
+
+Wait, I realize I should double-check: is there a blank line between the end of the method and the next method? Looking at the source:
+
+```
+                           ("Port could not be cast to integer value as b'abc'",))
+
+    def test_attributes_bad_scheme(self):
+```
+
+Yes, there's a blank line. So my old text ends with `                           ("Port could not be cast to integer value as b'abc'",))\n` and then there's a `\n` (blank line) before the next method.
+
+Actually, for the patch, I should NOT include the trailing newline/blank line. I should just end with the last content line. The patch replaces the exact substring, so if my old text is:
+
+```
+    def test_port_boundary_and_errors(self):
+        ...
+                           ("Port could not be cast to integer value as b'abc'",))
+```
+
+(without trailing newline), then after replacement, the file will have:
+```
+    def test_port_boundary_and_errors(self):
+        ...
+                           ("Port could not be cast to integer value as b'abc'",))
+
+    def test_attributes_bad_scheme(self):
+```
+
+Which is correct.
+
+Actually wait, I need to think about this more carefully. In a text file, each line ends with `\n`. So the actual bytes are:
+
+```
+    def test_port_boundary_and_errors(self):\n
+        """Regression tests for port access on urlsplit and urlparse results."""\n
+        ...
+                           ("Port could not be cast to integer value as b'abc'",))\n
+\n
+    def test_attributes_bad_scheme(self):\n
+```
+
+If my `old` text is:
+```
+    def test_port_boundary_and_errors(self):
+        """..."""
+        ...
+                           ("Port could not be cast to integer value as b'abc'",))
+```
+
+This represents the bytes from the start of the `def` line to the end of the last `)` character (NOT including the `\n` after it). After replacement, the file will have:
+```
+    def test_port_boundary_and_errors(self):\n
+        ...
+            self.assertIs(type(ctx.exception), ValueError)\n
+            self.assertEqual(ctx.exception.args,\n
+                           ("Port could not be cast to integer value as b'abc'",))\n
+\n
+    def test_attributes_bad_scheme(self):\n
+```
+
+That looks correct.
+
+But actually, I realize I should include the trailing newline to be safe. If my old text includes the `\n` after the last line, then my new text should also include it. Let me include it.
+
+Hmm, actually the `patch` documentation says "Replaces exactly one occurrence of old with new in an existing file, atomically." So `old` is a literal byte sequence that must appear exactly once. Let me just end my old text at the last `)` without the trailing newline. The newline will remain in the file after the replacement.
+
+OK let me just go for it. I'll construct the patch with the full method as the old text.
+
+Actually, I just realized something. Let me re-examine the source to make sure I'm reading it correctly. The source is displayed in the working_set.sources array. The content field for the test file shows the text. Let me look at the indentation more carefully.
+
+From the source:
+```
+    def test_port_boundary_and_errors(self):
+        """Regression tests for port access on urlsplit and urlparse results."""
+        for parse in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            # --- str URLs ---
+```
+
+So:
+- `def` is indented 4 spaces (class method)
+- docstring and for are 8 spaces
+- body of for is 12 spaces
+- `with` block body is 16 spaces
+
+Yes, that's standard 4-space indentation.
+
+Let me write the patch. I'll be very careful with the exact text.
+
+Actually, I want to make one more check. The source shows `na_digit = "\u0661"` - is that the literal Unicode character ١ (Arabic-Indic digit ONE, U+0661) or is it the escape sequence `\u0661`? Looking at the source display, it shows `na_digit = "\u0661"`. In a Python source file, `"\u0661"` is a string containing the single character U+0661. The source file itself contains the escape sequence `\u0661` (6 characters: backslash, u, 0, 6, 6, 1). So in the file, the bytes are literally: `n`, `a`, `_`, `d`, `i`, `g`, `i`, `t`, ` `, `=`, ` `, `"`, `\`, `u`, `0`, `6`, `6`, `1`, `"`.
+
+OK, I think I have enough information. Let me construct the patch.
+
+One more thought: should I also check for the `test_attributes_bad_port` method? That method also uses `self.assertRaises(ValueError)` but doesn't use `as ctx`. It just does:
+```python
+                        with self.assertRaises(ValueError):
+                            p.port
+```
+
+This method tests that ValueError IS raised, but doesn't check the exact type. Should I add assertIs there too? The task says "assert the exact exception class". But the task also says to keep existing tests intact. The `test_attributes_bad_port` is an existing test, so I should keep it as-is. My new test `test_port_boundary_and_errors` is where I add the exact class checks.
+
+Actually wait, let me re-read the task: "Establish when invalid-port errors occur, and assert the exact exception class, complete argument tuple and diagnostic text."
+
+This is about MY new tests. The existing `test_attributes_bad_port` just checks that ValueError is raised (it's a broader smoke test). My new test is the one that needs to assert the exact class.
+
+OK, so my plan is:
+1. Patch `test_port_boundary_and_errors` to add `self.assertIs(type(ctx.exception), ValueError)` after each `p.port` line.
+2. Run the tests check.
+3. If tests pass, work on the documentation.
+4. Submit.
+
+Let me do the patch now. I need to be very careful about the exact text.
+
+Let me also think about whether the `test_attributes_bad_port` method needs the assertIs check too. Looking at it:
+```python
+    def test_attributes_bad_port(self):
+        """Check handling of invalid ports."""
+        for bytes in (False, True):
+            for parse in (urllib.parse.urlsplit, urllib.parse.urlparse):
+                for port in ("foo", "1.5", "-1", "0x10", "-0", "1_1", " 1", "1 ", "६"):
+                    with self.subTest(bytes=bytes, parse=parse, port=port):
+                        netloc = "www.example.net:" + port
+                        url = "http://" + netloc + "/"
+                        if bytes:
+                            if netloc.isascii() and port.isascii():
+                                netloc = netloc.encode("ascii")
+                                url = url.encode("ascii")
+                            else:
+                                continue
+                        p = parse(url)
+                        self.assertEqual(p.netloc, netloc)
+                        with self.assertRaises(ValueError):
+                            p.port
+```
+
+This is an EXISTING test (it was in the original file). The task says "Keep all existing tests and supporting source intact." So I should NOT modify this test. Good.
+
+Now let me write the patch. I'll target the entire `test_port_boundary_and_errors` method.
+
+Hmm, actually let me reconsider. The method is quite long. Let me count the approximate size:
+- About 70 lines × ~50 chars/line ≈ 3500 characters ≈ 3500 bytes
+
+That's well within the 65,536 byte limit. Good.
+
+Let me write it out. I need to be extremely precise about the text. Let me trace through the source one more time:
+
+```
+    def test_port_boundary_and_errors(self):
+        """Regression tests for port access on urlsplit and urlparse results."""
+        for parse in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            # --- str URLs ---
+            # No port: construction succeeds, port is None
+            p = parse("http://example.com/")
+            self.assertEqual(p.port, None)
+            # Empty port: construction succeeds, port is None
+            p = parse("http://example.com:/:/")
+            self.assertEqual(p.port, None)
+            # Port 0: accepted boundary
+            p = parse("http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            # Port 65535: accepted boundary
+            p = parse("http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            # Port 65536: out of range
+            p = parse("http://example.com:65536/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port out of range 0-65535",))
+            # Negative port: not a valid digit string
+            p = parse("http://example.com:-1/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as '-1'",))
+            # Noninteger port
+            p = parse("http://example.com:abc/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as 'abc'",))
+            # Non-ASCII decimal digit (Arabic-Indic digit 1)
+            na_digit = "\u0661"
+            p = parse("http://example.com:" + na_digit + "/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           (f"Port could not be cast to integer value as {na_digit!r}",))
+
+            # --- bytes URLs ---
+            # No port
+            p = parse(b"http://example.com/")
+            self.assertEqual(p.port, None)
+            # Empty port
+            p = parse(b"http://example.com:/:/ ")
+            self.assertEqual(p.port, None)
+            # Port 0
+            p = parse(b"http://example.com:0/")
+            self.assertEqual(p.port, 0)
+            # Port 65535
+            p = parse(b"http://example.com:65535/")
+            self.assertEqual(p.port, 65535)
+            # Port 65536: out of range
+            p = parse(b"http://example.com:65536/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port out of range 0-65535",))
+            # Negative port
+            p = parse(b"http://example.com:-1/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as b'-1'",))
+            # Noninteger port
+            p = parse(b"http://example.com:abc/")
+            with self.assertRaises(ValueError) as ctx:
+                p.port
+            self.assertEqual(ctx.exception.args,
+                           ("Port could not be cast to integer value as b'abc'",))
+```
+
+And the new version adds `            self.assertIs(type(ctx.exception), ValueError)` after each `                p.port` line.
+
+Let me write this as a JSON patch action. The tricky part is the Unicode character in `na_digit = "\u0661"`. In the JSON, I need to represent this correctly. In the file, the actual bytes are the escape sequence `\u0661` (literal backslash-u-0-6-6-1), not the actual Unicode character. So in my JSON string, I need to write `\\u0661` to represent the literal text `\u0661` in the file.
+
+Wait, actually let me think about this. The Python source file contains:
+```python
+            na_digit = "\u0661"
+```
+
+The actual bytes in the file are:
+`            na_digit = "\u0661"`
+
+Where `\u0661` is the 6 characters: `\`, `u`, `0`, `6`, `6`, `1`. This is a Python string literal that, when evaluated, produces the character U+0661. But the FILE contains the escape sequence, not the actual character.
+
+In my JSON, to represent the literal text `\u0661`, I need to write `\\u0661` (escaped backslash followed by u0661). Let me make sure this is correct.
+
+Actually, in JSON:
+- `\\` represents a literal backslash
+- So `\\u0661` in JSON represents the 6 characters: `\`, `u`, `0`, `6`, `6`, `1`
+
+Yes, that's correct.
+
+Similarly, for the f-string: `(f"Port could not be cast to integer value as {na_digit!r}",))` - this contains `{na_digit!r}` which is literal text in the file.
+
+OK, let me construct the JSON. This is going to be a long string. Let me be very careful.
+
+Actually, I realize there might be an issue. Let me look at the source display more carefully. In the JSON content field, the text is:
+
+```
+na_digit = \"\\u0661\"
+```
+
+Wait no, the JSON display shows the content field with escaped quotes. Let me look at the raw display again:
+
+From the working_set.sources content:
+```
+            na_digit = \"\\u0661\"
+```
+
+Hmm, actually in the JSON that was displayed to me, the content field contains the actual file content with JSON escaping applied. So `\"` is an escaped quote (the file has `"`), and `\\u0661` is... wait.
+
+Let me think about this differently. The file contains the Python source:
+```python
+            na_digit = "\u0661"
+```
+
+The bytes in the file are: `            na_digit = "` followed by `\u0661` (which in the file is the literal 6 characters backslash, u, 0, 6, 6, 1) followed by `"`.
+
+When this is represented in a JSON string (the content field), the backslash needs to be escaped:
+- The `"` characters become `\"`
+- The `\` before `u0661` becomes `\\`
+
+So in the JSON content field, it appears as:
+```
+na_digit = \"\\u0661\"
+```
+
+Which is what I see. Good.
+
+Now, in MY patch JSON, I need to represent the same file content. The `old` field in my JSON needs to contain the exact bytes that are in the file. In JSON:
+- Literal `"` in the file → `\"` in JSON
+- Literal `\` in the file → `\\` in JSON
+
+So for the line `            na_digit = "\u0661"`, in my JSON `old` field it should be:
+`            na_digit = \"\\u0661\"`
+
+OK, I think I have it. Let me write the patch.
+
+Actually, let me reconsider whether to do this as one big patch or multiple smaller ones. The risk with one big patch is that if any single character is wrong, the whole thing fails. But the benefit is that it's one atomic operation.
+
+Given that I have 28 actions remaining, I could also do 7 smaller patches (one for each assertRaises block). Each would be smaller and easier to verify. But it would consume 7 actions instead of 1.
+
+I think one big patch is fine. Let me go with it.
+
+Let me write the JSON carefully:
+
+```json
+{
+  "action": "patch",
+  "path": "Lib/test/test_urlparse.py",
+  "old": "    def test_port_boundary_and_errors(self):\n        \"\"\"Regression tests for port access on urlsplit and urlparse results.\"\"\"\n        for parse in (urllib.parse.urlsplit, urllib.parse.urlparse):\n            # --- str URLs ---\n            # No port: construction succeeds, port is None\n            p = parse(\"http://example.com/\")\n            self.assertEqual(p.port, None)\n            # Empty port: construction succeeds, port is None\n            p = parse(\"http://example.com:/:/\")\n            self.assertEqual(p.port, None)\n            # Port 0: accepted boundary\n            p = parse(\"http://example.com:0/\")\n            self.assertEqual(p.port, 0)\n            # Port 65535: accepted boundary\n            p = parse(\"http://example.com:65535/\")\n            self.assertEqual(p.port, 65535)\n            # Port 65536: out of range\n            p = parse(\"http://example.com:65536/\")\n            with self.assertRaises(ValueError) as ctx:\n                p.port\n            self.assertEqual(ctx.exception.args,\n                           (\"Port out of range 0-65535\",))\n            # Negative port: not a valid digit string\n            p = parse(\"http://example.com:-1/\")\n            with self.assertRaises(ValueError) as ctx:\n                p.port\n            self.assertEqual(ctx.exception.args,\n                           (\"Port could not be cast to integer value as '-1'\",))\n            # Noninteger port\n            p = parse(\"http://example.com:abc/\")\n            with self.assertRaises(ValueError) as ctx:\n                p.port\n            self.assertEqual(ctx.exception.args,\n                           (\"Port could not be cast to integer value as 'abc'\",))\n            # Non-ASCII decimal digit (Arabic-Indic digit 1)\n            na_digit = \"\\u0661\"\n            p = parse(\"http://example.com:\" + na_digit + \"/\")\n            with self.assertRaises(ValueError) as ctx:\n                p.port\n            self.assertEqual(ctx.exception.args,\n                           (f\"Port could not be cast to integer value as {na_digit!r}\",))\n\n            # --- bytes URLs ---\n            # No port\n            p = parse(b\"http://example.com/\")\n            self.assertEqual(p.port, None)\n            # Empty port\n            p = parse(b\"http://example.com:/:/ \")\n            self.assertEqual(p.port, None)\n            # Port 0\n            p = parse(b\"http://example.com:0/\")\n            self.assertEqual(p.port, 0)\n            # Port 65535\n            p = parse(b\"http://example.com:65535/\")\n            self.assertEqual(p.port, 65535)\n            # Port 65536: out of range\n            p = parse(b\"http://example.com:65536/\")\n            with self.assertRaises(ValueError) as ctx:\n                p.port\n            self.assertEqual(ctx.exception.args,\n                           (\"Port out of range 0-65535\",))\n            # Negative port\n            p = parse(b\"http://example.com:-1/\")\n            with self.assertRaises(ValueError) as ctx:\n                p.port\n            self.assertEqual(ctx.exception.args,\n                           (\"Port could not be cast to integer value as b'-1'\",))\n            # Noninteger port\n            p = parse(b\"http://example.com:abc/\")\n            with self.assertRaises(ValueError) as ctx:\n                p.port\n            self.assertEqual(ctx.exception.args,\n                           (\"Port could not be cast to integer value as b'abc'\",))",
+  "new": "    def test_port_boundary_and_errors(self):\n        \"\"\"Regression tests for port access on urlsplit and urlparse results.\"\"\"\n        for parse in (urllib.parse.urlsplit, urllib.parse.urlparse):\n            # --- str URLs ---\n            # No port: construction succeeds, port is None\n            p = parse(\"http://example.com/\")\n            self.assertEqual(p.port, None)\n            # Empty port: construction succeeds, port is None\n            p = parse(\"http://example.com:/:/\")\n            self.assertEqual(p.port, None)\n            # Port 0: accepted boundary\n            p = parse(\"http://example.com:0/\")\n            self.assertEqual(p.port, 0)\n            # Port 65535: accepted boundary\n            p = parse(\"http://example.com:65535/\")\n            self.assertEqual(p.port, 65535)\n            # Port 65536: out of range\n            p = parse(\"http://example.com:65536/\")\n            with self.assertRaises(ValueError) as ctx:\n                p.port\n            self.assertIs(type(ctx.exception), ValueError)\n            self.assertEqual(ctx.exception.args,\n                           (\"Port out of range 0-65535\",))\n            # Negative port: not a valid digit string\n            p = parse(\"http://example.com:-1/\")\n            with self.assertRaises(ValueError) as ctx:\n                p.port\n            self.assertIs(type(ctx.exception), ValueError)\n            self.assertEqual(ctx.exception.args,\n                           (\"Port could not be cast to integer value as '-1'\",))\n            # Noninteger port\n            p = parse(\"http://example.com:abc/\")\n            with self.assertRaises(ValueError) as ctx:\n                p.port\n            self.assertIs(type(ctx.exception), ValueError)\n            self.assertEqual(ctx.exception.args,\n                           (\"Port could not be cast to integer value as 'abc'\",))\n            # Non-ASCII decimal digit (Arabic-Indic digit 1)\n            na_digit = \"\\u0661\"\n            p = parse(\"http://example.com:\" + na_digit + \"/\")\n            with self.assertRaises(ValueError) as ctx:\n                p.port\n            self.assertIs(type(ctx.exception), ValueError)\n            self.assertEqual(ctx.exception.args,\n                           (f\"Port could not be cast to integer value as {na_digit!r}\",))\n\n            # --- bytes URLs ---\n            # No port\n            p = parse(b\"http://example.com/\")\n            self.assertEqual(p.port, None)\n            # Empty port\n            p = parse(b\"http://example.com:/:/ \")\n            self.assertEqual(p.port, None)\n            # Port 0\n            p = parse(b\"http://example.com:0/\")\n            self.assertEqual(p.port, 0)\n            # Port 65535\n            p = parse(b\"http://example.com:65535/\")\n            self.assertEqual(p.port, 65535)\n            # Port 65536: out of range\n            p = parse(b\"http://example.com:65536/\")\n            with self.assertRaises(ValueError) as ctx:\n                p.port\n            self.assertIs(type(ctx.exception), ValueError)\n            self.assertEqual(ctx.exception.args,\n                           (\"Port out of range 0-65535\",))\n            # Negative port\n            p = parse(b\"http://example.com:-1/\")\n            with self.assertRaises(ValueError) as ctx:\n                p.port\n            self.assertIs(type(ctx.exception), ValueError)\n            self.assertEqual(ctx.exception.args,\n                           (\"Port could not be cast to integer value as b'-1'\",))\n            # Noninteger port\n            p = parse(b\"http://example.com:abc/\")\n            with self.assertRaises(ValueError) as ctx:\n                p.port\n            self.assertIs(type(ctx.exception), ValueError)\n            self.assertEqual(ctx.exception.args,\n                           (\"Port could not be cast to integer value as b'abc'\",))",
+  "expected_candidate_id": "83d8704c0a98ca6b201c991c56951d2e95bc060af33523531aa0b7789bf304ef",
+  "expected_file_sha256": "db7cc7f82acdea508adf662c9021c12be3e4ed79b1c4d95d6d5be9e907543088"
+}
+```
+
+Wait, I need to double-check the `\\u0661` in the JSON. In the file, the line is:
+```
+            na_digit = "\u0661"
+```
+
+The actual bytes are: `            na_digit = "` + `\u0661` (literal backslash, u, 0, 6, 6, 1) + `"`
+
+In JSON, to represent a literal backslash, I use `\\`. To represent a literal quote, I use `\"`. So in my JSON string:
+- `"` → `\"`
+- `\` → `\\`
+
+So the line in JSON is: `            na_digit = \"\\u0661\"`
+
+Yes, that's what I have. Good.
+
+Let me also double-check the f-string line. In the file:
+```
+                           (f"Port could not be cast to integer value as {na_digit!r}",))
+```
+
+The bytes are: `                           (f"Port could not be cast to integer value as {na_digit!r}",))`
+
+In JSON: `                           (f\"Port could not be cast to integer value as {na_digit!r}\",))`
+
+The `{` and `}` are literal characters in the file (they're part of an f-string expression), and they don't need escaping in JSON. Good.
+
+Let me finalize my patch. I'm fairly confident this is correct. Let me send it.
