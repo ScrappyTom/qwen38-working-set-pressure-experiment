@@ -1,3 +1,19 @@
+# Qualified original E19 source-reopening entry
+
+ecological_source_entry/PREPARATION_REVIEW-002.md qualifies exact fresh25files/
+128575bytes with7CPU tests,31native reply cases,11complete inputs and3scripted
+public executions (original failure/single-repair failure/final pass). Initial4851
+tokens, journey peak18145,0completions;276sealed artifacts/436sources. Fresh
+actor entry remains empty; scripted selections and repairs are evaluator-only.
+Publish before one uncoached24-request/72-operation seed173205 run002. Public
+is actor-requested, hidden post-seal only; named-source inspection is audited
+over actual delivered content separately from target edit guards. Preserve all
+23untouched files and review actual full outputs, source and observation evidence.
+Preparation001 source-change stop is root's coordination error, not host/model
+failure: final agent readiness must precede source freeze/native preparation.
+Its failed seal and exact originally bound source copies remain preserved. No
+silent retry/coaching/extension or pressure claim; wider corpus stays open.
+
 # Completed URL continuation and next ecological entry
 
 url_port_continuation/review/RESULTS-001.md closes the d71e9b98 uncoached

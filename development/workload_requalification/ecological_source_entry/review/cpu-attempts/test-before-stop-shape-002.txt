@@ -1,0 +1,188 @@
+"""Task-local entry and state qualification; no checker or native execution."""
+import copy
+import importlib.util
+import json
+from pathlib import Path
+import sys
+import tempfile
+import unittest
+from unittest.mock import patch
+
+AREA = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(AREA))
+import bootstrap
+import ecological_task as module
+from working_set_exp.jsonutil import canonical_json_bytes, load_json_strict, sha256_bytes
+
+
+class EcologicalTaskTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory(prefix='e19-task-cpu-')
+        self.folder = Path(self.temporary.name)
+        self.no_subprocess = patch('subprocess.Popen', side_effect=AssertionError('CPU entry tests must not execute a checker'))
+        self.no_subprocess.start()
+
+    def tearDown(self):
+        self.no_subprocess.stop()
+        self.temporary.cleanup()
+
+    def operation(self, session, action, account=None):
+        # Zero is a deliberately synthetic measurement. These tests qualify
+        # state/guards only; native preparation qualifies actual input fit.
+        session.mark_delivered(session.view())
+        session.begin_request()
+        reply = {'discussion': 'CPU task-local state qualification.'}
+        if account is not None:
+            reply['account'] = account
+        if action is not None:
+            reply['operation'] = action
+        return module.process_reply(session, reply, lambda view: 0, [])
+
+    def test_exact_original_fresh_entry_and_no_hidden_authority(self):
+        session = module.initial_session(self.folder)
+        self.assertEqual(session.candidate.candidate_id, module.STARTING_ID)
+        self.assertEqual(session.candidate.max_file_bytes, 24000)
+        self.assertEqual(len(session.candidate.files), 25)
+        self.assertEqual(sum(len(raw) for _, raw in session.candidate.files), 128575)
+        self.assertEqual(len(session.candidate.file_map['src/addressable_information_layer/__init__.py']), 69)
+        self.assertEqual(session.candidate.file_map, module.starting_files())
+        self.assertEqual((session.request_limit, session.call_limit), (24, 72))
+        self.assertEqual(session.edit_checks, {})
+        self.assertEqual(session.checkers, {'public': module.public_checker()})
+        self.assertEqual(module.SEED, 173205)
+        self.assertEqual(session.requests_used, 0)
+        self.assertEqual(session.starting_archive_length, 0)
+        self.assertEqual(session.pairs, [])
+        self.assertFalse(session.ranges)
+        self.assertEqual(session.saved, {})
+        self.assertIsNone(session.working_account())
+        self.assertIsNone(session.check_state())
+        view = session.view()
+        self.assertEqual(view['task'], module.task_text())
+        self.assertEqual(view['working_set']['sources'], [])
+        self.assertEqual(view['verification']['after_accepted_edit'], {})
+        self.assertNotIn('imported_observations', view)
+        self.assertEqual(sha256_bytes(module.public_checker()), module.PUBLIC_SHA)
+        self.assertEqual(sha256_bytes(module.hidden_checker()), module.HIDDEN_SHA)
+        self.assertNotIn(module.hidden_checker().decode(), json.dumps(view))
+
+    def test_public_only_operational_forms_and_truthful_reference(self):
+        for scope in ('public', 'hidden', 'tests', 'examples'):
+            text = json.dumps({'discussion': 'Check.', 'operation': {
+                'action': 'check', 'check_id': scope, 'expected_candidate_id': module.STARTING_ID}})
+            if scope == 'public':
+                self.assertEqual(module.decode_reply(text)['operation']['check_id'], 'public')
+            else:
+                with self.subTest(scope=scope), self.assertRaises(ValueError):
+                    module.decode_reply(text)
+        with self.assertRaises(ValueError):
+            module.decode_reply(json.dumps({'discussion': 'No operation.'}))
+        with self.assertRaises(ValueError):
+            module.decode_reply(json.dumps({'discussion': 'Save.', 'operation': {
+                'action': 'patch', 'path': module.TARGET, 'old': 'x', 'new': 'y',
+                'expected_candidate_id': module.STARTING_ID, 'expected_file_sha256': 'a'*64},
+                'check_after': 'public'}))
+        reference = module.operating_reference()
+        self.assertIn('edits do not trigger checks', reference)
+        self.assertIn('there are no injected fault tests', reference)
+        self.assertIn('Current source: a visible read/work_on excerpt containing all of old is sufficient', reference)
+        self.assertIn('SOURCE', reference)
+        self.assertIn('work_on_exact', reference)
+
+    def test_guarded_edit_refresh_no_auto_check_and_no_extra_inspection_gate(self):
+        session = module.initial_session(self.folder)
+        original = session.candidate
+        first_line = original.file_map[module.TARGET].decode().splitlines(keepends=True)[0]
+        action = {'action': 'patch', 'path': module.TARGET, 'old': first_line,
+            'new': first_line + '# CPU guarded-edit qualification.\n',
+            'expected_candidate_id': original.candidate_id,
+            'expected_file_sha256': original.file_sha256(module.TARGET)}
+        rejected = self.operation(session, action)
+        self.assertFalse(rejected['operations'][0]['result']['accepted'])
+        self.assertEqual(session.candidate, original)
+        acquired = self.operation(session, {'action': 'read', 'path': module.TARGET,
+            'start_line': 1, 'end_line': 2})
+        self.assertTrue(acquired['operations'][0]['result']['accepted'])
+        no_op = self.operation(session, {**action, 'new': first_line})
+        self.assertFalse(no_op['operations'][0]['result']['accepted'])
+        accepted = self.operation(session, action)
+        self.assertTrue(accepted['operations'][0]['result']['accepted'])
+        self.assertEqual(len(accepted['operations']), 1)
+        self.assertNotIn('policy_check', accepted)
+        self.assertNotEqual(session.candidate.candidate_id, original.candidate_id)
+        self.assertIsNone(session.check_state())
+        self.assertEqual({p for p,_ in session.candidate.files}, {p for p,_ in original.files})
+        self.assertEqual({p:raw for p,raw in session.candidate.files if p!=module.TARGET},
+            {p:raw for p,raw in original.files if p!=module.TARGET})
+        source = next(s for s in session.view()['working_set']['sources'] if s['path']==module.TARGET)
+        self.assertEqual(source['candidate_id'], session.candidate.candidate_id)
+        self.assertIn('# CPU guarded-edit qualification.', source['content'])
+        # Only the target excerpt was read. The separate four-file task audit
+        # must not silently become an additional host edit-acceptance gate.
+        stale = self.operation(session, action)
+        self.assertFalse(stale['operations'][0]['result']['accepted'])
+        self.assertEqual(len(session.versions), 2)
+
+    def test_multidigit_diff_restore_typed_addresses_and_tamper_rejection(self):
+        session = module.initial_session(self.folder)
+        for number in range(8):
+            self.operation(session, None, account='CPU pending question ' + str(number))
+        self.operation(session, {'action': 'read', 'path': module.REOPEN, 'start_line': 1, 'end_line': 2})
+        before = session.candidate
+        old = before.file_map[module.REOPEN].decode().splitlines(keepends=True)[0]
+        outcome = self.operation(session, {'action': 'patch', 'path': module.REOPEN,
+            'old': old, 'new': old + '# CPU restore qualification.\n',
+            'expected_candidate_id': before.candidate_id,
+            'expected_file_sha256': before.file_sha256(module.REOPEN)})
+        self.assertTrue(outcome['operations'][0]['result']['accepted'])
+        saved = module.snapshot(session)
+        self.assertEqual(set(saved['diffs']), {10})
+        for value in (saved, load_json_strict(canonical_json_bytes(saved))):
+            incoming = copy.deepcopy(value)
+            restored = module.restore(incoming, session.candidate, self.folder, replay=True)
+            self.assertEqual(incoming, value)
+            self.assertEqual(restored.view(), session.view())
+            self.assertEqual(module.snapshot(restored), saved)
+        loaded = load_json_strict(canonical_json_bytes(saved))
+        for label in ('alias', 'duplicate', 'wrong_receipt', 'unknown', 'allowance', 'ancestor'):
+            value = copy.deepcopy(loaded)
+            if label == 'alias': value['diffs']['010'] = value['diffs'].pop('10')
+            elif label == 'duplicate': value['diffs'][10] = value['diffs']['10']
+            elif label == 'wrong_receipt': value['diffs']['10'] += '\nforged'
+            elif label == 'unknown': value['diffs']['999'] = value['diffs'].pop('10')
+            elif label == 'allowance': value['request_limit'] = 25
+            else: value['source_versions'] = [v for v in value['source_versions'] if v['candidate_id']!=module.STARTING_ID]
+            with self.subTest(label=label), self.assertRaises(ValueError):
+                module.restore(value, session.candidate, self.folder, replay=True)
+
+    def test_loader_rejects_changed_original_bytes_without_touching_archive(self):
+        original_read = Path.read_bytes
+        changed_path = module.MODEL_VISIBLE / 'candidate' / module.REOPEN
+        def read_changed(path):
+            raw = original_read(path)
+            return raw + b'# tampered original\n' if path == changed_path else raw
+        with patch.object(Path, 'read_bytes', read_changed), self.assertRaises(ValueError):
+            module.starting_candidate()
+        self.assertEqual(module.starting_candidate().candidate_id, module.STARTING_ID)
+
+    def test_legacy_replay_shape_gate_keeps_missing_finish_reason_inert(self):
+        path = AREA / 'review/verify_run.py'
+        spec = importlib.util.spec_from_file_location('ecological_cpu_replay_shape', path)
+        helper = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(helper)
+        calls = self.folder / 'calls'
+        calls.mkdir()
+        response = calls / 'C01-endpoint-response.json'
+        # Synthetic saved endpoint shapes only; never a model/check execution.
+        value = {'choices': [{'message': {'content': '', 'reasoning_content': None}}]}
+        raw = canonical_json_bytes(value)
+        response.write_bytes(raw)
+        self.assertFalse(helper._reference_shape_supported(self.folder))
+        self.assertEqual(response.read_bytes(), raw)
+        value['choices'][0]['finish_reason'] = 'stop'
+        response.write_bytes(canonical_json_bytes(value))
+        self.assertTrue(helper._reference_shape_supported(self.folder))
+
+
+if __name__ == '__main__':
+    unittest.main()
