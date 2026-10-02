@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import saved_report_task as task
-from working_set_exp.jsonutil import canonical_json_bytes, load_json_strict, sha256_bytes, sha256_file
+from working_set_exp.jsonutil import canonical_json_bytes, load_json_strict
 
 
 REPORT = 'reports/incident.json'
@@ -249,130 +249,6 @@ class SavedReportEntryTests(unittest.TestCase):
                                ('phase counter', impossible_counter)):
             with self.subTest(label=label), self.assertRaises(ValueError):
                 task.restore(changed, self.session.candidate, replay_folder=self.folder, replay=True)
-
-
-class SavedReportRestoreTests(unittest.TestCase):
-    """Decode sealed actor checkpoints only; never rerun their operations."""
-
-    @classmethod
-    def setUpClass(cls):
-        cls.sealed_run = task.AREA / 'run-001'
-        seal_raw = (cls.sealed_run / 'RESPONSE_SEAL.json').read_bytes()
-        if sha256_bytes(seal_raw) != '8e0c0c553dd3fbe16c2ed4a07ac82cb5445ffa254e2a56b8b7c13e4e5e7afa86':
-            raise ValueError('restore regression run seal differs')
-        seal = load_json_strict(seal_raw)
-        if sha256_bytes(canonical_json_bytes(seal['files'])) != seal['aggregate_sha256']:
-            raise ValueError('restore regression run index differs')
-        index = {row['path']: row for row in seal['files']}
-        if len(index) != len(seal['files']):
-            raise ValueError('restore regression run index has duplicate addresses')
-
-        def exact(name):
-            raw = (cls.sealed_run / name).read_bytes()
-            row = index[name]
-            if len(raw) != row['size_bytes'] or sha256_bytes(raw) != row['sha256']:
-                raise ValueError('restore regression fixture differs: ' + name)
-            return raw
-
-        manifest = load_json_strict(exact('EXECUTION_MANIFEST.json'))
-        if manifest['source_sha256'] != seal['source_sha256']:
-            raise ValueError('restore regression original source binding differs')
-        # These are the original execution sources, not the prospective decoder
-        # and tests currently imported. Their exact copies remain separately bound.
-        originals = {
-            'development/workload_requalification/saved_report_entry/saved_report_task.py': {
-                'path': 'task.py',
-                'sha256': 'f78bb22474d94565de40d8f007d6c7a34f5ca1713a5926c06cdd13116d3263d8'},
-            'development/workload_requalification/saved_report_entry/tests/test_saved_report_entry.py': {
-                'path': 'test_task.py',
-                'sha256': 'c9ff57061dddbfb13542f3589251be9ae1265b79c56b6aebba81f7b98783ab78'},
-        }
-        frozen = task.AREA / 'review/restore-qualification-001/frozen-sources'
-        if load_json_strict((frozen / 'INDEX.json').read_bytes()) != originals:
-            raise ValueError('restore regression original-source index differs')
-        for name, row in originals.items():
-            if (manifest['source_sha256'][name] != row['sha256']
-                    or sha256_file(frozen / row['path']) != row['sha256']):
-                raise ValueError('restore regression original source differs: ' + name)
-
-        cls.raw = {name: exact(name) for name in (
-            'after/C04-O01-state.json', 'after/C04-O01-candidate.json',
-            'calls/C05-wire-request.json', 'final-state.json', 'final-candidate.json')}
-        # Replay view construction can inspect preserved outcomes; authenticate
-        # those actual files too, rather than trusting a mutable observation folder.
-        for name in index:
-            if name.startswith('observations/'):
-                exact(name)
-        cls.final_counters = seal['phase_counters']
-
-    def restore(self, state, candidate):
-        with patch('subprocess.Popen', side_effect=AssertionError('decoder regression must not execute')):
-            return task.restore(state, candidate, replay_folder=self.sealed_run, replay=True)
-
-    def test_sealed_mixed_digit_checkpoints_restore_original_bytes_and_actual_view(self):
-        for stem in ('after/C04-O01', 'final'):
-            original = load_json_strict(self.raw[stem + '-state.json'])
-            candidate = load_json_strict(self.raw[stem + '-candidate.json'])
-            self.assertEqual(set(original['diffs']), {'2', '8', '16'})
-            for integer_input in (False, True):
-                with self.subTest(stem=stem, direct_integer_addresses=integer_input):
-                    state = copy.deepcopy(original)
-                    if integer_input:
-                        state['diffs'] = {int(key): value for key, value in state['diffs'].items()}
-                    unchanged = copy.deepcopy(state)
-                    restored = self.restore(state, candidate)
-                    self.assertEqual(state, unchanged)
-                    # Preserve the original numeric-key serializer's exact bytes;
-                    # reserializing the loaded string-key map would sort differently.
-                    self.assertEqual(canonical_json_bytes(task.snapshot(restored)), self.raw[stem + '-state.json'])
-                    self.assertEqual(task.compiler.candidate_bytes(restored.candidate), self.raw[stem + '-candidate.json'])
-                    self.assertEqual(restored.diffs, {int(key): value for key, value in original['diffs'].items()})
-                    self.assertTrue(all(type(key) is int for key in restored.diffs))
-                    self.assertEqual(restored.pairs, original['pairs'])
-                    for sequence in (2, 8, 16):
-                        receipt = original['pairs'][sequence - 1]['result']
-                        self.assertEqual(restored.payload(f'RES-{sequence:04d}'), canonical_json_bytes(receipt))
-                        self.assertEqual(restored.diffs[sequence], receipt['diff' if sequence == 2 else 'applied_diff'])
-                    if stem == 'after/C04-O01':
-                        wire = load_json_strict(self.raw['calls/C05-wire-request.json'])
-                        shown = load_json_strict(wire['messages'][1]['content'])['workspace']
-                        self.assertEqual(canonical_json_bytes(restored.view()), canonical_json_bytes(shown))
-                        self.assertIsNone(restored.working_account())
-                        self.assertFalse(restored.submitted)
-                    else:
-                        self.assertEqual(restored.phase_counters(), self.final_counters)
-                        account_pair = original['pairs'][17]
-                        self.assertEqual(restored.working_account(), dict(
-                            author='model', text=account_pair['response']['text'], action_handle='EVT-0018',
-                            input_candidate_id=account_pair['result']['input_candidate_id'],
-                            written_during_request=account_pair['result']['written_during_request']))
-                        self.assertEqual((restored.requests_used, len(restored.pairs)), (6, 19))
-                        self.assertTrue(restored.submitted)
-
-    def test_sealed_checkpoint_rejects_diff_map_tampering_and_address_aliases(self):
-        state = load_json_strict(self.raw['final-state.json'])
-        candidate = load_json_strict(self.raw['final-candidate.json'])
-        diffs = state['diffs']
-        missing = {key: value for key, value in diffs.items() if key != '16'}
-        cases = {
-            'changed value': {**diffs, '16': diffs['16'] + 'Invented change.\n'},
-            'missing edit': missing,
-            'reassigned to check': {**missing, '17': diffs['16']},
-            'leading zero alias': {**diffs, '016': diffs['16']},
-            'integer/string collision': {**diffs, 16: diffs['16']},
-            'zero address': {**diffs, '0': diffs['16']},
-            'nondigit address': {**diffs, 'EVT-0016': diffs['16']},
-            'boolean address': {**diffs, True: diffs['16']},
-            'float address': {**diffs, 16.0: diffs['16']},
-            'non-string diff': {**diffs, '16': None},
-            'non-map': [],
-        }
-        for label, changed in cases.items():
-            with self.subTest(label=label):
-                altered = copy.deepcopy(state)
-                altered['diffs'] = changed
-                with self.assertRaises(ValueError):
-                    self.restore(altered, candidate)
 
 
 if __name__ == '__main__':

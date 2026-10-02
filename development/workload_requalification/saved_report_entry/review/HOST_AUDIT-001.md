@@ -78,3 +78,15 @@ Six calls process 116,256 input tokens and generate 23,009 output tokens in 1,59
 The complete outputs still contain repeated reconstruction, especially C03/C04, and recovered local misreadings of the AST. They do not establish missing delivery or a false host claim on this path. C03 correctly distinguishes the saved report from absent original evidence; C04 eventually uses the captured compile scopes and ASTs rather than assuming the called function is the whole changed module. The executed report is correct despite that deliberation. Length alone does not identify its cause or justify a new presentation patch.
 
 This is an assisted, reused-task two-phase continuation with uncoached model actions inside each phase. It demonstrates preserving and extending a saved contribution, an explicit archive recovery after the declared restart, actual failed-check feedback followed by completion, and checked submission. The first check fails because the prescribed phase-one work intentionally covers only one of two required builds; it is not recovery from a wrong factual patch. It does not establish autonomous entry without supplied repair/source arrangements, natural context-pressure continuity, general archive navigation, optional-account continuity, or an isolated speed advantage over the historical run. No further host feature is earned solely by this successful path.
+
+## Post-closure apparatus finding
+
+The original offline verifier subsequently failed to restore the final checkpoint. `RESTORE_FINDING-001.md` preserves the failure and direct trace: the only differing snapshot field was the diff map. Saved JSON string addresses `"2"`, `"8"`, `"16"` sort lexically; restored integer addresses `2`, `8`, `16` sort numerically. The three exact diff contents, phase counters, account provenance and submitted artifact did not differ. The original run, source bindings and failed verifier evidence remain unchanged.
+
+Thus **no live-path host defect found is not whole-apparatus qualification**. Multi-digit checkpoint reconstruction is a concrete post-closure serialization defect. The separately published repair plan calls for task-local typed normalization and cross-binding restored diff addresses/values to the archived accepted patch receipts, while retaining the historical serializer and strict reconstruction check. Until that corrected path is separately qualified, this audit must not be read as an original-verifier replay pass.
+
+That prospective qualification has now passed all23 actual checkpoints, preserving
+original raw snapshot bytes and actual model views. It also reproduces the original
+restorer's failure and records both source sets; see `RESTORE_REPAIR_REVIEW.md`.
+This closes the observed apparatus defect without reclassifying the original
+verifier attempt or supplying new model evidence.

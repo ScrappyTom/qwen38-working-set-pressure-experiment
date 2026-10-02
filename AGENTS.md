@@ -1,4 +1,4 @@
-# Completed saved-report restart and open checkpoint repair
+# Completed saved-report restart and qualified checkpoint repair
 
 saved_report_entry/review/RESULTS-001.md closes the d82cdc84 assisted continuation:
 six requests/seven actor operations, correct preserved/extended report, actual
@@ -9,10 +9,16 @@ checked, not established by the earlier incomplete-report pass count. The closin
 account has no subsequent use. No natural pressure/recovery outcome is claimed.
 Original post-closure replay fails final restoration on identical diff-map keys
 2/8/16 sorting as JSON strings versus runtime integers. Preserve that failure,
-source and sealed run. Publish RESTORE_REPAIR_PLAN.md before a narrow typed-address
-repair and separate offline qualification; no model rerun is earned by decoder
-repair alone. Exact roundtrip and authenticating diffs against receipts are distinct.
-Retain the original compiler pressure and wider corpus obligations.
+source and sealed run. Plan5948a929 preceded the task-local typed-address repair.
+RESTORE_REPAIR_REVIEW.md qualifies nine CPU tests and all23actual checkpoints
+through original execution/prospective restoration, with both429-file source sets
+explicit and no new model/check/native execution in the qualifier. Raw snapshots,
+views and archive payloads remain exact. Do not relabel the original failed source
+or rerun Qwen solely for this decoder repair. Exact roundtrip and authenticating
+diffs against receipts are distinct; future adapters must test mixed-digit addresses.
+Proceed to url_port_entry/PLAN.md, preserving original empty entry, task, seed,
+20requests/60operations and scoped checks; qualify/publish before inference.
+Retain original compiler pressure and wider corpus obligations.
 
 # Qualified distinct saved-report restart
 

@@ -292,39 +292,6 @@ def read_bytes(raw):
     return load_json_strict(raw)
 
 
-def _restore_diffs(value, pairs):
-    """Interpret numeric archive addresses without changing snapshot bytes.
-
-    JSON object keys are strings; runtime diff lookup uses integers. Receipt
-    binding checks consistency, while the enclosing seal authenticates history.
-    """
-    if not isinstance(value, dict):
-        raise ValueError('checkpoint diff map is not an address map')
-    restored = {}
-    for key, diff in value.items():
-        if type(key) is int:
-            number = key
-        elif (type(key) is str and key.isascii() and key.isdecimal()
-                and str(int(key)) == key):
-            number = int(key)
-        else:
-            raise ValueError('checkpoint diff address is not canonical')
-        if number <= 0 or number in restored or type(diff) is not str:
-            raise ValueError('checkpoint diff address or value differs')
-        restored[number] = diff
-    expected = {}
-    for number, pair in enumerate(pairs, 1):
-        if pair['response'].get('action') == 'patch' and pair['result'].get('accepted'):
-            field = 'diff' if number <= INHERITED_OPERATIONS else 'applied_diff'
-            diff = pair['result'].get(field)
-            if type(diff) is not str:
-                raise ValueError('checkpoint accepted patch has no exact diff receipt')
-            expected[number] = diff
-    if restored != expected:
-        raise ValueError('checkpoint diff map differs from accepted patch receipts')
-    return restored
-
-
 def restore(state, candidate, replay_folder=None, replay=False):
     if not isinstance(candidate, Candidate):
         candidate = candidate_from_snapshot(candidate)
@@ -354,7 +321,7 @@ def restore(state, candidate, replay_folder=None, replay=False):
         if key not in ('candidate_id', 'saved_report_state', 'source_versions', 'imported_capture_state'):
             setattr(session, key, copy.deepcopy(value))
     session.candidate, session.versions = candidate, version_map
-    session.diffs = _restore_diffs(state['diffs'], session.pairs)
+    session.diffs = {int(key): value for key, value in session.diffs.items()}
     session.restored_control_fields = tuple(session.restored_control_fields)
     session.parked_source_regions = tuple(tuple(row) for row in session.parked_source_regions)
     for key in ('phase', 'phase_start_requests', 'phase_start_actor_operations', 'phase_start_archive_length',
@@ -368,13 +335,10 @@ def restore(state, candidate, replay_folder=None, replay=False):
         raise ValueError('checkpoint operation/request accounting differs')
     _validate_phase_ledger(session)
     counters = session.phase_counters()
-    # Compare the declared typed map, not lexical JSON key sorting against numeric
-    # runtime sorting. The incoming state and historical serializer stay intact.
-    typed_state = {**state, 'diffs': session.diffs}
     if (not 0 <= counters['phase_requests_used'] <= PHASE_REQUESTS
             or not 0 <= counters['phase_actor_operations_used'] <= PHASE_ACTOR_OPERATIONS
             or len(session.setup_sequences) > 9
-            or canonical_json_bytes(snapshot(session)) != canonical_json_bytes(typed_state)):
+            or canonical_json_bytes(snapshot(session)) != canonical_json_bytes(state)):
         raise ValueError('checkpoint phase accounting or exact reconstruction differs')
     return session
 

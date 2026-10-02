@@ -109,3 +109,18 @@ open apparatus repair. It is an assisted source arrangement and supplied repair,
 not autonomous end-to-end incident discovery, a wrong-entry correction, natural
 pressure recovery, account continuity, or a general archive-navigation result.
 Original compiler pressure obligations and the wider workload programme remain open.
+
+## Separately qualified apparatus follow-through
+
+After publishing this result and plan at5948a929, the task-local restorer was
+repaired with typed numeric-address interpretation and accepted-receipt binding,
+preserving all historical snapshot bytes. Nine focused CPU tests pass. A distinct
+offline qualifier replays the original execution and validates the prospective
+restorer at all23actual checkpoints; all actual views, candidates, counters,
+accounts and archive payloads match. It reproduces the original final restore
+failure and binds both source sets rather than relabeling that failure. No model,
+checker or native calls occur in this qualifier. Read
+[RESTORE_REPAIR_REVIEW.md](RESTORE_REPAIR_REVIEW.md) and
+[QUALIFICATION.json](restore-qualification-001/QUALIFICATION.json).
+The functional entry and this bounded apparatus repair are now closed; broader
+pressure and account-use conclusions remain unchanged.

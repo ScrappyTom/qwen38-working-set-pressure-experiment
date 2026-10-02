@@ -83,3 +83,35 @@ replay must not be relabeled passed. RESTORE_FINDING-001.md preserves the failur
 RESTORE_REPAIR_PLAN.md specifies a prospective task-local typed-address repair,
 receipt validation and all-checkpoint offline qualification. Publish this result
 and plan before source edits. Preserve original run/preparation and their seals.
+
+## 2026-10-02 UTC — prospective restoration closes
+
+Result/plan5948a929 was pushed before implementation. Task-local restore now
+normalizes incoming canonical numeric diff addresses, binds every address/value
+to accepted patch receipts and retains exact comparison against a typed copy.
+The serializer, caller state, model inputs and original seals remain unchanged.
+Root independently restored the actual final state byte-exactly under subprocess
+prohibition. Two decoder-only tests pass; the full nine selected CPU checks pass
+in2.506seconds. Eleven tamper subcases are rejected.
+
+Preserve the first targeted test's fixture-name failure (run shadowed TestCase.run)
+and its successful renamed rerun. A first original-source archive attempt failed
+at Windows path length before writing; shorter provider names preserve exact
+original bytes. Read-only path searches also initially used nonexistent paths;
+actual files were located before diagnosis. None changed task evidence.
+
+One separately reviewed qualifier attempt passes all23 actual checkpoints using
+original execution functions and prospective restore, explicit old/new source
+providers, saved measurements/observations, and blocked subprocess/network access.
+It reproduces the old final ValueError, then checks complete snapshot/view/
+candidate/account/counters and all archive payloads under the repair. It replays
+six public replies,16new/19archive operations,16native inputs and223custody records
+with zero new check/model/native execution. Only Task/tests differ between429-file
+source maps; other427 providers remain exact. QUALIFICATION SHA336b8df34585... .
+Root reviewed helper/result and rechecked all prospective source bindings.
+
+The new programme plan is url_port_entry/PLAN.md: original six-file empty entry,
+original seed/task/20request60operation envelope and existing scoped checks.
+No later correct artifacts enter it. Publish this plan before implementation,
+then qualify/publish actual decoder, information and transition routes before
+one finite uncoached model attempt. Wider corpus and pressure obligations remain.
