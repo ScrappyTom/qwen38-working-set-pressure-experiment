@@ -1,0 +1,147 @@
+Let me analyze the current state:
+
+1. I've already fixed `compiler/unary.py` - the bug was that `visit_UnaryOp` was returning `node.operand` for both UAdd and USub (dropping the negation for USub). The fix properly handles UAdd (returns operand) and USub (returns `ast.Constant(-node.operand.value)`), but only for numeric literals (int/float, not bool).
+
+2. Now I need to complete `reports/incident.json` with the observed comparison for each build.
+
+Let me review what I know from the working account and the observations:
+
+**Reference (OBS-0001)** - The original input module:
+- `_normal_dist_inv_cdf`: has `UnaryOp(op=USub(), operand=Call(func=Name(id='log', args=[Name(id='r')]))` in `r = sqrt(-log(r))`, and `UnaryOp(op=USub(), operand=Name(id='x'))` in `x = -x`
+- `weibullvariate`: has `UnaryOp(op=USub(), operand=Call(func=Name(id='_log', args=[Name(id='u')]))` in the return statement
+
+**BUILD-A (OBS-0002)** - `compile_request: {"functions": ["_normal_dist_inv_cdf"]}`:
+- Only `_normal_dist_inv_cdf` was selected
+- In the emitted AST for `_normal_dist_inv_cdf`:
+  - `r = sqrt(-log(r))` became `r = sqrt(log(r))` - the USub was dropped (UnaryOp removed, just the Call remains)
+  - `x = -x` became `x = x` - the USub was dropped (UnaryOp removed, just the Name remains)
+- `weibullvariate` was NOT selected, so it's unchanged from original (still has `UnaryOp(op=USub(), operand=Call(...))`)
+
+Wait, let me re-check. The BUG was: `visit_UnaryOp` returns `node.operand` for BOTH UAdd and USub. So:
+- For USub on a Call (like `-log(r)`): the operand is `Call(func=log, args=[r])` which is NOT a Constant, so in the original buggy code it would return `node.operand` (the Call). This drops the negation!
+- For USub on a Name (like `-x`): the operand is `Name(id='x')` which is NOT a Constant, so it returns `node.operand` (the Name). This also drops the negation!
+
+Wait, but the original buggy code was:
+```python
+if isinstance(node.op, (ast.UAdd, ast.USub)):
+    return ast.copy_location(node.operand, node)
+```
+
+So it returns `node.operand` for ANY operand (not just constants). That's the bug - it was stripping the unary operator regardless of operand type.
+
+So for BUILD-A (only `_normal_dist_inv_cdf` selected):
+- `r = sqrt(-log(r))` → `r = sqrt(log(r))` (USub stripped, Call remains) - CHANGED
+- `x = -x` → `x = x` (USub stripped, Name remains) - CHANGED
+- `weibullvariate` NOT selected → unchanged
+
+For BUILD-B (both functions selected):
+- `_normal_dist_inv_cdf`:
+  - `r = sqrt(-log(r))` → `r = sqrt(log(r))` - CHANGED
+  - `x = -x` → `x = x` - CHANGED
+- `weibullvariate`:
+  - `return alpha * -_log(u) ** (1/beta)` → `return alpha * _log(u) ** (1/beta)` - CHANGED (USub stripped)
+
+Now let me verify this against the actual AST dumps in the observations:
+
+**BUILD-A (OBS-0002)** AST dump for `_normal_dist_inv_cdf`:
+- `r = sqrt(...)`: Looking at the AST... I see `Call(func=Name(id='sqrt'), args=[Call(func=Name(id='log'), args=[Name(id='r')])], keywords=[])`. So yes, the UnaryOp(USub) around log(r) is gone. It's just `sqrt(log(r))`.
+- `x = -x`: I see `Assign(targets=[Name(id='x')], value=Name(id='x'))`. The UnaryOp(USub) is gone. It's just `x = x`.
+
+**BUILD-A (OBS-0002)** AST dump for `weibullvariate`:
+- `Return(value=BinOp(left=Name(id='alpha'), op=Mult(), right=BinOp(left=UnaryOp(op=USub(), operand=Call(func=Name(id='_log'), args=[Name(id='u')])), op=Pow(), right=BinOp(left=Constant(1.0), op=Div(), right=Name(id='beta'))))`
+- The UnaryOp(USub) is PRESERVED because weibullvariate was not selected.
+
+**BUILD-B (OBS-0003)** AST dump:
+- `_normal_dist_inv_cdf`:
+  - `r = sqrt(log(r))` - USub dropped (same as BUILD-A)
+  - `x = x` - USub dropped (same as BUILD-A)
+- `weibullvariate`:
+  - `Return(value=BinOp(left=Name(id='alpha'), op=Mult(), right=BinOp(left=Call(func=Name(id='_log'), args=[Name(id='u')]), op=Pow(), right=BinOp(left=Constant(1.0), op=Div(), right=Name(id='beta')))))`
+  - The UnaryOp(USub) is GONE. It's just `alpha * _log(u) ** (1/beta)`.
+
+Now for the report:
+
+The task says:
+- "Include every captured emitted build"
+- "Compare with the captured original tree"
+- "List all top-level functions whose AST changed, in source order"
+- "Locate the first expression whose node kind changed, traversing functions in source order and their fields in normal Python AST order"
+
+**BUILD-A (OBS-0002):**
+- Changed functions: `["_normal_dist_inv_cdf"]` (only this function was selected, and it changed)
+- First change: In `_normal_dist_inv_cdf`, traversing in source/AST order:
+  - The first UnaryOp encountered is in `r = sqrt(-log(r))` → `r = sqrt(log(r))`
+  - before: `-log(r)` (the original expression at that position)
+  - after: `log(r)` (the emitted expression)
+
+Wait, I need to think about what "first expression whose node kind changed" means. The node kind changed from UnaryOp to Call (the UnaryOp was replaced by its operand which is a Call). 
+
+Actually, looking more carefully at the AST:
+- Original: `UnaryOp(op=USub(), operand=Call(func=log, args=[r]))` 
+- BUILD-A: `Call(func=log, args=[r])`
+
+The node kind changed from UnaryOp to Call. The "before" expression is `-log(r)` and the "after" expression is `log(r)`.
+
+**BUILD-B (OBS-0003):**
+- Changed functions: `["_normal_dist_inv_cdf", "weibullvariate"]` (both were selected, both changed)
+- First change: Same as BUILD-A - in `_normal_dist_inv_cdf`, the first UnaryOp is in `r = sqrt(-log(r))`
+  - before: `-log(r)` 
+  - after: `log(r)`
+
+Now let me write the incident.json:
+
+```json
+{
+  "builds": [
+    {
+      "capture": "OBS-0002",
+      "changed_functions": ["_normal_dist_inv_cdf"],
+      "first_change": {
+        "function": "_normal_dist_inv_cdf",
+        "before": "-log(r)",
+        "after": "log(r)"
+      }
+    },
+    {
+      "capture": "OBS-0003",
+      "changed_functions": ["_normal_dist_inv_cdf", "weibullvariate"],
+      "first_change": {
+        "function": "_normal_dist_inv_cdf",
+        "before": "-log(r)",
+        "after": "log(r)"
+      }
+    }
+  ]
+}
+```
+
+Wait, let me reconsider. The task says "Report which functions changed and the first changed expression in each build". And the README says:
+
+```
+{"builds": [
+  {"capture": "<emitted-tree handle>",
+   "changed_functions": ["<function name>", "..."],
+   "first_change": {"function": "<name>",
+                    "before": "<original expression>",
+                    "after": "<emitted expression>"}}
+]}
+```
+
+So the capture handle is the OBS handle. Let me verify: OBS-0002 is "BUILD-A emitted module" and OBS-0003 is "BUILD-B emitted module".
+
+Now I need to write this to `reports/incident.json`. The current content is `{"builds": []}`.
+
+Let me use patch to replace the content. The current file has:
+- file_sha256: `22efad348a13802b9bc50b72ff44cdb2234b2c9faacc9f4b33ddaea77ea68509`
+- Content: `{"builds": []}\n`
+
+I'll patch it with the full JSON. Let me format it properly.
+
+Actually, let me reconsider the "before" and "after" expressions. The task says "Express its original and emitted forms as ordinary Python expressions".
+
+Original: `r = sqrt(-log(r))` - the sub-expression is `-log(r)`
+Emitted: `r = sqrt(log(r))` - the sub-expression is `log(r)`
+
+So before = `-log(r)` and after = `log(r)`. That seems right.
+
+Let me now write the patch. I'll replace the entire content of incident.json.

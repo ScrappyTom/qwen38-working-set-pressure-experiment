@@ -90,3 +90,41 @@ and independent saved-report restart obligations. No silent reset/retry/coaching
 A documentation helper initially looked for running notes at the repository root;
 the existing notes are in this task area. Its partial doc writes are retained and
 completed at the actual location; no qualification source or evidence changed.
+
+## 2026-10-02 UTC — fresh retained-capture run closes
+
+Run003 under published d6ad62dd completes14requests/20operations:2tree,5read,
+3capture acquisitions,6accounts,2patches,1check,1submit. Qwen chooses all operations
+without coaching or supplied selection. Both target edits are saved, actual26/26
+check passes on c2866b76..., and the same candidate is submitted. Four other file
+bodies remain exact. Optional literal-minus folding is permitted; independent
+probes find no supported parsed-literal failure. An invalid caller-created
+Constant subclass exposes a broader-than-exact type predicate; preserve that
+limitation without invisibly repairing the submitted artifact.
+
+The host now retains all three exact requested operands through source reads,
+edits and verification, one copy each, with original historical bindings. No
+capacity rejection, release, reacquisition, failed check or pressure boundary
+occurs. This earns a functional contribution result, not a universal retention
+policy or matched efficiency claim. Run002's14/20stop and36.033minutes remain.
+
+Personally read all14complete thinking/final responses and actual inputs/effects.
+C09 quotes original wrappers as emitted despite correct co-present bodies; C10
+recovers and records the correct report comparison. C09's retained/latest receipt
+serialization is asymmetric. A symmetric decoded-object rendering is documented
+as a deferred candidate, not a proven cause or immediate refactor. Subsequent
+responses repeat correct comparisons; C14 calls UnaryOp-to-Call removal numeric
+constant folding. Its narrative is wrong while saved artifacts remain correct.
+The account's claims/old plan are authored information, not check authority.
+
+Costs:196906input/39646generated,2754.016model seconds,2818.485loop seconds;
+peak23048input/34624combined. MinimumGPU240MiB under accepted advisory policy;
+noCUDA/truncation, ownedruntime closed/portfree. Exact replay:14replies/20effects,
+21nativeinputs/315custody/408sources, no new inference/tokenization/check.
+Reviewers independently inspect artifacts and full outputs, not only the pass.
+
+Close and publish the fresh entry, then prepare the distinct historical assisted
+saved-report restart from its exact f7939c49... saved repair. Do not substitute
+the new repair/history, drop setup attribution or borrow40/100opportunity. The
+two original8-request phases need explicit current-host operation accounting.
+This result does not close old pressure studies or the wider workload programme.

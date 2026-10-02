@@ -1,0 +1,154 @@
+Let me analyze the current state:
+
+1. **Task**: Investigate two captured optimized builds, repair the optimizer, and complete `reports/incident.json`.
+
+2. **Current state**:
+   - `compiler/unary.py` has been fixed (the bug was that `USub` on a `log(r)` call was being simplified to remove the unary minus, changing `-log(r)` to `log(r)`). The fix ensures the simplifier only folds unary operators on numeric *literals*, not on function calls.
+   - `reports/incident.json` has been written with the build comparisons.
+   - The current candidate is `c2866b765306e1e38516d48aeacdeb304023aa0796e0781c5d33ecec904c56e2`.
+
+3. **What's left**:
+   - Run `check public` on the current candidate to verify everything passes.
+   - If it passes, submit.
+
+Let me look at what the incident.json says and verify it's correct:
+
+From the observations:
+- **OBS-0002 (BUILD-A)**: Compiles `_normal_dist_inv_cdf` only. The original had `sqrt(UnaryOp(USub, log(r)))` but the emitted module has `sqrt(log(r))` (the USub was removed). Also, in `_normal_dist_inv_cdf`, the final `If` body had `x = UnaryOp(USub, x)` but in BUILD-A it became `x = x` (the USub was removed). Wait, let me re-check.
+
+Looking at OBS-0001 (original):
+- `r = sqrt(UnaryOp(USub, log(r)))` — has the unary minus
+- In the final if-block: `x = UnaryOp(USub, x)` — has the unary minus
+
+In OBS-0002 (BUILD-A, compiling `_normal_dist_inv_cdf`):
+- `r = sqrt(log(r))` — the unary minus was removed (bug!)
+- In the final if-block: `x = x` — the unary minus was removed (bug!)
+
+Wait, let me look more carefully at the ASTs.
+
+Original (OBS-0001):
+```
+Assign(r, sqrt(UnaryOp(USub, log(r))))
+...
+If(q < 0, body=[Assign(x, UnaryOp(USub, x))])
+```
+
+BUILD-A (OBS-0002) - compiled with functions=[_normal_dist_inv_cdf]:
+```
+Assign(r, sqrt(log(r)))  -- USub removed!
+...
+If(q < 0, body=[Assign(x, x)])  -- USub removed!
+```
+
+Wait, actually let me re-read the ASTs more carefully.
+
+From RES-0010 (OBS-0001, original):
+```
+Assign(r, Call(sqrt, [UnaryOp(USub, Call(log, [r]))]))
+```
+and
+```
+If(q < 0, body=[Assign(x, UnaryOp(USub, x))])
+```
+
+From RES-0012 (OBS-0002, BUILD-A):
+```
+Assign(r, Call(sqrt, [Call(log, [r])]))
+```
+and
+```
+If(q < 0, body=[Assign(x, x)])
+```
+
+So in BUILD-A, both the `sqrt(-log(r))` lost its USub, and `x = -x` became `x = x`.
+
+From RES-0013 (OBS-0003, BUILD-B, compiling both `_normal_dist_inv_cdf` and `weibullvariate`):
+```
+Assign(r, Call(sqrt, [Call(log, [r])]))  -- same USub removal
+...
+If(q < 0, body=[Assign(x, x)])  -- same USub removal
+...
+weibullvariate: Return(alpha * UnaryOp(USub, _log(u)) ** (1/beta))
+```
+
+Wait, let me check weibullvariate in the original:
+```
+Return(alpha * UnaryOp(USub, _log(u)) ** (1/beta))
+```
+
+In BUILD-B:
+```
+Return(alpha * _log(u) ** (1/beta))  -- USub removed!
+```
+
+So in BUILD-B, `weibullvariate` also had its USub removed.
+
+Now, the incident.json format requires:
+- `changed_functions`: all top-level functions whose AST changed, in source order
+- `first_change`: the first expression whose node kind changed, traversing functions in source order
+
+For BUILD-A (OBS-0002), only `_normal_dist_inv_cdf` was selected, so only that function's AST could change. The changes are:
+1. `sqrt(-log(r))` → `sqrt(log(r))` — the UnaryOp(USub) node was removed
+2. `x = -x` → `x = x` — the UnaryOp(USub) node was removed
+
+The first change traversing in source order within `_normal_dist_inv_cdf` would be the `sqrt(-log(r))` one (it appears earlier in the function body than the `x = -x`).
+
+Wait, actually let me think about what "first expression whose node kind changed" means. The task says: "Locate the first expression whose node kind changed, traversing functions in source order and their fields in normal Python AST order."
+
+So we're looking for the first node where the kind changed. In `_normal_dist_inv_cdf`:
+- The `sqrt(-log(r))` assignment: the argument to sqrt changed from `UnaryOp(USub, log(r))` to `log(r)`. So the node kind at that position changed from UnaryOp to Call. The "expression" that changed is `-log(r)` → `log(r)`.
+
+Actually wait - the "node kind changed" means the type of AST node at a given position changed. In the original, the argument to `sqrt()` is a `UnaryOp` node. In the build, it's a `Call` node (directly `log(r)`). So the node kind at that position changed from UnaryOp to Call.
+
+The expression in "original expression" form would be `-log(r)` and "emitted expression" would be `log(r)`.
+
+For BUILD-A:
+- changed_functions: ["_normal_dist_inv_cdf"] (only this was selected and it changed)
+- first_change: function="_normal_dist_inv_cdf", before="-log(r)", after="log(r)"
+
+For BUILD-B (OBS-0003), both functions were selected:
+- `_normal_dist_inv_cdf` changed (same as BUILD-A)
+- `weibullvariate` changed: `alpha * (-_log(u)) ** (1/beta)` → `alpha * _log(u) ** (1/beta)`
+
+The first change traversing functions in source order: `_normal_dist_inv_cdf` comes first in source order. Within it, the first change is the same `sqrt(-log(r))` → `sqrt(log(r))`.
+
+So:
+- changed_functions: ["_normal_dist_inv_cdf", "weibullvariate"]
+- first_change: function="_normal_dist_inv_cdf", before="-log(r)", after="log(r)"
+
+This matches what's already in the incident.json. 
+
+Now let me verify the current `compiler/unary.py` fix is correct:
+
+```python
+import ast
+
+
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, (ast.UAdd, ast.USub)):
+            if (isinstance(node.operand, ast.Constant)
+                    and isinstance(node.operand.value, (int, float))
+                    and not isinstance(node.operand.value, bool)):
+                if isinstance(node.op, ast.UAdd):
+                    return ast.copy_location(node.operand, node)
+                else:
+                    return ast.copy_location(ast.Constant(-node.operand.value), node)
+        return node
+```
+
+This looks correct. It only folds unary operators when the operand is a numeric literal (int or float, not bool). So:
+- `-5` → `Constant(-5)` ✓
+- `+5` → `Constant(5)` ✓
+- `-log(r)` → not folded (operand is a Call, not a Constant) ✓
+- `-x` → not folded (operand is a Name, not a Constant) ✓
+- `-True` → not folded (bool excluded) ✓
+
+This preserves the contract: "eliminate unary plus on exact built-in integer and float literals" and "preserve Python's values, types, exceptions and operator dispatch everywhere else, including negative zero and user-defined unary operators."
+
+Wait, but the original bug was that the simplifier was folding USub on non-literal operands. The fix correctly restricts it to only literals. Let me also check: does it handle UAdd correctly? `+5` should become `5` (the constant). Yes, it returns `node.operand` which is the Constant(5).
+
+What about negative zero? `-0.0` should become `Constant(-0.0)`. In Python, `-0.0` is a valid float and `ast.Constant(-0.0)` is `Constant(-0.0)`. This preserves the negative zero. Good.
+
+Now I need to run the public check on the current candidate. Let me do that.

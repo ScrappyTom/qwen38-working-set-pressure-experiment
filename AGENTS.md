@@ -1,3 +1,18 @@
+# Completed fresh compiler contribution
+
+compiler_entry/review/RESULTS-003.md closes the d6ad62dd fresh uncoached entry:
+14requests/20operations, correct optimizer/report, actual26/26pass and submission.
+All3requested captures remain exact and co-present through both edits/check;
+current source refreshes while captures keep original incident bindings. Exact
+replay passes315custody records/21native inputs/408sources. Preserve45.900model
+minutes and run002's separate stop/cost. Passing artifacts do not certify account
+claims or closure prose: C09 misbinding recovered C10; C14's Constant explanation
+is false. Malformed caller-created AST type-subclass behavior is unqualified.
+No pressure/recovery/release/correction or isolated speed effect is established.
+Keep symmetric decoded capture display deferred; no new patch is earned solely
+by this run. Prepare the exact assisted saved-report restart as a distinct entry,
+preserving its supplied repair/setup and independent phase opportunities.
+
 # Qualified retained compiler captures
 
 compiler_entry/PREPARATION_REVIEW-003.md qualifies the opt-in capture-lifetime

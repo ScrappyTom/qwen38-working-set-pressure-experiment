@@ -1,0 +1,115 @@
+Let me analyze the situation carefully.
+
+The task says:
+1. Two optimized builds changed behavior: one raised an unexpected arithmetic error, another returned a complex result where the original returned a real number.
+2. I need to investigate the recorded trees and compiler source.
+3. Repair the optimizer while preserving the supported compilation contract.
+4. Complete reports/incident.json with the observed comparison for each build.
+5. Report which functions changed and the first changed expression in each build.
+6. Distinguish captured behavior from verification of my repair.
+7. Check the current candidate and submit.
+
+Looking at the bug in `compiler/unary.py`:
+```python
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, (ast.UAdd, ast.USub)):
+            return ast.copy_location(node.operand, node)
+        return node
+```
+
+The problem: This unconditionally unwraps any UAdd or USub to just the operand. For UAdd (+x), that's fine for numeric literals (returns x). But for USub (-x), it also just returns x, DROPPING the negation sign! It should return `-x` (i.e., the negated constant) for literals.
+
+Additionally, the README says:
+- "It must at least eliminate unary plus on exact built-in integer and float literals in selected functions."
+- "It must preserve Python's values, types, exceptions and operator dispatch everywhere else, including negative zero and user-defined unary operators."
+- "Constant folding is optional for other cases when equivalent."
+
+So the correct behavior should be:
+1. For UAdd on a numeric literal (int/float, not bool): return the operand (eliminates unary plus)
+2. For USub on a numeric literal: fold to the negated constant (e.g., -3 → Constant(-3))
+3. For UAdd on non-literal: keep the UnaryOp (don't unwrap)
+4. For USub on non-literal: keep the UnaryOp (don't unwrap)
+5. For other unary ops (Not, etc.): keep as-is
+
+Wait, let me re-read the README more carefully:
+
+"The small optimizer may simplify unary signs applied to numeric literals. It must at least eliminate unary plus on exact built-in integer and float literals in selected functions. It must preserve Python's values, types, exceptions and operator dispatch everywhere else, including negative zero and user-defined unary operators. Constant folding is optional for other cases when equivalent."
+
+So:
+- MUST: eliminate unary plus (`+x`) on int/float literals → return x
+- MAY: fold unary minus (`-x`) on int/float literals → return Constant(-value)
+- MUST preserve: values, types, exceptions, operator dispatch everywhere else
+
+The bug is that the current code unconditionally unwraps BOTH UAdd and USub to just the operand. This means:
+- `+x` → `x` (correct for literals, wrong for non-literals)
+- `-x` → `x` (WRONG! It drops the negation sign entirely)
+
+The fix should be:
+```python
+import ast
+
+
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, ast.UAdd):
+            if isinstance(node.operand, ast.Constant) and not isinstance(node.operand.value, bool) and isinstance(node.operand.value, (int, float)):
+                return ast.copy_location(node.operand, node)
+            return node
+        if isinstance(node.op, ast.USub):
+            if isinstance(node.operand, ast.Constant) and not isinstance(node.operand.value, bool) and isinstance(node.operand.value, (int, float)):
+                return ast.copy_location(
+                    ast.Constant(value=-node.operand.value), node
+                )
+            return node
+        return node
+```
+
+Wait, but I need to be careful about what "must" vs "may" means. The README says:
+- "must at least eliminate unary plus on exact built-in integer and float literals"
+- "Constant folding is optional for other cases when equivalent."
+
+So for USub on a literal, I could either:
+a) Fold to Constant(-value) - this is constant folding, which is "optional"
+b) Keep the UnaryOp as-is
+
+But the bug is that it's currently DROPPING the negation. The correct fix must at minimum NOT drop the negation. The safest fix that preserves behavior:
+- For UAdd on int/float literal: return operand (required by contract)
+- For USub on int/float literal: either fold to -value OR keep as UnaryOp. Both are valid.
+- For anything else: keep the UnaryOp unchanged.
+
+Actually, looking at the OBS-0001 AST dump more carefully, I can see the original module has functions `_normal_dist_inv_cdf` and `weibullvariate`. The reference calls show:
+- `_normal_dist_inv_cdf` returned -2.3263478740408408
+- `weibullvariate` returned 1.6651092223153954
+
+Now I need to:
+1. Read OBS-0002 and OBS-0003 to see what the builds emitted
+2. Fix the optimizer
+3. Write the incident report
+4. Run public check
+5. Submit
+
+Let me first acquire OBS-0002 and OBS-0003 to see the emitted trees from the two builds.
+
+Actually, let me think about what I already know:
+- The bug: `visit_UnaryOp` returns `node.operand` for BOTH UAdd AND USub. For USub, this drops the negation sign.
+- This means `-x` becomes just `x` in the emitted code.
+
+For the OBS-0001 (input module), the functions use:
+- `fabs(q)` 
+- `sqrt(-log(r))` - here the `-log(r)` is a USub applied to a function call, not a literal. But wait, in the original AST it's `UnaryOp(op=USub(), operand=Call(...))`. The buggy optimizer would turn this into just `Call(...)` (dropping the negation).
+- `-log(u)` in weibullvariate - same issue
+
+So the builds would have changed:
+1. `sqrt(-log(r))` → `sqrt(log(r))` - this could cause an arithmetic error (log of a number between 0 and 1 is negative, so log(r) without the negation would be negative, and sqrt of negative = complex or math domain error)
+2. `(-log(u))**(1/beta)` → `(log(u))**(1/beta)` - log(u) for u in (0,1) is negative, so this gives a complex result instead of real
+
+This matches the task description:
+- BUILD-A: "raised an unexpected arithmetic error" - probably the sqrt of a negative number (math domain error)
+- BUILD-B: "returned a complex result where the original returned a real number" - the power of a negative number to a fractional power
+
+Now let me acquire OBS-0002 and OBS-0003 to see the exact emitted trees.
+
+Let me start by reopening OBS-0002.

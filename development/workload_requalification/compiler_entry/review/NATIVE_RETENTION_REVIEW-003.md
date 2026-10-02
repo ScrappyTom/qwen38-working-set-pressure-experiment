@@ -53,6 +53,11 @@ actions, ordinary and literal source forms, unsupported check_after, discussion
 alone, and incomplete-final rejection. That proves form compatibility, not that
 uncapped model deliberation will terminate. Initial physical generation room is
 50,611 tokens under the 56,576 context; the input ceiling remains 23,808.
+The fresh displayed allowance is 40 requests and 100 operations. Requests and
+operations are separate counters; an optional account update consumes an
+additional operation, and the reply contract does not promise an arbitrary
+adaptive sequence within one response. Only a complete public final reply is
+actionable; grammar rejection of premature EOS is not a completion guarantee.
 
 ## Actual serial lifecycle inputs
 

@@ -1,0 +1,106 @@
+Let me analyze the situation:
+
+1. I need to fix a bug in the compiler optimizer
+2. The bug is in `compiler/unary.py` - the `visit_UnaryOp` method incorrectly simplifies unary operations:
+   - For `UAdd` (unary plus): it returns `node.operand` which is correct (drops the plus sign)
+   - For `USub` (unary minus): it also returns `node.operand` which is WRONG - it should negate the value
+   - For other unary ops (like `Not`, `Invert`): it shouldn't simplify at all, but the code only checks for `UAdd` and `USub`
+
+Wait, let me re-read the code:
+```python
+def visit_UnaryOp(self, node):
+    node = self.generic_visit(node)
+    if isinstance(node.op, (ast.UAdd, ast.USub)):
+        return ast.copy_location(node.operand, node)
+    return node
+```
+
+The issue: For BOTH UAdd and USub, it returns `node.operand` - the operand without the unary operator. This means:
+- `+x` becomes `x` (correct for UAdd)
+- `-x` becomes `x` (WRONG for USub - should become `-x` with negated constant)
+
+According to the README:
+- "It must at least eliminate unary plus on exact built-in integer and float literals in selected functions."
+- "It must preserve Python's values, types, exceptions and operator dispatch everywhere else, including negative zero and user-defined unary operators."
+
+So the fix should:
+1. For `UAdd` on numeric literals (int/float, not bool): simplify to just the operand (drop the plus)
+2. For `USub` on numeric literals (int/float, not bool): negate the value (e.g., `-5` stays `-5` but as a literal, not `-(-5)`)
+
+Wait, actually let me think more carefully. The unary simplifier should:
+- `UAdd` on a literal: drop the unary plus (e.g., `+5` → `5`)
+- `USub` on a literal: negate the value (e.g., `-5` → `-5` as a literal, or `--5` → `5`)
+
+But the current code drops the operator entirely for BOTH, turning `-5` into `5`. That's the bug!
+
+The fix:
+- For `UAdd` on an int/float literal (not bool): return the operand (drop the plus)
+- For `USub` on an int/float literal (not bool): return a new Constant with the negated value
+- For anything else: don't simplify (return the node as-is after generic_visit)
+
+Now let me think about what "numeric literals" means:
+- `ast.Constant` with `int` or `float` value (but not `bool`, since `bool` is a subclass of `int`)
+- The README says "exact built-in integer and float literals"
+
+Let me also consider:
+- What about `0`? `-0` should become `0.0` (negative zero) per Python semantics. Actually in Python, `-0` is `0` and `-0.0` is `-0.0`. The README says "including negative zero" must be preserved.
+- Actually, for integer literals, `-0` is just `0`. For float, `-0.0` is `-0.0`.
+
+Let me write the fix:
+
+```python
+import ast
+
+
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, ast.UAdd):
+            if isinstance(node.operand, ast.Constant) and isinstance(node.operand.value, (int, float)) and not isinstance(node.operand.value, bool):
+                return ast.copy_location(node.operand, node)
+        elif isinstance(node.op, ast.USub):
+            if isinstance(node.operand, ast.Constant) and isinstance(node.operand.value, (int, float)) and not isinstance(node.operand.value, bool):
+                negated = ast.copy_location(ast.Constant(value=-node.operand.value), node)
+                return negated
+        return node
+```
+
+Wait, I need to be careful about `ast.Constant` vs the older `ast.Num`. In Python 3.8+, `ast.Constant` is used. Since the README mentions Python 3.12, `ast.Constant` is correct.
+
+Also, I need to handle the case where `node.operand` is already a `ast.Constant`. After `generic_visit`, if the operand was a `UnaryOp` that got simplified, it could now be a `Constant`.
+
+Let me also think about edge cases:
+- `+True` → should NOT simplify (bool is not a numeric literal per the contract)
+- `+5` → `5`
+- `-5` → `-5` (as a Constant with value -5)
+- `+5.0` → `5.0`
+- `-5.0` → `-5.0` (as a Constant with value -5.0)
+- `+x` → `+x` (no simplification, x is not a literal)
+- `-x` → `-x` (no simplification)
+- `~x` → `~x` (Invert is not UAdd/USub)
+- `not x` → `not x` (Not is not UAdd/USub)
+
+Actually wait - what about `not` and `~`? The current code only checks for `UAdd` and `USub`, so those would just fall through to `return node`. That's fine.
+
+Now I also need to:
+1. Read the observations to understand what the original and emitted builds look like
+2. Compare them to identify changed functions and first changed expression
+3. Write `reports/incident.json`
+4. Run the public check
+
+Let me first read the observations. I'll start with OBS-0001 (input calculation module) to see the original, then OBS-0002 (BUILD-A) and OBS-0003 (BUILD-B) to see the emitted trees.
+
+Let me first fix the unary.py file, then read the observations.
+
+Actually, let me read the observations first to understand what's happening, then fix the code. Let me reopen OBS-0001 first.
+
+Wait, I should be strategic. Let me:
+1. Read OBS-0001 (original input)
+2. Read OBS-0002 (BUILD-A emitted)
+3. Read OBS-0003 (BUILD-B emitted)
+4. Fix unary.py
+5. Write reports/incident.json
+6. Run public check
+7. Submit
+
+Let me start by reading the observations.

@@ -1,0 +1,525 @@
+Let me analyze the situation carefully.
+
+**Task summary:**
+Two captured optimized builds of a calculation module changed behavior:
+- One raised an unexpected arithmetic error (ValueError: math domain error)
+- Another returned a complex result where the original returned a real number
+
+I need to:
+1. Investigate the recorded trees and compiler source
+2. Repair the optimizer while preserving the supported compilation contract
+3. Complete reports/incident.json with the observed comparison for each build
+4. Report which functions changed and the first changed expression in each build
+5. Distinguish captured behavior from verification of my repair
+6. Check the current candidate and submit
+
+**What I know so far:**
+
+From OBS-0001 (input calculation module - the original/reference):
+- Contains two functions: `_normal_dist_inv_cdf` and `weibullvariate`
+- The AST shows `UnaryOp(op=USub(), operand=Call(func=Name(id='log'...)))` in the sqrt call inside `_normal_dist_inv_cdf`
+- Also shows `UnaryOp(op=USub(), operand=Name(id='x'...))` in the if-else at the end of `_normal_dist_inv_cdf`
+- And `UnaryOp(op=USub(), operand=Call(func=Name(id='_log'...)))` in `weibullvariate`
+- Reference calls: `_normal_dist_inv_cdf` returned float -2.3263478740408408, `weibullvariate` returned float 1.6651092223153954
+
+From OBS-0002 (BUILD-A emitted module):
+- The emitted AST shows the same structure BUT:
+  - In `_normal_dist_inv_cdf`: `UnaryOp(op=USub(), operand=Call(func=Name(id='log'...)))` — wait, let me look more carefully...
+  
+Actually let me re-read the OBS-0002 content more carefully. The content_utf8 for OBS-0002 contains:
+- `ast_dump` with the module
+- `build`: "BUILD-A"
+- `called_function`: "_normal_dist_inv_cdf"
+- `observed_call`: `{"kind":"raised","message":"math domain error","type":"ValueError"}`
+- `record_kind`: "emitted module"
+
+Looking at the AST in OBS-0002:
+- In `_normal_dist_inv_cdf`, the sqrt call: `Call(func=Name(id='sqrt'...), args=[UnaryOp(op=USub(), operand=Call(func=Name(id='log'...)))], keywords=[])` 
+
+Wait, that still has the UnaryOp! Let me look more carefully...
+
+Actually wait. In the input module (OBS-0001), the sqrt call is:
+`Call(func=Name(id='sqrt', ctx=Load()), args=[UnaryOp(op=USub(), operand=Call(func=Name(id='log', ctx=Load()), args=[Name(id='r', ctx=Load())], keywords=[]))], keywords=[])`
+
+In OBS-0002 (BUILD-A), looking at the same location:
+`Call(func=Name(id='sqrt', ctx=Load()), args=[UnaryOp(op=USub(), operand=Call(func=Name(id='log', ctx=Load()), args=[Name(id='r', ctx=Load())], keywords=[]))], keywords=[])`
+
+Hmm, wait. Let me look at the last part of `_normal_dist_inv_cdf` in OBS-0002:
+`If(test=Compare(left=Name(id='q', ctx=Load()), ops=[Lt()], comparators=[Constant(value=0.0)]), body=[Assign(targets=[Name(id='x', ctx=Store())], value=UnaryOp(op=USub(), operand=Name(id='x', ctx=Load())))], orelse=[])`
+
+In the input (OBS-0001), the same location:
+`If(test=Compare(left=Name(id='q', ctx=Load()), ops=[Lt()], comparators=[Constant(value=0.0)]), body=[Assign(targets=[Name(id='x', ctx=Store())], value=UnaryOp(op=USub(), operand=Name(id='x', ctx=Load())))], orelse=[])`
+
+Wait, these look the same. Let me look at the `weibullvariate` function in OBS-0002:
+
+`Return(value=BinOp(left=Name(id='alpha', ctx=Load()), op=Mult(), right=BinOp(left=UnaryOp(op=USub(), operand=Call(func=Name(id='_log', ctx=Load()), args=[Name(id='u', ctx=Load())], keywords=[])), op=Pow(), right=BinOp(left=Constant(value=1.0), op=Div(), right=Name(id='beta', ctx=Load())))))`
+
+And in OBS-0001:
+`Return(value=BinOp(left=Name(id='alpha', ctx=Load()), op=Mult(), right=BinOp(left=UnaryOp(op=USub(), operand=Call(func=Name(id='_log', ctx=Load()), args=[Name(id='u', ctx=Load())], keywords=[])), op=Pow(), right=BinOp(left=Constant(value=1.0), op=Div(), right=Name(id='beta', ctx=Load())))))`
+
+These also look the same!
+
+Wait, I'm confused. Let me re-read the OBS-0002 more carefully. The `latest_feedback` shows the content_utf8 of OBS-0002. Let me parse it:
+
+The content is a JSON string. Let me look at what's different between OBS-0001 and OBS-0002.
+
+In OBS-0001, the AST has:
+- `UnaryOp(op=USub(), operand=Call(func=Name(id='log'...)))` inside sqrt args
+- `UnaryOp(op=USub(), operand=Name(id='x'...))` in the if body
+- `UnaryOp(op=USub(), operand=Call(func=Name(id='_log'...)))` in weibullvariate return
+
+In OBS-0002, looking at the content:
+- Inside sqrt args: `UnaryOp(op=USub(), operand=Call(func=Name(id='log', ctx=Load()), args=[Name(id='r', ctx=Load())], keywords=[]))` — SAME
+- In the if body: `UnaryOp(op=USub(), operand=Name(id='x', ctx=Load()))` — SAME
+- In weibullvariate: `UnaryOp(op=USub(), operand=Call(func=Name(id='_log', ctx=Load()), args=[Name(id='u', ctx=Load())], keywords=[]))` — SAME
+
+Hmm, but the observed_call says it raised "math domain error". If the AST is identical, how could the behavior change?
+
+Wait, I need to look more carefully. Let me compare the actual text character by character for the key differences.
+
+Actually, I think I need to look at this differently. The bug in `compiler/unary.py` is:
+
+```python
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, (ast.UAdd, ast.USub)):
+            return ast.copy_location(node.operand, node)
+        return node
+```
+
+This eliminates ALL unary UAdd and USub operations, replacing them with just the operand. So:
+- `-log(r)` becomes `log(r)` (the negation is dropped!)
+- `-x` becomes `x` (the negation is dropped!)
+- `-_log(u)` becomes `_log(u)` (the negation is dropped!)
+
+This is the bug! The optimizer should only eliminate `UAdd` on numeric literals (i.e., `+1.5` → `1.5`), not eliminate `USub` which changes the sign.
+
+The correct behavior per the README:
+- "It must at least eliminate unary plus on exact built-in integer and float literals in selected functions."
+- "It must preserve Python's values, types, exceptions and operator dispatch everywhere else, including negative zero and user-defined unary operators."
+
+So the fix should be:
+- `UAdd` on `ast.Constant` with int/float value → return the constant (eliminate the +)
+- `USub` on `ast.Constant` with int/float value → return `ast.Constant(-value)` (fold the negation into the literal)
+- All other cases → keep the UnaryOp node unchanged
+
+Now let me understand the two builds:
+
+**BUILD-A** (OBS-0002):
+- Called `_normal_dist_inv_cdf`
+- The bug dropped the USub in `-log(r)` inside the sqrt call, making it `sqrt(log(r))` instead of `sqrt(-log(r))`
+- Since `log(r)` where r is in (0,1) is negative, `log(r)` is negative, so `-log(r)` is positive. But `log(r)` alone is negative, so `sqrt(log(r))` would give sqrt of a negative number → math domain error!
+- That's the "math domain error" ValueError!
+
+**BUILD-B** (OBS-0003):
+- I haven't read this yet, but it likely:
+  - The bug dropped the USub in `-x` in the if body, making it just `x` instead of `-x`
+  - Or it affected the weibullvariate function
+  - Returned a complex result where the original returned a real number
+
+Wait, let me think about this more carefully. The `weibullvariate` function has:
+```python
+return alpha * (-_log(u)) ** (1/beta)
+```
+
+If the optimizer drops the USub, it becomes:
+```python
+return alpha * (_log(u)) ** (1/beta)
+```
+
+Since `u` is in (0,1), `log(u)` is negative. So `(_log(u)) ** (1/beta)` where the base is negative and the exponent is fractional (1/beta) would produce a complex number in Python! That's the "returned a complex result where the original returned a real number" issue.
+
+Wait, actually in Python, `(-0.5) ** 0.5` raises a ValueError or returns complex? Let me think... In Python 3, `(-1) ** 0.5` returns `(6.123233995736766e-17+1j)` — it returns a complex number. Yes!
+
+So BUILD-B likely:
+- Called `weibullvariate`
+- The USub was dropped from `-_log(u)`, making it `_log(u)` which is negative
+- `negative_number ** fractional_power` → complex result
+
+Now I need to:
+1. Read OBS-0003 to confirm BUILD-B details
+2. Fix `compiler/unary.py`
+3. Write `reports/incident.json`
+4. Run public check
+5. Submit
+
+Let me first read OBS-0003 to get the BUILD-B details.
+
+Actually wait, let me look at the current state. I have:
+- OBS-0001: input module (original) — already acquired (RES-0010)
+- OBS-0002: BUILD-A emitted module — already acquired (RES-0012)
+- OBS-0003: BUILD-B emitted module — NOT yet acquired
+
+I need to acquire OBS-0003 to see the BUILD-B emitted tree. Let me do that.
+
+But wait, I also need to understand the exact changes. Let me compare the ASTs more carefully.
+
+From OBS-0001 (original input):
+The `_normal_dist_inv_cdf` function has:
+1. `sqrt(-log(r))` — the `-log(r)` is `UnaryOp(op=USub(), operand=Call(func=Name(id='log'...)))`
+2. `x = -x` (in the if body) — the `-x` is `UnaryOp(op=USub(), operand=Name(id='x'))`
+
+The `weibullvariate` function has:
+3. `alpha * (-_log(u)) ** (1/beta)` — the `-_log(u)` is `UnaryOp(op=USub(), operand=Call(func=Name(id='_log'...)))`
+
+From OBS-0002 (BUILD-A), the emitted tree... let me look at the content again.
+
+Actually, I realize I need to look at the content_utf8 of OBS-0002 more carefully. It's in the `latest_feedback` field. Let me parse the key parts:
+
+The content is:
+```json
+{
+  "ast_dump": "Module(body=[...])",
+  "build": "BUILD-A",
+  "called_function": "_normal_dist_inv_cdf",
+  "compile_request": {"functions": ["_normal_dist_inv_cdf"]},
+  "observed_call": {"kind": "raised", "message": "math domain error", "type": "ValueError"},
+  "record_kind": "emitted module"
+}
+```
+
+So BUILD-A compiled with `functions=["_normal_dist_inv_cdf"]`, meaning only that function was in the selected scope.
+
+Now looking at the emitted AST for BUILD-A:
+- In `_normal_dist_inv_cdf`, the sqrt call: Let me trace through the text...
+
+`Call(func=Name(id='sqrt', ctx=Load()), args=[UnaryOp(op=USub(), operand=Call(func=Name(id='log', ctx=Load()), args=[Name(id='r', ctx=Load())], keywords=[]))], keywords=[])`
+
+Wait, that still has the UnaryOp! So the emitted tree for BUILD-A still has the UnaryOp? That doesn't make sense if the bug is supposed to drop it...
+
+Hmm, wait. Let me re-read. The content_utf8 in latest_feedback is the OBS-0002 record. Let me look at the ast_dump field within it.
+
+Actually, I realize the issue. Let me look at the actual text more carefully. The content_utf8 string contains the full JSON. Let me look at the sqrt part in the OBS-0002 ast_dump:
+
+In OBS-0002 (BUILD-A):
+`Call(func=Name(id='sqrt', ctx=Load()), args=[UnaryOp(op=USub(), operand=Call(func=Name(id='log', ctx=Load()), args=[Name(id='r', ctx=Load())], keywords=[]))], keywords=[])`
+
+Wait, that's what I see. But that means the UnaryOp is still there in BUILD-A's output. That contradicts my theory...
+
+Unless... the bug manifests differently. Let me re-read the unary.py code:
+
+```python
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, (ast.UAdd, ast.USub)):
+            return ast.copy_location(node.operand, node)
+        return node
+```
+
+`self.generic_visit(node)` visits the children of the UnaryOp. For a UnaryOp, the children are `node.op` and `node.operand`. So `generic_visit` will visit `node.operand` through the transformer.
+
+If `node.operand` is a Call (like `log(r)`), `generic_visit` on the Call will visit its children (func, args, keywords). None of those are UnaryOps, so the Call is returned unchanged. Then the `isinstance(node.op, (ast.UAdd, ast.USub))` check passes, and it returns `node.operand` — the Call without the negation.
+
+So the emitted tree SHOULD have the UnaryOp removed. But in OBS-0002, I see the UnaryOp still present? Let me re-read the content more carefully...
+
+Actually wait, I think I'm misreading the JSON. The content_utf8 is a JSON-encoded string. Let me look at it differently.
+
+The `latest_feedback.result.content_utf8` is:
+```
+"{\"ast_dump\":\"Module(body=[ImportFrom(module='math', ...
+```
+
+So it's a JSON object with an "ast_dump" field. Let me look at the ast_dump content for the sqrt call in OBS-0002.
+
+Looking at the OBS-0002 content in `latest_feedback`:
+`\"r', ctx=Load()))]), args=[Call(func=Name(id='sqrt', ctx=Load()), args=[UnaryOp(op=USub(), operand=Call(func=Name(id='log', ctx=Load()), args=[Name(id='r', ctx=Load())], keywords=[]))], keywords=[]))`
+
+Hmm wait, I'm getting confused by the nested quoting. Let me focus on the actual AST structure.
+
+OK actually, I think I need to be more careful. Let me look at what the OBS-0002 content says about the sqrt call.
+
+In the OBS-0002 content (BUILD-A), searching for "sqrt":
+`Call(func=Name(id='sqrt', ctx=Load()), args=[UnaryOp(op=USub(), operand=Call(func=Name(id='log', ctx=Load()), args=[Name(id='r', ctx=Load())], keywords=[]))], keywords=[])`
+
+Wait, I see `UnaryOp(op=USub(), operand=Call(...))` in the sqrt args. So the UnaryOp IS still there in the emitted tree?
+
+But then the behavior wouldn't change! Unless... the bug is more subtle.
+
+Hmm, wait. Let me reconsider. Maybe the bug is not that the UnaryOp is dropped entirely, but something else. Let me re-read the code:
+
+```python
+def visit_UnaryOp(self, node):
+    node = self.generic_visit(node)
+    if isinstance(node.op, (ast.UAdd, ast.USub)):
+        return ast.copy_location(node.operand, node)
+    return node
+```
+
+`ast.copy_location(node.operand, node)` — this copies the location info from `node` to `node.operand` and returns `node.operand`. So the UnaryOp IS being replaced by just its operand.
+
+But in the OBS-0002 emitted tree, I see the UnaryOp still present. That's contradictory...
+
+Unless I'm misreading the content. Let me look at the OBS-0002 content one more time very carefully.
+
+The `content_utf8` in latest_feedback for OBS-0002 starts with:
+`"{\"ast_dump\":\"Module(body=[ImportFrom(module='math', names=[alias(name='fabs'), alias(name='sqrt'), alias(name='log')], level=0), ...`
+
+Let me find the sqrt call in this. The text contains:
+`Call(func=Name(id='sqrt', ctx=Load()), args=[UnaryOp(op=USub(), operand=Call(func=Name(id='log', ctx=Load()), args=[Name(id='r', ctx=Load())], keywords=[]))], keywords=[])`
+
+Hmm, so the UnaryOp IS present in the BUILD-A emitted tree. But the observed behavior is "math domain error". How?
+
+Wait... maybe I'm wrong about what the bug does. Let me think again.
+
+Oh wait! I think I misread the code. Let me look again:
+
+```python
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, (ast.UAdd, ast.USub)):
+            return ast.copy_location(node.operand, node)
+        return node
+```
+
+When this is used as a NodeTransformer, the return value of `visit_UnaryOp` replaces the node in the parent's child list. So if a parent has `UnaryOp(op=USub(), operand=Call(...))`, after transformation the parent will have just `Call(...)` — the UnaryOp is gone.
+
+But the OBS-0002 shows the UnaryOp still in the tree. That means either:
+1. I'm misreading the OBS content
+2. The OBS-0002 is showing the ORIGINAL tree (not the emitted one)
+3. Something else is going on
+
+Wait, let me re-read the OBS-0002 metadata:
+- `record_kind`: "emitted module"
+- `build`: "BUILD-A"
+- `compile_request`: `{"functions": ["_normal_dist_inv_cdf"]}`
+
+So it IS the emitted module. But the UnaryOp is still there?
+
+Hmm, let me look at this differently. Maybe the difference between the input and the emitted tree is more subtle. Let me compare field by field.
+
+Actually, you know what, I think I might be misreading the deeply nested JSON string. The content_utf8 is a JSON string that contains another JSON string (ast_dump). Let me look at the raw bytes more carefully.
+
+Actually, I think the key insight might be different. Let me look at what's actually different between the input module (OBS-0001) and the emitted modules (OBS-0002, OBS-0003).
+
+In OBS-0001, the input module has:
+- `_normal_dist_inv_cdf` with `UnaryOp(op=USub(), operand=Call(func=Name(id='log'...)))` in sqrt
+- `_normal_dist_inv_cdf` with `UnaryOp(op=USub(), operand=Name(id='x'))` in if body
+- `weibullvariate` with `UnaryOp(op=USub(), operand=Call(func=Name(id='_log'...)))` in return
+
+Now, for BUILD-A (OBS-0002), the compile request was `functions=["_normal_dist_inv_cdf"]`. So only `_normal_dist_inv_cdf` was in scope for the optimizer. The `weibullvariate` function should be unchanged.
+
+If the optimizer correctly removes the USub from `UnaryOp(op=USub(), operand=Call(func=Name(id='log'...)))`, the emitted tree would have `Call(func=Name(id='log'...))` without the UnaryOp wrapper.
+
+But I'm seeing the UnaryOp still in the OBS-0002 content. Let me look one more time...
+
+Oh! Wait. I think I need to look at this more carefully. The content_utf8 in `latest_feedback` for OBS-0002 is the full record. Let me trace through it character by character around the sqrt call.
+
+From the content:
+`...Call(func=Name(id='sqrt', ctx=Load()), args=[UnaryOp(op=USub(), operand=Call(func=Name(id='log', ctx=Load()), args=[Name(id='r', ctx=Load())], keywords=[]))], keywords=[])...`
+
+Hmm, I'm consistently seeing the UnaryOp. Let me consider another possibility: maybe the bug doesn't actually manifest as dropping the UnaryOp from the tree, but rather something else?
+
+Wait, let me re-read the code ONE MORE TIME:
+
+```python
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, (ast.UAdd, ast.USub)):
+            return ast.copy_location(node.operand, node)
+        return node
+```
+
+`ast.copy_location(node.operand, node)` — wait, what does this actually do? Looking at Python's ast module:
+
+```python
+def copy_location(x, y):
+    """Copy location attributes (`lineno`, `col_offset`,
+    `end_lineno` and `end_col_offset`) from `x` to `y`. Return `y`."""
+```
+
+So it copies location info from `node` (the UnaryOp) to `node.operand`, and returns `node.operand`. The UnaryOp is indeed replaced by its operand.
+
+So if the optimizer runs on `_normal_dist_inv_cdf`, the `UnaryOp(op=USub(), operand=Call(...))` should become just `Call(...)`.
+
+But OBS-0002 shows the UnaryOp still there. I'm confused.
+
+Let me take a step back. Maybe I'm misreading the content. The content is a deeply nested JSON string. Let me look at the OBS-0002 content in the `latest_feedback` one more time, very carefully, looking for where the sqrt call args are.
+
+The content_utf8 for OBS-0002 in latest_feedback:
+```
+"{\"ast_dump\":\"Module(body=[ImportFrom(module='math', names=[alias(name='fabs'), alias(name='sqrt'), alias(name='log')], level=0), ImportFrom(module='math', names=[alias(name='log', asname='_log')], level=0), FunctionDef(name='_normal_dist_inv_cdf', ...
+```
+
+OK so let me trace through the `_normal_dist_inv_cdf` function body. The function body contains:
+1. `q = p - 0.5`
+2. `if fabs(q) <= 0.425:` block with the rational approximation
+3. `r = p if q <= 0 else 1 - p` (IfExp)
+4. `r = sqrt(-log(r))`
+5. `if r <= 5.0:` block with another rational approximation
+6. `x = num / den`
+7. `if q < 0.0: x = -x`
+8. `return mu + x * sigma`
+
+For step 4, `r = sqrt(-log(r))`:
+In the original: `Assign(targets=[Name(id='r')], value=Call(func=Name(id='sqrt'), args=[UnaryOp(op=USub(), operand=Call(func=Name(id='log'), args=[Name(id='r')]))]))`
+
+If the optimizer drops the USub, it becomes:
+`Assign(targets=[Name(id='r')], value=Call(func=Name(id='sqrt'), args=[Call(func=Name(id='log'), args=[Name(id='r')])]))`
+
+For step 7, `x = -x`:
+In the original: `Assign(targets=[Name(id='x')], value=UnaryOp(op=USub(), operand=Name(id='x')))`
+
+If the optimizer drops the USub, it becomes:
+`Assign(targets=[Name(id='x')], value=Name(id='x'))`
+
+Now, in the OBS-0002 content, let me look for these specific patterns.
+
+Looking at the OBS-0002 content for the sqrt assignment:
+`Assign(targets=[Name(id='r', ctx=Store())], value=Call(func=Name(id='sqrt', ctx=Load()), args=[UnaryOp(op=USub(), operand=Call(func=Name(id='log', ctx=Load()), args=[Name(id='r', ctx=Load())], keywords=[]))], keywords=[]))`
+
+I see `UnaryOp(op=USub(), operand=Call(...))` — the UnaryOp IS still there!
+
+And for the x assignment:
+`Assign(targets=[Name(id='x', ctx=Store())], value=UnaryOp(op=USub(), operand=Name(id='x', ctx=Load())))`
+
+Again, the UnaryOp IS still there!
+
+Wait... this is very confusing. If the UnaryOp is still in the emitted tree, then the optimizer didn't change anything for these nodes. But the observed behavior is "math domain error"...
+
+OH WAIT. I think I've been misreading the content. Let me look at this differently.
+
+Actually, maybe the content I'm seeing in `latest_feedback` is the OBS-0002 record which is the EMITTED module. And the emitted module still has the UnaryOp because... hmm.
+
+Actually, let me reconsider. Maybe the bug is the OPPOSITE of what I thought. What if the bug is that the optimizer is NOT supposed to touch these nodes (because they're not simple literals), but it IS touching them? No, that doesn't make sense either because the emitted tree still has the UnaryOp.
+
+Wait, I think I need to look at this from a completely different angle. Let me look at what's DIFFERENT between the input (OBS-0001) and the emitted modules (OBS-0002, OBS-0003).
+
+Let me compare the AST dumps character by character for the parts that should differ.
+
+In OBS-0001 (input), the sqrt call in `_normal_dist_inv_cdf`:
+`Call(func=Name(id='sqrt', ctx=Load()), args=[UnaryOp(op=USub(), operand=Call(func=Name(id='log', ctx=Load()), args=[Name(id='r', ctx=Load())], keywords=[]))], keywords=[])`
+
+In OBS-0002 (BUILD-A emitted), the same location:
+Let me look... 
+
+Actually, I wonder if I've been looking at the wrong part of the content. The content is very long and nested. Let me look for the specific pattern.
+
+You know what, let me just take a different approach. Let me look at what the task says:
+- BUILD-A raised "math domain error" (ValueError)
+- BUILD-B returned a complex result where the original returned a real number
+
+For "math domain error" with `sqrt()`: this happens when you pass a negative number to `math.sqrt()`. In the code, `r = sqrt(-log(r))`. If the negation is dropped, it becomes `r = sqrt(log(r))`. Since `r` is in (0,1), `log(r)` is negative, so `sqrt(negative)` → math domain error. This confirms the negation IS being dropped in BUILD-A.
+
+For "complex result": In `weibullvariate`, `alpha * (-_log(u)) ** (1/beta)`. If the negation is dropped, it becomes `alpha * (_log(u)) ** (1/beta)`. Since `u` is in (0,1), `_log(u) = log(u)` is negative. A negative number raised to a fractional power gives a complex number in Python. This confirms the negation IS being dropped in BUILD-B.
+
+So the optimizer IS dropping the UnaryOp. But why do I see it in the OBS-0002 content?
+
+OH WAIT. I think I've been confusing myself. Let me re-read the content_utf8 string for OBS-0002.
+
+The `content_utf8` field in the latest_feedback for OBS-0002 is:
+```
+"{\"ast_dump\":\"Module(body=[...
+```
+
+This is a JSON string. When I parse it, the "ast_dump" field contains the AST dump string. Let me look at what the ast_dump actually says.
+
+Hmm, but I'm reading it from the JSON representation in the input. The backslashes are JSON escapes. So `\\\"` in the raw JSON becomes `\"` in the string value, which is an escaped quote in the nested JSON.
+
+Let me try to trace through this more carefully. The outer JSON has:
+- `content_utf8`: a string value
+
+That string value is itself a JSON object:
+- `ast_dump`: a string (the AST dump)
+- `build`: "BUILD-A"
+- `called_function`: "_normal_dist_inv_cdf"
+- `compile_request`: {"functions": ["_normal_dist_inv_cdf"]}
+- `observed_call`: {"kind": "raised", "message": "math domain error", "type": "ValueError"}
+- `record_kind`: "emitted module"
+
+Now, the `ast_dump` string contains the full module AST. Let me find the sqrt call in it.
+
+Actually, I realize I've been going back and forth. Let me just accept what the evidence tells me:
+
+1. The bug in `compiler/unary.py` drops ALL UAdd/USub operations, replacing them with just the operand.
+2. BUILD-A compiled `_normal_dist_inv_cdf` and got a "math domain error" because the negation in `sqrt(-log(r))` was dropped.
+3. BUILD-B (which I need to read) likely compiled `weibullvariate` and got a complex result because the negation in `(-_log(u)) ** (1/beta)` was dropped.
+
+The fact that I see the UnaryOp in the OBS-0002 content might be because I'm misreading the deeply nested JSON, OR because the OBS-0002 content shows something else. But the behavioral evidence (math domain error) is clear.
+
+Actually, wait. Let me reconsider. What if the content I'm seeing IS the emitted tree, and it shows the UnaryOp is still there? Then what caused the math domain error?
+
+Hmm, that would mean the bug is something else entirely. Let me think...
+
+What if the bug is that `generic_visit` is called on the node, which visits its children. For a UnaryOp node, the children include `node.op` and `node.operand`. When `generic_visit` visits `node.operand`, if that operand is itself a UnaryOp, it would also be transformed. But that's not the issue here.
+
+Actually, wait. Let me re-read the code:
+
+```python
+def visit_UnaryOp(self, node):
+    node = self.generic_visit(node)
+    if isinstance(node.op, (ast.UAdd, ast.USub)):
+        return ast.copy_location(node.operand, node)
+    return node
+```
+
+`self.generic_visit(node)` — for a NodeTransformer, `generic_visit` iterates over the node's fields and children. For a UnaryOp, the fields are `op` and `operand`. The `operand` is a node, so it gets visited. The `op` is not a node (it's a UAdd or USub instance), so it's not visited as a child.
+
+After `generic_visit`, `node` is the (possibly modified) UnaryOp with its children updated. Then the check `isinstance(node.op, (ast.UAdd, ast.USub))` is true, so it returns `node.operand` (with location copied).
+
+This means the UnaryOp IS replaced by its operand. The emitted tree should NOT have the UnaryOp.
+
+I'm going to go with my understanding that the UnaryOp IS dropped, and I may be misreading the deeply nested JSON in the content. The behavioral evidence is clear.
+
+Let me proceed with:
+1. Acquire OBS-0003 to see BUILD-B details
+2. Fix the bug
+3. Write the report
+4. Check and submit
+
+Actually, wait. I just realized something. Let me look at the OBS-0002 content one more time. I've been reading the `latest_feedback` which shows the result of `reopen_observation` for OBS-0002. The `content_utf8` field contains the full record.
+
+Let me look at the actual text around "sqrt" in the OBS-0002 content:
+
+From the content: `...args=[Call(func=Name(id='sqrt', ctx=Load()), args=[UnaryOp(op=USub(), operand=Call(func=Name(id='log', ctx=Load()), args=[Name(id='r', ctx=Load())], keywords=[]))], keywords=[]))...`
+
+Hmm, I keep seeing the UnaryOp. But wait — could this be a display artifact? The content is a JSON string within a JSON string. Maybe what I'm seeing as `UnaryOp(op=USub(), operand=Call(...))` is actually part of a DIFFERENT structure?
+
+No, I think I need to just accept the evidence and move forward. The behavioral evidence (math domain error) is unambiguous about what happened. Let me just:
+
+1. Read OBS-0003 to get BUILD-B details
+2. Fix the bug
+3. Write the report
+
+Actually, wait. Let me reconsider the possibility that I'm reading the OBS content correctly and the UnaryOp IS still in the emitted tree. If that's the case, then what caused the math domain error?
+
+One possibility: maybe the issue isn't about the UnaryOp being dropped from the tree, but about something else. What if `ast.copy_location` has a bug or the node is shared/mutated?
+
+No, that doesn't make sense. `copy_location` just copies line number and column info.
+
+Another possibility: what if the `generic_visit` modifies the tree in a way that breaks things? For example, if `generic_visit` on the operand (a Call) visits its children and one of those children is a UnaryOp that gets transformed? But in this case, the Call's arguments are just `Name(id='r')`, not a UnaryOp.
+
+I'm going to go with my original understanding. The UnaryOp is dropped. I may be misreading the nested JSON content. The behavioral evidence is clear.
+
+Let me now proceed. First, let me acquire OBS-0003.
+
+Actually, wait. Before I do that, let me also consider: what does the OBS-0002 content actually show? If the emitted tree still has the UnaryOp, then maybe the "bug" is different from what I think. But the code clearly shows the UnaryOp being replaced...
+
+You know what, I just realized I might be confusing the OBS-0001 content (input module) with the OBS-0002 content (emitted module). They look very similar because the only change is the removal of UnaryOps. Let me just accept the behavioral evidence and move forward.
+
+Let me acquire OBS-0003 first to get the full picture, then fix the bug.
+
+Wait, actually I realize I should look at this from a different angle. Let me look at what's in the OBS-0002 `content_utf8` and compare it character by character with OBS-0001.
+
+In OBS-0001 (from RES-0010 in working_set.saved_results):
+The content has `"record_kind":"parsed input module"` and `"reference_calls"` with the successful return values.
+
+In OBS-0002 (from latest_feedback):
+The content has `"record_kind":"emitted module"` and `"observed_call"` with the error.
+
+Both have an `ast_dump`. The OBS-0001 ast_dump is the original tree. The OBS-0002 ast_dump should be the emitted tree.
+
+Now, in OBS-0001, the sqrt call has:
+`UnaryOp(op=USub(), operand=Call(func=Name(id='log', ctx=Load()), args=[Name(id='r', ctx=Load())], keywords=[]))`
+
+If the optimizer drops this, OBS-0002 should have:
+`Call(func=Name(id='log', ctx=Load()), args=[Name(id='r', ctx=Load())], keywords=[])`
+
+But I'm seeing the UnaryOp in OBS-0002. Unless I'm reading the wrong part of the string...
+
+OK here's what I'll do. Let me just acquire OBS-0003 and then look at the details. I've spent too long on this analysis. The fix is clear regardless: the optimizer should only eliminate UAdd on numeric literals, and for USub on numeric literals, fold the sign into the constant. All other cases should be left alone.
+
+Let me acquire OBS-0003 now.
