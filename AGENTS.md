@@ -1,3 +1,17 @@
+# Qualified C16 pair; bounded apparatus screen before behavior
+
+ecological_information_transition/PREPARATION_REVIEW-001.md qualifies both
+native entries at21608/11723tokens,44decoderforms each,8focusedCPUchecks and
+5/6evaluator-scripted decisions withactualfailedcheck/correction/currentpass.
+0completions;1231sourcebindings. Exactinitialwire isolation changes only
+selectedsources and matchingvisibility. Release/currentauthority/history and
+branchpayload/companion/account semantics are qualified; originalevidence exact.
+Publish before4nonexecuting apparatuscalls,32whole-generationtokens onlythere,
+15minute timebox/fixedruntime/RAM+sharedGPUmonitor. Stablecompletion gates the
+uncoachedpair; do not confuse cappedapparatus output with actor performance.
+Both live attempts staymediumuncapped/8newrequests48ops/no coaching/retry.
+Evaluate embedded andzero repairs separately; freshwork follows directreview.
+
 # Revised C16 information-transition qualification
 
 Read ecological_information_transition/PLAN.md and its separate
