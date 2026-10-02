@@ -1,3 +1,20 @@
+# URL original-entry qualification boundary
+
+url_port_entry/PLAN.md at4db773d7 preserves the original empty2921cbc8 entry,
+task, seed961219 and20requests/60operations. CPU acceptance/report checks and
+native preparation002 qualify exact feedback, scoped automatic checks, saved
+work, source-group replacement and typed checkpoint restoration with no model
+calls. Preserve initialization-failed001 and malformed evaluator searches; do
+not relabel them as Qwen behavior or overwrite failed sources. The original
+capture reduction is fixed before storage, with unchanged original verdicts.
+Read PREPARATION_REVIEW-002.md and the separately sealed historical-state
+supplement before inference; a broad-source branch is not that migration.
+Publish qualification before the one finite uncoached attempt. Review every
+actual input/full output, diagnostic and artifact; independent prose/assertion
+review remains required beyond check success. Keep account interpretations,
+scripted feasibility and model outcomes distinct. Wider pressure/corpus rows
+remain open; no repeated approval or live coaching under standing direction.
+
 # Completed saved-report restart and qualified checkpoint repair
 
 saved_report_entry/review/RESULTS-001.md closes the d82cdc84 assisted continuation:
