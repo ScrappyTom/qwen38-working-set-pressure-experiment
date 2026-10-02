@@ -1,0 +1,3 @@
+# Evaluator-only cumulative inspection and correction
+
+The exact task names eleven source paths and inclusive boundaries. Inspect them through three bounded replacement groups; actual returned extents must be complete. Retain cumulative delivered coverage, not permanent co-residence. A premature source-backed proposal is rejected while seven paths remain absent. Reselect the two exact targets after all coverage. Real public assertions preserve failed observations; task and visible source, not the diagnostic alone, justify each boundary correction. Reference work and choices remain evaluator-only.

@@ -1,5 +1,20 @@
 # Running engineering and governance notes
 
+## 2026-10-02 — qualify the actual exposure path, not inherited assumptions
+
+E20 requires complete eleven-file inspection; finite continuous dispatched
+coverage expresses it without requiring simultaneous residence. Native qualification
+delivers2045lines through replacement and records the first mutation proof.
+Keep scripted feasibility separate from actor selection and comprehension.
+The supplemental zero-count probe is separate from fixed grades and actor feedback.
+
+Root traced a proposed audit defect to inherited source deduplication; active
+DecisionSession already projects source in the authoritative list. The new helper
+inclusion is compatibility, not an observed active omission. Review the concrete
+input and active assembly before diagnosing. Final readiness precedes freezing;
+actual native forms and information paths supplement CPU transition checks.
+Exact old sources and failed evidence remain preserved.
+
 ## 2026-10-02 — complete task scope and honest source prerequisites
 
 The fresh E19 observation rerun completed with all four required source bodies

@@ -1,3 +1,20 @@
+# Qualified original E20 complete-source entry
+
+ecological_import_entry/PREPARATION_REVIEW-001.md qualifies9CPU checks,
+44nativeforms,14actualinputs/13scripteddecisions and3actualpublicchecks with
+0completions. All11complete sources arrive across replacements; premature
+mutation rejects7missingpaths; exact source/coverage/boundary/checkpoint proofs
+survive release and restoration. Reference postseal12caseprobe passes separately,
+not an actor grade. 439newsourcebindings/370sealedfiles; all460oldbindings unchanged.
+Publish before fresh uncoached24/72run001 under medium/uncapped/q4/56576/noMTP.
+No coaching, supplied group/repair, retry/extension/autocheck or private-draft use.
+Root must review actual complete inputs/outputs/source/receipts/artifact, then
+exactreplay, accounting, and separate postsealhidden+supplemental. Exposure is
+not comprehension/currenteditauthority. Preserve frozen grades/zero-count gap,
+all23otherfiles/APIs, adversecost/accountclaims and oldpressure/widercorpus limits.
+Read active rendering before diagnosing inherited behavior; the feedback-source
+helper change was defensive compatibility, not a proven active host defect.
+
 # Completed E19 observation entry; next complete-coverage workload
 
 ecological_prerequisites/review/RESULTS-001.md closes fresh uncoached run001 under

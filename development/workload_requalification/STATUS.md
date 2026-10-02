@@ -31,7 +31,11 @@ not proof of unaided comprehension. The next prospective ecological_next/PLAN.md
 covers the original E20 source task with continuous whole-file dispatch coverage,
 not simultaneous residence or a metadata redesign. Publish before implementation,
 qualify/publish before inference. Zero-count assessment stays separate from fixed
-grades; E20OBS, old R50/X25pressure and wider corpus remain open.
+grades. ecological_import_entry preparation001 is qualified:9CPU/44nativeforms,
+14inputs/13scripteddecisions,3realpublicchecks,all11complete sources throughrelease;
+0completions.439bound sources/370sealedfiles; separate referenceprobe12/12.
+Publish before fresh uncoached24/72run001; no model outcome yet. E20OBS, old
+R50/X25pressure and wider corpus remain open.
 
 INVENTORY.json records discovered task texts and locations. Its untriaged entries
 are obligations to reconcile, not an exclusion list. Different contexts, seeds and
