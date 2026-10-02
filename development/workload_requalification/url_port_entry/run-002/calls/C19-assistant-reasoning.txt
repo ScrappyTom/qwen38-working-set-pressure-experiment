@@ -1,0 +1,451 @@
+Let me analyze the current situation:
+
+1. I'm working on extending regression tests and documentation for port access on urlsplit/urlparse results.
+2. I have 2 requests remaining and 34 actions remaining.
+3. The task requires:
+   - Adding tests in Lib/test/test_urlparse.py for port access (no port, empty port, 0, 65535, 65536, negative, noninteger, non-ASCII digits)
+   - Adding documentation in Doc/library/urllib.parse.rst explaining the boundary/error behavior
+
+Let me look at what I have visible:
+- Test file lines 527-750 (selected, shown in full)
+- parse.py lines 1-350 (selected, shown in full)
+
+I need to:
+1. Understand the current test structure (I can see `test_attributes_bad_port` already exists)
+2. Add comprehensive port tests
+3. Add documentation
+
+Let me look at what's already there:
+- `test_attributes_bad_port` (around line 737-750) tests invalid ports like "foo", "1.5", "-1", "0x10", "-0", "1_1", " 1", "1 ", "६"
+- `test_urlsplit_attributes` (around line 527) has basic port tests and one illegal port test
+
+I need to add tests for:
+- No port → None
+- Empty port (host:/) → None  
+- Port 0 → 0
+- Port 65535 → 65535
+- Port 65536 → ValueError "Port out of range 0-65535"
+- Negative port → ValueError cast error
+- Noninteger port → ValueError cast error
+- Non-ASCII digits → ValueError cast error
+
+For both urlsplit and urlparse, with str and bytes.
+
+The key insight from the implementation:
+- Port validation happens in the `port` property (lazy)
+- For str: `port.isdigit() and port.isascii()` gates int conversion
+- For bytes: same pattern
+- Non-digit/non-ascii → `ValueError(f"Port could not be cast to integer value as {port!r}")`
+- Out of range (65536+) → `ValueError("Port out of range 0-65535")`
+- Empty port → None
+
+Wait, let me think about negative ports. A negative port like "-1" - the minus sign is not a digit, so `isdigit()` returns False, so it hits the first ValueError (cast error). Let me verify: "-1".isdigit() → False. Yes, so negative ports get the cast error, not the range error.
+
+For the bytes version: b"-1".isdigit() → False (for bytes, isdigit() checks ASCII digits only). Wait, actually for bytes objects, `isdigit()` checks if all bytes are ASCII digits. So b"-1".isdigit() → False. Same result.
+
+Now let me think about what I need to see to make my edits:
+1. I need to see the test file around where I'll add new tests
+2. I need to see the doc file around where I'll add documentation
+
+I currently have:
+- Test file lines 527-750 visible
+- parse.py lines 1-350 visible
+
+I need to:
+1. Find where to insert new tests in the test file (probably after `test_attributes_bad_port` or after `test_urlsplit_attributes`)
+2. Find where to add documentation in the rst file
+
+Let me look at the test file more carefully. The visible portion shows:
+- `test_urlsplit_attributes` (line 527+)
+- `test_urlsplit_remove_unsafe_bytes`
+- `test_urlsplit_strip_url`
+- `test_attributes_bad_port` (starts around line 737)
+- `test_attributes_bad_scheme` (starts around line 750)
+
+I need to read more of the test file to find a good insertion point, and I need to read the doc file.
+
+But I'm limited to 2 requests and 34 actions. Let me be strategic.
+
+Let me plan my approach:
+1. Read the test file to find the end of `test_attributes_bad_port` and see what comes after (I can see it starts around line 737-750 but the content shown ends at line 750 mid-function)
+2. Read the doc file to find where to add port documentation
+3. Make the test edit
+4. Make the doc edit
+5. Run checks
+6. Submit
+
+Actually, looking more carefully at the visible test source, I can see `test_attributes_bad_port` starts at around line 737 and the visible content ends at line 750 in the middle of `test_attributes_bad_scheme`. I need to see where `test_attributes_bad_port` ends to know where to insert.
+
+Wait, let me re-read. The visible source shows lines 527-750. The last function shown is `test_attributes_bad_port` which ends, and then `test_attributes_bad_scheme` starts. Let me look at the exact text...
+
+Looking at the source content:
+```
+    def test_attributes_bad_port(self):
+        """Check handling of invalid ports."""
+        for bytes in (False, True):
+            for parse in (urllib.parse.urlsplit, urllib.parse.urlparse):
+                for port in ("foo", "1.5", "-1", "0x10", "-0", "1_1", " 1", "1 ", "६"):
+                    with self.subTest(bytes=bytes, parse=parse, port=port):
+                        netloc = "www.example.net:" + port
+                        url = "http://" + netloc + "/"
+                        if bytes:
+                            if netloc.isascii() and port.isascii():
+                                netloc = netloc.encode("ascii")
+                                url = url.encode("ascii")
+                            else:
+                                continue
+                        p = parse(url)
+                        self.assertEqual(p.netloc, netloc)
+                        with self.assertRaises(ValueError):
+                            p.port
+
+    def test_attributes_bad_scheme(self):
+```
+
+So `test_attributes_bad_port` is followed by `test_attributes_bad_scheme`. I'll add my new tests between them, or after `test_attributes_bad_port`.
+
+Actually, I think I should add a new test method like `test_port_boundaries` after `test_attributes_bad_port`. Let me write it.
+
+For the test, I need to cover:
+- No port → None
+- Empty port (host:/) → None
+- Port 0 → 0
+- Port 65535 → 65535
+- Port 65536 → ValueError "Port out of range 0-65535"
+- Negative port → ValueError cast error (since "-" is not a digit)
+- Noninteger port → ValueError cast error
+- Non-ASCII digits → ValueError cast error
+
+For both urlsplit and urlparse, str and bytes.
+
+Let me think about the bytes cases:
+- For bytes, the non-ASCII digits case is tricky. If I have a URL with non-ASCII digits like b"http://www.example.net:\xe0\xa6\x83/", the port would be b"\xe0\xa6\x83" which is not ASCII, so `isascii()` would be False, triggering the cast error.
+
+Wait, but for bytes objects, `isdigit()` checks if all bytes are in the range 0x30-0x39 (ASCII digits). So b"6" (which is b"\x36") would be isdigit() True and isascii() True. But b"\xe0\xa6\x83".isdigit() → False (since 0xE0 is not an ASCII digit). And b"\xe0\xa6\x83".isascii() → False.
+
+Actually wait, for bytes, the `isdigit()` method: "Return true if all characters in the string are digits... A byte is a digit if it is in the Unicode category 'Nd' (decimal digit)". For bytes objects, this is limited to ASCII digits 0-9. So b"123".isdigit() → True, b"\xe0".isdigit() → False.
+
+So for bytes:
+- Non-ASCII digits: b"6" encoded as UTF-8 is b"\xe0\xa6\x83". `isdigit()` → False, `isascii()` → False. So it hits the cast error.
+- But wait, the condition is `port.isdigit() and port.isascii()`. If either is False, it raises the cast error. So non-ASCII digits fail both checks.
+
+For str:
+- "6" (Arabic-Indic digit 6, U+0661): `isdigit()` → True (it's in category Nd), `isascii()` → False. So it hits the cast error.
+- "６" (fullwidth digit 6, U+FF16): `isdigit()` → True, `isascii()` → False. Cast error.
+
+Now, the key behavioral points:
+1. Construction (urlsplit/urlparse) succeeds - no error during parsing
+2. Error only occurs when accessing `.port`
+3. Empty port (e.g., "http://host:/" or "http://host:/path") → port is None
+4. No port (e.g., "http://host/path") → port is None
+
+Wait, what does "empty port" mean? If the URL is "http://host:/" - the port after the colon is empty string. Let me trace through the code:
+
+In `_hostinfo`:
+```python
+hostname, _, port = hostinfo.partition(':')
+if not port:
+    port = None
+```
+
+So if port is empty string (after partition), it becomes None. Then in the `port` property:
+```python
+port = self._hostinfo[1]
+if port is not None:
+    ...
+return port
+```
+
+If port is None, it just returns None. So empty port → None, no error.
+
+Similarly, "http://host/" (no colon) → partition(':') gives ("host", "", "") → port = "" → None.
+
+Let me now think about what tests to write. I want to be thorough but also need to actually run them. Let me write a test that:
+
+1. Tests boundary values (0, 65535) succeed
+2. Tests out-of-range (65536) raises specific ValueError
+3. Tests negative port (cast error)
+4. Tests non-integer port (cast error)
+5. Tests non-ASCII digits (cast error)
+6. Tests empty port → None
+7. Tests no port → None
+8. Verifies the error is raised on access, not construction
+9. Tests both urlsplit and urlparse
+10. Tests both str and bytes
+
+For the exception assertions, the task says: "assert the exact exception class, complete argument tuple and diagnostic text"
+
+So I need:
+- `assertRaises` with exact ValueError class
+- Check `str(exc)` or `exc.args` for the exact message
+- For cast error: `ValueError(f"Port could not be cast to integer value as {port!r}")`
+- For range error: `ValueError("Port out of range 0-65535")`
+
+Let me write the test:
+
+```python
+    def test_port_boundaries(self):
+        """Test port boundary and error behavior for urlsplit and urlparse."""
+        # (url, expected_port, bytes_version)
+        # Valid boundary cases
+        valid_cases = [
+            ("http://host/", None, b"http://host/"),
+            ("http://host:0/", 0, b"http://host:0/"),
+            ("http://host:65535/", 65535, b"http://host:65535/"),
+        ]
+        # Empty port cases
+        empty_port_cases = [
+            ("http://host:/", None, b"http://host:/"),
+            ("http://host:/path", None, b"http://host:/path"),
+        ]
+        
+        for parse in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for url, expected, burl in valid_cases + empty_port_cases:
+                with self.subTest(parse=parse, url=url):
+                    p = parse(url)
+                    self.assertEqual(p.port, expected)
+                with self.subTest(parse=parse, url=burl):
+                    p = parse(burl)
+                    self.assertEqual(p.port, expected)
+        
+        # Invalid port cases: (port_str, expected_error_msg_template)
+        # Cast errors
+        invalid_cases = [
+            ("0", None),  # handled above
+            ("65536", "Port out of range 0-65535"),
+            ("-1", None),  # cast error
+            ("-0", None),  # cast error  
+            ("abc", None),  # cast error
+            ("1.5", None),  # cast error
+        ]
+        # Actually, let me restructure this.
+```
+
+Hmm, let me think more carefully. The task says:
+- no port → None
+- empty port → None
+- 0 → 0
+- 65535 → 65535
+- 65536 → ValueError "Port out of range 0-65535"
+- negative port → ValueError cast
+- noninteger port → ValueError cast
+- non-ASCII decimal digits in text URLs → ValueError cast
+
+For the negative port case: "-1" → `"−1".isdigit()` is False → cast error: `f"Port could not be cast to integer value as '-1'"`.
+
+Wait, I need to be careful about what the port string actually is. In the URL "http://host:-1/", the partition on ':' gives hostname="host", port="-1". So port = "-1".
+
+For bytes: "http://host:-1/" → b"http://host:-1/" → port = b"-1". b"-1".isdigit() → False. Cast error.
+
+Now let me write the full test:
+
+```python
+    def test_port_boundaries_and_errors(self):
+        """Test port validation boundaries and error behavior."""
+        for parse in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            # --- Valid ports: construction and access both succeed ---
+            valid = [
+                ("http://host/", None),
+                ("http://host:0/", 0),
+                ("http://host:65535/", 65535),
+                ("http://host:/", None),  # empty port
+                ("http://host:/path", None),  # empty port with path
+            ]
+            for url, expected in valid:
+                with self.subTest(parse=parse, url=url, kind="valid"):
+                    p = parse(url)
+                    self.assertEqual(p.port, expected)
+                    # bytes variant
+                    p = parse(url.encode())
+                    self.assertEqual(p.port, expected)
+
+            # --- Out-of-range port: construction succeeds, access raises ---
+            for port_val in ("65536", "99999"):
+                url = f"http://host:{port_val}/"
+                with self.subTest(parse=parse, url=url, kind="range"):
+                    p = parse(url)  # construction succeeds
+                    self.assertEqual(p.netloc, f"host:{port_val}")
+                    with self.assertRaisesRegex(
+                        ValueError, r"^Port out of range 0-65535$"):
+                        p.port
+                    # bytes variant
+                    p = parse(url.encode())
+                    with self.assertRaisesRegex(
+                        ValueError, r"^Port out of range 0-65535$"):
+                        p.port
+
+            # --- Cast errors: non-digit, non-ASCII, negative ---
+            cast_errors = ["-1", "abc", "1.5", "0x10", "1_1", " 1", "1 ", "\u0661", "\uff16"]
+            for port_val in cast_errors:
+                url = "http://host:" + port_val + "/"
+                with self.subTest(parse=parse, url=url, kind="cast"):
+                    p = parse(url)  # construction succeeds
+                    expected_msg = f"Port could not be cast to integer value as {port_val!r}"
+                    with self.assertRaisesRegex(ValueError, re.escape(expected_msg)):
+                        p.port
+                # bytes variant (only if ASCII)
+                if port_val.isascii():
+                    burl = url.encode()
+                    p = parse(burl)
+                    expected_bmsg = f"Port could not be cast to integer value as {port_val.encode()!r}"
+                    with self.assertRaisesRegex(ValueError, re.escape(expected_bmsg)):
+                        p.port
+                # Non-ASCII port: only test str variant
+                else:
+                    # Can't make a bytes URL with non-ASCII easily in this context
+                    pass
+```
+
+Wait, I need to be more careful. For the non-ASCII cases like "\u0661" (Arabic-Indic digit 6), I can only test with str URLs since a bytes URL would need the UTF-8 encoding of that character, and then the port bytes would be b"\xd9\xa1" which has isdigit() False and isascii() False.
+
+Actually wait - for bytes, `b"\xd9\xa1".isdigit()` - let me think. For bytes objects, `isdigit()` checks if all bytes are in the range 0x30-0x39 (i.e., '0' to '9'). 0xD9 and 0xA1 are not in that range, so it returns False. So the cast error would be raised.
+
+But the error message for bytes would be: `f"Port could not be cast to integer value as {b'\xd9\xa1'!r}"` → `"Port could not be cast to integer value as b'\\xd9\\xa1'"`.
+
+Hmm, this is getting complex. Let me simplify and focus on what's testable and what the task requires.
+
+The task says: "add regression coverage for both public functions with text URLs and ASCII byte URLs"
+
+So for bytes, I should focus on ASCII byte URLs. The non-ASCII digits case is specifically for "text URLs" (str).
+
+Let me restructure:
+
+For both urlsplit and urlparse:
+1. Text (str) URLs: no port, empty port, 0, 65535, 65536, -1, abc, \u0661 (non-ASCII digit)
+2. ASCII byte URLs: no port, empty port, 0, 65535, 65536, -1, abc
+
+Let me also think about what "exact exception class, complete argument tuple and diagnostic text" means:
+- Exception class: ValueError
+- Complete argument tuple: `exc.args` should be `(f"Port could not be cast to integer value as {port!r}",)` or `("Port out of range 0-65535",)`
+- Diagnostic text: `str(exc)` should match the message
+
+Actually, for a single-argument ValueError, `exc.args` is a 1-tuple `(message,)` and `str(exc)` is the message itself.
+
+Let me use `assertRaises` and then check the exception:
+
+```python
+try:
+    p.port
+except ValueError as e:
+    self.assertEqual(e.args, (expected_msg,))
+    self.assertEqual(str(e), expected_msg)
+```
+
+Or use context manager:
+```python
+with self.assertRaises(ValueError) as ctx:
+    p.port
+self.assertEqual(ctx.exception.args, (expected_msg,))
+```
+
+Now let me also think about the "establish when invalid-port errors occur" requirement. This means I should show that:
+1. `urlsplit(url)` / `urlparse(url)` succeeds (no exception)
+2. Accessing `.port` raises the exception
+
+I can demonstrate this by successfully calling the parse function and then asserting the exception on `.port`.
+
+OK, let me also think about the doc changes. I need to read the doc file to see where to add the port documentation. Let me look at what I have from the search results:
+
+From the search, I can see:
+- Line 129: `| :attr:`port`     |       | Port number as integer, | :const:`None`          |`
+- Line 133: `Reading the :attr:`port` attribute will raise a :exc:`ValueError` if`
+- Line 134: `an invalid port is specified in the URL.  See section`
+
+And there's a similar section around line 315-320 for urlparse.
+
+I need to read the doc file to see the current text around these lines and find where to add my new content.
+
+Given my constraints (2 requests, 34 actions), let me plan:
+1. Read the test file around the insertion point (I already have it visible - lines 527-750)
+2. Read the doc file around the port documentation
+3. Make the test edit
+4. Make the doc edit
+5. Wait for checks
+6. Submit
+
+Actually, I have the test file visible (lines 527-750) and I can see where `test_attributes_bad_port` ends and `test_attributes_bad_scheme` begins. I can insert my new test between them.
+
+For the doc, I need to read it first. Let me do that.
+
+Wait, I'm in a "recovery" presentation mode because the previous feedback didn't fit. Let me use work_on to get what I need visible, or just read what I need.
+
+Let me read the doc file around lines 120-145 to see the port documentation for urlsplit, and also around lines 310-330 for urlparse.
+
+Actually, let me be strategic. I'll:
+1. Read the doc file (lines 120-145 and 310-330) to see current port docs
+2. Then make both edits
+
+But I only have 2 requests left. Each response consumes 1 request. Let me make sure I'm efficient.
+
+Actually wait - "Remaining requests include the response to this input. Each response consumes one request; its operations consume the separate action allowance."
+
+So I have 2 requests remaining (including this one), and 34 actions remaining. Each operation (read, patch, etc.) consumes 1 action. So I can do up to 34 operations across my remaining 2 responses.
+
+Let me plan:
+- This response: Read doc file to see port docs (1 action)
+- Next response: Make test edit (1 action), make doc edit (1 action)
+- After: checks run automatically
+- After: submit (1 action)
+
+That's only 4 actions, well within budget.
+
+Actually wait, I realize I should also check: do I need to see the full test file to know where to insert? I can see lines 527-750 which includes `test_attributes_bad_port` ending and `test_attributes_bad_scheme` starting. I'll insert my new method right after `test_attributes_bad_port` ends (before `test_attributes_bad_scheme`).
+
+Looking at the visible source, I can see:
+```
+    def test_attributes_bad_port(self):
+        """Check handling of invalid ports."""
+        for bytes in (False, True):
+            for parse in (urllib.parse.urlsplit, urllib.parse.urlparse):
+                for port in ("foo", "1.5", "-1", "0x10", "-0", "1_1", " 1", "1 ", "६"):
+                    with self.subTest(bytes=bytes, parse=parse, port=port):
+                        netloc = "www.example.net:" + port
+                        url = "http://" + netloc + "/"
+                        if bytes:
+                            if netloc.isascii() and port.isascii():
+                                netloc = netloc.encode("ascii")
+                                url = url.encode("ascii")
+                            else:
+                                continue
+                        p = parse(url)
+                        self.assertEqual(p.netloc, netloc)
+                        with self.assertRaises(ValueError):
+                            p.port
+
+    def test_attributes_bad_scheme(self):
+```
+
+I'll insert my new test between the blank line after `test_attributes_bad_port` and `def test_attributes_bad_scheme`.
+
+For the patch, I'll use `old` as the transition point:
+```
+                        with self.assertRaises(ValueError):
+                            p.port
+
+    def test_attributes_bad_scheme(self):
+```
+
+And insert my new test in between.
+
+Actually, let me think about what exact text to use as the `old` parameter. I need a unique occurrence. Let me use:
+
+```
+    def test_attributes_bad_scheme(self):
+        """Check handling of invalid schemes."""
+```
+
+And replace it with my new test + that same text. This should be unique.
+
+Now for the doc, let me read it first.
+
+Let me read Doc/library/urllib.parse.rst around lines 120-145 and 310-330.
+
+Actually, I can only do one read per operation. Let me read a range that covers both sections... no, they're too far apart (120-145 and 310-330). Let me read 120-145 first, then I'll need another read for 310-330.
+
+Actually, I have 34 actions, so I can afford multiple reads. Let me do:
+1. Read doc lines 125-145 (port section for urlsplit)
+2. Read doc lines 310-335 (port section for urlparse)
+
+Then make edits.
+
+Let me start with reading the doc file.

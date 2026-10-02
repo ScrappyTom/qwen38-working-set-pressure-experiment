@@ -1,0 +1,313 @@
+Let me understand the task. I need to:
+
+1. In `Lib/test/test_urlparse.py`, add regression tests for port access on both `urlsplit` and `urlparse` with:
+   - Text URLs and ASCII byte URLs
+   - No port, empty port, 0, 65535, 65536, negative port, noninteger port
+   - Non-ASCII decimal digits in text URLs
+   - Establish when invalid-port errors occur
+   - Assert exact exception class, complete argument tuple, and diagnostic text
+   - Assert concrete results for accepted boundary cases
+   - Keep all existing tests intact
+
+2. In `Doc/library/urllib.parse.rst`, add focused documentation with executable examples showing the boundary/error behavior, including the distinction between constructing the parsed result and accessing its port.
+
+First, I need to understand the implementation. Let me look at the `port` property in `_NetlocResultMixinBase`:
+
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+Key observations:
+- The port property is a *lazy* property - it's not validated at construction time, only when accessed.
+- `port.isdigit() and port.isascii()` - for str, `isdigit()` returns True for non-ASCII digits too (like '١٢٣'), but `isascii()` ensures it's ASCII. For bytes, `isdigit()` doesn't exist... wait, let me check.
+
+Actually for bytes, `b'123'.isdigit()` - does bytes have `isdigit()`? Let me think... In Python, `bytes` objects do NOT have `isdigit()` or `isascii()` methods. Wait, actually they might not. Let me reconsider.
+
+Looking at the code: `port.isdigit() and port.isascii()` - this is called on the port value from `_hostinfo[1]`.
+
+For the bytes mixin (`_NetlocResultMixinBytes`), `_hostinfo` returns bytes for port. So `port` would be `b'123'` for example.
+
+Wait, does `bytes` have `isdigit()`? Let me check... Actually in Python 3, `bytes` does NOT have `isdigit()`. Let me look more carefully.
+
+Actually wait - looking at the CPython source, `bytes` objects do have some string methods but not `isdigit()`. Let me reconsider...
+
+Actually, I need to check: in Python 3, `bytes` has `isdigit()`, `isalpha()`, etc.? Let me think... No, I believe `bytes` does NOT have `isdigit()`. The `bytes` type has `count`, `find`, `index`, `isalnum`... wait, actually I'm not sure.
+
+Let me look at this differently. The code says:
+```python
+if port.isdigit() and port.isascii():
+    port = int(port)
+else:
+    raise ValueError(...)
+```
+
+For str: `str.isdigit()` returns True for any Unicode digit (including non-ASCII like Arabic-Indic digits). `str.isascii()` returns True only if all characters are ASCII (0-127). So for `'0123'`, both are True → `int('0123')` = 123. For `'٠١٢٣'` (Arabic digits), `isdigit()` is True but `isascii()` is False → ValueError.
+
+For bytes: I need to check if `bytes` has `isdigit()` and `isascii()`. Actually, looking at Python docs, `bytes` does NOT have `isdigit()`. Hmm, but the code uses it... 
+
+Wait, let me re-read the code. The `_hostinfo` for the bytes mixin returns `port` as bytes (from `hostinfo.partition(b':')`). So port would be `b'123'` or `b''` (which becomes `None`).
+
+Actually, I recall now - in Python 3, `bytes` objects do NOT have string methods like `isdigit()`, `isalpha()`, `isascii()`. They only have byte-level methods. So calling `b'123'.isdigit()` would raise `AttributeError`.
+
+Wait, but that can't be right because the existing test `test_RFC2732` tests bytes URLs with ports and they work. Let me look at the test:
+
+```python
+('http://Test.python.org:5432/foo/', 'test.python.org', 5432),
+```
+
+And this is tested with both str and bytes. The bytes version would be `(b'http://Test.python.org:5432/foo/', b'test.python.org', 5432)`.
+
+So the port access must work for bytes. Let me reconsider what methods bytes has...
+
+Actually, I just remembered: Python 3 `bytes` does NOT have `isdigit()` or `isascii()`. These are `str`-only methods. So how does the bytes case work?
+
+Wait, let me re-read the code more carefully. Maybe I'm wrong about bytes methods. Let me check: `b'123'.isdigit()` - in CPython, I believe bytes objects do NOT inherit string methods. They have their own set of methods.
+
+Hmm, but the tests pass with bytes. So either:
+1. bytes does have these methods (I'm wrong), or
+2. There's some other mechanism
+
+Actually, let me reconsider. Looking at Python docs more carefully... I think `bytes` in Python 3 does NOT have `isdigit()`. Let me verify by thinking about what happens:
+
+`b'123'.isdigit()` → `AttributeError: 'bytes' object has no attribute 'isdigit'`
+
+But wait, the existing tests in `test_RFC2732` use bytes with ports and they call `urlparsed.port`. If this raised AttributeError, the tests would fail. Since these are existing tests that presumably pass, bytes must have these methods.
+
+Actually, I just realized I should look at this more carefully. Let me check the Python source... Actually in Python 3, I believe `bytes` does NOT have `isdigit()`. But wait - maybe the code handles this differently.
+
+Let me re-read:
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+If `port` is `b'123'`, then `port.isdigit()` would need to exist. Let me think about this differently - maybe I should just run the tests and see what happens. But first, let me look at what the existing tests show.
+
+The existing `test_RFC2732` test has:
+```python
+('http://Test.python.org:5432/foo/', 'test.python.org', 5432),
+```
+
+And it's tested with both str and bytes. The bytes version has `b'5432'` as the port. The test calls `urlparsed.port` and expects `5432`. So `b'5432'` must go through the `port.isdigit() and port.isascii()` check successfully.
+
+OK so either:
+1. `bytes` does have `isdigit()` and `isascii()` in Python 3 (I need to verify)
+2. Or there's something else going on
+
+Actually, I just recalled: In Python 3, `bytes` objects DO have some of the string methods! Let me think... `bytes.isalnum()`, `bytes.isdigit()`, etc. - actually I'm not sure about this. Let me look at what I know:
+
+`bytes` has: `capitalize`, `center`, `count`, `decode`, `encode`, `endswith`, `expandtabs`, `find`, `hex`, `index`, `isalnum`, `isalpha`, `isdigit`, `islower`, `isprintable`, `isspace`, `istitle`, `isupper`, `join`, `lower`, `lstrip`, `maketrans`, `partition`, `removeprefix`, `removesuffix`, `replace`, `rfind`, `rindex`, `rpartition`, `rsplit`, `rstrip`, `split`, `splitlines`, `startswith`, `strip`, `swapcase`, `title`, `translate`, `upper`, `zfill`, `count`, `decode`, `endswith`, `find`, `hex`, `index`, `isalnum`, `isalpha`, `isdigit`, `islower`, `isprintable`, `isspace`, `istitle`, `isupper`, `join`, `lower`, `lstrip`, `partition`, `removeprefix`, `removesuffix`, `replace`, `rfind`, `rindex`, `rpartition`, `rsplit`, `rstrip`, `split`, `splitlines`, `startswith`, `strip`, `swapcase`, `title`, `translate`, `upper`, `zfill`.
+
+Wait, I'm confusing myself. Let me just focus on what matters:
+
+For `bytes`, the methods `isdigit()` and `isascii()` - I believe:
+- `bytes.isdigit()` does NOT exist in standard Python 3
+- `bytes.isascii()` does NOT exist in standard Python 3
+
+Hmm, but then how do the existing tests pass? Let me look at this from a different angle.
+
+Actually wait - I just realized I should check if maybe Python 3.7+ added these to bytes. Let me think... No, I don't think so.
+
+OK let me take a different approach. Let me look at the actual behavior by examining what the tests expect. The key question is: what does `b'123'.isdigit()` do in this Python version?
+
+Actually, I just realized: I should just look at the code and the test expectations, and write tests that match the actual implementation behavior. The implementation is the authority. Let me focus on what I can determine from the code:
+
+For **str** URLs:
+- `port` is a `str` (e.g., `'123'`)
+- `'123'.isdigit()` → True, `'123'.isascii()` → True → `int('123')` = 123
+- `''` → port is `None` (because `_hostinfo` returns `None` for empty port)
+- `'0'` → `int('0')` = 0, 0 <= 0 <= 65535 → OK, returns 0
+- `'65535'` → 65535, OK
+- `'65536'` → 65536, NOT in range → `ValueError("Port out of range 0-65535")`
+- `'-1'` → `'-1'.isdigit()` → False → `ValueError(f"Port could not be cast to integer value as '-1'")`
+- `'abc'` → `'abc'.isdigit()` → False → `ValueError(f"Port could not be cast to integer value as 'abc'")`
+- `'١٢٣'` (non-ASCII digits) → `isdigit()` → True, `isascii()` → False → `ValueError(f"Port could not be cast to integer value as '١٢٣'")`
+
+Wait, for `'-1'`: `'-1'.isdigit()` returns `False` because `-` is not a digit. So it goes to the else branch.
+
+For **bytes** URLs:
+- `port` is `bytes` (e.g., `b'123'`)
+- The question is whether `bytes` has `isdigit()` and `isascii()`
+
+Let me look at this more carefully. In Python 3:
+- `bytes` has `isdigit()` - actually, I need to check this.
+
+You know what, let me just look at the Python version being used. The fact that the code uses `f-strings` (f"...") means Python 3.6+. And the use of `types.GenericAlias` means Python 3.7+.
+
+For Python 3.7+, I believe `bytes` does NOT have `isdigit()` or `isascii()`. Let me verify by thinking about what happens in the existing tests.
+
+Actually, wait. Let me re-read the `_NetlocResultMixinBase.port` property:
+
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+This is in `_NetlocResultMixinBase`, which is shared by both `_NetlocResultMixinStr` and `_NetlocResultMixinBytes`.
+
+For the bytes case, `self._hostinfo[1]` returns bytes (from `hostinfo.partition(b':')`).
+
+So we'd be calling `b'123'.isdigit()`. In Python 3, `bytes` objects... let me think carefully.
+
+Actually, I just checked my memory: Python 3 `bytes` does NOT have `isdigit()`. The `bytes` type has these methods: `capitalize`, `center`, `count`, `decode`, `encode`, `endswith`, `expandtabs`, `find`, `hex`, `index`, `isalnum`(?), `join`, `lower`, `lstrip`, `maketrans`, `partition`, `replace`, `rfind`, `rindex`, `rpartition`, `rsplit`, `rstrip`, `split`, `splitlines`, `startswith`, `strip`, `swapcase`, `title`, `translate`, `upper`, `zfill`.
+
+Hmm wait, I recall now that `bytes` does NOT have `isdigit()`, `isalpha()`, `isalnum()`, `isspace()`, etc. These are string-only methods.
+
+But then how do the existing tests pass? The `test_RFC2732` test uses bytes URLs with ports...
+
+Let me look at the test more carefully:
+```python
+def test_RFC2732(self):
+    str_cases = [
+        ('http://Test.python.org:5432/foo/', 'test.python.org', 5432),
+        ...
+    ]
+    def _encode(t):
+        return t[0].encode('ascii'), t[1].encode('ascii'), t[2]
+    bytes_cases = [_encode(x) for x in str_cases]
+    for url, hostname, port in str_cases + bytes_cases:
+        urlparsed = urllib.parse.urlparse(url)
+        self.assertEqual((urlparsed.hostname, urlparsed.port) , (hostname, port))
+```
+
+So for bytes, it calls `urlparse(url)` where `url` is bytes, then accesses `.port`. If `b'5432'.isdigit()` raised AttributeError, this test would fail. Since it's an existing test that presumably passes, either:
+1. `bytes` does have `isdigit()` in this Python version
+2. Or something else is going on
+
+Actually, I just realized I might be wrong. Let me reconsider. In CPython, `bytes` and `bytearray` share the same method set through the `PyBytesObject` type. Let me recall...
+
+Actually, you know what, I think I've been overthinking this. Let me just look at what methods `bytes` actually has in Python 3.7+.
+
+From the Python docs: https://docs.python.org/3/library/stdtypes.html#bytes-methods
+
+The bytes methods include: `capitalize`, `center`, `count`, `decode`, `encode`, `endswith`, `expandtabs`, `find`, `hex`, `index`, `isalnum`, `isalpha`, `isdigit`, `islower`, `isprintable`, `isspace`, `istitle`, `isupper`, `join`, `lower`, `lstrip`, `maketrans`, `partition`, `removeprefix`, `removesuffix`, `replace`, `rfind`, `rindex`, `rpartition`, `rsplit`, `rstrip`, `split`, `splitlines`, `startswith`, `strip`, `swapcase`, `title`, `translate`, `upper`, `zfill`.
+
+Wait, actually I think `bytes` DOES have `isdigit()` but NOT `isascii()`. Let me think...
+
+Actually no. Looking at the Python source, `bytes` methods are defined in `Objects/bytes_methods.c` and include things like `bytes_lower`, `bytes_upper`, etc. I don't think `isdigit` is there for bytes.
+
+OK, I'm going in circles. Let me take a practical approach: I'll look at the actual implementation code, write tests based on my best understanding, run them, and see what happens. If my understanding is wrong, the test failures will tell me.
+
+Actually, wait. Let me re-read the code one more time:
+
+```python
+if port.isdigit() and port.isascii():
+```
+
+For `bytes`:
+- `b'123'.isdigit()` - I'll assume this exists and returns True for ASCII digits
+- `b'123'.isascii()` - I'll assume this exists and returns True for ASCII bytes
+
+Actually, I just recalled: `bytes.isascii()` was NOT a method. `bytes` doesn't have `isascii()`. Only `str` has `isascii()`.
+
+But wait, `bytes` does have `isdigit()`? Let me think again...
+
+OK here's what I'll do: I'll look at what the implementation does and write tests accordingly. The key insight is:
+
+For **str** port values:
+- `port` is a `str`
+- `str.isdigit()` → True for any Unicode digit
+- `str.isascii()` → True only for ASCII (code points 0-127)
+- So `'0'` through `'9'` as a string of digits → both True → `int(port)`
+- Non-ASCII digits like `'٠'` → `isdigit()` True, `isascii()` False → ValueError
+- `'-1'` → `isdigit()` False (because of '-') → ValueError
+- `'12a'` → `isdigit()` False → ValueError
+
+For **bytes** port values:
+- `port` is a `bytes`
+- If `bytes` doesn't have `isdigit()` or `isascii()`, it would raise `AttributeError`
+- But the existing tests pass, so something must work
+
+Let me look at this from yet another angle. Maybe I should check if there's a `__getattr__` or something in the class hierarchy...
+
+No, that doesn't make sense. The classes are plain Python classes.
+
+OK, let me just assume that in this Python version, `bytes` has `isdigit()` and `isascii()` methods (perhaps added in a newer version), and that they work on ASCII bytes. For bytes:
+- `b'123'.isdigit()` → True
+- `b'123'.isascii()` → True
+- `b'-1'.isdigit()` → False
+- `b'abc'.isdigit()` → False
+
+This would make the behavior parallel between str and bytes for ASCII content.
+
+Actually, I just realized something. Let me check: maybe Python 3.7 or 3.8 added `isdigit()` and `isascii()` to `bytes`. Let me think about what Python version this code targets...
+
+The code uses:
+- f-strings (3.6+)
+- `types.GenericAlias` (3.7+)
+- `types.GenericAlias` specifically for `__class_getitem__`
+
+So this is at least Python 3.7. And looking at the CPython changelog... I think `bytes.isdigit()` might have been added at some point. Actually, I recall now that `bytes` does NOT have `isdigit()` in any Python 3 version I know of. But `str` does.
+
+Hmm, but then how do the bytes tests work? Let me look at the `_hostinfo` for bytes again:
+
+```python
+@property
+def _hostinfo(self):
+    netloc = self.netloc
+    _, _, hostinfo = netloc.rpartition(b'@')
+    _, have_open_br, bracketed = hostinfo.partition(b'[')
+    if have_open_br:
+        hostname, _, port = bracketed.partition(b']')
+        _, _, port = port.partition(b':')
+    else:
+        hostname, _, port = hostinfo.partition(b':')
+    if not port:
+        port = None
+    return hostname, port
+```
+
+So for bytes, `port` is `bytes` (or `None`). Then in the `port` property:
+
+```python
+port = self._hostinfo[1]
+if port is not None:
+    if port.isdigit() and port.isascii():
+```
+
+If `port` is `b'5432'`, this calls `b'5432'.isdigit()`. 
+
+OK you know what, I'll just write the tests and run them. If `bytes` doesn't have these methods, I'll get an error and can adjust. Let me look at what the test file already has and what I need to add.
+
+Let me first read the rest of the test file to see what's already there, and also read the doc file.
+
+Actually, I have the test file lines 1-500 visible. Let me read the rest to see where to add new tests. Let me also read the doc file.
+
+Let me plan my next actions:
+1. Read the rest of test_urlparse.py (lines 500+)
+2. Read the doc file
+3. Understand the full picture
+4. Write tests
+5. Write docs
+6. Run tests
+7. Run public check
+
+Let me start by reading more of the test file and the doc file.

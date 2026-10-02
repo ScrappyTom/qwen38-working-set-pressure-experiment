@@ -1,3 +1,20 @@
+# URL original-entry outcome and explicit continuation boundary
+
+url_port_entry/review/RESULTS-002.md closes the e93051ec uncoached original
+20-request attempt at20requests/30operations: one saved test, actual failed
+tests check, no documentation/public pass/submission. Normal73tests and required
+paths pass; exact-class sensitivity fails. All19 nonterminal outcomes arrive;
+final complete feedback fits16663tokens but has no C21. Exact replay/direct
+input, complete-output, observation and artifact reviews pass. Preserve57.171
+model minutes/60.204loop minutes and distinguish opportunity closure from loss
+or physical exhaustion. Live model-chosen capacity recovery works; no new
+mechanical host defect is established. Do not implement unproven presentation
+candidates just to produce change. Publish url_port_continuation/PLAN.md before
+its task-local adapter. Restore actual failed work/account/source/observations,
+retain20/30, explicitly extend requests to36 while operations stay60, and
+qualify/publish before uncoached exposure. Supply no reviewer correction/group
+and do not relabel original-budget failure. Wider programme rows remain open.
+
 # URL original-entry qualification boundary
 
 url_port_entry/PLAN.md at4db773d7 preserves the original empty2921cbc8 entry,

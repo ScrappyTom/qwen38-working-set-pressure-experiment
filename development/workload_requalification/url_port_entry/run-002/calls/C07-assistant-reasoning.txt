@@ -1,0 +1,102 @@
+Let me understand the task. I need to:
+
+1. Add regression tests in `Lib/test/test_urlparse.py` for port access on `urlsplit` and `urlparse` results with:
+   - Text URLs and ASCII byte URLs
+   - No port, empty port, 0, 65535, 65536, negative port, noninteger port
+   - Non-ASCII decimal digits in text URLs
+   - Establish when invalid-port errors occur
+   - Assert exact exception class, complete argument tuple, and diagnostic text
+   - Assert concrete results for accepted boundary cases
+   - Keep all existing tests and supporting source intact
+
+2. Add documentation in `Doc/library/urllib.parse.rst` with:
+   - Focused explanation of observed boundary/error behavior
+   - Executable examples (with `>>>` prompts, self-contained with imports)
+   - Distinction between constructing the parsed result and accessing its port
+   - Preserve existing documentation
+   - Real outputs/exceptions
+
+First, I need to understand the port validation logic from the source. I've already read `Lib/urllib/parse.py` lines 1-280. Let me look at the key part:
+
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+Key observations:
+- Port validation happens at **access time** (when you access `.port`), not at construction time
+- For str URLs: `port` is a string, validated with `isdigit()` and `isascii()`, then `int(port)`, then range check
+- For bytes URLs: `port` is bytes, validated with `isdigit()` and `isascii()` (bytes methods), then `int(port)`, then range check
+- If port is `None` (no port in URL), returns `None`
+- If port is empty string/bytes: `''` or `b''` is falsy but `port is not None` - wait, let me re-check.
+
+Looking at `_hostinfo`:
+```python
+@property
+def _hostinfo(self):
+    netloc = self.netloc
+    _, _, hostinfo = netloc.rpartition('@')
+    _, have_open_br, bracketed = hostinfo.partition('[')
+    if have_open_br:
+        hostname, _, port = bracketed.partition(']')
+        _, _, port = port.partition(':')
+    else:
+        hostname, _, port = hostinfo.partition(':')
+    if not port:
+        port = None
+    return hostname, port
+```
+
+So if port is empty string, it becomes `None`. So:
+- No port in URL → `port` is `None` → returns `None`
+- Empty port (e.g., `http://host:/`) → `port` is `''` → `if not port: port = None` → returns `None`
+- Wait, but what about `http://host:80/`? port = `'80'`
+
+Let me trace through the cases:
+- `http://host/` → no colon after host → `port = None` → returns `None`
+- `http://host:/` → colon present, empty after → `port = ''` → `if not port: port = None` → returns `None`
+- `http://host:0/` → `port = '0'` → `isdigit()` True, `isascii()` True → `int('0')` = 0 → `0 <= 0 <= 65535` True → returns 0
+- `http://host:65535/` → `port = '65535'` → valid → returns 65535
+- `http://host:65536/` → `port = '65536'` → valid digits → `int('65536')` = 65536 → `not (0 <= 65536 <= 65535)` → raises `ValueError("Port out of range 0-65535")`
+- `http://host:-1/` → `port = '-1'` → `'-1'.isdigit()` → False (because of the `-`) → raises `ValueError("Port could not be cast to integer value as '-1'")`
+
+Wait, let me check: `'-1'.isdigit()` in Python → False. Yes, because `-` is not a digit.
+
+- `http://host:abc/` → `port = 'abc'` → `'abc'.isdigit()` → False → raises `ValueError("Port could not be cast to integer value as 'abc'")`
+- Non-ASCII digits: e.g., `http://host:٠١/` (Arabic-Indic digits) → `'٠١'.isdigit()` → True! But `'٠١'.isascii()` → False → raises `ValueError("Port could not be cast to integer value as '٠١'")`
+
+Wait, actually let me check. Python's `str.isdigit()` returns True for Unicode decimal digits. And `str.isascii()` returns True only if all characters are ASCII (ord < 128). So non-ASCII digits like Arabic-Indic digits would pass `isdigit()` but fail `isascii()`, triggering the error.
+
+For bytes:
+- `b'80'` → `b'80'.isdigit()` → True, `b'80'.isascii()` → True → `int(b'80')` = 80
+- `b'65536'` → valid → range error
+- `b'-1'` → `b'-1'.isdigit()` → False → error
+- `b'abc'` → `b'abc'.isdigit()` → False → error
+
+Wait, for bytes: `b'80'.isdigit()` - yes, this works in Python 3. And `b'80'.isascii()` - yes.
+
+Now let me think about what I need to do:
+
+1. First, I should run a quick test to verify my understanding of the behavior. Actually, I can't run code directly. But I can write the tests based on my reading of the source, and the test check will verify them.
+
+Let me look at the test file more to understand its structure. I've seen lines 1-200. Let me read more to find where to add my tests.
+
+Actually, let me first read more of the test file to see what's already there and find a good place to add tests. Let me also check the Doc file.
+
+Let me plan my actions:
+1. Read more of the test file to see structure and find where to add
+2. Read the Doc file
+3. Write the tests
+4. Write the doc updates
+5. Run checks
+
+Let me start by reading more of the test file and the doc file.

@@ -1,0 +1,248 @@
+Let me understand the current state:
+
+1. I'm working on extending regression tests for port access on `urlsplit` and `urlparse` in `Lib/test/test_urlparse.py`, and adding documentation in `Doc/library/urllib.parse.rst`.
+
+2. I've already read:
+   - `Lib/urllib/parse.py` lines 1-280 (the implementation)
+   - `Lib/test/test_urlparse.py` lines 1-845
+
+3. The implementation shows the `port` property in `_NetlocResultMixinBase`:
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+Key behaviors:
+- For str: `port.isdigit()` and `port.isascii()` must both be True for valid port. Then `int(port)`. Then range check 0-65535.
+- For bytes: `port.isdigit()` checks all bytes are ASCII digits 0-9, `port.isascii()` checks all bytes are ASCII. Then `int(port)`. Then range check.
+- If port is `None` (no port in URL), returns `None`.
+- Errors:
+  - `ValueError(f"Port could not be cast to integer value as {port!r}")` - for non-digit/non-ascii
+  - `ValueError("Port out of range 0-65535")` - for out-of-range after successful int conversion
+
+Wait, let me think about the bytes case more carefully. For bytes:
+- `b'0'.isdigit()` → True
+- `b'0'.isascii()` → True
+- `b'65535'.isdigit()` → True
+- `b'65536'.isdigit()` → True (all digits)
+- `b'-1'.isdigit()` → False (the minus sign isn't a digit)
+- `b''` → wait, can port be empty bytes? Let me check...
+
+Looking at `_hostinfo`:
+```python
+@property
+def _hostinfo(self):
+    netloc = self.netloc
+    _, _, hostinfo = netloc.rpartition(b'@')
+    _, have_open_br, bracketed = hostinfo.partition(b'[')
+    if have_open_br:
+        hostname, _, port = bracketed.partition(b']')
+        _, _, port = port.partition(b':')
+    else:
+        hostname, _, port = hostinfo.partition(b':')
+    if not port:
+        port = None
+    return hostname, port
+```
+
+So `port` is `None` when it's falsy (empty string/bytes). So an empty port after `:` becomes `None`.
+
+For str:
+- `"0".isdigit()` → True, `"0".isascii()` → True → `int("0")` → 0 → in range → returns 0
+- `"65535".isdigit()` → True, `"65535".isascii()` → True → `int("65535")` → 65535 → in range → returns 65535
+- `"65536".isdigit()` → True, `"65536".isascii()` → True → `int("65536")` → 65536 → NOT in range → ValueError("Port out of range 0-65535")
+- `"-1".isdigit()` → False → ValueError("Port could not be cast to integer value as '-1'")
+- `"0".isdigit()` → True → int → 0
+- `"65535"` → 65535
+
+Wait, what about `"-0"`? `"-0".isdigit()` → False → ValueError
+
+What about `"1_1"`? `"1_1".isdigit()` → False (underscore isn't a digit) → ValueError
+What about `" 1"`? `" 1".isdigit()` → False → ValueError
+What about `"1 "`? `"1 ".isdigit()` → False → ValueError
+
+Non-ASCII digits: `"६"` (Devanagari 6). `"६".isdigit()` → True (it's a digit in Unicode). `"६".isascii()` → False → ValueError("Port could not be cast to integer value as '६'")
+
+Now I need to:
+1. Read the rest of the test file (lines 846-1457) to see what else is there
+2. Read the Doc file
+3. Add the required tests
+4. Add the documentation
+
+Let me first read the rest of the test file to see what's there after line 845.
+
+Actually, looking at my working account and the existing `test_attributes_bad_port`, I see it already tests: "foo", "1.5", "-1", "0x10", "-0", "1_1", " 1", "1 ", "६" for both text and bytes (ASCII-only).
+
+What I still need to add:
+- Boundary values: 0, 65535 (valid), 65536 (out of range)
+- Empty port (no port → None)
+- Negative port: already have "-1" but the error is "could not be cast" not "out of range" for both str and bytes
+- Non-integer port: already covered by "foo", "1.5", etc.
+
+Wait, let me re-read the task requirements:
+- no port → port is None
+- empty port → port is None (the colon with nothing after)
+- 0 → valid, returns 0
+- 65535 → valid, returns 65535
+- 65536 → ValueError "Port out of range 0-65535"
+- negative port → ValueError "Port could not be cast to integer value as '-1'" (for "-1", isdigit is False)
+- noninteger port → already covered
+
+Wait, for bytes: `b"-1".isdigit()` → False, so it's "could not be cast to integer value as b'-1'".
+
+Actually wait - I need to think about what "negative port" means here. The string "-1" has a minus sign which is not a digit, so `isdigit()` returns False. So it fails at the digit check, not the range check. The error message would be "Port could not be cast to integer value as '-1'" for str or "Port could not be cast to integer value as b'-1'" for bytes.
+
+Hmm, but what about a port like "007"? `"007".isdigit()` → True, `"007".isascii()` → True → `int("007")` → 7 → in range → returns 7.
+
+What about very long strings like "000000000000000000000000000000000000000000000000000000000000000000000000000001"? `isdigit()` → True, `isascii()` → True → `int(...)` → 1 → in range → returns 1. That's fine.
+
+What about "65536"? `isdigit()` → True, `isascii()` → True → `int("65536")` → 65536 → NOT in range → ValueError("Port out of range 0-65535").
+
+OK so let me plan the tests I need to add:
+
+For both `urlsplit` and `urlparse`, with both str and bytes:
+1. No port: `http://www.example.net/` → port is None
+2. Empty port: `http://www.example.net:/` → port is None (the `:` with empty string after it → partition gives empty → falsy → None)
+3. Port 0: `http://www.example.net:0/` → port is 0
+4. Port 65535: `http://www.example.net:65535/` → port is 65535
+5. Port 65536: `http://www.example.net:65536/` → ValueError("Port out of range 0-65535")
+6. Negative port "-1": `http://www.example.net:-1/` → ValueError("Port could not be cast to integer value as '-1'")
+7. Non-integer port: already covered by existing test
+
+Wait, I need to also verify the exact exception arguments. The task says "assert the exact exception class, complete argument tuple and diagnostic text."
+
+For ValueError:
+- `ValueError(f"Port could not be cast to integer value as {port!r}")` → args = (f"Port could not be cast to integer value as {port!r}",)
+- `ValueError("Port out of range 0-65535")` → args = ("Port out of range 0-65535",)
+
+For str port: `port!r` gives `"'-1'"` etc.
+For bytes port: `port!r` gives `"b'-1'"` etc.
+
+Wait, actually for bytes, the port value is a bytes object. So `b'-1'!r` → `"b'-1'"`. Let me verify:
+- `f"Port could not be cast to integer value as {b'-1'!r}"` → `"Port could not be cast to integer value as b'-1'"`
+
+So the args tuple would be:
+- str: `("Port could not be cast to integer value as '-1'",)`
+- bytes: `("Port could not be cast to integer value as b'-1'",)`
+
+For "out of range": `("Port out of range 0-65535",)` for both.
+
+Now let me also think about what "non-ASCII decimal digits in text URLs" means. The existing test already has "६" (Devanagari 6). I should make sure the test covers this case with the full exception assertion.
+
+Actually, looking more carefully at the existing `test_attributes_bad_port`:
+```python
+def test_attributes_bad_port(self):
+    """Check handling of invalid ports."""
+    for bytes in (False, True):
+        for parse in (urllib.parse.urlsplit, urllib.parse.urlparse):
+            for port in ("foo", "1.5", "-1", "0x10", "-0", "1_1", " 1", "1 ", "६"):
+                with self.subTest(bytes=bytes, parse=parse, port=port):
+                    netloc = "www.example.net:" + port
+                    url = "http://" + netloc + "/"
+                    if bytes:
+                        if netloc.isascii() and port.isascii():
+                            netloc = netloc.encode("ascii")
+                            url = url.encode("ascii")
+                        else:
+                            continue
+                    p = parse(url)
+                    self.assertEqual(p.netloc, netloc)
+                    with self.assertRaises(ValueError):
+                        p.port
+```
+
+This test exists but doesn't assert the exact exception message/args. The task says I need to "assert the exact exception class, complete argument tuple and diagnostic text." So I need to add more detailed assertions.
+
+Let me now think about what tests to add. I'll add a new test method that covers:
+1. Valid boundary ports (0, 65535) for both str and bytes, both urlsplit and urlparse
+2. No port / empty port → None
+3. Out-of-range port (65536) → exact ValueError
+4. Negative port ("-1") → exact ValueError  
+5. Non-integer port → exact ValueError
+6. Non-ASCII digit → exact ValueError
+
+Actually, let me re-read the task: "add regression coverage for both public functions with text URLs and ASCII byte URLs: no port, an empty port, 0, 65535, 65536, a negative port, and a noninteger port. Also cover non-ASCII decimal digits in text URLs. Establish when invalid-port errors occur, and assert the exact exception class, complete argument tuple and diagnostic text. Assert the concrete results for accepted boundary cases."
+
+So I need:
+- Both `urlsplit` and `urlparse`
+- Text (str) URLs and ASCII byte URLs
+- Cases: no port, empty port, 0, 65535, 65536, negative port, noninteger port
+- Non-ASCII decimal digits (str only, since bytes must be ASCII)
+- Exact exception class, args tuple, and message
+- Concrete results for valid cases
+- "Establish when invalid-port errors occur" → the errors happen on `.port` access, not on construction
+
+Let me also check: for "empty port", what does the URL look like? `http://www.example.net:/` - the netloc is `www.example.net:`, and partition(':') gives hostname='www.example.net', port=''. Since '' is falsy, port becomes None.
+
+Wait, let me trace through more carefully. For `_hostinfo` (str version):
+```python
+@property
+def _hostinfo(self):
+    netloc = self.netloc
+    _, _, hostinfo = netloc.rpartition('@')
+    _, have_open_br, bracketed = hostinfo.partition('[')
+    if have_open_br:
+        hostname, _, port = bracketed.partition(']')
+        _, _, port = port.partition(':')
+    else:
+        hostname, _, port = hostinfo.partition(':')
+    if not port:
+        port = None
+    return hostname, port
+```
+
+For `http://www.example.net:/`:
+- netloc = 'www.example.net:'
+- No '@', so hostinfo = 'www.example.net:'
+- No '[', so hostname, _, port = 'www.example.net:'.partition(':') → hostname='www.example.net', port=''
+- `not ''` is True → port = None
+- Returns ('www.example.net', None)
+
+Then in `port` property: port is None → returns None. Good.
+
+For `http://www.example.net:0/`:
+- netloc = 'www.example.net:0'
+- partition(':') → hostname='www.example.net', port='0'
+- `not '0'` is False → port stays '0'
+- Returns ('www.example.net', '0')
+
+Then in `port` property: port = '0', `'0'.isdigit()` → True, `'0'.isascii()` → True → `int('0')` → 0, `0 <= 0 <= 65535` → True → returns 0.
+
+For `http://www.example.net:65535/`:
+- port = '65535' → isdigit() → True, isascii() → True → int → 65535, in range → returns 65535.
+
+For `http://www.example.net:65536/`:
+- port = '65536' → isdigit() → True, isascii() → True → int → 65536, NOT in range → raises ValueError("Port out of range 0-65535").
+
+For `http://www.example.net:-1/`:
+- port = '-1' → isdigit() → False → raises ValueError(f"Port could not be cast to integer value as '-1'")
+
+For `http://www.example.net:abc/`:
+- port = 'abc' → isdigit() → False → raises ValueError(f"Port could not be cast to integer value as 'abc'")
+
+For `http://www.example.net:६/` (Devanagari 6):
+- port = '६' → isdigit() → True (Unicode digit), isascii() → False → raises ValueError(f"Port could not be cast to integer value as '६'")
+
+Now for bytes:
+- `b'0'` → isdigit() → True, isascii() → True → int(b'0') → 0
+- `b'65535'` → similar
+- `b'65536'` → int → 65536 → out of range
+- `b'-1'` → isdigit() → False → ValueError with b'-1' in message
+- `b'abc'` → isdigit() → False
+
+Wait, `int(b'0')` works? Yes, `int()` accepts bytes objects.
+
+OK so now I have a clear picture. Let me write the test. I'll add it after `test_attributes_bad_port` since it's related.
+
+Actually, let me first read the rest of the file to see where to add the test and what else is there.
+
+Let me read lines 846-1457 of the test file.

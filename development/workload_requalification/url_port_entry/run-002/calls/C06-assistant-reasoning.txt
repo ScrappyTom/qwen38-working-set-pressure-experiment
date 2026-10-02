@@ -1,0 +1,97 @@
+Let me analyze what I need to do:
+
+1. Add regression tests for port access on `urlsplit` and `urlparse` in `Lib/test/test_urlparse.py`
+2. Add documentation in `Doc/library/urllib.parse.rst`
+
+From the source I've already read, I can see the `port` property in `_NetlocResultMixinBase` (around line 175-185 of `Lib/urllib/parse.py`):
+
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+Key observations:
+- Port validation happens at **access** time (when you access `.port`), not at construction time
+- `port` is `None` if no port was specified (empty port string)
+- For a port to be accepted: it must be a string where `isdigit()` and `isascii()` are both True, then converted to int
+- If it's digits but not ASCII → ValueError with message `f"Port could not be cast to integer value as {port!r}"`
+- If it's not all digits (or not ASCII) → same ValueError
+- If the port is out of range (not 0-65535) → ValueError("Port out of range 0-65535")
+
+Wait, let me re-read: `port.isdigit()` checks if all characters are digits (including non-ASCII digits like '٣' which is digit but not ASCII). `port.isascii()` checks if all chars are ASCII.
+
+So the logic is:
+1. If port is not None (i.e., a port string was present):
+   - If `port.isdigit()` AND `port.isascii()`: convert to int
+   - Else: raise ValueError(f"Port could not be cast to integer value as {port!r}")
+   - If not 0 <= port <= 65535: raise ValueError("Port out of range 0-65535")
+2. Return port (could be None)
+
+Wait, but for bytes URLs, the port would be bytes, not str. Let me think about this...
+
+For bytes URLs, the result is `SplitResultBytes` which uses `_NetlocResultMixinBytes`. The `_hostinfo` would contain bytes. But `port.isdigit()` and `port.isascii()` are string methods. For bytes objects, you'd need `port.isdigit()` - wait, bytes objects don't have `.isdigit()` method in the same way.
+
+Actually wait - let me look more carefully. The `_hostinfo` is set from `_hostinfo` which comes from the netloc partition. For str results, it's a string. For bytes results, it's bytes.
+
+But the `port` property uses `port.isdigit()` and `port.isascii()`. For bytes, these methods don't exist... Let me check if there's a separate implementation for bytes.
+
+Let me read more of the parse.py file to see if there's a bytes-specific port property.
+
+Actually, I need to read more of the file. Let me also read the rest of test_urlparse.py to see what existing tests are there and understand the structure.
+
+Let me first read more of parse.py to understand the bytes case for port, and then read the rest of the test file.
+
+Actually, looking at the code again:
+```python
+@property
+def port(self):
+    port = self._hostinfo[1]
+    if port is not None:
+        if port.isdigit() and port.isascii():
+            port = int(port)
+        else:
+            raise ValueError(f"Port could not be cast to integer value as {port!r}")
+        if not (0 <= port <= 65535):
+            raise ValueError("Port out of range 0-65535")
+    return port
+```
+
+This is in `_NetlocResultMixinBase`. For bytes results, `_hostinfo[1]` would be bytes. But bytes objects don't have `.isdigit()` or `.isascii()` methods in Python 3. Wait, actually they do! In Python 3, `bytes` objects have methods like `isdigit()`, `isalpha()`, etc. And `isascii()` was added in Python 3.7.
+
+Let me verify: `b'123'.isdigit()` → True, `b'123'.isascii()` → True. Yes, bytes objects do have these methods.
+
+So for bytes URLs:
+- `port` would be `bytes` like `b'80'`
+- `port.isdigit()` checks if all bytes are ASCII digits (0-9)
+- `port.isascii()` checks if all bytes are ASCII
+- `int(b'80')` works fine
+
+Now let me think about the test cases:
+1. No port: `http://example.com/` → `result.port` is `None`
+2. Empty port: `http://example.com:/` → port is `''` which is not None... wait, what happens?
+
+Let me look at how `_hostinfo` is set. I need to read more of parse.py to understand the `_hostinfo` property.
+
+Actually, let me read more of parse.py to see the `_hostinfo` property implementation.
+
+Let me also think about what tests to write:
+- No port: `http://example.com/` → port is None
+- Empty port: `http://example.com:/` → port string is `''`... does `''.isdigit()` return False? Yes! So it would raise ValueError. Wait, but the code checks `if port is not None`. An empty string is not None, so it would proceed. `''.isdigit()` is False, so it would raise ValueError.
+
+Hmm wait, but I need to check what the actual behavior is. Let me look at how `_hostinfo` is set. I need to read more of parse.py.
+
+Let me plan my reads:
+1. Read more of parse.py (lines 200+) to see `_hostinfo` property
+2. Read more of test_urlparse.py (lines 200+) to see existing tests and where to add new ones
+3. Read the Doc file
+
+Let me start by reading more of parse.py to understand `_hostinfo`.
