@@ -1,3 +1,23 @@
+# Closed E20 full-contract reference; next information transition
+
+ecological_contract_continuation/review/RESULTS-001.md closes the uncoached new
+job under a5c2ecce:3new requests/5ops, correct count-guard relocation, actual
+fullpublicpass and submission, separate originalhidden/12caseprobepass. Combined
+22requests/33ops; old nineteen-request grades and supplemental9/12 remain exact.
+All3nonterminal outcomes reach nextinputs;109artifacts/1219sources/91custody and
+7checkpoint replay pass. Preserve34.016modelminutes/35.032loopminutes, advisory
+53MiB margin and unresolved9–12x slowerprefill versus comparable oldcalls.
+Exact launch/settings/buffers match; do not assign that cost to deliberation or
+phaseview without evidence. Account revisions occur, but selectedsources remain
+resident; no isolated accountbenefit, turnover, failedcheck or pressure claim.
+Publish ecological_information_transition/PLAN.md before implementation; one
+matched C16checkpoint diagnostic changes only declared initialselection, keeps
+actualaccount/receipts/archive/currentguards/fullchecker and knownzero gap.
+Qualify actualnative informationpaths before exposure; no livecoaching, supplied
+repair, mandatoryaccount, retry or extension. It tests continuity after release,
+not autonomous selection/accountbenefit/naturalpressure. Freshwork follows;
+further exposure-only tasks do not supersede it. Wider corpus remains open.
+
 # Qualified E20 full-contract continuation
 
 ecological_contract_continuation preparation001 qualifies10selectedCPUchecks,

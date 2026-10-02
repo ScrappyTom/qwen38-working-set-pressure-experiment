@@ -1,0 +1,175 @@
+Let me understand the current situation:
+
+1. This is a "NEW CONTRACT-COMPLETION JOB" continuing previously submitted work.
+2. The previous job was completed successfully - submitted at sequence 28 with candidate `23b5c17999963faf7453c68a6b537ae6c447555f77eb0a835bfa659ad47e89aa`.
+3. The new job adds twelve byte/count boundary cases with max_file_bytes=0,1,5 and max_files=0,1,2,10.
+4. The verification shows `check_definition_matches: false` - meaning the current public check definition is different from what was checked before.
+5. The old public check passed (CHK-0027) but it was against the old checker definition, not the new one.
+
+The key question: what does the new public check test that the old one didn't?
+
+The new check tests "twelve byte/count boundary cases with max_file_bytes=0,1,5 and max_files=0,1,2,10."
+
+Looking at the current code in `importers.py`:
+- `if path.stat().st_size > max_file_bytes: continue` - this means files with size == max_file_bytes are eligible (the `>` is correct, not `>=`)
+- `if len(artifacts) >= max_files: break` - this means at most max_files files are admitted
+
+Wait, let me think about the boundary contract:
+- "a file whose byte size equals max_file_bytes is eligible" → `st_size > max_file_bytes` correctly excludes only files strictly larger
+- "max_files=N admits at most the first N eligible files" → `len(artifacts) >= max_files` breaks after N files added
+- "JSONL records 1 through MAX_JSONL_LINES are eligible" → `idx > MAX_JSONL_LINES` breaks after record MAX_JSONL_LINES (records 1..1000)
+- "an embedded artifact on line MAX_JSONL_LINES is eligible" → `idx > MAX_JSONL_LINES` in `_embedded_artifacts_from_jsonl`
+
+Now for the new boundary cases with max_file_bytes=0,1,5 and max_files=0,1,2,10:
+
+Let me think about edge cases:
+
+**max_file_bytes=0**: 
+- A file with size 0 bytes → `0 > 0` is False → eligible ✓
+- A file with size 1 byte → `1 > 0` is True → excluded ✓
+
+**max_file_bytes=1**:
+- A file with size 0 bytes → `0 > 1` is False → eligible ✓
+- A file with size 1 byte → `1 > 1` is False → eligible ✓
+- A file with size 2 bytes → `2 > 1` is True → excluded ✓
+
+**max_file_bytes=5**:
+- A file with size 5 bytes → `5 > 5` is False → eligible ✓
+- A file with size 6 bytes → `6 > 5` is True → excluded ✓
+
+**max_files=0**:
+- `len(artifacts) >= 0` → immediately True → break before adding any file → 0 files admitted ✓
+
+**max_files=1**:
+- First file: `len(artifacts) >= 1` → False (0 >= 1) → add file → artifacts = 1
+- Second file: `len(artifacts) >= 1` → True (1 >= 1) → break → only 1 file admitted ✓
+
+**max_files=2**:
+- Similar, 2 files admitted ✓
+
+**max_files=10**:
+- Up to 10 files admitted ✓
+
+Wait, let me re-examine the loop more carefully:
+
+```python
+for path in sorted(root.rglob("*")):
+    if not path.is_file():
+        continue
+    if _is_excluded(path, root):
+        continue
+    if path.suffix.lower() not in TEXT_EXTENSIONS:
+        continue
+    if path.stat().st_size > max_file_bytes:
+        continue
+    rel = path.relative_to(root).as_posix()
+    artifacts.append({"path": rel})
+    if len(artifacts) >= max_files:
+        break
+```
+
+For max_files=0: On the first eligible file, after `artifacts.append({"path": rel})`, `len(artifacts)` becomes 1, and `1 >= 0` is True, so it breaks. Wait, that means it adds ONE file before breaking!
+
+Actually wait: `len(artifacts) >= max_files` when max_files=0:
+- Before any file: len(artifacts) = 0, `0 >= 0` is True... but we haven't reached the check yet because the check is after the append.
+- After first append: len(artifacts) = 1, `1 >= 0` is True → break
+
+So for max_files=0, it would add 1 file and then break. But the contract says "max_files=N admits at most the first N eligible files." For N=0, it should admit 0 files.
+
+This is a bug! The check `if len(artifacts) >= max_files: break` happens AFTER the append, so for max_files=0, one file gets added before the break triggers.
+
+The fix should be: check BEFORE adding, or use `> max_files` after adding, or check `if len(artifacts) == max_files: break` before the append.
+
+Actually, the cleanest fix: move the break check to before the append:
+```python
+if len(artifacts) >= max_files:
+    break
+artifacts.append({"path": rel})
+```
+
+Wait, but that changes the semantics for max_files > 0 too. Let's think:
+- max_files=1: Before first file, len=0, `0 >= 1` False → append → len=1. Before second file, len=1, `1 >= 1` True → break. Result: 1 file. ✓
+- max_files=0: Before first file, len=0, `0 >= 0` True → break. Result: 0 files. ✓
+- max_files=2: Before first, 0>=2 False → append (len=1). Before second, 1>=2 False → append (len=2). Before third, 2>=2 True → break. Result: 2 files. ✓
+
+Yes! Moving the break check before the append fixes the max_files=0 case while preserving correct behavior for all other cases.
+
+But wait - the current code has `if len(artifacts) >= max_files: break` AFTER the append. Let me verify:
+- max_files=1: Append first (len=1), then 1>=1 True → break. 1 file. ✓
+- max_files=2: Append first (len=1), 1>=2 False. Append second (len=2), 2>=2 True → break. 2 files. ✓
+- max_files=0: Append first (len=1), 1>=0 True → break. 1 file. ✗ (should be 0)
+
+So the bug is specifically for max_files=0. The fix is to check before appending.
+
+Now, let me also check the other boundary conditions:
+
+For `st_size > max_file_bytes`:
+- max_file_bytes=0: Only size-0 files pass. Empty files are eligible. Is that correct per the contract? "a file whose byte size equals max_file_bytes is eligible" → size 0 == 0 → eligible. ✓
+
+Now what about the JSONL boundary cases? Let me look at `_events_from_jsonl`:
+```python
+for idx, item in enumerate(_read_jsonl_lines(path), start=1):
+    if idx > MAX_JSONL_LINES:
+        break
+```
+
+MAX_JSONL_LINES = 1000. So records 1-1000 are processed, record 1001 triggers break. "JSONL records 1 through MAX_JSONL_LINES are eligible" → records 1..1000 ✓.
+
+And `_embedded_artifacts_from_jsonl`:
+```python
+for idx, item in enumerate(_read_jsonl_lines(path), start=1):
+    if idx > MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+        break
+```
+
+"an embedded artifact on line MAX_JSONL_LINES is eligible" → line 1000: `1000 > 1000` is False → processed ✓. Line 1001: `1001 > 1000` is True → break ✓.
+
+Now, the new check tests max_file_bytes=0,1,5 and max_files=0,1,2,10. The only issue I can see is max_files=0.
+
+Let me also think about whether there could be issues with the `st_size > max_file_bytes` check for the specific values:
+- max_file_bytes=0: st_size must be 0 (empty file). `0 > 0` False → eligible. Correct per contract.
+- max_file_bytes=1: st_size must be ≤ 1. `1 > 1` False → eligible. `2 > 1` True → excluded. Correct.
+- max_file_bytes=5: st_size must be ≤ 5. `5 > 5` False → eligible. `6 > 5` True → excluded. Correct.
+
+So the only bug is the max_files=0 case in `importers.py`.
+
+Let me now formulate the fix. The current code:
+```python
+    rel = path.relative_to(root).as_posix()
+    artifacts.append({"path": rel})
+    if len(artifacts) >= max_files:
+        break
+```
+
+Should become:
+```python
+    if len(artifacts) >= max_files:
+        break
+    rel = path.relative_to(root).as_posix()
+    artifacts.append({"path": rel})
+```
+
+This is a clean fix. Let me apply it.
+
+I need to use the current candidate_id: `23b5c17999963faf7453c68a6b537ae6c447555f77eb0a835bfa659ad47e89aa`
+File sha: `e61aa755e3be2471b5dcc3f493be3c723b13f66791a14046cacc03aee43e2f91`
+
+The old text to replace:
+```
+        rel = path.relative_to(root).as_posix()
+        artifacts.append({"path": rel})
+        if len(artifacts) >= max_files:
+            break
+```
+
+New text:
+```
+        if len(artifacts) >= max_files:
+            break
+        rel = path.relative_to(root).as_posix()
+        artifacts.append({"path": rel})
+```
+
+Let me verify this is unique in the file. Looking at the source, this pattern appears only once in `fixture_from_directory`. The `_embedded_artifacts_from_jsonl` has a different structure. Yes, this should be unique.
+
+Let me apply the patch.
