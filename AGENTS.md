@@ -1,3 +1,20 @@
+# Qualified E19 first-mutation exposure policy
+
+ecological_prerequisites/PREPARATION_REVIEW-001.md qualifies the task-local
+minimum exposure barrier:8CPU tests,36native forms,13actual inputs,12scripted
+decisions/13restores and3real public checks,0completions. All444old sources
+remain unchanged;460new bindings/329sealed files. Exact old C03 proposal now
+rejects three absent paths under declared policy; evaluator acquisition and
+correction remain separate from Qwen behavior. Exposure witnesses must match
+actual dispatched source and wires; rendering/acquisition/account/outline/partial
+history do not count. Cumulative exposure is not current edit authority or
+comprehension; E19 is not E20whole-file coverage. Publish before fresh uncoached
+24/72run001, no retry/coaching/extension. Directly review all actual inputs/full
+outputs/source/receipts/artifact and post-seal hidden, beyond host acceptance.
+Keep original correct repair/unmet inspection outcome unchanged; wider corpus
+and pressure stay open. Final readiness precedes freezing source; accounting
+follows exact replay sequentially.
+
 # E19 observation repair passes checks but misses task inspection order
 
 ecological_observation_entry/review/RESULTS-002.md closes the uncoached6-request/
