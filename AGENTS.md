@@ -1,3 +1,18 @@
+# Qualified distinct saved-report restart
+
+saved_report_entry/PREPARATION_REVIEW.md qualifies the exact assisted f7939c49
+saved-repair entry:7CPU tests,33native inputs,4scripted checks,0model calls,
+380sealed files/429sources. Separately sealed capacity recovery adds10native
+trials/3scripted decisions without checks/setup/model calls. Initial16136tokens;
+journey peak22593. Five real duplicated capture receipts reject at28839; complete
+recovery7620 and exact restored comparison21073 preserve saved work/account.
+Keep evaluator selection distinct from Qwen behavior. Original phase texts and
+12assisted archival records remain explicit; each phase has8requests/16actor
+operations, no allowance reset, automatic check, coaching or silent retry.
+Publish preparation before one finite attempt. Review actual prompts/full outputs,
+effects and artifacts; exact replay sends no checker/model calls. Legacy checks
+stay historical; accounts stay authored. Preserve original pressure obligations.
+
 # Completed fresh compiler contribution
 
 compiler_entry/review/RESULTS-003.md closes the d6ad62dd fresh uncoached entry:
