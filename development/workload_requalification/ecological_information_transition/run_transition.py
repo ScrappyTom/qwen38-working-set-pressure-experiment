@@ -1,6 +1,7 @@
 """Qualify then execute the one controlled pair through the existing runner."""
 import argparse
 import copy
+from datetime import datetime
 import json
 from types import SimpleNamespace
 
@@ -45,6 +46,10 @@ def verify_preparation(module):
     assert manifest['maximum_new_operations']==48 and manifest['checker_contracts']==study.contract_checker.contracts()
     assert manifest['source_release_is_evaluator_setup_not_actor_action']
     assert manifest['automatic_edit_checks']=={} and manifest['no_live_coaching']
+    if module.PACKAGE.name != 'preparation-001':
+        original = module.PACKAGE.parent / 'preparation-001'
+        assert (module.PACKAGE/'initial-wire-request.json').read_bytes() == (original/'initial-wire-request.json').read_bytes()
+        assert proof['initial'] == module.read(original/'QUALIFICATION.json')['initial']
     declared_entry(module,module.initial_session())
     return manifest
 
@@ -110,32 +115,92 @@ def prepare(module):
         source_release_is_evaluator_setup_not_actor_action=True,source_coverage_policy=module.coverage_policy(),
         literal_source_reply=True,hidden_evaluation='after_response_seal_only',
         runtime_policy='same pinned medium/uncapped q4/56576/noMTP and common passive monitoring in both arms')
+    manifest['apparatus_decision_sha256']=sha256_file(study.AREA/'review/APPARATUS-DECISION-001.json')
     with module.MANIFEST.open('xb') as stream:
         stream.write(canonical_json_bytes(manifest))
     verify_preparation(module)
     print(json.dumps(dict(condition=module.condition,status='qualified',initial=initial,
         scripted_decisions=route['scripted_decisions'],completion_requests=0)),flush=True)
 
+def _timebox_basis(result, records):
+    """A known screen deadline limits measurement, not the actor's opportunity."""
+    assert result['status']=='stopped_preserved' and result['completion_requests']==3
+    assert result['completed_responses']==2 and result['stable_all_responses_returned'] is False
+    assert result['whole_generation_allowance']==32 and result['actor']==study.ACTOR
+    assert result['behavioral_operations']==0 and result['runtime_policy_changed'] is False
+    starts=[r for r in records if r['record_type']=='apparatus_invocation_started']
+    assert [(r['payload']['id'],r['payload']['condition']) for r in starts] == [
+        ('P01','unchanged'),('P02','released'),('P03','released')]
+    returned=[r for r in records if r['record_type']=='apparatus_response_preserved']
+    assert [r['payload']['id'] for r in returned]==['P01','P02']
+    stopped=[r for r in records if r['record_type']=='apparatus_transport_stopped']
+    assert len(stopped)==1 and stopped[0]['payload']['id']=='P03'
+    monitoring=[r for r in records if r['record_type']=='process_memory_monitor_started']
+    assert len(monitoring)==1
+    elapsed=(datetime.fromisoformat(stopped[0]['created_at_utc'])-
+             datetime.fromisoformat(monitoring[0]['created_at_utc'])).total_seconds()
+    assert 899 <= elapsed <= 910,'Only the declared fifteen-minute deadline is eligible'
+    ready=[r for r in records if r['record_type']=='runtime_ready']
+    closed=[r for r in records if r['record_type']=='runtime_closed']
+    assert len(ready)==len(closed)==1
+    for row in ready+closed:
+        effect=row['payload']['effective_runtime']
+        assert effect['full_offload'] and effect['context_matches'] and effect['q4_k_and_v'] and effect['mtp_disabled']
+        assert not effect['cuda_failure_observed'] and not effect['truncation_observed']
+    assert closed[0]['payload']['owned_server_shutdown_verified'] and result['port_free']
+    assert result['process_memory']['samples']>0 and result['process_memory']['unavailable_messages']==[]
+    return 'two descriptive measurements; repeatability and performance cause remain unqualified'
+
 def require_apparatus():
     folder=study.AREA/'apparatus_qualification/run-001'
     seal=study.read(folder/'SEAL.json')
+    assert sha256_bytes(canonical_json_bytes(seal['files']))==seal['aggregate_sha256']
     for row in seal['files']:
         assert sha256_file(folder/row['path'])==row['sha256']
+    for name,digest in seal['private_runtime_files_local_only'].items():
+        assert sha256_file(folder/'private-runtime'/name)==digest
     result=study.read(folder/'RESULT.json')
-    assert result['status']=='completed' and result['completion_requests']==4
     assert result['behavioral_operations']==0 and result['runtime_policy_changed'] is False
-    assert result['port_free'] and result['stable_all_responses_returned']
+    if result['status']=='completed':
+        assert result['completion_requests']==4 and result['port_free'] and result['stable_all_responses_returned']
+    else:
+        decision=study.read(study.AREA/'review/APPARATUS-DECISION-001.json')
+        assert decision['status']=='prospective_reduced_apparatus_basis'
+        assert decision['apparatus_seal_sha256']==sha256_file(folder/'SEAL.json')
+        assert not decision['repetition_or_causal_speed_qualified'] and not decision['actor_policy_changes']
+        for field,name in (('verification_sha256','APPARATUS-VERIFICATION-001.json'),
+                           ('metrics_sha256','APPARATUS-METRICS-001.json'),
+                           ('review_sha256','APPARATUS-RESULTS-001.md')):
+            assert sha256_file(study.AREA/'review'/name)==decision[field]
+        assert study.read(folder/'FAILED.json')==dict(type='ResponseFailure',message='TimeoutError')
+        records=verify_records(folder/'records.jsonl',folder)
+        assert len(records)==seal['record_count']
+        _timebox_basis(result,records)
+        for index,condition in ((1,'unchanged'),(2,'released')):
+            stem=folder/f'calls/P{index:02d}'
+            raw=study.read(stem.with_name(stem.name+'-endpoint-response.json'))
+            request=study.read(stem.with_name(stem.name+'-wire-request.json'))
+            old=study.Task(condition).PACKAGE
+            expected=copy.deepcopy(study.read(old/'initial-wire-request.json'))
+            expected['max_tokens']=expected['n_predict']=32
+            assert request==expected
+            assert stem.with_name(stem.name+'-native.txt').read_bytes()==(old/'admission/I0001-native.txt').read_bytes()
+            usage,timing=raw['usage'],raw['timings']
+            assert usage['prompt_tokens']==study.read(old/'QUALIFICATION.json')['initial']['prompt_tokens']
+            assert usage['completion_tokens']==32 and usage['prompt_tokens_details']['cached_tokens']==timing['cache_n']==0
     return sha256_file(folder/'SEAL.json')
 
 def run_once(module):
     manifest=verify_preparation(module)
     apparatus_sha=require_apparatus()
+    assert manifest['apparatus_decision_sha256']==sha256_file(study.AREA/'review/APPARATUS-DECISION-001.json')
     assert not module.RUN.exists(),'Attempt exists; no retry'
     module.RUN.mkdir()
     store=ArtifactStore(module.RUN)
     log=runner.RunLog(module.RUN/'records.jsonl','ecological-information-transition',task_module=module)
     log.append('attempt_reserved',dict(condition=module.condition,owner_direction=module.OWNER_DIRECTION,
-        apparatus_seal_sha256=apparatus_sha,manifest_sha256=sha256_file(module.MANIFEST)),
+        apparatus_seal_sha256=apparatus_sha,manifest_sha256=sha256_file(module.MANIFEST),
+        apparatus_decision_sha256=manifest['apparatus_decision_sha256'],performance_cause_and_repeatability_unqualified=True),
         [store.put('EXECUTION_MANIFEST.json',module.MANIFEST.read_bytes()),
          store.put('SPEC.md',(module.AREA/'SPEC.md').read_bytes())])
     session=adapter=error=outcome=None

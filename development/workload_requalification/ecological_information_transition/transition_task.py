@@ -150,7 +150,7 @@ def implementation_identities():
         *(AREA / 'apparatus_qualification').glob('*.py'),
         *(AREA / 'apparatus_qualification').glob('*.ps1'),
         *(AREA / name for name in ('PLAN.md', 'SPEC.md', 'SYSTEM.txt')),
-        AREA / 'apparatus_qualification/PLAN.md']
+        AREA / 'apparatus_qualification/PLAN.md', AREA / 'review/APPARATUS-DECISION-001.json']
     bound.update({p.relative_to(ROOT).as_posix(): sha256_file(p) for p in paths})
     original.verify_sources(bound)
     return bound

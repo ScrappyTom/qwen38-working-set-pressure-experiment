@@ -1,3 +1,18 @@
+# Published successor C16 pair under limited apparatus evidence
+
+ecological_information_transition/PREPARATION_REVIEW-002.md and
+INITIAL-ISOLATION-002.json qualify11CPUchecks/44nativeforms each/0completions,
+1233sources,5/6scripted decisions/actualfailedcheck/correction/pass. Bothactual
+initialwires/nativebytes equal001 exactly; only sourceinventory differs between
+arms. Two changedsourcefiles/two addedbindings implement the declared gate only;
+actor/task/format/checker/opportunity unchanged. Preserve apparatus001 as stopped,
+two descriptive prefill samples, cause/repetition unqualified, no speedattribution.
+Publish before run002unchanged thenreleased, eachonce8remainingrequests48ops,
+mediumuncapped/no coaching/retry/extension/private-draft use. Inspect fullactual
+inputs/outputs/artifacts, replay/account/postsealcheck then decision-level review.
+Do not repair staleaccounts or conflate chronological edit status with zero-count
+satisfaction. No new memory architecture; freshwork follows this closed diagnostic.
+
 # Preserved apparatus timebox; prospective limited behavioral qualification
 
 ecological_information_transition/review/APPARATUS-RESULTS-001.md preserves
