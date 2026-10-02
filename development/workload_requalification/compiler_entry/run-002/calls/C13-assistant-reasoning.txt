@@ -1,0 +1,173 @@
+Let me analyze the situation carefully.
+
+The task says:
+1. Two captured optimized builds of a calculation module changed its behavior
+2. One raised an unexpected arithmetic error (math domain error)
+3. Another returned a complex result where the original returned a real number
+4. I need to investigate the recorded trees and the compiler source
+5. Repair the optimizer while preserving the supported compilation contract
+6. Complete reports/incident.json with the observed comparison for each build
+7. Report which functions changed and the first changed expression in each build
+8. Distinguish captured behavior from verification of my repair
+9. Check the current candidate and submit
+
+From the working account, I already know:
+- The bug is in compiler/unary.py - it strips both UAdd and USub on any operand
+- It should only strip UAdd on int/float constants (numeric literals)
+- OBS-0002 (BUILD-A) is fully shown: _normal_dist_inv_cdf raised ValueError 'math domain error'
+- I need OBS-0001 (original) and OBS-0003 (BUILD-B) to complete comparison
+
+Let me look at what I have:
+
+**OBS-0002 (BUILD-A emitted module)** - fully shown in latest_feedback:
+- Build: BUILD-A
+- Called function: _normal_dist_inv_cdf
+- Observed call: raised ValueError "math domain error"
+- The AST dump shows the emitted module
+
+**Current source files:**
+1. `compiler/unary.py` - the buggy optimizer:
+```python
+import ast
+
+
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, (ast.UAdd, ast.USub)):
+            return ast.copy_location(node.operand, node)
+        return node
+```
+
+The bug: It strips both `UAdd` and `USub` from ANY operand. According to the README:
+- It must "at least eliminate unary plus on exact built-in integer and float literals in selected functions"
+- It must "preserve Python's values, types, exceptions and operator dispatch everywhere else"
+
+So the correct behavior should be:
+- Strip `UAdd` (unary plus) only on numeric literals (int/float constants) - because `+5` is the same as `5`
+- Do NOT strip `USub` (unary minus) from non-constants - because `-x` is not the same as `x`
+- Actually, wait. Let me think more carefully.
+
+The README says: "It must at least eliminate unary plus on exact built-in integer and float literals in selected functions."
+
+So the required simplification is: `+literal` → `literal` for int/float constants.
+
+But the bug is that it ALSO strips USub (unary minus) from any operand. So `-x` becomes `x`, which changes the meaning. And `-5` (unary minus on a constant) becomes `5`, which also changes the meaning.
+
+Wait, actually let me re-read. The issue is:
+- `UAdd` on a constant: `+5` → `5` (OK, same value)
+- `USub` on a constant: `-5` → `5` (WRONG, changes sign!)
+- `UAdd` on any expression: `+x` → `x` (OK for most cases, but changes dispatch)
+- `USub` on any expression: `-x` → `x` (WRONG, changes sign!)
+
+So the fix should be:
+- Only strip `UAdd` (unary plus) on numeric literals (int/float constants)
+- Do NOT strip `USub` from anything (or only fold it into constants: `-5` → `-5` as a constant, but that's just keeping it)
+
+Actually wait, let me reconsider. The README says "eliminate unary plus on exact built-in integer and float literals". So the only required simplification is `+N` → `N` where N is an int or float literal.
+
+The correct fix for `compiler/unary.py`:
+
+```python
+import ast
+
+
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, ast.UAdd) and isinstance(node.operand, ast.Constant) and isinstance(node.operand.value, (int, float)):
+            return ast.copy_location(node.operand, node)
+        return node
+```
+
+This only strips unary plus on int/float constants, preserving everything else.
+
+Now I need to:
+1. Fix compiler/unary.py
+2. Get OBS-0001 and OBS-0003 to understand the original and BUILD-B behavior
+3. Write reports/incident.json
+
+Let me first retrieve OBS-0001 (the original) and OBS-0003 (BUILD-B) to understand what changed.
+
+Actually, looking at the recent activity, I've already reopened OBS-0003 (RES-0012) and OBS-0001 (RES-0016). Let me check what I have.
+
+From the recent_activity:
+- seq 12: reopen OBS-0003 → RES-0012
+- seq 13: reopen OBS-0001 → RES-0013
+- seq 14: reopen OBS-0002 → RES-0014
+- seq 15: record account
+- seq 16: reopen OBS-0001 → RES-0016
+- seq 17: reopen OBS-0002 → RES-0017
+
+The latest_feedback shows OBS-0002 (BUILD-A) fully. I need to see OBS-0001 and OBS-0003 content. Let me reopen them.
+
+Actually, I already have RES-0016 for OBS-0001 and RES-0012 for OBS-0003. Let me reopen those results to see their content.
+
+Wait, I should use `reopen_result` to see the content of those saved results, or `reopen_observation` to get the observation content again.
+
+Let me reopen OBS-0001 to see the original module's AST dump, and OBS-0003 to see BUILD-B's emitted module.
+
+Actually, looking more carefully at the imports - the OBS-0002 content shows:
+- It has `_normal_dist_inv_cdf` and `weibullvariate` functions
+- The `_normal_dist_inv_cdf` function uses polynomial approximations with constants
+- Looking at the AST, I can see it has negative coefficients like `-1.6` (Sub from r), and the polynomial coefficients
+
+Wait, let me look at the BUILD-A AST more carefully. In the `_normal_dist_inv_cdf` function:
+
+The first branch (when |q| <= 0.425):
+- r = 0.180625 - q*q  (this is `BinOp(left=Constant(value=0.180625), op=Sub(), right=BinOp(...q*q...))`)
+- num = polynomial in r
+- den = polynomial in r  
+- x = num/den
+- return mu + x*sigma
+
+The second branch (when |q| > 0.425):
+- r = p if p <= 0.5 else 1-p
+- r = sqrt(log(r))
+- if r <= 5:
+    - r = r - 1.6  (this is `BinOp(left=Name(id='r'), op=Sub(), right=Constant(value=1.6))`)
+    
+Wait, in the original Acklam's algorithm, the formula for r when p > 0.5 is:
+- t = -log(1 - p) ... no wait
+- Actually the standard formula uses r = sqrt(-log(p)) or r = sqrt(-log(1-p))
+
+Let me look at the standard Acklam inverse CDF:
+```
+if (p < 0.5):
+    r = p
+else:
+    r = 1 - p
+r = sqrt(-log(r))
+if (r <= 5):
+    r = r - 1.6
+    ... polynomial ...
+else:
+    r = r - 5.0
+    ... polynomial ...
+```
+
+Wait, in the standard formula, it's `sqrt(-log(r))` where the `-log` is a unary minus applied to `log(r)`. 
+
+Looking at the BUILD-A AST:
+```
+r = sqrt(log(r))
+```
+
+There's NO unary minus before log(r)! The original should have `r = sqrt(-log(r))` but BUILD-A emitted `r = sqrt(log(r))`. This is because the optimizer stripped the USub from `log(r)`!
+
+That's the bug! The original code had `-log(r)` (unary minus applied to a function call), and the buggy optimizer stripped the USub, turning it into just `log(r)`. Since log(r) for 0 < r < 1 is negative, `-log(r)` is positive, and sqrt of a negative number raises "math domain error"!
+
+Wait, actually sqrt of a negative number in Python's math module raises a ValueError. So `sqrt(log(r))` where log(r) < 0 (since r is between 0 and 1) would give sqrt of a negative number → math domain error. That matches!
+
+Now for BUILD-B, I need to see what it emitted. The task says "another returned a complex result where the original returned a real number." This suggests BUILD-B did something different - maybe it stripped a different unary operation that affected the result type.
+
+Let me retrieve OBS-0001 and OBS-0003 to see their full content.
+
+Actually, I realize I should first look at what I need to do:
+1. Fix compiler/unary.py
+2. Get OBS-0001 and OBS-0003 content to write the report
+3. Write reports/incident.json
+4. Run the public check
+5. Submit
+
+Let me start by reopening OBS-0001 to see the original AST.

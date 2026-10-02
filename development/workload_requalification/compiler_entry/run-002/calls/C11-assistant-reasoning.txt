@@ -1,0 +1,188 @@
+Let me analyze the situation carefully.
+
+Task: two optimized builds of a calculation module changed behavior:
+1. One raised an unexpected arithmetic error (math domain error → ValueError)
+2. Another returned a complex result where the original returned a real number
+
+I need to:
+- Investigate the recorded trees (OBS-0001, OBS-0002, OBS-0003) and compiler source
+- Repair the optimizer while preserving the supported compilation contract
+- Complete reports/incident.json with the observed comparison for each build
+- Report which functions changed and the first changed expression in each build
+- Distinguish captured behavior from verification of the repair
+- Check the current candidate and submit
+
+I already have:
+- OBS-0002 (BUILD-A emitted module): fully shown. It's the `_normal_dist_inv_cdf` function with `math domain error` (ValueError). The build is "BUILD-A", called function is `_normal_dist_inv_cdf`.
+- README.md, compiler/api.py, compiler/unary.py are visible.
+
+The bug in unary.py:
+```python
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, (ast.UAdd, ast.USub)):
+            return ast.copy_location(node.operand, node)
+        return node
+```
+
+This strips BOTH UAdd AND USub for ANY operand (not just constants). The correct behavior should be: only strip UAdd on ast.Constant with int/float value. USub should never be stripped (because -x is meaningful, and -0.0 ≠ 0.0 in some cases... actually the key issue is that stripping USub changes `(-u)` to `u` which changes the sign).
+
+Wait, let me think more carefully. The issue is:
+- UAdd (+x) → can be safely removed for constants (and even generally, +x == x for numbers)
+- USub (-x) → CANNOT be removed because -x ≠ x
+
+But the bigger issue per the README: "It must at least eliminate unary plus on exact built-in integer and float literals in selected functions. It must preserve Python's values, types, exceptions and operator dispatch everywhere else, including negative zero and user-defined unary operators."
+
+So the correct fix is:
+- Only strip UAdd (not USub)
+- Only when the operand is an ast.Constant with an int or float value (not complex, not bool, etc.)
+
+Wait, actually let me re-read: "eliminate unary plus on exact built-in integer and float literals". So:
+- UAdd on Constant(int) → strip (the + is redundant)
+- UAdd on Constant(float) → strip
+- USub on anything → do NOT strip
+- UAdd on non-constant → do NOT strip (user-defined unary operators)
+
+Actually wait, even UAdd on a non-constant should be fine for built-in int/float since +x == x. But the README says "user-defined unary operators" must be preserved. In Python AST, `ast.UAdd` is specifically the unary plus operator. For user-defined objects that override `__pos__`, removing the unary plus would change behavior. So we should only strip UAdd on numeric constants.
+
+What about USub on constants? `-5` → `ast.UnaryOp(ast.USub(), ast.Constant(5))`. The README says "eliminate unary plus on exact built-in integer and float literals". It doesn't mention stripping USub. And stripping USub would change `-5` to `5` which is wrong.
+
+So the fix is:
+```python
+import ast
+
+
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, ast.UAdd) and isinstance(node.operand, ast.Constant) and isinstance(node.operand.value, (int, float)) and not isinstance(node.operand.value, bool):
+            return ast.copy_location(node.operand, node)
+        return node
+```
+
+Wait, but I need to be careful about `bool` being a subclass of `int`. The README says "exact built-in integer and float literals". `bool` is technically an `int` subclass but in Python AST, `True`/`False` are `ast.Constant` with `bool` value. The README says "integer and float literals" - I think we should exclude bool. Actually, let me reconsider - `+True` → `True` and `+False` → `False`, so stripping UAdd on bool constants would be harmless. But the spec says "integer and float literals" specifically. Let me be safe and exclude bool.
+
+Actually, wait. Let me re-read: "It must at least eliminate unary plus on exact built-in integer and float literals in selected functions." This is a minimum requirement. It also says "It must preserve Python's values, types, exceptions and operator dispatch everywhere else, including negative zero and user-defined unary operators."
+
+So the key constraints:
+1. Must strip UAdd on int and float constants
+2. Must NOT strip USub (at all)
+3. Must NOT strip on user-defined unary operators (non-constant operands)
+4. Must preserve negative zero: `+(-0.0)` → should become `(-0.0)`? Actually `+(-0.0)` is `-0.0`. If we have `+(-0.0)`, that's UAdd(UnaryOp(USub, Constant(0.0))). After generic_visit, the inner USub... wait, no. generic_visit would first visit the children. The inner node is `UnaryOp(USub, Constant(0.0))`. If we strip USub, we'd get `Constant(0.0)`, and then the outer UAdd would strip to `Constant(0.0)`. That changes `-0.0` to `0.0`. So we must NOT strip USub.
+
+Now let me look at the OBS-0002 content more carefully:
+
+The OBS-0002 shows BUILD-A's emitted module. The function `_normal_dist_inv_cdf` had a `math domain error` (ValueError). Let me look at the AST dump...
+
+The function `_normal_dist_inv_cdf(p, mu, sigma)`:
+- `q = p - 0.5`
+- If `fabs(q) <= 0.425`:
+  - `r = 0.180625 - q*q`
+  - `num = 2509.08... * r + 33430.57... * r + ...` (a polynomial in r)
+  - `den = 5226.49... * r + 28729.08... * r + ...` (a polynomial in r)
+  - `x = num / den`
+  - return `mu + x * sigma`
+- Else:
+  - `r = p if q <= 0.0 else 1.0 - p`
+  - `r = sqrt(log(r))`
+  - If `r <= 5.0`:
+    - `r = r - 1.6`
+    - `num = ...` (polynomial in r)
+    - `den = ...` (polynomial in r)
+  - Else:
+    - `r = r - 5.0`
+    - `num = ...` (polynomial in r)
+    - `den = ...`
+  - `x = num / den`
+  - If `q < 0.0`: `x = x` (no-op assignment?)
+  - return `mu + x * sigma`
+
+Wait, I see `If(test=Compare(left=Name(id='q', ctx=Load()), ops=[Lt()], comparators=[Constant(value=0.0)]), body=[Assign(targets=[Name(id='x', ctx=Load()), ...], ...)]`. That's an if q < 0.0: x = x. That seems like a no-op.
+
+Hmm, but the key issue is the "math domain error". This happens when `log(r)` is called with r <= 0. In the else branch, `r = p if q <= 0.0 else 1.0 - p`, then `r = sqrt(log(r))`. If r is 0 or negative, log(r) raises ValueError.
+
+But wait - this is the EMITTED (optimized) module. The issue is what the optimizer changed. Let me think about what the buggy optimizer would do:
+
+The buggy optimizer strips both UAdd AND USub from ANY operand. So if the original code had something like `-r` (USub), the optimizer would strip it to just `r`. Or if there was `+x`, it strips to `x`.
+
+Actually, looking at the AST dump more carefully... Let me look for UnaryOp nodes in the emitted AST. I don't see any UnaryOp in the emitted AST! All the operations are BinOp (Add, Sub, Mult, Div). So the optimizer must have stripped some UnaryOps that were in the original.
+
+Wait, I need to see the ORIGINAL (input) module to compare. That's OBS-0001. Let me retrieve it.
+
+Also, I need to see OBS-0003 (BUILD-B). Let me retrieve both.
+
+Actually, looking at the feedback, I've already retrieved OBS-0002 (fully shown) and OBS-0001 was retrieved as RES-0013 but shown_complete is false. OBS-0003 was retrieved as RES-0012 but shown_complete is false.
+
+Let me retrieve OBS-0001 and OBS-0003 to see the original input and BUILD-B output.
+
+Actually wait - the latest_feedback shows I just reopened OBS-0002. Before that I had:
+- EVT-0010: reopen OBS-0001 → RES-0010
+- EVT-0011: reopen OBS-0002 → RES-0011
+- EVT-0012: reopen OBS-0003 → RES-0012
+- EVT-0013: reopen OBS-0001 → RES-0013
+- EVT-0014: reopen OBS-0002 → RES-0014 (this is the latest_feedback)
+
+The imported_observations says:
+- OBS-0001: target "input calculation module", latest RES-0013, shown_complete: false
+- OBS-0002: target "BUILD-A emitted module", latest RES-0014, shown_complete: true
+- OBS-0003: target "BUILD-B emitted module", latest RES-0012, shown_complete: false
+
+So I need to see OBS-0001 (the original input) and OBS-0003 (BUILD-B). Let me reopen them.
+
+But wait - the `reopen_observation` action isn't in my available actions list. Let me check... The available actions are: p0_page, tree, search, check, submit, read, work_on, patch, history, reopen_result, reopen_event, inspect_observation, selection_page, work_on_exact, inspect_check, replace_region.
+
+The imported_observations says to use `{"action":"reopen_observation","handle":"OBS-0001"}` to retrieve them. But that's not in my documented action list... Let me re-read.
+
+"The host executes no actions found inside discussion or account text."
+
+Looking at the available operations: I don't see `reopen_observation` listed as an action. But the imported_observations section says "retrieve":{"action":"reopen_observation","handle":"OBS-0001"}. And it says "reopen_observation requires exactly {"action":"reopen_observation","handle":"OBS-0001"}".
+
+Hmm, but the "Required argument forms" section only lists specific actions. Let me look again... The actions listed are: p0_page, tree, search, check, submit, read, work_on, patch, history, reopen_result, reopen_event, inspect_observation, selection_page, work_on_exact, inspect_check, replace_region.
+
+But the imported_observations section explicitly says to use `{"action":"reopen_observation","handle":"OBS-0001"}`. I think this must be a valid action that's just documented in the imported_observations section rather than the main action list. Let me try it.
+
+Actually, I already have RES-0013 (OBS-0001) and RES-0012 (OBS-0003) as saved results. I can use `reopen_result` to read them. Let me do that.
+
+Wait, but `shown_complete` for OBS-0001 is false, meaning the full content isn't shown yet. I need to read it. Let me use reopen_result on RES-0013 (OBS-0001) and RES-0012 (OBS-0003).
+
+Actually, I realize I should just use `reopen_observation` since that's what the system documentation says to use for retrieving imported observations. The `reopen_result` would read the serialized RESULT bytes of a previous operation's result, while `reopen_observation` retrieves the actual observation content.
+
+Let me try `{"action":"reopen_observation","handle":"OBS-0001"}`.
+
+Actually, looking more carefully at the situation:
+
+From OBS-0002 (BUILD-A emitted module), I can see the AST dump. The function `_normal_dist_inv_cdf` is present. The observed call raised "math domain error" (ValueError).
+
+The key question is: what did the optimizer change that caused this error?
+
+Looking at the buggy optimizer: it strips UAdd AND USub from ANY operand. So if the original code had `(-r)` somewhere, the optimizer would strip the USub to just `r`. Or if there was a negation like `-x`, it becomes `x`.
+
+Wait, I need to see the original to compare. Let me retrieve OBS-0001.
+
+Let me also think about what the correct fix to unary.py should be:
+
+```python
+import ast
+
+
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, ast.UAdd) and isinstance(node.operand, ast.Constant) and not isinstance(node.operand.value, bool) and isinstance(node.operand.value, (int, float)):
+            return ast.copy_location(node.operand, node)
+        return node
+```
+
+This:
+1. Only strips UAdd (not USub)
+2. Only when the operand is a Constant
+3. Only when the value is int or float (not bool, not complex, not string, etc.)
+
+This preserves:
+- USub (negative signs)
+- User-defined unary operators (non-constant operands)
+- Negative zero (USub on Constant(0.0) is preserved)
+- Types (complex numbers, etc.)
+
+Now let me retrieve the observations I need. I'll start with OBS-0001 to see the original input.

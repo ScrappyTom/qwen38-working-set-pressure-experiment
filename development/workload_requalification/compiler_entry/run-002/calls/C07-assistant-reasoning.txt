@@ -1,0 +1,107 @@
+Let me analyze the situation carefully.
+
+I have the task:
+- Two optimized builds changed behavior of a calculation module
+- Need to investigate recorded trees and compiler source
+- Repair the optimizer while preserving the compilation contract
+- Complete reports/incident.json with observed comparison for each build
+- Report which functions changed and first changed expression in each build
+- Distinguish captured behavior from verification of repair
+- Check and submit
+
+Current state:
+- I have OBS-0001 already retrieved (the input calculation module AST dump)
+- I still need OBS-0002 (BUILD-A emitted module) and OBS-0003 (BUILD-B emitted module)
+- I have compiler source: api.py and unary.py visible
+- I need to read selection.py and reports/
+- I need to fix unary.py
+
+Let me look at the OBS-0001 content. It's the "parsed input module" - the original AST. Key functions:
+1. `_normal_dist_inv_cdf(p, mu, sigma)` - uses fabs, sqrt, log
+2. `weibullvariate(self, alpha, beta)` - uses _log (which is log)
+
+Now let me look at the bug in unary.py:
+
+```python
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, (ast.UAdd, ast.USub)):
+            return ast.copy_location(node.operand, node)
+        return node
+```
+
+The bug: It strips BOTH UAdd AND USub for ANY operand. The correct behavior per README:
+- "It must at least eliminate unary plus on exact built-in integer and float literals in selected functions."
+- "It must preserve Python's values, types, exceptions and operator dispatch everywhere else, including negative zero and user-defined unary operators."
+
+So the fix should:
+- For UAdd on ast.Constant with int/float value: return the constant (strip the +)
+- For USub: should NOT strip it (preserving -x behavior). Actually, let me think more carefully...
+
+Wait, the README says "eliminate unary plus on exact built-in integer and float literals". So:
+- UAdd on Constant(int/float) → return the constant (strip +)
+- USub on anything → should NOT be simplified (preserve it)
+
+But wait, what about USub on a Constant? Like -5.0? The README says "It must preserve Python's values, types, exceptions and operator dispatch everywhere else, including negative zero and user-defined unary operators."
+
+Actually, for -5.0 (USub on Constant(5.0)), the result is -5.0 which is a Constant. But the issue is that stripping USub changes semantics: -(-x) vs -x. Actually no, USub on a constant is fine to fold, but the README specifically says "eliminate unary plus on exact built-in integer and float literals" - it only mandates UAdd stripping.
+
+But the key issue is: the current code strips USub too. For example, in `weibullvariate`, there's `-log(u)` which is USub(Call(log, ...)). Stripping USub would turn it into just `log(u)`, which is wrong (changes the sign). That would be the "complex result" issue.
+
+Wait, let me re-read the OBS-0001 more carefully. The original has:
+- `_normal_dist_inv_cdf`: uses `fabs(q)`, `sqrt(...)`, `log(...)`
+- `weibullvariate`: has `-_log(u)` which is USub(Call(_log, ...))
+
+So in the original:
+- `weibullvariate` returns `alpha * (-_log(u))**(1/beta)` = `alpha * (-log(u))**(1/beta)`
+
+If the buggy optimizer strips USub from `-_log(u)`, it becomes `alpha * _log(u)**(1/beta)`. For u in (0,1), log(u) is negative, so (-log(u)) is positive, and the power gives a real result. But log(u) raised to a fractional power (1/beta) of a negative number gives a complex result. That's the "complex result where original returned real" issue!
+
+And for the "arithmetic error" - in `_normal_dist_inv_cdf`, there are expressions like:
+- `num = 2509.0809287301227*r + 33430.57558358813 + ...`
+
+Wait, actually let me look more carefully. The original code has `x = num / den` where num and den are polynomials. Then `mu + x * sigma`.
+
+Hmm, let me look at the specific expressions in the original AST more carefully.
+
+In `_normal_dist_inv_cdf`:
+- `q = p - 0.5`
+- If `fabs(q) <= 0.425`:
+  - `r = 0.180625 - q*q`  (this is `0.180625 - q*q`, i.e., Sub(0.180625, Mult(q,q)))
+  - Then polynomial evaluation for num and den
+  - `x = num / den`
+  - Return `mu + x * sigma`
+- Else:
+  - `r = p if q <= 0 else 1 - p`
+  - `r = sqrt(-log(r))`
+  - Then polynomial evaluation for num and den
+  - `x = num / den`
+  - If `q < 0`: `x = -x`
+  - Return `mu + x * sigma`
+
+Now, the key expressions where USub stripping would cause problems:
+1. `r = 0.180625 - q*q` → this is Sub, not UnaryOp, so it's fine
+2. `r = sqrt(-log(r))` → USub(Call(log, ...)) → stripping USub gives sqrt(log(r)), but for r in (0,1), log(r) < 0, so sqrt of negative → arithmetic error!
+3. `x = -x` → USub(Name(x)) → stripping USub gives x, which changes sign
+4. In weibullvariate: `-_log(u)` → USub(Call(_log, ...)) → stripping gives `_log(u)`, and for u in (0,1), log(u) < 0, so negative number to fractional power → complex
+
+So the "arithmetic error" build (BUILD-A) likely corresponds to stripping USub from `sqrt(-log(r))` → `sqrt(log(r))` where log(r) < 0 → domain error.
+
+The "complex result" build (BUILD-B) likely corresponds to stripping USub from `-_log(u)**(1/beta)` → `_log(u)**(1/beta)` where _log(u) < 0 → complex.
+
+Wait, but I need to see the actual emitted trees (OBS-0002 and OBS-0003) to know which build is which and what exactly changed.
+
+Let me first retrieve OBS-0002 and OBS-0003 to see the emitted trees. Then I can write the report and fix the code.
+
+Actually, let me think about what I need to do in order:
+1. Retrieve OBS-0002 (BUILD-A) and OBS-0003 (BUILD-B) to see the emitted trees
+2. Read compiler/selection.py
+3. Fix compiler/unary.py
+4. Write reports/incident.json
+5. Run public check
+6. Submit
+
+Let me start by retrieving OBS-0002 and reading selection.py. I can do one operation per reply.
+
+Let me retrieve OBS-0002 first.

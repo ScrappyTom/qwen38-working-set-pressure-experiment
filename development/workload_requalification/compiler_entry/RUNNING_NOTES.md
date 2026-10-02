@@ -48,3 +48,18 @@ runtime closed normally. No Qwen outcome is inferred from these scripted paths.
 The first CPU test draft also assumed observation identity was in check_state;
 it belongs to the actual executed-check receipt. Corrected the test assumption,
 without changing production state. Ten focused tests subsequently passed.
+
+Run002 closed normally after 14 requests / 20 operations, operator-drained through C14.
+No contribution/check/submission; candidate unchanged. All capture bytes reached
+immediate inputs except the final receipt after closure. Exact replay passes.
+Actual C08-C14 inputs exposed a lifecycle mismatch: current-source reads persist,
+imported OBS reads become transient latest feedback, and sequential comparison
+acquisition rotates absent counterparts without pressure. This is host usability,
+not missing stored bytes or proof of permanent actor inability. Some private bool
+and AST alternatives are wrong; no corresponding bad artifact was executed.
+The lifetime difference is not explicitly stated in the import reference. C11 also
+questions the separate imported contract placement, then resolves it correctly.
+Do not mislabel that as an unavailable operation. Preserve 36.033 model minutes,
+37.098 loop minutes, 140,725 input / 33,856 generated tokens and 240 MiB sampled GPU minimum.
+Publish the stopped result and CAPTURE_RETENTION_PLAN before opt-in implementation,
+qualification and a separate fresh run. No in-run source or prompt change occurred.

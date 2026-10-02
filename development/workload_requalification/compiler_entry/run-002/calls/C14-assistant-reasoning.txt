@@ -1,0 +1,206 @@
+Let me analyze the situation carefully.
+
+The task says:
+1. Two captured optimized builds of a calculation module changed its behavior
+2. One raised an unexpected arithmetic error (math domain error)
+3. Another returned a complex result where the original returned a real number
+4. I need to investigate the recorded trees and the compiler source
+5. Repair the optimizer while preserving the supported compilation contract
+6. Complete reports/incident.json with the observed comparison for each build
+7. Report which functions changed and the first changed expression in each build
+8. Distinguish captured behavior from verification of my repair
+9. Check the current candidate and submit
+
+From the working account: "Task: Fix compiler/unary.py - it strips both UAdd and USub on ANY operand. Per README, it should only eliminate unary plus on int/float constants. The bug: -log(r) becomes log(r) in BUILD-A, causing sqrt of negative → math domain error. Need OBS-0001 (original) and OBS-0003 (BUILD-B) to write incident.json."
+
+Current state:
+- I have OBS-0001 (original input module) fully retrieved - it shows the AST of the calculation module with two functions: `_normal_dist_inv_cdf` and `weibullvariate`
+- I have OBS-0002 (BUILD-A emitted module) - not yet fully shown (shown_complete: false)
+- I have OBS-0003 (BUILD-B emitted module) - not yet fully shown (shown_complete: false)
+
+The bug in compiler/unary.py:
+```python
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, (ast.UAdd, ast.USub)):
+            return ast.copy_location(node.operand, node)
+        return node
+```
+
+This strips ALL unary plus and unary minus operations from ANY operand. Per the README:
+- It must at least eliminate unary plus on exact built-in integer and float literals in selected functions
+- It must preserve Python's values, types, exceptions and operator dispatch everywhere else
+
+So the fix is: only eliminate unary plus (UAdd) on integer/float constants. USub should never be eliminated (it changes the sign/value), and UAdd should only be eliminated on int/float constants (not on arbitrary expressions).
+
+Wait, let me re-read: "It must at least eliminate unary plus on exact built-in integer and float literals in selected functions."
+
+So the correct behavior is:
+- `+ 5` → `5` (eliminate unary plus on int/float constants)
+- `+ 3.14` → `3.14` (eliminate unary plus on int/float constants)
+- `- x` → keep as is (USub changes the value)
+- `- 5` → keep as is (USub changes the value, even on constants)
+- `+ x` where x is a variable → keep as is (only eliminate on exact int/float literals)
+
+Wait, actually let me reconsider. The README says "It must at least eliminate unary plus on exact built-in integer and float literals in selected functions." The "at least" suggests it could do more, but the minimum requirement is unary plus on int/float constants.
+
+But the bug is that it eliminates BOTH UAdd AND USub on ANY operand. This is clearly wrong because:
+1. USub changes the value (negation), so it must never be eliminated
+2. UAdd on non-constant expressions must be preserved because it affects type (e.g., `+True` vs `True` are different types)
+
+Actually wait - for UAdd on variables, `+x` where x is a float is just x, but for a custom type it could dispatch differently. The README says "It must preserve Python's values, types, exceptions and operator dispatch everywhere else, including negative zero and user-defined unary operators."
+
+So the fix should be:
+- Only eliminate UAdd when the operand is a numeric literal (int or float constant)
+- Never eliminate USub (it changes the value)
+- For all other cases, preserve the UnaryOp node
+
+Let me think about what "exact built-in integer and float literals" means in AST terms:
+- `ast.Constant` with `isinstance(value, (int, float))` - but need to be careful about bool (which is a subclass of int)
+- Actually, "built-in integer and float literals" means `ast.Constant` where `isinstance(node.value, (int, float))` and not `isinstance(node.value, bool)`? Or just `type(node.value) in (int, float)`?
+
+Actually in Python AST, `True` is parsed as `ast.Constant(value=True)` and `True` is an instance of `bool` which is a subclass of `int`. But `True` is not an "integer literal" in the traditional sense. However, `+True` is just `True` so eliminating it would be fine. But the README says "exact built-in integer and float literals" - I think this means `ast.Constant` nodes with `int` or `float` values (not bool).
+
+Let me think about this more carefully. The key constraint is:
+- "It must at least eliminate unary plus on exact built-in integer and float literals"
+- "It must preserve Python's values, types, exceptions and operator dispatch everywhere else"
+
+So the safe fix:
+```python
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, ast.UAdd) and isinstance(node.operand, ast.Constant) and isinstance(node.operand.value, (int, float)) and not isinstance(node.operand.value, bool):
+            return ast.copy_location(node.operand, node)
+        return node
+```
+
+Wait, but should I also handle USub on constants? The README says "It must at least eliminate unary plus on exact built-in integer and float literals." It doesn't say anything about USub. And "It must preserve Python's values, types, exceptions and operator dispatch everywhere else, including negative zero."
+
+So USub should NEVER be eliminated because:
+- `-x` is not equivalent to `x`
+- Even `-5` is not the same node as `5` (different value)
+- "including negative zero" suggests that `-0.0` must be preserved as `-0.0`, not converted to `0.0`
+
+So the fix is clear: only eliminate UAdd on int/float constants.
+
+Now I need to:
+1. Fix compiler/unary.py
+2. Get OBS-0002 and OBS-0003 content to write incident.json
+3. Write reports/incident.json
+4. Run the public check
+5. Submit
+
+Let me first get the OBS-0002 and OBS-0003 content. Actually, looking at the imported observations:
+- OBS-0001: shown_complete: true (I have the full content already)
+- OBS-0002: shown_complete: false (BUILD-A emitted module)
+- OBS-0003: shown_complete: false (BUILD-B emitted module)
+
+I need to retrieve OBS-0002 and OBS-0003 to understand what changes the builds made. But wait - the OBS-0001 content already shows me the original AST. The builds are the optimized versions. Let me retrieve them.
+
+Actually, looking at the recent activity, I've already opened OBS-0002 (sequence 17) and OBS-0001 again (sequence 19). Let me check what I have.
+
+Looking at the latest_feedback, it shows OBS-0001 was just retrieved (sequence 19) and it's fully shown. I need OBS-0002 and OBS-0003.
+
+Let me first retrieve OBS-0002 (BUILD-A) since that's the one that raised the arithmetic error. Then OBS-0003 (BUILD-B) for the complex result.
+
+Actually wait - let me re-read the task more carefully: "one raised an unexpected arithmetic error and another returned a complex result where the original returned a real number."
+
+So BUILD-A → arithmetic error (math domain error, sqrt of negative)
+BUILD-B → complex result where original was real
+
+The original module has:
+- `_normal_dist_inv_cdf(p, mu, sigma)` - uses `sqrt(-log(r))` where r depends on p
+- `weibullvariate(self, alpha, beta)` - uses `alpha * (-log(u)) ** (1/beta)`
+
+In the original:
+- `_normal_dist_inv_cdf` has `sqrt(-log(r))` - the `-log(r)` is a USub applied to `log(r)` call
+- `weibullvariate` has `(-log(u))` - the `-log(u)` is a USub applied to `log(u)` call
+
+With the buggy optimizer that strips ALL USub and UAdd:
+- `sqrt(-log(r))` becomes `sqrt(log(r))` - if log(r) is negative (r < 1), this would be sqrt of negative → domain error! Wait no, log(r) where r is in (0,1) gives negative values. So sqrt(negative) → domain error. That's BUILD-A!
+- `(-log(u))` becomes `log(u)` - wait, that would change the value. `u` is in (0,1), so `log(u)` is negative, and `-log(u)` is positive. If we strip the USub, we get `log(u)` which is negative, and then `negative ** (1/beta)` where 1/beta is not an integer → complex result! That's BUILD-B!
+
+Wait, but these are two different builds. Let me think about what each build selected. The builds might have different function selections.
+
+Actually, looking at the reference_calls in OBS-0001:
+```
+"reference_calls": {
+    "_normal_dist_inv_cdf": {"kind": "returned", "type": "float", "value_repr": "-2.3263478740408408"},
+    "weibullvariate": {"kind": "returned", "type": "float", "value_repr": "1.6651092223153954"}
+}
+```
+
+These are the original (unoptimized) reference values. Both return real floats.
+
+Now for the builds:
+- BUILD-A: raised arithmetic error → likely `_normal_dist_inv_cdf` was in scope, and `sqrt(-log(r))` became `sqrt(log(r))` where log(r) < 0 → math domain error
+- BUILD-B: returned complex → likely `weibullvariate` was in scope, and `(-log(u)) ** (1/beta)` became `log(u) ** (1/beta)` where log(u) < 0 and 1/beta is non-integer → complex
+
+But I need to actually see the emitted trees to confirm. Let me retrieve OBS-0002 and OBS-0003.
+
+Actually, I realize I should be more careful. Let me look at what I already know:
+
+From OBS-0001, the original module has:
+1. `import math.fabs, math.sqrt, math.log`
+2. `from math import log as _log`
+3. Function `_normal_dist_inv_cdf(p, mu, sigma)`:
+   - `q = p - 0.5`
+   - if `fabs(q) <= 0.425`:
+     - `r = 0.180625 - q*q`
+     - `num = 2509.08... * r + 33430.57... * r + ... + 3.387... * q` (a polynomial in r, last term multiplied by q)
+     
+     Wait, let me re-read the AST more carefully. The `num` expression is:
+     ```
+     ((2509.08 * r + 33430.57 * r + 67265.77 * r + 45921.95 * r + 13731.69 * r + 1971.59 * r + 133.14 * r + 3.387 * q)
+     ```
+     Wait no, that's not right either. Let me parse the nested BinOp structure.
+
+     Actually looking at the AST dump more carefully, the `num` expression is a deeply nested BinOp. Let me trace it:
+     - It's a chain of additions of terms like `constant * r`
+     - The last term is `3.3871328727963665 * q` (not `* r`)
+     
+     Wait, I see `right=Constant(value=3.3871328727963665)), op=Mult(), right=Name(id='q', ctx=Load())` at the end. So the last multiplication is by `q`, not `r`. This is a rational approximation (like Acklam's algorithm for inverse normal CDF).
+
+   - `den = 5226.49 * r + 28729.08 * r + 39307.89 * r + 21213.79 * r + 5394.19 * r + 687.18 * r + 42.31 * r + 1.0`
+     Wait, the last term is just `1.0` (a Constant), not multiplied by anything. Let me re-read...
+     
+     Actually: `Constant(value=1.0)))` at the end - yes, the last addition is just +1.0.
+   
+   - `x = num / den`
+   - Return `mu + x * sigma`
+   - else:
+     - `r = p if q <= 0.0 else 1.0 - p`  (IfExp)
+     - `r = sqrt(-log(r))`  ← THIS IS THE USub on log(r)!
+     - if `r <= 5.0`:
+       - `r = r - 1.6`
+       - `num = 0.000774... * r + ... + 1.423...` (constant term)
+       - `den = 1.0507...e-09 * r + ... + 1.0` (constant term)
+     - else:
+       - `r = r - 5.0`
+       - `num = 2.0103...e-07 * r + ... + 6.657...` (constant term)
+       - `den = 2.0442...e-15 * r + ... + 1.0` (constant term)
+     - `x = num / den`
+     - if `q < 0.0`:
+       - `x = -x`  ← ANOTHER USub!
+     - Return `mu + x * sigma`
+
+4. Function `weibullvariate(self, alpha, beta)`:
+   - docstring (Expr with Constant)
+   - `u = 1.0 - self.random()`
+   - Return `alpha * (-log(u)) ** (1.0 / beta)`  ← USub on log(u)!
+
+So the USub operations in the original are:
+1. In `_normal_dist_inv_cdf`, else branch: `sqrt(-log(r))` - USub applied to `log(r)` Call
+2. In `_normal_dist_inv_cdf`, else branch: `x = -x` - USub applied to `x` Name
+3. In `weibullvariate`: `(-log(u))` - USub applied to `log(u)` Call
+
+With the buggy optimizer (strips ALL UAdd and USub):
+1. `sqrt(-log(r))` → `sqrt(log(r))` 
+2. `x = -x` → `x = x`
+3. `(-log(u))` → `log(u)`
+
+Now I need to see what the actual builds emitted. Let me retrieve OBS-0002 and OBS-0003.
+
+Let me start by retrieving OBS-0002 (BUILD-A emitted module).

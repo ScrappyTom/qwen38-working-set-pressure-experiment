@@ -1,0 +1,87 @@
+Let me analyze the situation carefully.
+
+I have the task:
+1. Two captured optimized builds changed behavior: one raised an arithmetic error, another returned a complex result where original returned real.
+2. I need to investigate recorded trees and compiler source.
+3. Repair the optimizer while preserving the compilation contract.
+4. Complete reports/incident.json with the observed comparison for each build.
+5. Report which functions changed and the first changed expression in each build.
+6. Distinguish captured behavior from verification of repair.
+7. Check the current candidate and submit.
+
+Current state:
+- I've read the source files: README.md, compiler/api.py, compiler/unary.py
+- I've opened OBS-0003 (BUILD-B emitted module) - shown in latest_feedback
+- I need to also look at OBS-0001 (input calculation module) and OBS-0002 (BUILD-A emitted module)
+- The compiler bug: `unary.py` `visit_UnaryOp` strips both UAdd and USub for ANY operand. The README says it should "at least eliminate unary plus on exact built-in integer and float literals in selected functions" and "must preserve Python's values, types, exceptions and operator dispatch everywhere else, including negative zero and user-defined unary operators."
+
+So the bug is: the current code strips UAdd and USub for any operand, but it should only strip UAdd on ast.Constant with int/float value. It should NOT strip USub (negative zero!), and should NOT strip UAdd on non-constant operands.
+
+Let me look at what I have:
+
+From OBS-0003 (BUILD-B emitted module):
+- The AST shows `_normal_dist_inv_cdf` and `weibullvariate` functions
+- `weibullvariate` uses `_log` (which is `log` from math, aliased as `_log`)
+- The observed_call shows: `"type":"complex","value_repr":"(1.0195853396696437e-16+1.6651092223153954j)"`
+- This is a complex number where it should be real!
+
+The issue: `weibullvariate` computes `alpha * log(u) ** (1/beta)`. If `u` is very close to 1 (like 1 - tiny_random), then `log(u)` is a small negative number. Raising a negative number to a fractional power in Python gives a complex result (or actually in Python, `(-x) ** (1/beta)` where 1/beta is not an integer gives a complex result... wait, no. In Python 3, `(-1) ** 0.5` gives `(6.123233995736766e-17+1j)`. So that's the complex result!
+
+But wait - the ORIGINAL code should return a real number. Let me think about what the original code looks like vs the emitted code.
+
+Looking at the AST for `weibullvariate`:
+```python
+def weibullvariate(self, alpha, beta):
+    'Weibull distribution...'
+    u = 1 - self.random()
+    return alpha * _log(u) ** (1/beta)
+```
+
+Wait, but `_log` is imported as `from math import log as _log`. And in the original, it's probably `from math import log`. The optimizer is supposed to preserve values.
+
+Actually wait - let me re-read the import: `ImportFrom(module='math', names=[alias(name='log', asname='_log')], level=0)`. So it imports `log` as `_log`.
+
+Now, the key question: what did the ORIGINAL module look like? I need to see OBS-0001 (the input calculation module).
+
+Let me think about what the bug does:
+- Original: `u = 1 - self.random()`, `return alpha * log(u) ** (1/beta)`
+- The `1 - self.random()` has a unary... no wait, `1 - self.random()` is a BinOp Sub, not a UnaryOp.
+
+Actually, let me look more carefully. In the emitted BUILD-B tree, I see:
+- `u = 1.0 - self.random()` (BinOp Sub)
+- `return alpha * _log(u) ** (1.0 / beta)` (BinOp Mult, with Pow)
+
+Hmm, but where's the unary op issue? Let me look at the original (OBS-0001) which I haven't seen yet.
+
+Actually, I need to see OBS-0001 to understand what the original looked like. Let me also check OBS-0002 (BUILD-A).
+
+The key insight from the account: "visit_UnaryOp strips both UAdd and USub for any operand. Correct: only strip UAdd on ast.Constant with int/float value."
+
+So the fix to unary.py should be:
+```python
+import ast
+
+
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, ast.UAdd) and isinstance(node.operand, ast.Constant) and isinstance(node.operand.value, (int, float)):
+            return ast.copy_location(node.operand, node)
+        return node
+```
+
+This only strips UAdd on numeric constants. It does NOT strip USub (preserving negative zero), and does NOT strip UAdd on non-constants (preserving user-defined unary operators and dispatch).
+
+Now I need to:
+1. See OBS-0001 (original input) to understand the before/after for the report
+2. See OBS-0002 (BUILD-A emitted) to understand BUILD-A's change
+3. Fix unary.py
+4. Write reports/incident.json
+5. Run public check
+6. Submit
+
+Let me start by opening OBS-0001 to see the original module.
+
+Actually, I already have OBS-0003 content in the latest feedback. Let me now get OBS-0001 (the original input) and OBS-0002 (BUILD-A).
+
+Let me open OBS-0001 first.

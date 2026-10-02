@@ -1,0 +1,500 @@
+Let me analyze the situation carefully.
+
+The task says:
+1. Two optimized builds changed behavior:
+   - One raised an unexpected arithmetic error (math domain error - ValueError)
+   - Another returned a complex result where the original returned a real number
+2. I need to investigate the recorded trees and compiler source
+3. Repair the optimizer while preserving the supported compilation contract
+4. Complete reports/incident.json with the observed comparison for each build
+5. Report which functions changed and the first changed expression in each build
+6. Distinguish captured behavior from verification of repair
+7. Check the current candidate and submit
+
+From the working account:
+- Compiler bug in unary.py: visit_UnaryOp strips both UAdd and USub for any operand
+- Correct: only strip UAdd on ast.Constant with int/float value
+- Need to: fix unary.py, write reports/incident.json, public check, submit
+
+From OBS-0002 (BUILD-A):
+- The build was BUILD-A
+- Called function: `_normal_dist_inv_cdf`
+- Observed call: raised ValueError "math domain error"
+- The AST dump shows the module with functions `_normal_dist_inv_cdf` and `weibullvariate`
+
+Let me look at the AST dump more carefully. The import statements show:
+- `from math import fabs, sqrt, log`
+- `from math import log as _log`
+
+The function `_normal_dist_inv_cdf` has a body that:
+1. `q = p - 0.5`
+2. If `fabs(q) <= 0.425`:
+   - `r = 0.180625 - q * q`
+   - `num = 2509.0809287301227 * r + 33430.57558358813 * r + ...` (polynomial)
+   - `den = 5226.495278852854 * r + ...` (polynomial)
+   - `x = num / den`
+   - `return mu + x * sigma`
+3. Else:
+   - `r = p if q <= 0.0 else 1.0 - p`
+   - `r = sqrt(log(r))` -- Wait, this is suspicious! Shouldn't it be `sqrt(log(r))`? Actually wait...
+
+Let me think about the normal distribution inverse CDF (erfinv or inverse normal CDF). The standard algorithm (e.g., from Numerical Recipes or similar) for the inverse normal CDF typically involves:
+- If |q| <= 0.425: use a rational approximation directly
+- Else: transform. Typically `r = sqrt(-log(r))` where r is either p or 1-p depending on which tail.
+
+Wait, let me re-read the AST more carefully. The original code should have:
+- `r = p if q <= 0.0 else 1.0 - p`
+- Then something like `r = sqrt(-log(r))` or `r = sqrt(log(r))`
+
+Actually, looking at the AST:
+```
+Assign(targets=[Name(id='r', ...)], value=Call(func=Name(id='sqrt', ...), args=[Call(func=Name(id='log', ...), args=[Name(id='r', ...)])]))
+```
+
+This is `r = sqrt(log(r))`. 
+
+But wait - if r is a probability in (0,1), then log(r) is negative, so sqrt(log(r)) would give a complex number or a math domain error! The correct code should be `r = sqrt(-log(r))` which would be `sqrt(unary minus log(r))`.
+
+So the bug is: the optimizer's `visit_UnaryOp` is stripping the USub (unary minus) from `-log(r)`, turning it into just `log(r)`. This makes `sqrt(log(r))` instead of `sqrt(-log(r))`, which causes a math domain error (since log of a number in (0,1) is negative, and sqrt of a negative number raises ValueError in math.sqrt).
+
+Wait, but let me re-read. The observed error is "math domain error" which is what `math.sqrt` raises when given a negative argument. So if the original had `sqrt(-log(r))` and the optimizer stripped the unary minus, it becomes `sqrt(log(r))`, and since log(r) < 0 for r in (0,1), this would raise the domain error.
+
+Actually wait - let me reconsider. The issue is:
+- Original: `r = sqrt(-log(r))` (USub applied to log(r))
+- After buggy optimization: `r = sqrt(log(r))` (USub stripped)
+- Since r ∈ (0,1), log(r) < 0, so sqrt of negative → math domain error
+
+That matches! BUILD-A raised ValueError "math domain error".
+
+Now for BUILD-B (OBS-0003), the task says it "returned a complex result where the original returned a real number." Let me think about what could cause that...
+
+Actually, I need to see OBS-0001 (the original/input calculation module) and OBS-0003 (BUILD-B emitted module) to understand the full picture.
+
+Let me look at what I have:
+- OBS-0001: "input calculation module" - not yet fully shown (shown_complete: false)
+- OBS-0002: "BUILD-A emitted module" - shown_complete: true, I can see the full content
+- OBS-0003: "BUILD-B emitted module" - not yet shown (shown_complete: false)
+
+I need to:
+1. Get OBS-0001 to see the original module
+2. Get OBS-0003 to see BUILD-B
+3. Fix unary.py
+4. Write reports/incident.json
+5. Run public check
+6. Submit
+
+Let me first retrieve OBS-0001 and OBS-0003. Actually, OBS-0001 already has a latest_acquisition_result of RES-0010, so I can reopen that. And OBS-0003 has no latest_acquisition_result yet, so I need to reopen_observation first.
+
+Wait, actually looking at the imported_observations more carefully:
+- OBS-0001: latest_acquisition_result: "RES-0010", shown_complete: false
+- OBS-0002: latest_acquisition_result: "RES-0011", shown_complete: true
+- OBS-0003: latest_acquisition_result: null, shown_complete: false
+
+So I need to:
+1. Reopen OBS-0001 (or reopen_result RES-0010) to see the original
+2. Reopen OBS-0003 to get BUILD-B
+
+Let me start by getting OBS-0001 and OBS-0003. I'll do one at a time since each action consumes one operation.
+
+Actually, I can only do one operation per reply. Let me think about what's most useful.
+
+Let me first get OBS-0001 (the original input calculation module) since I already have OBS-0002. Then I'll get OBS-0003.
+
+Actually wait - OBS-0001 already has RES-0010 from a previous reopen_observation. Let me use reopen_result on RES-0010 to see the content, or I can just do reopen_observation on OBS-0001 again.
+
+Let me do reopen_observation on OBS-0003 first since it has no acquisition yet, then OBS-0001.
+
+Actually, let me think about what I really need:
+- From OBS-0001: the original module's AST to compare against the emitted builds
+- From OBS-0002: already have it - BUILD-A emitted `_normal_dist_inv_cdf` and `weibullvariate`
+- From OBS-0003: BUILD-B emitted module
+
+For the report, I need:
+- For each build: which functions changed and the first changed expression
+
+Let me think about what the bug is in unary.py:
+
+```python
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, (ast.UAdd, ast.USub)):
+            return ast.copy_location(node.operand, node)
+        return node
+```
+
+This strips BOTH UAdd and USub for ANY operand. The README says:
+- "It must at least eliminate unary plus on exact built-in integer and float literals in selected functions."
+- "It must preserve Python's values, types, exceptions and operator dispatch everywhere else, including negative zero and user-defined unary operators."
+
+So the correct behavior should be:
+- Strip UAdd only when the operand is an ast.Constant with an int or float value (not complex)
+- Do NOT strip USub at all (or only strip it in very specific cases? No - the README says "unary plus on exact built-in integer and float literals")
+
+Wait, re-reading: "It must at least eliminate unary plus on exact built-in integer and float literals in selected functions."
+
+So the minimum requirement is:
+- `+5` → `5` (strip unary plus on int/float constants)
+- `+3.14` → `3.14` (strip unary plus on float constants)
+- `-5` → should NOT be simplified (or should become a Constant(-5)? The README says "at least eliminate unary plus" - it doesn't say anything about USub on constants)
+
+Actually wait, let me re-read: "The small optimizer may simplify unary signs applied to numeric literals. It must at least eliminate unary plus on exact built-in integer and float literals in selected functions. It must preserve Python's values, types, exceptions and operator dispatch everywhere else, including negative zero and user-defined unary operators. Constant folding is optional for other cases when equivalent."
+
+So:
+- MUST: strip `+x` when x is an int or float constant (e.g., `+5` → `5`, `+3.14` → `3.14`)
+- MAY: simplify other unary signs on numeric literals (e.g., `-5` → Constant(-5) would be "constant folding" which is optional)
+- MUST NOT: change behavior for non-constant operands (like `-log(r)`)
+- MUST preserve: negative zero, user-defined unary operators
+
+The current bug: it strips both UAdd and USub for ANY operand, not just constants. So `-log(r)` becomes `log(r)`, which changes semantics.
+
+The fix should be:
+```python
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, ast.UAdd):
+            if isinstance(node.operand, ast.Constant) and isinstance(node.operand.value, (int, float)) and not isinstance(node.operand.value, bool):
+                return ast.copy_location(node.operand, node)
+        return node
+```
+
+Wait, but what about USub on constants? The README says "constant folding is optional for other cases when equivalent." So `-5` → `Constant(-5)` is optional. But the current code does strip USub on any operand, which is the bug.
+
+Actually, I need to be more careful. Let me re-read the requirement:
+- "It must at least eliminate unary plus on exact built-in integer and float literals"
+- "Constant folding is optional for other cases when equivalent"
+
+So the minimum fix is:
+- Only strip UAdd (not USub) on ast.Constant with int/float value
+- USub should NOT be stripped (at minimum, not on non-constants)
+
+But wait - should I also handle USub on constants? The README says constant folding is "optional for other cases when equivalent." So I could optionally fold `-5` to `Constant(-5)`, but I don't have to. The safest fix is to only strip UAdd on int/float constants.
+
+Actually, let me think about this more carefully. The current code strips BOTH UAdd and USub for ANY operand. The fix needs to:
+1. Only strip UAdd (not USub) for the "at least" requirement
+2. Only on int/float constants (not on any expression)
+
+Let me also consider: should I handle the case where UAdd is on a USub? Like `+-5`? With the current NodeTransformer approach, generic_visit would first process the inner node, then the outer. If the inner is `-5` (USub on Constant 5), the outer `+` would see its operand is a USub node, not a Constant. So it wouldn't strip. That's fine.
+
+Actually wait - I need to think about what `generic_visit` does. It visits children first. For `ast.UnaryOp(op=UAdd, operand=ast.UnaryOp(op=USub, operand=Constant(5)))`:
+- `generic_visit` would first transform the operand (the inner USub). 
+- If we don't strip USub, the inner stays as `USub(Constant(5))`
+- Then the outer sees `UAdd(USub(Constant(5)))` - operand is not a Constant, so we don't strip. Good.
+
+OK so the fix is:
+```python
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, ast.UAdd):
+            if isinstance(node.operand, ast.Constant) and isinstance(node.operand.value, (int, float)):
+                return ast.copy_location(node.operand, node)
+        return node
+```
+
+Wait, but should I also not strip UAdd on complex constants? The README says "integer and float literals" - complex is neither int nor float in Python (well, `isinstance(1+2j, (int, float))` is False, but `isinstance(True, int)` is True). Let me be safe and exclude bool:
+
+```python
+if isinstance(node.op, ast.UAdd):
+    if isinstance(node.operand, ast.Constant) and isinstance(node.operand.value, (int, float)) and not isinstance(node.operand.value, bool):
+        return ast.copy_location(node.operand, node)
+```
+
+Actually, in Python's AST, `ast.Constant` with a bool value would be `True` or `False`. `isinstance(True, int)` is True in Python. But `+True` is just `True` in Python, so stripping UAdd on a bool constant is actually fine semantically. But the README says "integer and float literals" - booleans are technically integers in Python. I think it's safer to just check `isinstance(node.operand.value, (int, float))` without excluding bool, since `+True` → `True` is semantically identical. But actually, to be precise about "exact built-in integer and float literals", I should probably exclude bool since True/False are not "integer literals" in the Python source sense. But functionally it doesn't matter since `+True` is `True`.
+
+Hmm, let me just go with the simple check. The key fix is: only strip UAdd on Constants, and don't strip USub at all (or at least not on non-constants).
+
+Actually, wait. Let me reconsider whether USub on constants should also be handled. The README says "Constant folding is optional for other cases when equivalent." So folding `-5` to `Constant(-5)` is optional. I'll leave it out for simplicity and safety.
+
+Now, for the report, I need to understand what the original module looks like and what each build emitted. Let me get OBS-0001 first.
+
+Let me also check: what's in reports/? The p0_page showed `reports` as a directory with file_count 1 and total_bytes 15. Let me see what's in there.
+
+OK, let me plan my actions:
+1. Get OBS-0001 (original module) - I'll use reopen_result on RES-0010 since it was already acquired
+2. Get OBS-0003 (BUILD-B) - need to reopen_observation
+3. Look at reports/ directory
+4. Fix unary.py
+5. Write reports/incident.json
+6. Run public check
+7. Submit
+
+Let me start with reopening OBS-0003 since it hasn't been acquired yet, and also I need OBS-0001. Let me do OBS-0003 first.
+
+Wait, actually I should be strategic. Let me think about what I already know:
+
+From OBS-0002 (BUILD-A):
+- The emitted module has `_normal_dist_inv_cdf` and `weibullvariate`
+- In `_normal_dist_inv_cdf`, the else branch has:
+  - `r = p if q <= 0.0 else 1.0 - p`
+  - `r = sqrt(log(r))`  ← BUG: should be `sqrt(-log(r))`
+  - Then polynomial evaluation with `x = num / den`
+  - `if q < 0.0: x = x` (wait, that's `x = x`? Let me re-read...)
+
+Actually looking at the AST more carefully:
+```
+If(test=Compare(left=Name(id='q', ...), ops=[Lt()], comparators=[Constant(value=0.0)]), body=[Assign(targets=[Name(id='x', ...)], value=Name(id='x', ...))], orelse=[])
+```
+
+This is `if q < 0.0: x = x` which is a no-op. In the original code, this should probably be `x = -x` (USub on x). The optimizer stripped the USub!
+
+So in `_normal_dist_inv_cdf`:
+- Original had `r = sqrt(-log(r))` → BUILD-A emitted `r = sqrt(log(r))` (USub stripped from log(r))
+- Original had `x = -x` → BUILD-A emitted `x = x` (USub stripped from x)
+
+Wait, but `x = -x` where x is a Name node, not a constant. The buggy code strips USub on ANY operand, so `-x` becomes just `x`. That's the bug!
+
+Now for the "first changed expression" - I need to traverse functions in source order and their fields in normal Python AST order.
+
+In `_normal_dist_inv_cdf`, the source order of statements is:
+1. `q = p - 0.5`
+2. `if fabs(q) <= 0.425:` block
+   - `r = 0.180625 - q * q`
+   - `num = ...` (polynomial)
+   - `den = ...` (polynomial)
+   - `x = num / den`
+   - `return mu + x * sigma`
+3. (implicit else)
+   - `r = p if q <= 0.0 else 1.0 - p`
+   - `r = sqrt(-log(r))` → changed to `r = sqrt(log(r))`
+   - `if r <= 5.0:` block
+     - `r = r - 1.6`
+     - `num = ...` (polynomial)
+     - `den = ...` (polynomial)
+   - (else)
+     - `r = r - 5.0`
+     - `num = ...` (polynomial)
+     - `den = ...` (polynomial)
+   - `x = num / den`
+   - `if q < 0.0: x = -x` → changed to `x = x`
+   - `return mu + x * sigma`
+
+The first changed expression in normal AST traversal order would be in the else branch: `sqrt(-log(r))` → `sqrt(log(r))`. Actually wait, I need to think about "normal Python AST order" for traversing fields.
+
+For a Module, the body is traversed in order. For each FunctionDef, the body is traversed in order. For each statement in the body, we traverse its fields.
+
+In the `_normal_dist_inv_cdf` function body:
+1. `q = p - 0.5` - Assign
+2. `if fabs(q) <= 0.425:` - If node with body and orelse
+   - The `orelse` of this if contains the else branch
+   - Wait, actually looking at the AST again:
+
+Let me re-read the structure. The function body is:
+```
+body=[
+  Assign(q = p - 0.5),
+  If(test=fabs(q) <= 0.425, body=[...], orelse=[...]),  # Wait no
+  ...
+]
+```
+
+Actually, looking at the AST dump again more carefully:
+
+```
+FunctionDef(name='_normal_dist_inv_cdf', ..., body=[
+  Assign(q = p - 0.5),
+  If(test=fabs(q) <= 0.425, body=[
+    Assign(r = 0.180625 - q*q),
+    Assign(num = ...),
+    Assign(den = ...),
+    Assign(x = num/den),
+    Return(mu + x*sigma)
+  ], orelse=[]),
+  Assign(r = p if q <= 0.0 else 1.0 - p),  # IfExp
+  Assign(r = sqrt(log(r))),  # BUG: was sqrt(-log(r))
+  If(test=r <= 5.0, body=[...], orelse=[...]),
+  Assign(x = num/den),
+  If(test=q < 0.0, body=[Assign(x = x)], orelse=[]),  # BUG: was x = -x
+  Return(mu + x*sigma)
+])
+```
+
+Wait, I'm reading the AST wrong. Let me look at the structure more carefully from the JSON:
+
+The body of `_normal_dist_inv_cdf` is:
+```
+body=[
+  Assign(targets=[q], value=p - 0.5),
+  If(test=fabs(q) <= 0.425, body=[...], orelse=[]),
+  Assign(targets=[r], value=IfExp(q <= 0.0, p, 1.0 - p)),
+  Assign(targets=[r], value=sqrt(log(r))),
+  If(test=r <= 5.0, body=[...], orelse=[...]),
+  Assign(targets=[x], value=num/den),
+  If(test=q < 0.0, body=[Assign(x=x)], orelse=[]),
+  Return(mu + x*sigma)
+]
+```
+
+Wait no. Let me re-parse the JSON structure. The If node with `fabs(q) <= 0.425` has:
+- body: the polynomial calculation
+- orelse: [] (empty!)
+
+Then after the If, there's:
+- `r = p if q <= 0.0 else 1.0 - p` (IfExp)
+- `r = sqrt(log(r))`
+- Another If with `r <= 5.0`
+- `x = num / den`
+- `if q < 0.0: x = x`
+- `return mu + x * sigma`
+
+Hmm, but that doesn't make sense algorithmically. In a proper inverse normal CDF implementation, the code should be:
+```python
+def _normal_dist_inv_cdf(p, mu, sigma):
+    q = p - 0.5
+    if fabs(q) <= 0.425:
+        # rational approximation for central region
+        r = 0.180625 - q*q
+        # ... polynomial ...
+        x = num / den
+        return mu + x * sigma
+    # tail region
+    r = p if q <= 0.0 else 1.0 - p
+    r = sqrt(-log(r))  # or sqrt(-2*log(r)) depending on implementation
+    if r <= 5.0:
+        r = r - 1.6
+        # polynomial for [0, 5)
+    else:
+        r = r - 5.0
+        # polynomial for [5, ...)
+    x = num / den
+    if q < 0.0:
+        x = -x
+    return mu + x * sigma
+```
+
+So the structure after the first If (which handles the central case and returns) would be the tail case. The first If's orelse is empty because the body has a return statement (so the else is never reached).
+
+OK so the first change in traversal order:
+- Function: `_normal_dist_inv_cdf` (first function in source order)
+- Traversing the body in order:
+  1. `q = p - 0.5` - no change
+  2. `if fabs(q) <= 0.425:` - need to check contents
+     - `r = 0.180625 - q*q` - no change (this is a BinOp with Sub, not a UnaryOp)
+     - `num = ...` polynomial - no change
+     - `den = ...` polynomial - no change
+     - `x = num / den` - no change
+     - `return mu + x * sigma` - no change
+  3. `r = p if q <= 0.0 else 1.0 - p` - this is an IfExp, not a UnaryOp, so no change
+  4. `r = sqrt(log(r))` - this WAS `r = sqrt(-log(r))` in the original! The USub was stripped.
+  
+So the first change is at statement 4: `sqrt(-log(r))` → `sqrt(log(r))`
+
+The "before" expression would be `sqrt(-log(r))` and the "after" would be `sqrt(log(r))`.
+
+Wait, but I need to express these as "ordinary Python expressions". The original was `sqrt(-log(r))` and the emitted is `sqrt(log(r))`.
+
+Hmm, but actually I need to be more careful. Let me re-read the AST for the `sqrt(log(r))` part:
+
+```
+Assign(targets=[Name(id='r', ctx=Store())], value=Call(func=Name(id='sqrt', ctx=Load()), args=[Call(func=Name(id='log', ctx=Load()), args=[Name(id='r', ctx=Load())], keywords=[])], keywords=[]))
+```
+
+So it's `r = sqrt(log(r))`. The original would have been `r = sqrt(-log(r))` which in AST would be:
+```
+Call(sqrt, args=[UnaryOp(USub, Call(log, args=[r]))])
+```
+
+But in the emitted version, the USub is gone, making it just `Call(sqrt, args=[Call(log, args=[r])])`.
+
+Now for the second change in the same function: `x = -x` → `x = x`. But the first change is the `sqrt(-log(r))` → `sqrt(log(r))` one.
+
+Actually wait - I need to think about what "first changed expression" means. The task says "Locate the first expression whose node kind changed, traversing functions in source order and their fields in normal Python AST order."
+
+So I need to find the first node in AST traversal order where the node kind changed. The USub node was removed (changed to just the operand). The "expression" that changed is the one where the node kind changed.
+
+In the original: `sqrt(-log(r))` has a UnaryOp(USub) node
+In the emitted: `sqrt(log(r))` has no UnaryOp node - just Call(log, ...)
+
+So the node kind changed at the position where `UnaryOp(USub, Call(log, r))` became `Call(log, r)`. The expression before is `-log(r)` and after is `log(r)`? Or is it the whole `sqrt(-log(r))` vs `sqrt(log(r))`?
+
+I think the "first expression whose node kind changed" refers to the specific node that changed. The UnaryOp node was replaced by its operand (the Call node). So the expression is the UnaryOp expression: before = `-log(r)`, after = `log(r)`.
+
+Hmm, but the task says "Locate the first expression whose node kind changed." The node kind changed from UnaryOp to Call (since the UnaryOp was replaced by its operand which is a Call). So the expression at that position changed from `-log(r)` to `log(r)`.
+
+Actually, I think I should express it as the full expression context. Let me re-read the task: "Report which functions changed and the first changed expression in each build." And the format is:
+```
+"first_change": {"function": "<name>", "before": "<original expression>", "after": "<emitted expression>"}
+```
+
+I think "before" and "after" should be the expressions themselves. The changed expression is `-log(r)` → `log(r)`. Or maybe it should be the full assignment? Let me think...
+
+"Locate the first expression whose node kind changed" - this is the expression, not the statement. So it should be the expression `-log(r)` that became `log(r)`.
+
+Actually, I realize I need to see the original module (OBS-0001) to confirm what the original AST looked like. Let me get that first.
+
+Also, for BUILD-B, I need to see what it emitted. The task says "another returned a complex result where the original returned a real number." This might be related to the `weibullvariate` function which uses `_log` (which is `log` aliased). Let me think...
+
+In `weibullvariate`:
+```python
+def weibullvariate(self, alpha, beta):
+    u = 1.0 - self.random()
+    return alpha * (-log(u)) ** (1.0/beta)
+```
+
+Wait, looking at the AST for `weibullvariate`:
+```
+FunctionDef(name='weibullvariate', args=[self, alpha, beta], body=[
+  Expr('Weibull distribution...'),  # docstring
+  Assign(u = 1.0 - self.random()),
+  Return(alpha * UnaryOp(USub, Call(_log, u)) ** (1.0/beta))
+])
+```
+
+The return is: `alpha * (-log(u)) ** (1.0/beta)` which in AST is:
+```
+Return(alpha * USub(Call(_log, u)) ** (1.0/beta))
+```
+
+Wait, let me look more carefully at the AST:
+```
+Return(value=BinOp(left=Name(id='alpha'), op=Mult(), right=BinOp(left=UnaryOp(op=USub(), operand=Call(func=Name(id='_log'), args=[Name(id='u')])), op=Pow(), right=BinOp(left=Constant(value=1.0), op=Div(), right=Name(id='beta')))))
+```
+
+So it's `alpha * (-_log(u)) ** (1.0 / beta)`. 
+
+If the optimizer strips the USub, it becomes `alpha * _log(u) ** (1.0 / beta)`. Since u is in (0,1), _log(u) is negative, and a negative number raised to a fractional power (1.0/beta) gives a complex number in Python (if using `**` with floats). Wait, actually in Python, `(-1.0) ** 0.5` gives `(6.123233995736766e-17+1j)` - a complex number! So `alpha * log(u) ** (1.0/beta)` where log(u) < 0 and 1.0/beta is fractional would give a complex result.
+
+But wait - in the OBS-0002 (BUILD-A) AST, the `weibullvariate` function still has the USub! Let me re-check...
+
+Looking at the OBS-0002 AST for weibullvariate:
+```
+FunctionDef(name='weibullvariate', ..., body=[
+  Expr(docstring),
+  Assign(u = 1.0 - self.random()),
+  Return(alpha * USub(_log(u)) ** (1.0/beta))
+])
+```
+
+Yes! In BUILD-A, the `weibullvariate` function still has `USub(_log(u))` - the USub was NOT stripped here. But in `_normal_dist_inv_cdf`, the USub WAS stripped. Why?
+
+Oh wait - I think I misread the BUILD-A AST. Let me look again...
+
+Actually, the `compile_request` in OBS-0002 says:
+```json
+"compile_request": {"functions": ["_normal_dist_inv_cdf"]}
+```
+
+So BUILD-A only compiled/optimized `_normal_dist_inv_cdf`! The `weibullvariate` function was NOT in the selected scope, so it wasn't modified. That's why it still has the USub.
+
+So in BUILD-A:
+- Selected function: `_normal_dist_inv_cdf`
+- The USub in `sqrt(-log(r))` was stripped → `sqrt(log(r))`
+- The USub in `x = -x` was stripped → `x = x`
+- `weibullvariate` was NOT modified (not in scope)
+- First change: in `_normal_dist_inv_cdf`, `sqrt(-log(r))` → `sqrt(log(r))`
+
+Now for BUILD-B, I need to see what was selected. The task says it "returned a complex result where the original returned a real number." This sounds like it could be `weibullvariate` being selected, and the USub in `(-log(u))` was stripped, making `log(u) ** (1.0/beta)` where log(u) < 0, giving a complex result.
+
+Let me get OBS-0003 to confirm.
+
+OK, my plan:
+1. Get OBS-0003 (BUILD-B emitted module)
+2. Get OBS-0001 (original module) - to confirm the original AST
+3. Look at reports/ directory
+4. Fix unary.py
+5. Write reports/incident.json
+6. Check public
+7. Submit
+
+Let me start with OBS-0003.

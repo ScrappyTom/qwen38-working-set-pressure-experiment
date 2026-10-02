@@ -1,0 +1,112 @@
+Let me analyze the situation. I have the task and the current source files.
+
+The task is:
+- Two captured optimized builds of a calculation module changed its behavior
+- Need to investigate OBS-0001, OBS-0002, OBS-0003
+- Need to repair the optimizer while preserving the supported compilation contract
+- Complete reports/incident.json with the observed comparison for each build
+- Report which functions changed and the first changed expression in each build
+- Distinguish captured behavior from verification of repair
+- Check the current candidate and submit
+
+Let me look at the bug in `compiler/unary.py`:
+
+```python
+import ast
+
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, (ast.UAdd, ast.USub)):
+            return ast.copy_location(node.operand, node)
+        return node
+```
+
+The bug is clear: `isinstance(node.op, (ast.UAdd, ast.USub))` — it's stripping BOTH unary plus AND unary minus. According to the README:
+
+"It must at least eliminate unary plus on exact built-in integer and float literals in selected functions. It must preserve Python's values, types, exceptions and operator dispatch everywhere else, including negative zero and user-defined unary operators."
+
+So the simplifier should:
+1. Only eliminate unary PLUS (`ast.UAdd`), not unary minus (`ast.USub`)
+2. Only for exact built-in integer and float literals (not for any operand)
+3. Preserve negative zero (so `-0.0` should stay as `-0.0`, not become `0.0`)
+4. Preserve user-defined unary operators (so only `UAdd` and `USub` are candidates, but `USub` should NOT be eliminated because it changes values)
+
+Wait, let me re-read: "It must at least eliminate unary plus on exact built-in integer and float literals in selected functions."
+
+So the correct behavior:
+- `+5` → `5` (unary plus on int literal)
+- `+3.14` → `3.14` (unary plus on float literal)
+- `-5` → `-5` (unary minus should NOT be eliminated — it changes the value)
+- `+x` where x is not a literal → `+x` (should not be simplified)
+- `-x` where x is not a literal → `-x` (should not be simplified)
+
+The current code eliminates BOTH `UAdd` and `USub` for ANY operand, which is wrong because:
+1. It eliminates `USub` which changes the value (e.g., `-5` becomes `5`, `-0.0` becomes `0.0`)
+2. It eliminates `UAdd` even when the operand is not a literal (e.g., `+x` becomes `x`, which changes behavior for user-defined classes with `__add__`... wait, actually `+x` for a regular variable is the same as `x` in Python? No! `+x` calls `__pos__` on the object. So `+x` != `x` in general for user-defined types.)
+
+So the fix should be:
+```python
+import ast
+
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, ast.UAdd) and isinstance(node.operand, (ast.Constant)) and isinstance(node.operand.value, (int, float)):
+            return ast.copy_location(node.operand, node)
+        return node
+```
+
+Wait, but I need to be careful. `ast.Constant` is the modern way (Python 3.8+). In older Python, there were `ast.Num`, `ast.Str`, etc. Since the task mentions Python 3.12, `ast.Constant` is correct.
+
+Actually, let me think more carefully. The README says "It must at least eliminate unary plus on exact built-in integer and float literals in selected functions."
+
+So:
+- `+5` → `5` ✓
+- `+3.14` → `3.14` ✓
+- `+True` → `+True` (True is not int/float... wait, actually `True` is an instance of `int` in Python. But `ast.Constant` with `value=True` — `isinstance(True, int)` is True. Hmm, but `+True` is `1` in Python. Let me think about whether we should simplify `+True`. The README says "exact built-in integer and float literals". `True` is a boolean literal, not an integer literal per se. In the AST, `True` is `ast.Constant(value=True)` where `type(True)` is `bool`. So `isinstance(True, (int, float))` is True (since bool is a subclass of int), but `type(True)` is `bool`, not `int`.
+
+To be safe, I should check `type(node.operand.value) in (int, float)` rather than `isinstance`. This way, `+True` would NOT be simplified (since `type(True)` is `bool`, not `int`).
+
+Actually wait - in Python's AST, `True` and `False` are `ast.Constant` nodes with `value=True`/`value=False`. `type(True)` is `bool`. `isinstance(True, int)` is `True` because `bool` is a subclass of `int`. But `type(True)` is `bool`. So using `type(...) in (int, float)` would correctly exclude booleans.
+
+Let me also consider: what about `+0.0`? That should become `0.0` (just a constant). And `-0.0`? That should STAY as `-0.0` because unary minus is not being eliminated. Good.
+
+What about complex numbers? `+1j`? `type(1j)` is `complex`. The README says "integer and float literals", so complex should NOT be simplified. Good, `type(1j) in (int, float)` is False.
+
+So the fix:
+```python
+import ast
+
+class UnarySimplifier(ast.NodeTransformer):
+    def visit_UnaryOp(self, node):
+        node = self.generic_visit(node)
+        if isinstance(node.op, ast.UAdd) and isinstance(node.operand, ast.Constant) and type(node.operand.value) in (int, float):
+            return ast.copy_location(node.operand, node)
+        return node
+```
+
+Now I need to:
+1. Read the OBS captures to understand what the builds did
+2. Read `compiler/selection.py` 
+3. Read `reports/` directory
+4. Fix the bug
+5. Write the incident report
+6. Run public check
+7. Submit
+
+Let me start by opening the OBS captures and reading selection.py and reports.
+
+Let me first open OBS-0001 (the input calculation module) and OBS-0002/0003 (the emitted modules). I'll also read selection.py and the reports directory.
+
+Actually, let me be strategic. I need to:
+1. Read OBS-0001 (input) to know the original
+2. Read OBS-0002 and OBS-0003 to see what the builds emitted
+3. Read selection.py to understand the selection logic
+4. Read reports/ to see what's there
+
+Let me do multiple operations. I'll start with reading selection.py and opening the observations.
+
+Actually, I can only do one operation per reply (or one operation + account update). Let me be efficient.
+
+Let me start by opening OBS-0001 to see the input module.

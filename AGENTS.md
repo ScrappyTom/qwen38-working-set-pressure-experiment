@@ -1,3 +1,16 @@
+# Compiler capture lifetime finding and successor boundary
+
+compiler_entry/review/RESULTS-002.md preserves the operator-drained 14-request/20-
+operation run: no edits/checks/submission, 36.033 model minutes,exact replay passes.
+Actual imported captures arrived but ordinary acquisition did not retain them,
+rotating absent comparison operands without pressure. Do not blame forgetting or
+claim the unused 26 requests could never finish. Keep custody and delivery distinct.
+CAPTURE_RETENTION_PLAN.md authorizes a separately qualified opt-in read-like
+capture lifetime with deduplication, explicit release and truthful capacity recovery.
+Publish this result/plan before implementation, then publish native qualification
+before one new uncoached entry. Keep baseline002, historical pressure and assisted
+restart separate. Review actual inputs and complete outputs, not just totals.
+
 # Qualified original compiler capture bridge
 
 compiler_entry/PREPARATION_REVIEW.md qualifies the exact original six-file entry
