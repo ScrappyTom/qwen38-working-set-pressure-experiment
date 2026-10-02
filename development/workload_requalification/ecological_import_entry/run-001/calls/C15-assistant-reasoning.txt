@@ -1,0 +1,116 @@
+Let me analyze the current state:
+
+1. I've already applied fix 1: `importers.py:56` changed `st_size >= max_file_bytes` to `st_size > max_file_bytes` (file whose byte size equals max_file_bytes is eligible)
+
+2. From my working account, I identified 4 fixes:
+   - (1) importers.py:56 st_size >= → > ✅ DONE
+   - (2) importers.py:62 len(artifacts) > → >= (max_files=N admits at most the first N eligible files)
+   - (3) saved_runs.py _events_from_jsonl idx >= MAX_JSONL_LINES → idx > MAX_JSONL_LINES (records 1 through MAX_JSONL_LINES are eligible)
+   - (4) saved_runs.py _embedded_artifacts_from_jsonl idx >= MAX_JSONL_LINES → idx > MAX_JSONL_LINES (embedded artifact on line MAX_JSONL_LINES is eligible)
+
+Now let me look at the current source of importers.py (which is visible in the working set):
+
+```python
+        if path.stat().st_size > max_file_bytes:
+            continue
+        rel = path.relative_to(root).as_posix()
+        artifacts.append({"path": rel})
+        if len(artifacts) > max_files:
+            break
+```
+
+Wait, looking at line 62: `if len(artifacts) > max_files:` - The boundary contract says "max_files=N admits at most the first N eligible files". 
+
+Currently: after appending, it checks `len(artifacts) > max_files`. So if max_files=5:
+- After appending 1st: len=1, 1>5? No
+- After appending 2nd: len=2, 2>5? No
+- ...
+- After appending 5th: len=5, 5>5? No
+- After appending 6th: len=6, 6>5? Yes → break
+
+So currently it admits 6 files before breaking (the 6th is appended then the check triggers). Wait no - let me re-read. The break happens AFTER the append. So:
+- Append 1st, check len(1)>5? No
+- Append 2nd, check len(2)>5? No
+- ...
+- Append 5th, check len(5)>5? No
+- Append 6th, check len(6)>5? Yes → break
+
+So 6 files are appended. That's wrong. We want at most N=5 eligible files.
+
+The fix should be: check BEFORE appending, or change the condition. If we change to `len(artifacts) >= max_files`, then:
+- After appending 1st: len=1, 1>=5? No
+- ...
+- After appending 5th: len=5, 5>=5? Yes → break
+
+But wait, the 5th was already appended before the check. So 5 files are in the list. That's correct - "at most the first N eligible files".
+
+Actually wait, let me re-read the code flow more carefully:
+
+```python
+        if path.stat().st_size > max_file_bytes:
+            continue
+        rel = path.relative_to(root).as_posix()
+        artifacts.append({"path": rel})
+        if len(artifacts) > max_files:
+            break
+```
+
+So the flow is:
+1. Check exclusion (continue)
+2. Check extension (continue)
+3. Check size (continue)
+4. Append to artifacts
+5. Check if len(artifacts) > max_files → break
+
+With the fix to `>`, a file with size == max_file_bytes passes. Good.
+
+For max_files: with `len(artifacts) > max_files`, if max_files=5:
+- Files 1-5 get appended, len goes 1,2,3,4,5. None of these trigger >5.
+- File 6 gets appended (len=6), then 6>5 → break. But file 6 is already in the list!
+
+So the current code admits max_files+1 files. The fix is to change `>` to `>=`:
+- Files 1-5 get appended, len goes 1,2,3,4,5. At len=5, 5>=5 → break.
+- Only 5 files admitted. Correct.
+
+Wait, but with `>=`, the break happens at the 5th file (after it's appended). So 5 files are in the list. That's "at most the first N eligible files" where N=5. Correct.
+
+Actually, I need to be more careful. The loop iterates over sorted paths. For each path:
+- If excluded, continue (skip to next)
+- If wrong extension, continue
+- If too big, continue
+- Otherwise: append, then check limit
+
+With `>=`:
+- 1st eligible: append (len=1), 1>=5? No
+- 2nd eligible: append (len=2), 2>=5? No
+- 3rd eligible: append (len=3), 3>=5? No
+- 4th eligible: append (len=4), 4>=5? No
+- 5th eligible: append (len=5), 5>=5? Yes → break
+
+So 5 files are admitted. "max_files=N admits at most the first N eligible files" - correct.
+
+Now for saved_runs.py, looking at the current source:
+
+In `_events_from_jsonl`:
+```python
+        for idx, item in enumerate(_read_jsonl_lines(path), start=1):
+            if idx >= MAX_JSONL_LINES:
+                break
+```
+
+The boundary contract says "JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion". So record at index MAX_JSONL_LINES (i.e., the 1000th record) should be eligible. Currently `idx >= MAX_JSONL_LINES` means idx=1000 triggers the break, so the 1000th record is NOT processed. We need `idx > MAX_JSONL_LINES` so that idx=1000 is still processed (1000 > 1000 is False), and idx=1001 triggers the break.
+
+In `_embedded_artifacts_from_jsonl`:
+```python
+        for idx, item in enumerate(_read_jsonl_lines(path), start=1):
+            if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+                break
+```
+
+Same fix: `idx >= MAX_JSONL_LINES` → `idx > MAX_JSONL_LINES`. The boundary contract says "an embedded artifact on line MAX_JSONL_LINES is eligible".
+
+Now let me apply fix 2. I need to patch importers.py to change `len(artifacts) > max_files` to `len(artifacts) >= max_files`.
+
+The current file SHA is `20a19ddd0a0af792bf36a762fa5eb7e01f46947acb6bff7d9fbfd922e54b89c7` and candidate is `91d4b001242fe161e46550e814faa2c54065a9ee837a0f2e26b99048823c9fce`.
+
+Let me apply the patch for fix 2.

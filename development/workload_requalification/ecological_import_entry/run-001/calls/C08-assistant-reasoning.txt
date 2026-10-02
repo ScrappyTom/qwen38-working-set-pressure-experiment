@@ -1,0 +1,161 @@
+Let me analyze the current state:
+
+1. I need to complete the import-boundary audit by reading all 11 required files completely before making any mutations.
+
+2. Coverage status:
+   - saved_runs.py: 266/266 ✓ (complete)
+   - importers.py: 91/91 ✓ (complete)
+   - fixture_packs.py: 94/94 ✓ (complete)
+   - records.py: 460/460 ✓ (complete)
+   - content_log.py: 70/70 ✓ (complete)
+   - artifact_units.py: 364/459 - MISSING lines 365-459
+   - hashing.py: 0/39 - MISSING all
+   - storage.py: 0/58 - MISSING all
+   - renderer.py: 0/227 - MISSING all
+   - policy.py: 0/140 - MISSING all
+   - readiness.py: 0/141 - MISSING all
+
+3. I have 17 requests remaining. I need to read 6 files (artifact_units.py lines 365-459, hashing.py, storage.py, renderer.py, policy.py, readiness.py).
+
+Let me read the remaining files. I can read multiple files, but each read is one operation. Let me start with the ones I need. I can batch reads by doing them one at a time.
+
+Actually, looking at the constraints:
+- artifact_units.py: need lines 365-459 (95 lines)
+- hashing.py: need lines 1-39 (39 lines)
+- storage.py: need lines 1-58 (58 lines)
+- renderer.py: need lines 1-227 (227 lines)
+- policy.py: need lines 1-140 (140 lines)
+- readiness.py: need lines 1-141 (141 lines)
+
+That's 6 read operations. I have 17 requests remaining. After reading all files, I need to:
+1. Make 4 patches (importers.py:56, importers.py:62, saved_runs.py _events_from_jsonl, saved_runs.py _embedded_artifacts_from_jsonl)
+2. Run check public
+3. Submit
+
+Let me start reading the remaining files. I'll read them in order.
+
+Wait, let me re-read the task more carefully. The boundary contract says:
+- "a file whose byte size equals max_file_bytes is eligible" - so `st_size == max_file_bytes` should be eligible (currently `st_size >= max_file_bytes` excludes it, should be `st_size > max_file_bytes` to skip)
+- "max_files=N admits at most the first N eligible files" - so we should have at most N files (currently `len(artifacts) > max_files` breaks after adding the (N+1)th, should be `len(artifacts) >= max_files` to break before adding the (N+1)th... wait let me think)
+
+Actually let me re-read the importers.py code:
+```python
+if path.stat().st_size >= max_file_bytes:
+    continue
+rel = path.relative_to(root).as_posix()
+artifacts.append({"path": rel})
+if len(artifacts) > max_files:
+    break
+```
+
+The contract says:
+1. "a file whose byte size equals max_file_bytes is eligible" - so `st_size == max_file_bytes` should be eligible. Currently `st_size >= max_file_bytes` means files with size == max_file_bytes are SKIPPED (not eligible). Fix: change `>=` to `>` so files with size == max_file_bytes are included.
+
+2. "max_files=N admits at most the first N eligible files" - so exactly N files max. Currently after appending, `len(artifacts) > max_files` checks if we have more than N. So if we have N files, len(artifacts) == N, and `N > N` is False, so we continue. Then we append the (N+1)th, making len(artifacts) == N+1, and `N+1 > N` is True, so we break. But the (N+1)th file was already appended! So we get N+1 files. Fix: change `>` to `>=` so that after appending the Nth file, `len(artifacts) == N`, `N >= N` is True, and we break. Wait, but that would break after appending the Nth file... let me trace through:
+
+Current code:
+```python
+artifacts.append({"path": rel})
+if len(artifacts) > max_files:
+    break
+```
+
+If max_files = 3:
+- Append file 1: len=1, 1>3? No
+- Append file 2: len=2, 2>3? No
+- Append file 3: len=3, 3>3? No
+- Append file 4: len=4, 4>3? Yes, break
+
+Result: 4 files. But contract says "at most the first N eligible files" = 3 files.
+
+Fix: change to `>=`:
+- Append file 1: len=1, 1>=3? No
+- Append file 2: len=2, 2>=3? No
+- Append file 3: len=3, 3>=3? Yes, break
+
+Result: 3 files. ✓
+
+Wait, but that breaks AFTER appending the 3rd file. So we get exactly 3 files. That's correct for "at most the first N".
+
+Actually wait, I need to think about this differently. The loop continues to the next iteration and checks the break condition. Let me re-trace:
+
+```python
+for path in sorted(root.rglob("*")):
+    ...
+    artifacts.append({"path": rel})
+    if len(artifacts) > max_files:
+        break
+```
+
+With `>` and max_files=3:
+- Iteration 1: append file1, len=1, 1>3? No
+- Iteration 2: append file2, len=2, 2>3? No
+- Iteration 3: append file3, len=3, 3>3? No
+- Iteration 4: append file4, len=4, 4>3? Yes, break
+
+Result: 4 artifacts in list. Wrong.
+
+With `>=` and max_files=3:
+- Iteration 1: append file1, len=1, 1>=3? No
+- Iteration 2: append file2, len=2, 2>=3? No
+- Iteration 3: append file3, len=3, 3>=3? Yes, break
+
+Result: 3 artifacts. Correct!
+
+OK so fix 2 is `>` → `>=` on line 62.
+
+Now for saved_runs.py:
+
+3. "JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion"
+
+Current code in `_events_from_jsonl`:
+```python
+for idx, item in enumerate(_read_jsonl_lines(path), start=1):
+    if idx >= MAX_JSONL_LINES:
+        break
+```
+
+With start=1, idx goes 1, 2, 3, ...
+- idx=1: 1>=1000? No → process
+- idx=999: 999>=1000? No → process
+- idx=1000: 1000>=1000? Yes → break
+
+So records 1 through 999 are processed. Record 1000 is NOT processed.
+
+Contract says records 1 through MAX_JSONL_LINES (1000) are eligible. So record 1000 should be processed.
+
+Fix: change `>=` to `>`:
+- idx=1: 1>1000? No → process
+- ...
+- idx=1000: 1000>1000? No → process
+- idx=1001: 1001>1000? Yes → break
+
+Records 1 through 1000 are processed. ✓
+
+4. "an embedded artifact on line MAX_JSONL_LINES is eligible"
+
+Current code in `_embedded_artifacts_from_jsonl`:
+```python
+for idx, item in enumerate(_read_jsonl_lines(path), start=1):
+    if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+        break
+```
+
+Same issue. With `>=`:
+- idx=1000: 1000>=1000? Yes → break
+
+Record 1000 is NOT processed. Fix: change `>=` to `>`:
+- idx=1000: 1000>1000? No → process
+- idx=1001: 1001>1000? Yes → break
+
+Record 1000 IS processed. ✓
+
+So my 4 fixes are:
+1. importers.py line 56: `if path.stat().st_size >= max_file_bytes:` → `if path.stat().st_size > max_file_bytes:`
+2. importers.py line 62: `if len(artifacts) > max_files:` → `if len(artifacts) >= max_files:`
+3. saved_runs.py _events_from_jsonl: `if idx >= MAX_JSONL_LINES:` → `if idx > MAX_JSONL_LINES:`
+4. saved_runs.py _embedded_artifacts_from_jsonl: `if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:` → `if idx > MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:`
+
+Now I need to read the remaining 6 files to satisfy the coverage prerequisite. Let me read them now.
+
+I'll start with artifact_units.py lines 365-459, then the other files.

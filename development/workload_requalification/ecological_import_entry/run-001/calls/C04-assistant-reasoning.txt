@@ -1,0 +1,60 @@
+Let me analyze the current state:
+
+1. I've read saved_runs.py (266 lines), importers.py (91 lines), and fixture_packs.py (94 lines) - all fully visible.
+2. I still need to read 8 more files for the task prerequisites (continuous source coverage before first mutation):
+   - records.py (460 lines)
+   - content_log.py (70 lines)
+   - artifact_units.py (459 lines)
+   - hashing.py (39 lines)
+   - storage.py (58 lines)
+   - renderer.py (227 lines)
+   - policy.py (140 lines)
+   - readiness.py (141 lines)
+
+3. The four regressions I've identified:
+   - importers.py:56: `st_size >= max_file_bytes` should be `st_size > max_file_bytes` (boundary contract: file whose byte size EQUALS max_file_bytes IS eligible)
+   - importers.py:62: `len(artifacts) > max_files` should be `len(artifacts) >= max_files` (boundary contract: max_files=N admits at most the first N eligible files)
+   - saved_runs.py _events_from_jsonl: `idx >= MAX_JSONL_LINES` should be `idx > MAX_JSONL_LINES` (boundary contract: records 1 through MAX_JSONL_LINES are eligible)
+   - saved_runs.py _embedded_artifacts_from_jsonl: `idx >= MAX_JSONL_LINES` should be `idx > MAX_JSONL_LINES` (boundary contract: embedded artifact on line MAX_JSONL_LINES is eligible)
+
+Wait, let me re-check the boundary contract more carefully:
+- "a file whose byte size equals max_file_bytes is eligible" → so `st_size == max_file_bytes` should be allowed. Currently `st_size >= max_file_bytes` skips it. Fix: `st_size > max_file_bytes` (only skip if strictly larger).
+- "max_files=N admits at most the first N eligible files" → so we should stop after adding N files. Currently `len(artifacts) > max_files` means we add N+1 before breaking. Fix: `len(artifacts) >= max_files` means we stop when we already have N.
+
+Wait, let me trace through more carefully:
+- `if len(artifacts) > max_files: break` - this means we break when artifacts has more than max_files items. So we add one, then check. With max_files=3: add 1st (len=1, 1>3? no), add 2nd (len=2, 2>3? no), add 3rd (len=3, 3>3? no), add 4th (len=4, 4>3? yes, break). So we get 4 files, not 3. The break happens AFTER the 4th is appended.
+
+Wait, let me re-read the code:
+```python
+        artifacts.append({"path": rel})
+        if len(artifacts) > max_files:
+            break
+```
+
+So: append first → len=1, 1>200? no. ... append 200th → len=200, 200>200? no. Append 201st → len=201, 201>200? yes, break.
+
+So with `>`, we get 201 files admitted. The contract says "at most the first N eligible files" where N=max_files. So we should get exactly N=200 files max. The fix should be `>=`:
+- append 200th → len=200, 200>=200? yes, break.
+
+So we get exactly 200. That's correct.
+
+For saved_runs.py _events_from_jsonl:
+```python
+        for idx, item in enumerate(_read_jsonl_lines(path), start=1):
+            if idx >= MAX_JSONL_LINES:
+                break
+```
+With MAX_JSONL_LINES=1000: idx=1 (1>=1000? no), ..., idx=999 (999>=1000? no), idx=1000 (1000>=1000? yes, break). So records 1-999 are processed, record 1000 is excluded.
+
+Contract says "JSONL records 1 through MAX_JSONL_LINES are eligible" → records 1-1000 should be processed. Fix: `idx > MAX_JSONL_LINES`:
+- idx=1000 (1000>1000? no, process it), idx=1001 (1001>1000? yes, break). Records 1-1000 processed. ✓
+
+For saved_runs.py _embedded_artifacts_from_jsonl:
+```python
+        for idx, item in enumerate(_read_jsonl_lines(path), start=1):
+            if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+                break
+```
+Same fix: `idx > MAX_JSONL_LINES` so that line MAX_JSONL_LINES (1000) is still processed. Contract: "an embedded artifact on line MAX_JSONL_LINES is eligible".
+
+Now I need to continue reading the remaining files for the task prerequisite. Let me read them in order. I'll read records.py next (460 lines).

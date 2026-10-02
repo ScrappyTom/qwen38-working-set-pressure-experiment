@@ -1,5 +1,17 @@
 # Workload requalification ledger
 
+E20source run001 under8335f6f7 is closed but fullcontract remainsopen:19requests/
+28ops, eleven complete originals beforefirstmutation, actor-chosen recovery and
+originalpublic+hiddenpass/submission. All27nonterminaloutcomes arrive; exactreplay
+and sourcepreservation pass. The separate original12caseprobe passes9/12; zero
+count stillfails.43.486modelminutes/46.324loopminutes. See ecological_import_entry/
+review/RESULTS-001.md; preserve original grades and28operationclosedhistory.
+Next ecological_contract_continuation/PLAN.md explicitly reopens a new contribution
+with32absolute requests/72ops and registered originalpublic+existingprobe. Publish
+plan before implementation and qualification before inference. No coaching/retry/
+suppliedrepair or view/reasoning/format changes. After correctreference, controlled
+informationtransition and freshwork takepriority over further exposure-only tasks.
+
 The programme is active. No claim that all workloads pass is warranted yet.
 Historical successes remain preserved; the new-host column requires new evidence.
 
@@ -34,7 +46,7 @@ qualify/publish before inference. Zero-count assessment stays separate from fixe
 grades. ecological_import_entry preparation001 is qualified:9CPU/44nativeforms,
 14inputs/13scripteddecisions,3realpublicchecks,all11complete sources throughrelease;
 0completions.439bound sources/370sealedfiles; separate referenceprobe12/12.
-Publish before fresh uncoached24/72run001; no model outcome yet. E20OBS, old
+Run001 now closed; see the current full-contract-open result above. E20OBS, old
 R50/X25pressure and wider corpus remain open.
 
 INVENTORY.json records discovered task texts and locations. Its untriaged entries

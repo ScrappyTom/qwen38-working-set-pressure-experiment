@@ -1,0 +1,33 @@
+Let me analyze the current state:
+
+1. The task is to repair four regressions in the offline audit package.
+2. Looking at the working account, the fixes identified are:
+   - (1) importers.py:56 st_size >= → > [DONE]
+   - (2) importers.py:62 len(artifacts) > → >= [DONE]
+   - (3) saved_runs.py _events_from_jsonl idx >= → > [DONE]
+   - (4) saved_runs.py _embedded_artifacts_from_jsonl idx >= → > [APPLYING]
+
+3. The last operation (EVT-0026) was a patch to saved_runs.py that changed `idx >= MAX_JSONL_LINES` to `idx > MAX_JSONL_LINES` in `_embedded_artifacts_from_jsonl`. The result shows it was accepted and the file was updated.
+
+4. Looking at the current source of saved_runs.py, I can see line 203 now reads:
+   `if idx > MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:`
+   
+   This confirms the fix was applied successfully.
+
+5. Now I need to verify all four fixes are in place:
+   - Fix 1: importers.py line 56: `if path.stat().st_size > max_file_bytes:` ✓ (visible in current source)
+   - Fix 2: importers.py line 62: `if len(artifacts) >= max_files:` ✓ (visible in current source)
+   - Fix 3: saved_runs.py `_events_from_jsonl`: `if idx > MAX_JSONL_LINES:` ✓ (visible in current source, line ~107)
+   - Fix 4: saved_runs.py `_embedded_artifacts_from_jsonl`: `if idx > MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:` ✓ (visible in current source, line ~203)
+
+Wait, let me re-check the boundary contract:
+- "a file whose byte size equals max_file_bytes is eligible" → means st_size == max_file_bytes should be included, so we should NOT skip it. The check `st_size > max_file_bytes` means: skip if strictly larger, include if equal. That's correct.
+- "max_files=N admits at most the first N eligible files" → we want to include N files. The loop adds a file, then checks `len(artifacts) >= max_files` to break. So after adding the Nth file, len becomes N, and N >= N is true, so we break. That means we include exactly N files. Correct.
+- "JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion" → records 1..1000 should be included. `enumerate(..., start=1)` gives idx=1,2,... and we break if `idx > MAX_JSONL_LINES` (i.e., idx > 1000). So idx=1000 is the last included. Correct.
+- "an embedded artifact on line MAX_JSONL_LINES is eligible" → line 1000 should be included. `idx > MAX_JSONL_LINES` means idx=1000 passes (1000 > 1000 is false), so it's included. Correct.
+
+All four fixes look correct in the current source. Now I need to run the public check on the current candidate.
+
+The current candidate_id is: 23b5c17999963faf7453c68a6b537ae6c447555f77eb0a835bfa659ad47e89aa
+
+Let me run check public.

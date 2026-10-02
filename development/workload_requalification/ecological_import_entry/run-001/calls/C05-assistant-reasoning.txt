@@ -1,0 +1,41 @@
+Let me analyze the current state:
+
+1. I've read 4 files so far: fixture_packs.py, importers.py, records.py, saved_runs.py
+2. I still need to read: content_log.py, artifact_units.py, hashing.py, storage.py, renderer.py, policy.py, readiness.py
+
+The task requires complete reads of all 11 files before any mutation. Let me continue reading the remaining files.
+
+Let me look at what I've identified as regressions so far:
+
+1. **importers.py line 56**: `if path.stat().st_size >= max_file_bytes:` - The contract says "a file whose byte size equals max_file_bytes is eligible". So `>=` should be `>` (a file exactly at max_file_bytes should be included, only files strictly larger should be excluded).
+
+2. **importers.py line 62**: `if len(artifacts) > max_files:` - The contract says "max_files=N admits at most the first N eligible files". If we've already added N files (len == N), we should break. So `len(artifacts) > max_files` should be `len(artifacts) >= max_files`. Wait, let me think again. We append an artifact, then check. So after appending, if len(artifacts) == max_files, we should break (we've reached the limit). The current code says `> max_files` which means it would add max_files+1 artifacts before breaking. So it should be `>= max_files`.
+
+3. **saved_runs.py _events_from_jsonl**: `if idx >= MAX_JSONL_LINES:` - The contract says "JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion". So records 1..MAX_JSONL_LINES (inclusive) are eligible. With `start=1`, idx goes 1, 2, 3, ... If idx >= MAX_JSONL_LINES, that means idx == MAX_JSONL_LINES would trigger break, excluding record MAX_JSONL_LINES. But record MAX_JSONL_LINES should be eligible. So the break should be `idx > MAX_JSONL_LINES` (i.e., idx >= MAX_JSONL_LINES + 1, or equivalently, break when idx would be MAX_JSONL_LINES + 1).
+
+Wait, let me re-think. With `enumerate(..., start=1)`, idx starts at 1. The check `if idx >= MAX_JSONL_LINES: break` means:
+- idx=1: 1 >= 1000? No. Process.
+- idx=999: 999 >= 1000? No. Process.
+- idx=1000: 1000 >= 1000? Yes. Break.
+
+So records 1 through 999 are processed, record 1000 is NOT processed. But the contract says records 1 through MAX_JSONL_LINES (i.e., 1 through 1000) are eligible. So record 1000 should be processed. The fix is to change `>=` to `>`:
+- idx=1000: 1000 > 1000? No. Process.
+- idx=1001: 1001 > 1000? Yes. Break.
+
+This gives records 1 through 1000. Correct.
+
+4. **saved_runs.py _embedded_artifacts_from_jsonl**: Same issue. `if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS: break` - The `idx >= MAX_JSONL_LINES` part has the same issue. Record on line MAX_JSONL_LINES should be eligible. Fix: change `>=` to `>` for the idx check.
+
+But wait, there's also `len(artifacts) >= MAX_EMBEDDED_ARTIFACTS` - this is a cap on total embedded artifacts. This seems like a different limit (MAX_EMBEDDED_ARTIFACTS = 80), not related to the 4 regressions. Let me re-read the task.
+
+The task says:
+- "a file whose byte size equals max_file_bytes is eligible" → importers.py:56 `>=` should be `>`
+- "max_files=N admits at most the first N eligible files" → importers.py:62 `> max_files` should be `>= max_files`
+- "JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion" → saved_runs.py _events_from_jsonl: `idx >= MAX_JSONL_LINES` should be `idx > MAX_JSONL_LINES`
+- "an embedded artifact on line MAX_JSONL_LINES is eligible" → saved_runs.py _embedded_artifacts_from_jsonl: `idx >= MAX_JSONL_LINES` should be `idx > MAX_JSONL_LINES`
+
+Now I need to read all remaining files before making any mutations. Let me read them one by one. I have 20 requests remaining and 64 actions remaining.
+
+Let me read the remaining 7 files: content_log.py, artifact_units.py, hashing.py, storage.py, renderer.py, policy.py, readiness.py.
+
+I can only do one operation per response, so let me read content_log.py first.

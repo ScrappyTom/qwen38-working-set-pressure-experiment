@@ -1,0 +1,102 @@
+Let me analyze the current state:
+
+1. I've been working on a task to repair 4 regressions in an offline audit package.
+2. The task requires a complete import-boundary audit with full file reads before any mutation.
+3. Current coverage status:
+   - saved_runs.py ✓ (266 lines)
+   - importers.py ✓ (91 lines)
+   - fixture_packs.py ✓ (94 lines)
+   - records.py ✓ (460 lines)
+   - content_log.py ✓ (70 lines)
+   - artifact_units.py - only 364 of 459 lines shown (need lines 365-459)
+   - hashing.py ✗ (39 lines, none shown)
+   - storage.py ✗ (58 lines, none shown)
+   - renderer.py ✗ (227 lines, none shown)
+   - policy.py ✗ (140 lines, none shown)
+   - readiness.py ✗ (141 lines, none shown)
+
+4. The 4 regressions I've identified:
+   - importers.py:56: `st_size >= max_file_bytes` should be `st_size > max_file_bytes` (file size == max is eligible)
+   - importers.py:62: `len(artifacts) > max_files` should be `len(artifacts) >= max_files` (at most first N eligible)
+   - saved_runs.py _events_from_jsonl: `idx >= MAX_JSONL_LINES` should be `idx > MAX_JSONL_LINES` (records 1..MAX are eligible)
+   - saved_runs.py _embedded_artifacts_from_jsonl: `idx >= MAX_JSONL_LINES` should be `idx > MAX_JSONL_LINES` (artifact on line MAX is eligible)
+
+Wait, let me re-check the boundary contract:
+- "a file whose byte size equals max_file_bytes is eligible" → `st_size == max_file_bytes` is eligible, so `st_size > max_file_bytes` is not eligible. Current code: `st_size >= max_file_bytes` → this means `st_size == max_file_bytes` is NOT eligible. So we need `st_size > max_file_bytes` to skip (i.e., only skip if strictly greater). Current code has `>=` which incorrectly excludes files exactly at the limit. Fix: change `>=` to `>`.
+
+- "max_files=N admits at most the first N eligible files" → we want exactly N files max. Current code: `if len(artifacts) > max_files: break`. Let's trace: after appending, if len > max_files, break. So if max_files=5, after appending the 6th, len=6 > 5, break. That means we get 6 files, not 5. We want at most N, so we should break when len(artifacts) >= max_files (i.e., after appending the Nth, len=N, N >= N, break). Wait, let me re-think.
+
+Actually wait: the loop appends then checks. So:
+- After 1st append: len=1, check 1 > max_files? If max_files=5, 1>5? No.
+- After 2nd: len=2, 2>5? No.
+- ...
+- After 5th: len=5, 5>5? No.
+- After 6th: len=6, 6>5? Yes, break.
+
+So we get 6 files. But we want "at most the first N eligible files" = at most 5. So the fix is to check BEFORE appending, or change the condition.
+
+If we change to `len(artifacts) >= max_files: break`, then:
+- After 1st: len=1, 1>=5? No.
+- ...
+- After 5th: len=5, 5>=5? Yes, break.
+
+So we'd get 5 files. That's correct. Fix: change `>` to `>=`.
+
+Wait, but that breaks after the 5th append. So we have 5 files. "at most the first N" = at most 5. Yes, 5 is correct.
+
+- "JSONL records 1 through MAX_JSONL_LINES are eligible" → records at positions 1, 2, ..., MAX_JSONL_LINES (inclusive) are eligible. So idx=1 to idx=MAX_JSONL_LINES should be processed. Current code: `if idx >= MAX_JSONL_LINES: break`. With MAX=1000, idx=1000 triggers break, so only 999 records are processed. We need idx > MAX_JSONL_LINES to break, so idx=1000 is still processed. Fix: change `>=` to `>`.
+
+- "an embedded artifact on line MAX_JSONL_LINES is eligible" → same logic. Current: `if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS: break`. Fix: change `idx >= MAX_JSONL_LINES` to `idx > MAX_JSONL_LINES`.
+
+Now I need to read the remaining files for coverage:
+- artifact_units.py lines 365-459 (remaining 95 lines)
+- hashing.py (all 39 lines)
+- storage.py (all 58 lines)
+- renderer.py (all 227 lines)
+- policy.py (all 140 lines)
+- readiness.py (all 141 lines)
+
+That's a lot of files to read. Let me prioritize. I need to get all of them read before I can make any mutation. Let me start reading them.
+
+Actually, looking at the coverage requirements more carefully: "exact current source must actually reach dispatched decision inputs continuously from line 1 through the true file end." So I need to have read every file completely at some point, and the coverage accumulates.
+
+Let me read the remaining parts. I'll start with artifact_units.py lines 365-459, then the smaller files.
+
+Actually, I can only do one operation per reply. Let me be strategic. Let me read artifact_units.py lines 365-459 first since that's the one I've partially read.
+
+Wait, I should also think about what the 4 regressions are. Let me re-examine:
+
+Looking at importers.py (line 56 in the file as shown):
+```python
+if path.stat().st_size >= max_file_bytes:
+    continue
+```
+The boundary says "a file whose byte size equals max_file_bytes is eligible". So a file with size == max_file_bytes should be included. With `>=`, a file with size == max_file_bytes would be skipped (continue). That's wrong. Fix: `>`.
+
+```python
+if len(artifacts) > max_files:
+    break
+```
+The boundary says "max_files=N admits at most the first N eligible files". So after N files are added, we should stop. With `>`, we stop at N+1. Fix: `>=`.
+
+Looking at saved_runs.py `_events_from_jsonl`:
+```python
+if idx >= MAX_JSONL_LINES:
+    break
+```
+"JSONL records 1 through MAX_JSONL_LINES are eligible" means idx=1..MAX_JSONL_LINES should all be processed. With `>=`, idx=MAX_JSONL_LINES breaks, so only 1..MAX-1 are processed. Fix: `>`.
+
+Looking at saved_runs.py `_embedded_artifacts_from_jsonl`:
+```python
+if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+    break
+```
+"an embedded artifact on line MAX_JSONL_LINES is eligible" means idx=MAX_JSONL_LINES should still be processed. Fix: `idx > MAX_JSONL_LINES`.
+
+So the 4 fixes are:
+1. importers.py: `st_size >= max_file_bytes` → `st_size > max_file_bytes`
+2. importers.py: `len(artifacts) > max_files` → `len(artifacts) >= max_files`
+3. saved_runs.py: `idx >= MAX_JSONL_LINES` → `idx > MAX_JSONL_LINES` (in _events_from_jsonl)
+4. saved_runs.py: `idx >= MAX_JSONL_LINES` → `idx > MAX_JSONL_LINES` (in _embedded_artifacts_from_jsonl)
+
+Now let me proceed with reading the remaining files. I'll read artifact_units.py lines 365-459 first.

@@ -1,0 +1,32 @@
+Let me analyze the current state:
+
+1. I've read `saved_runs.py` (266 lines) - the first of 11 required files
+2. The task requires me to read all 11 files completely before making any mutations
+3. The task is to repair 4 regressions related to a boundary contract:
+   - A file whose byte size equals max_file_bytes is eligible (currently uses `>` which would exclude equal sizes)
+   - max_files=N admits at most the first N eligible files
+   - JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion
+   - An embedded artifact on line MAX_JSONL_LINES is eligible
+   - Later files or records remain excluded
+
+Looking at the current `saved_runs.py` code, I can already see potential issues:
+- `path.stat().st_size > MAX_JSONL_BYTES` - this should be `>=` for eligibility (files with size equal to max are eligible, so we should SKIP files that are LARGER than max). Wait, let me re-read the contract: "a file whose byte size equals max_file_bytes is eligible". So a file with size == max is eligible. The current code skips files where `st_size > MAX_JSONL_BYTES`. If size == max, it's NOT greater than max, so it would be included. That seems correct actually. Wait, let me re-read...
+
+Actually wait - the contract says "a file whose byte size equals max_file_bytes is eligible". The current code does `if path.stat().st_size > MAX_JSONL_BYTES: continue`. So if st_size == MAX_JSONL_BYTES, it does NOT continue (i.e., it IS eligible). That seems correct.
+
+But wait - let me look at the JSONL lines issue:
+- `for idx, item in enumerate(_read_jsonl_lines(path), start=1):` then `if idx >= MAX_JSONL_LINES: break`
+- This means records 1 through MAX_JSONL_LINES-1 are processed (since at idx == MAX_JSONL_LINES, it breaks before processing). So record 1000 would be skipped.
+- The contract says "JSONL records 1 through MAX_JSONL_LINES are eligible". So records 1..1000 should be eligible.
+- With `if idx >= MAX_JSONL_LINES: break`, when idx=1000, it breaks and doesn't process record 1000. So records 1..999 are processed. This is a regression!
+- Fix: should be `if idx > MAX_JSONL_LINES: break` so records 1..1000 are processed.
+
+Similarly for embedded artifacts:
+- `if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS: break`
+- Same issue: record at line MAX_JSONL_LINES (1000) would be skipped.
+- The contract says "an embedded artifact on line MAX_JSONL_LINES is eligible"
+- Fix: should be `if idx > MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS: break`
+
+Now I need to read the other 10 files. Let me continue reading them. I've already read saved_runs.py. Let me read the next files.
+
+Let me read importers.py next (91 lines).

@@ -1,5 +1,23 @@
 # Running engineering and governance notes
 
+## 2026-10-02 — full task, usable recovery and evidence integration
+
+The E20source actor completes inspection and chooses an actual recovery group,
+then saves work and consumes original checks. Its count repair still mishandles
+zero. Preservation, exposure, recovery, integration and acceptance coverage are
+separate achievements; original grades do not redefine the full task. Preserve
+this unsuccessful contract result, not only the valid submitted state.
+
+Optional accounts retain stale plans and an incomplete proposed predicate.
+Source/diffs/outcomes supply alternative continuity. Peer selection-to-production
+and stale-account cases deserve focused transition tests, not automatic schema
+imports. After closing the known original boundary, prioritize that transition.
+Inactive bookkeeping cost must be measured; byte removal is not measured speed.
+
+Root's wrong-wrapper receipt query generated a false omission alarm; direct actual
+wire bytes and independent comparisons refuted it. Check concrete input structure
+before patching. Exact source custody and reviewer conclusions are different.
+
 ## 2026-10-02 — qualify the actual exposure path, not inherited assumptions
 
 E20 requires complete eleven-file inspection; finite continuous dispatched

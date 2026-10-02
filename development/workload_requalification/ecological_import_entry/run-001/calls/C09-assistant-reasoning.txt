@@ -1,0 +1,74 @@
+Let me analyze the current state:
+
+1. I need to complete the import-boundary audit by reading all 11 required files completely before making any mutations.
+
+2. Coverage status:
+   - saved_runs.py: ✓ (266 lines, complete)
+   - importers.py: ✓ (91 lines, complete)
+   - fixture_packs.py: ✓ (94 lines, complete)
+   - records.py: ✓ (460 lines, complete)
+   - content_log.py: ✓ (70 lines, complete)
+   - artifact_units.py: ✗ (only 374 of 459 lines covered, missing 375-459)
+   - hashing.py: ✗ (0 of 39 lines covered)
+   - storage.py: ✗ (0 of 58 lines covered)
+   - renderer.py: ✗ (0 of 227 lines covered)
+   - policy.py: ✗ (0 of 140 lines covered)
+   - readiness.py: ✗ (0 of 141 lines covered)
+
+3. The task requires reading all files completely before the first mutation.
+
+4. The four regressions I've already identified:
+   - importers.py line 56: `path.stat().st_size >= max_file_bytes` should be `path.stat().st_size > max_file_bytes` (a file whose byte size equals max_file_bytes IS eligible, so we should only skip if it's strictly greater)
+   - importers.py line 62: `if len(artifacts) > max_files` should be `if len(artifacts) >= max_files` (max_files=N admits at most the first N eligible files, so we should stop when we already have N)
+   - saved_runs.py `_events_from_jsonl`: `if idx >= MAX_JSONL_LINES` should be `if idx > MAX_JSONL_LINES` (records 1 through MAX_JSONL_LINES are eligible, so we should break when idx exceeds MAX_JSONL_LINES, not when it equals it)
+   - saved_runs.py `_embedded_artifacts_from_jsonl`: `if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS` should be `if idx > MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS` (an embedded artifact on line MAX_JSONL_LINES is eligible)
+
+Wait, let me re-check:
+- Boundary contract: "a file whose byte size equals max_file_bytes is eligible" → so we should NOT skip it. Current code: `if path.stat().st_size >= max_file_bytes: continue` → this skips files where size == max_file_bytes. Fix: change to `>`.
+- "max_files=N admits at most the first N eligible files" → we should stop after adding N files. Current code: `if len(artifacts) > max_files: break` → this allows max_files+1 files to be added (it checks after appending). Wait, let me re-read the code:
+
+```python
+artifacts.append({"path": rel})
+if len(artifacts) > max_files:
+    break
+```
+
+So it appends first, then checks. If max_files=3, after appending the 3rd, len=3, 3>3 is False, so it doesn't break. Then it appends the 4th, len=4, 4>3 is True, break. So it admits 4 files when max_files=3. The fix should be `>=`: after appending the 3rd, len=3, 3>=3 is True, break. That admits exactly 3.
+
+Wait, actually let me reconsider. The contract says "max_files=N admits at most the first N eligible files." So if N=3, we want at most 3 files. With `> max_files`: after appending 3rd file, len=3, 3>3=False, continue. After appending 4th, len=4, 4>3=True, break. So we get 4 files. That's wrong. With `>= max_files`: after appending 3rd, len=3, 3>=3=True, break. We get 3 files. Correct!
+
+- "JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion" → records 1 to 1000 are eligible. Current code: `if idx >= MAX_JSONL_LINES: break` → when idx=1000, 1000>=1000 is True, break. So record 1000 is NOT processed. Fix: change to `> MAX_JSONL_LINES`. Then when idx=1000, 1000>1000 is False, process it. When idx=1001, 1001>1000 is True, break. Records 1-1000 are processed.
+
+- "an embedded artifact on line MAX_JSONL_LINES is eligible" → same fix. Current: `if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS: break`. Fix: `if idx > MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS: break`.
+
+So my four regressions are:
+1. importers.py line 56: `>=` → `>`
+2. importers.py line 62: `>` → `>=`
+3. saved_runs.py _events_from_jsonl: `>=` → `>` for idx check
+4. saved_runs.py _embedded_artifacts_from_jsonl: `>=` → `>` for idx check (the MAX_JSONL_LINES part)
+
+Now I need to complete coverage of the remaining files before I can make any mutations. Let me read the remaining files. I need to read:
+- artifact_units.py lines 375-459
+- hashing.py lines 1-39
+- storage.py lines 1-58
+- renderer.py lines 1-227
+- policy.py lines 1-140
+- readiness.py lines 1-141
+
+That's a lot of reading. Let me start with the smaller files. I can only do one operation per response. Let me read artifact_units.py lines 375-459 first (the remaining 85 lines), since I already have the first 374 lines.
+
+Actually wait - I have 58 actions remaining and 16 requests remaining. Each read is one action. I need at least 6 reads (one for each uncovered file/range). Let me be strategic.
+
+Actually, let me re-read the coverage rules: "exact source shown here gains coverage on dispatch without another read" and "Adjacent and overlapping delivered ranges accumulate." So I need to read:
+1. artifact_units.py 375-459 (to complete the 459-line file)
+2. hashing.py 1-39
+3. storage.py 1-58
+4. renderer.py 1-227
+5. policy.py 1-140
+6. readiness.py 1-141
+
+That's 6 reads minimum. I have 16 requests and 58 actions. That should be fine.
+
+Let me start reading. I'll do one read per response since each response consumes one request.
+
+Let me start with artifact_units.py 375-459 to complete that file.

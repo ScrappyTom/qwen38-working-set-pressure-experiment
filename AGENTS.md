@@ -1,3 +1,25 @@
+# Closed E20 source entry; full zero-count contract remains open
+
+ecological_import_entry/review/RESULTS-001.md preserves19requests/28operations,
+originalpublic+hiddenpass and checkedsubmission under8335f6f7, all11completefiles
+before EVT-0021, actor-chosen recovery replacement and all27nonterminaloutcomes.
+Separate unchanged12caseprobe passes9/12; allzero-countcases fail. Originalgrades
+are preserved; fulltask remainsopen. Exact748file/439source/668custody/30checkpoint
+replay and complete direct input/output/source/artifact review pass. Keep43.486
+modelminutes/46.324loopminutes, low58MiB advisorymargin, staleaccounts, repeated
+tail and oldpressure/widercorpus limits. Currentaccount is not guaranteed current
+understanding; historical exposure is not current support/editauthority.
+Publish ecological_contract_continuation/PLAN.md before successor implementation:
+explicitly reopen submitted work, preserve history/custody, register originalpublic
+plus unchanged12caseprobe, make oldpass inapplicable,32absolute requests/72ops.
+Sameactor/settings/transport; no livecoaching, suppliedrepair/group, retry or
+silentextension. Qualify actual failed-feedback/correction/currentpass path and
+publish before inference. After correctreference, prioritize controlled information
+transition and freshwork before another exposure-onlysuccess. Inspect peer primary
+records where available; distinguish review-reported examples. Measure phaseview
+cost before selecting a change; existing bytecounts are not token/performanceproof.
+Check correct actual wire wrapper before diagnosing missing companion receipts.
+
 # Qualified original E20 complete-source entry
 
 ecological_import_entry/PREPARATION_REVIEW-001.md qualifies9CPU checks,

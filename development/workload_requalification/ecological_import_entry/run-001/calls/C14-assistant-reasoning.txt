@@ -1,0 +1,224 @@
+Let me analyze the current state:
+
+1. I've been reading files to satisfy the task prerequisite of complete source coverage before the first mutation.
+2. Looking at the task prerequisites coverage, all 11 files show `complete: true` with 0 missing lines.
+3. The working set sources show I currently have visible:
+   - hashing.py (39 lines) ✓
+   - importers.py (91 lines) ✓
+   - policy.py (140 lines) ✓
+   - readiness.py (141 lines) ✓
+   - renderer.py (227 lines) ✓
+   - saved_runs.py (266 lines) ✓
+   - storage.py (58 lines) ✓
+
+But wait - the coverage shows all files complete. Let me re-read the task prerequisites:
+
+"status_as_of": "previous dispatches; exact source shown here gains coverage on dispatch without another read"
+
+And looking at the coverage:
+- saved_runs.py: complete ✓
+- importers.py: complete ✓
+- fixture_packs.py: complete ✓
+- records.py: complete ✓
+- content_log.py: complete ✓
+- artifact_units.py: complete ✓
+- hashing.py: complete ✓
+- storage.py: complete ✓
+- renderer.py: complete ✓
+- policy.py: complete ✓
+- readiness.py: complete ✓
+
+All 11 files have complete coverage! The `first_missing_interval` is null for all of them and `missing_lines` is 0.
+
+So the task prerequisites are satisfied. I can now proceed with the actual repair work.
+
+Now let me identify the 4 regressions based on my working account:
+1. importers.py:56 `>=` should be `>` for st_size check (file whose byte size equals max_file_bytes IS eligible, so `>=` would incorrectly exclude it)
+2. importers.py:62 `>` should be `>=` for len(artifacts) check (max_files=N admits at most first N, so we should allow exactly N)
+3. saved_runs.py `_events_from_jsonl`: `>=` should be `>` for idx (JSONL records 1 through MAX_JSONL_LINES are eligible, so line MAX_JSONL_LINES should be included)
+4. saved_runs.py `_embedded_artifacts_from_jsonl`: `>=` should be `>` for idx (embedded artifact on line MAX_JSONL_LINES is eligible)
+
+Let me verify each:
+
+**Regression 1: importers.py line 56**
+Current: `if path.stat().st_size >= max_file_bytes:`
+The boundary contract says: "a file whose byte size equals max_file_bytes is eligible"
+So a file with size == max_file_bytes SHOULD be included. The current code excludes it (continues past it).
+Fix: change `>=` to `>` so that size == max_file_bytes is NOT excluded (i.e., is eligible).
+
+Wait, let me re-read: "a file whose byte size equals max_file_bytes is eligible" means size == max_file_bytes should be admitted. The current code `if path.stat().st_size >= max_file_bytes: continue` would skip files where size >= max_file_bytes, meaning size == max_file_bytes gets skipped (not eligible). That's the regression.
+Fix: `if path.stat().st_size > max_file_bytes: continue`
+
+**Regression 2: importers.py line 62**
+Current: `if len(artifacts) > max_files:`
+The boundary contract says: "max_files=N admits at most the first N eligible files"
+So we should admit at most N files. The loop adds a file, then checks if len > max_files to break. 
+- When len(artifacts) == max_files (we just added the Nth file), `len > max_files` is False, so we don't break - correct, we've admitted N files.
+- When len(artifacts) == max_files + 1 (we just added the N+1th file), `len > max_files` is True, so we break.
+
+Wait, that seems correct already. Let me re-think.
+
+Actually wait - the code adds the artifact first, THEN checks:
+```python
+artifacts.append({"path": rel})
+if len(artifacts) > max_files:
+    break
+```
+
+So if max_files = 5:
+- After adding 1st: len=1, 1>5? No
+- After adding 2nd: len=2, 2>5? No
+- ...
+- After adding 5th: len=5, 5>5? No
+- After adding 6th: len=6, 6>5? Yes → break
+
+So we'd have 6 artifacts when we break, but the 6th was already appended. That means we admit max_files+1 files, not max_files. The boundary says "admits at most the first N eligible files". So we should only have N.
+
+Fix: change `>` to `>=`:
+```python
+if len(artifacts) >= max_files:
+    break
+```
+With `>=`:
+- After adding 1st: len=1, 1>=5? No
+- ...
+- After adding 5th: len=5, 5>=5? Yes → break
+
+So we'd have exactly 5 artifacts. That's correct for "at most first N eligible files".
+
+Wait, but we need to be more careful. With `>=`, after adding the 5th file (len=5), we break. So we have exactly 5. Good.
+
+But wait - there's a subtlety. The break happens AFTER the append. So:
+- We iterate through files
+- For each eligible file, we append it
+- Then we check if len >= max_files
+- If yes, break
+
+So with `>=`, the Nth file gets appended, then we break. We have exactly N files. ✓
+
+With the current `>`, the (N+1)th file gets appended, then we break. We have N+1 files. ✗
+
+So fix 2: `>` → `>=`
+
+**Regression 3: saved_runs.py `_events_from_jsonl`**
+Current:
+```python
+for idx, item in enumerate(_read_jsonl_lines(path), start=1):
+    if idx >= MAX_JSONL_LINES:
+        break
+```
+
+The boundary contract says: "JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion"
+
+So records 1, 2, ..., MAX_JSONL_LINES should all be processed. With `start=1`, idx goes 1, 2, 3, ...
+
+Current: `if idx >= MAX_JSONL_LINES: break`
+- idx=1: 1>=1000? No
+- ...
+- idx=999: 999>=1000? No
+- idx=1000: 1000>=1000? Yes → break
+
+So record 1000 (=MAX_JSONL_LINES) gets broken before being processed. Only records 1-999 are processed. That's the regression.
+
+Fix: change `>=` to `>`:
+- idx=1000: 1000>1000? No → process it
+- idx=1001: 1001>1000? Yes → break
+
+So records 1-1000 are processed. ✓
+
+**Regression 4: saved_runs.py `_embedded_artifacts_from_jsonl`**
+Current:
+```python
+for idx, item in enumerate(_read_jsonl_lines(path), start=1):
+    if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+        break
+```
+
+The boundary contract says: "an embedded artifact on line MAX_JSONL_LINES is eligible"
+
+Same logic as regression 3. With `idx >= MAX_JSONL_LINES`, line 1000 gets broken before processing.
+
+Fix: change `idx >= MAX_JSONL_LINES` to `idx > MAX_JSONL_LINES`
+
+Now let me plan the patches. I need to make 4 edits:
+
+1. importers.py line 56: `>=` → `>` (st_size check)
+2. importers.py line 62: `>` → `>=` (len(artifacts) check)
+3. saved_runs.py in `_events_from_jsonl`: `idx >= MAX_JSONL_LINES` → `idx > MAX_JSONL_LINES`
+4. saved_runs.py in `_embedded_artifacts_from_jsonl`: `idx >= MAX_JSONL_LINES` → `idx > MAX_JSONL_LINES`
+
+I have the source visible for both files. Let me use the patch action.
+
+For importers.py:
+- path: src/addressable_information_layer/importers.py
+- file_sha256: 62a27df5c1c3723341b705fac1e44479113eebd7913d0c7155d98f15f7985497
+- expected_candidate_id: 2355c3eaa32dcf8db2659a75feb3a93309255fbff60e14b7f154dc34c47675c0
+
+For saved_runs.py:
+- path: src/addressable_information_layer/saved_runs.py
+- file_sha256: 98f1e7931a3b06ee21f78efe2fbe7153024deac1d966139adaae1b2b8e2c649f
+- expected_candidate_id: 2355c3eaa32dcf8db2659a75feb3a93309255fbff60e14b7f154dc34c47675c0
+
+Let me start with the first patch. I'll do them one at a time since each changes the candidate.
+
+Actually, let me look at the exact text I need to match:
+
+For importers.py line 56:
+```
+        if path.stat().st_size >= max_file_bytes:
+```
+Change to:
+```
+        if path.stat().st_size > max_file_bytes:
+```
+
+For importers.py line 62:
+```
+        if len(artifacts) > max_files:
+```
+Change to:
+```
+        if len(artifacts) >= max_files:
+```
+
+For saved_runs.py in _events_from_jsonl (around line 82):
+```
+            if idx >= MAX_JSONL_LINES:
+                break
+```
+Change to:
+```
+            if idx > MAX_JSONL_LINES:
+                break
+```
+
+For saved_runs.py in _embedded_artifacts_from_jsonl (around line 193):
+```
+            if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+                break
+```
+Change to:
+```
+            if idx > MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+                break
+```
+
+Let me start with the first edit. I'll do importers.py first (two edits to the same file, but I need to do them one at a time since each changes the candidate).
+
+Actually wait - I can only do one operation per response. Let me do the first patch now.
+
+Let me be precise about the old text for importers.py:
+
+Line 56: `        if path.stat().st_size >= max_file_bytes:`
+Line 57: `            continue`
+
+I'll match on just the one line that changes to be safe. Actually let me use a slightly larger context to be unique:
+
+```
+        if path.stat().st_size >= max_file_bytes:
+            continue
+```
+
+This should be unique in the file.
+
+Let me proceed with the first patch.

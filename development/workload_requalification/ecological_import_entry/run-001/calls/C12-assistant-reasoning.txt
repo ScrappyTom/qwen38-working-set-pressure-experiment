@@ -1,0 +1,107 @@
+Let me analyze the current state:
+
+1. The task requires repairing 4 regressions in an offline audit package related to import boundary conditions.
+2. The boundary contract states:
+   - A file whose byte size equals max_file_bytes is eligible (so `>=` should be `==` for file size, or the check should allow equality)
+   - max_files=N admits at most the first N eligible files
+   - JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion
+   - An embedded artifact on line MAX_JSONL_LINES is eligible
+
+3. From the working account, the 4 identified regressions are:
+   - importers.py:56: `>=`→`>` for st_size (should be `==` for exact match, or the regression is that it uses `>` instead of `==`)
+   - importers.py:62: `>`→`>=` for len(artifacts)
+   - saved_runs.py _events_from_jsonl: `>=`→`>` for idx
+   - saved_runs.py _embedded_artifacts_from_jsonl: `>=`→`>` for idx
+
+Wait, let me re-read the boundary contract more carefully:
+- "a file whose byte size equals max_file_bytes is eligible" - this means the condition should be `st_size == max_file_bytes` or `st_size <= max_file_bytes` (allowing equality). If the regression is `>=`, it might be that the code uses `st_size >= max_file_bytes` when it should be `st_size <= max_file_bytes` (i.e., the file is eligible if its size is at most max_file_bytes, including exactly max_file_bytes). Actually, re-reading: "a file whose byte size equals max_file_bytes is eligible" - this specifically says equality is eligible. So the check should allow `==`. If the code has `st_size >= max_file_bytes` that would make files LARGER than max also eligible, which is wrong. The correct check should be `st_size <= max_file_bytes` or `st_size == max_file_bytes`.
+
+Wait, let me reconsider. The task says "a file whose byte size equals max_file_bytes is eligible". This means the boundary is: if st_size == max_file_bytes, it's eligible. The regression might be that the code uses `st_size > max_file_bytes` (strictly greater) which would exclude the equality case, or `st_size >= max_file_bytes` which would include larger files incorrectly.
+
+Actually, looking at the working account's identification:
+- importers.py:56: `>=`→`>` for st_size - this means the current code has `>=` and it should be `>`. Wait, that doesn't make sense with the contract.
+
+Let me re-read: "Identified 4 regressions: (1) importers.py:56 `>=`→`>` for st_size"
+
+Hmm, the format seems to be "current→correct" or "wrong→right". Let me think about this differently.
+
+Actually, I think the working account is saying what the fix is: change `>=` to `>`. But wait, that would mean the file must be strictly larger than max_file_bytes to be eligible, which contradicts the contract.
+
+Let me reconsider. The contract says "a file whose byte size equals max_file_bytes is eligible". This means:
+- The eligibility condition for file size is `st_size <= max_file_bytes` (the file fits within the limit, including the boundary)
+- OR it could be `st_size == max_file_bytes` specifically
+
+Actually, I think the most natural reading is: the file is eligible if its size is at most max_file_bytes (i.e., `st_size <= max_file_bytes`). The boundary case is when `st_size == max_file_bytes`, which should be eligible (included, not excluded).
+
+If the regression is that the code uses `st_size < max_file_bytes` (strictly less than), then the equality case is excluded. The fix would be to change `<` to `<=`.
+
+OR if the code uses `st_size >= max_file_bytes` (meaning: skip files that are at or above max), then the equality case is incorrectly excluded. The fix would be to change `>=` to `>`.
+
+Wait, I need to actually look at the source code. Let me check what I have access to.
+
+Looking at the current working_set.sources, I can see:
+- hashing.py (39 lines) - full
+- policy.py (140 lines) - full
+- readiness.py (141 lines) - full
+- renderer.py (227 lines) - full
+- storage.py (58 lines) - full
+
+But I DON'T see:
+- importers.py
+- saved_runs.py
+- fixture_packs.py
+- records.py
+- content_log.py
+- artifact_units.py
+
+These are in the coverage list as "complete" but they're not in the current working_set.sources. They must have been read in earlier operations.
+
+The task prerequisites show that 6 files are complete (saved_runs, importers, fixture_packs, records, content_log, artifact_units) and 5 are not (hashing, storage, renderer, policy, readiness). But wait - the 5 incomplete ones are now shown in the working_set.sources! So after this dispatch, they should gain coverage.
+
+Actually, looking more carefully at the prerequisites:
+- "exposure_is_not_inspection": true
+- The status says "status_as_of": "previous dispatches; exact source shown here gains coverage on dispatch without another read"
+
+So the 5 files shown in working_set.sources will gain coverage when this dispatch is processed. The 6 files that were previously read (saved_runs, importers, fixture_packs, records, content_log, artifact_units) already have coverage.
+
+So after this dispatch, all 11 files should have complete coverage, satisfying the prerequisite for the first mutation.
+
+Now, I need to actually see the source of importers.py and saved_runs.py to make the fixes. The working account identifies the regressions but I need to see the actual code to make patches.
+
+Let me look at what I need to do:
+1. First, I need to read importers.py and saved_runs.py to see the actual code (they're not in my current working_set.sources)
+2. Then make the 4 patches
+3. Run check public
+4. Submit
+
+Wait, but the task says I need to do a "complete import-boundary audit and repair four regressions". The working account already identifies them. Let me re-read the working account:
+
+"Identified 4 regressions: (1) importers.py:56 `>=`→`>` for st_size; (2) importers.py:62 `>`→`>=` for len(artifacts); (3) saved_runs.py _events_from_jsonl: `>=`→`>` for idx; (4) saved_runs.py _embedded_artifacts_from_jsonl: `>=`→`>` for idx."
+
+The format seems to be "current→fix". So:
+1. importers.py line 56: change `>=` to `>` (for st_size comparison)
+2. importers.py line 62: change `>` to `>=` (for len(artifacts) comparison)
+3. saved_runs.py _events_from_jsonl: change `>=` to `>` (for idx comparison)
+4. saved_runs.py _embedded_artifacts_from_jsonl: change `>=` to `>` (for idx comparison)
+
+But I need to see the actual source to make these patches. Let me read importers.py and saved_runs.py.
+
+Actually wait - the coverage says these files are already complete (covered_lines match total_lines). But they're not in my current working_set.sources. I need to read them to have them visible for patching.
+
+Let me read importers.py first (91 lines) and saved_runs.py (266 lines).
+
+Actually, I should be strategic. I have 13 requests remaining and 55 actions remaining. Let me read both files, then make the 4 patches, then check, then submit. That's:
+- Read importers.py (1 action)
+- Read saved_runs.py (1 action)
+- 4 patches (4 actions)
+- Check public (1 action)
+- Submit (1 action)
+Total: 8 actions, well within limits.
+
+But wait - can I read both in one go? No, each read is a separate operation. But I can do them in sequence.
+
+Actually, let me think about whether I can use work_on to select both files. That would be one action. But then I'd need to see the content to make patches.
+
+Let me just read importers.py first since it's smaller (91 lines).
+
+Actually, I realize I should read both files to see the exact code. Let me start with importers.py since it has 2 of the 4 fixes.

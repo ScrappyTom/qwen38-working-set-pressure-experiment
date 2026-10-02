@@ -1,0 +1,103 @@
+Let me analyze the current state:
+
+1. The task is to repair four regressions in the offline audit package.
+2. The boundary contract states:
+   - File size == max_file_bytes is eligible (not >)
+   - max_files=N admits at most first N eligible files
+   - JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion
+   - Embedded artifact on line MAX_JSONL_LINES is eligible
+
+3. From the working account, the four fixes are:
+   - (1) importers.py:56 `st_size >= max_file_bytes` → `st_size > max_file_bytes` [DONE]
+   - (2) importers.py:62 `len(artifacts) >= max_files` → `len(artifacts) > max_files` [NEXT]
+   - (3) saved_runs.py `_events_from_jsonl` `idx >= MAX_JSONL_LINES` → `idx > MAX_JSONL_LINES` [DONE - just applied]
+   - (4) saved_runs.py `_embedded_artifacts_from_jsonl` `idx >= MAX_JSONL_LINES` → `idx > MAX_JSONL_LINES` [NEXT]
+
+Wait, let me re-read the contract more carefully:
+- "a file whose byte size equals max_file_bytes is eligible" → so `st_size > max_file_bytes` should skip (files that are larger are NOT eligible), and `st_size == max_file_bytes` IS eligible. So the check should be `if path.stat().st_size > max_file_bytes: continue`. Looking at the current importers.py, line 62 shows `if path.stat().st_size > max_file_bytes:` — wait, that's already `>`. Let me look again.
+
+Actually looking at the current source of importers.py:
+```python
+        if path.stat().st_size > max_file_bytes:
+            continue
+```
+
+And:
+```python
+        if len(artifacts) >= max_files:
+            break
+```
+
+The contract says "a file whose byte size equals max_file_bytes is eligible" — so `> max_file_bytes` correctly excludes files that are too big (size > max). A file with size == max is NOT > max, so it's eligible. That's correct.
+
+The contract says "max_files=N admits at most the first N eligible files" — so we should admit exactly N files. The current code has `if len(artifacts) >= max_files: break`. This means when len(artifacts) equals max_files, it breaks, so we have exactly max_files artifacts. That's correct.
+
+Wait, but the working account says fix (2) is `importers.py:62 len(artifacts) > → >=`. Let me re-read...
+
+The account says: "(2) importers.py:62 len(artifacts) > → >= [NEXT]"
+
+Hmm, but looking at the current source, it already has `>= max_files`. Let me re-read the account:
+
+"Fixes: (1) importers.py:56 st_size >= → > [DONE]; (2) importers.py:62 len(artifacts) > → >= [NEXT]"
+
+Wait, that's confusing. Let me re-read the contract:
+- "max_files=N admits at most the first N eligible files"
+
+So if max_files=5, we want exactly 5 files. The code:
+```python
+        artifacts.append({"path": rel})
+        if len(artifacts) >= max_files:
+            break
+```
+
+After appending, if len >= max_files, break. So after appending the 5th file, len becomes 5, which is >= 5, so break. That gives us exactly 5 files. That's correct!
+
+But wait, the account says the fix was `> → >=`. That means the original (buggy) code had `>` and the fix is to change it to `>=`. Let me check: if the code had `> max_files`, then after appending the 5th file, len=5, 5 > 5 is False, so we don't break. Then we'd append a 6th file. That's wrong. So the fix from `>` to `>=` makes sense.
+
+But looking at the current source, it already shows `>= max_files`. So it seems fix (2) was already applied in a previous patch (EVT-0021 or EVT-0023).
+
+Let me trace the patches:
+- EVT-0021: patch on importers.py (first mutation)
+- EVT-0023: patch on importers.py
+- EVT-0024: patch on saved_runs.py (just applied, idx >= → idx >)
+
+So it seems:
+- EVT-0021: fixed importers.py st_size >= → > (fix 1)
+- EVT-0023: fixed importers.py len(artifacts) > → >= (fix 2)  
+- EVT-0024: fixed saved_runs.py _events_from_jsonl idx >= → > (fix 3)
+
+Now I need fix (4): saved_runs.py `_embedded_artifacts_from_jsonl` `idx >= MAX_JSONL_LINES` → `idx > MAX_JSONL_LINES`
+
+Looking at the current source of saved_runs.py, in `_embedded_artifacts_from_jsonl`:
+```python
+        for idx, item in enumerate(_read_jsonl_lines(path), start=1):
+            if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+                break
+```
+
+The contract says "an embedded artifact on line MAX_JSONL_LINES is eligible". So line MAX_JSONL_LINES (i.e., idx == MAX_JSONL_LINES) should be eligible. The current code `idx >= MAX_JSONL_LINES` breaks when idx equals MAX_JSONL_LINES, which means line MAX_JSONL_LINES is NOT processed. We need `idx > MAX_JSONL_LINES` so that line MAX_JSONL_LINES IS processed (idx == MAX_JSONL_LINES passes the check), and only line MAX_JSONL_LINES+1 breaks.
+
+So I need to change `if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:` to `if idx > MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:`
+
+The current candidate_id is `8009375d715d85c91b329ec12e58df9c091c95c521cd2b56f1e5b725ad05c60e`.
+The file sha256 for saved_runs.py is `94c4ee1ab3233b3c9fc50727371456e4a2fade82f10ad8dd4b74c85af0ff9fb2`.
+
+I can see the source is visible (whole_file_shown: true), so I can do a patch.
+
+The old text:
+```python
+            if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+```
+
+The new text:
+```python
+            if idx > MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+```
+
+Let me verify this is unique in the file. Looking at the file:
+- Line 71 (in _events_from_jsonl): `if idx > MAX_JSONL_LINES:` (already fixed)
+- Line ~228 (in _embedded_artifacts_from_jsonl): `if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:`
+
+Yes, the `if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:` is unique.
+
+Let me do the patch.

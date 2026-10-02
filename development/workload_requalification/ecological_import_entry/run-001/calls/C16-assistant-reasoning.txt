@@ -1,0 +1,123 @@
+Let me analyze the current state:
+
+1. I've already made two patches to `importers.py`:
+   - Patch 1 (EVT-0021): Changed `st_size >= max_file_bytes` to `st_size > max_file_bytes` (line 56)
+   - Patch 2 (EVT-0023): Changed `len(artifacts) > max_files` to `len(artifacts) >= max_files` (line 63)
+
+2. The current candidate is `dc3efb3e4d27a2ec29e705102184f44c590d49a05a50a61554d2f78453057fb8`
+
+3. I still need to make two more fixes in `saved_runs.py`:
+   - Fix 3: In `_events_from_jsonl`, change `idx >= MAX_JSONL_LINES` to `idx > MAX_JSONL_LINES` (so records 1 through MAX_JSONL_LINES are eligible)
+   - Fix 4: In `_embedded_artifacts_from_jsonl`, change `idx >= MAX_JSONL_LINES` to `idx > MAX_JSONL_LINES` (so embedded artifact on line MAX_JSONL_LINES is eligible)
+
+Let me look at the current `saved_runs.py` source. From the working_set.sources, I can see the full file. Let me find the relevant lines:
+
+In `_events_from_jsonl`:
+```python
+        for idx, item in enumerate(_read_jsonl_lines(path), start=1):
+            if idx >= MAX_JSONL_LINES:
+                break
+```
+
+This should be `idx > MAX_JSONL_LINES` so that records 1 through MAX_JSONL_LINES (inclusive) are eligible.
+
+In `_embedded_artifacts_from_jsonl`:
+```python
+        for idx, item in enumerate(_read_jsonl_lines(path), start=1):
+            if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+                break
+```
+
+This should be `idx > MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS` so that an embedded artifact on line MAX_JSONL_LINES is eligible.
+
+Wait, let me re-read the boundary contract:
+- "JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion"
+- "an embedded artifact on line MAX_JSONL_LINES is eligible"
+
+So with `enumerate(..., start=1)`, idx goes 1, 2, 3, ...
+- For records 1 through MAX_JSONL_LINES to be eligible, we need to break when idx > MAX_JSONL_LINES (i.e., idx = MAX_JSONL_LINES + 1 and beyond)
+- Currently it's `idx >= MAX_JSONL_LINES` which breaks at idx = MAX_JSONL_LINES, meaning records 1 through MAX_JSONL_LINES-1 are eligible. That's wrong.
+
+So the fix is: change `idx >= MAX_JSONL_LINES` to `idx > MAX_JSONL_LINES` in both functions.
+
+Let me verify the file SHA for saved_runs.py. From the working set:
+- `file_sha256`: `98f1e7931a3b06ee21f78efe2fbe7153024deac1d966139adaae1b2b8e2c649f`
+- `file_total_lines`: 266
+
+Now I need to make two patches to saved_runs.py. Let me do the first one:
+
+In `_events_from_jsonl`, the line is:
+```
+            if idx >= MAX_JSONL_LINES:
+```
+Should become:
+```
+            if idx > MAX_JSONL_LINES:
+```
+
+In `_embedded_artifacts_from_jsonl`, the line is:
+```
+            if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+```
+Should become:
+```
+            if idx > MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+```
+
+Let me do the first patch. The current candidate is `dc3efb3e4d27a2ec29e705102184f44c590d49a05a50a61554d2f78453057fb8`.
+
+For the first patch, I need:
+- path: `src/addressable_information_layer/saved_runs.py`
+- expected_candidate_id: `dc3efb3e4d27a2ec29e705102184f44c590d49a05a50a61554d2f78453057fb8`
+- expected_file_sha256: `98f1e7931a3b06ee21f78efe2fbe7153024deac1d966139adaae1b2b8e2c649f`
+- old: `            if idx >= MAX_JSONL_LINES:\n                break` (in _events_from_jsonl context)
+- new: `            if idx > MAX_JSONL_LINES:\n                break`
+
+Wait, I need to be careful. The `old` text must be unique in the file. Let me check - both functions have similar patterns. Let me look at the exact context:
+
+In `_events_from_jsonl`:
+```python
+        for idx, item in enumerate(_read_jsonl_lines(path), start=1):
+            if idx >= MAX_JSONL_LINES:
+                break
+            event = _event_from_item(item, path, detected)
+```
+
+In `_embedded_artifacts_from_jsonl`:
+```python
+        for idx, item in enumerate(_read_jsonl_lines(path), start=1):
+            if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+                break
+```
+
+These are different lines, so I can patch them separately. Let me use enough context to make each unique.
+
+For the first patch (_events_from_jsonl):
+old:
+```
+            if idx >= MAX_JSONL_LINES:
+                break
+            event = _event_from_item(item, path, detected)
+```
+
+new:
+```
+            if idx > MAX_JSONL_LINES:
+                break
+            event = _event_from_item(item, path, detected)
+```
+
+For the second patch (_embedded_artifacts_from_jsonl):
+old:
+```
+            if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+                break
+```
+
+new:
+```
+            if idx > MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+                break
+```
+
+Let me do the first patch now.

@@ -1,0 +1,74 @@
+Let me analyze the current state:
+
+1. I've read saved_runs.py (266 lines) - complete
+2. I've read importers.py (91 lines) - complete
+3. I still need to read 9 more files:
+   - fixture_packs.py (94 lines)
+   - records.py (460 lines)
+   - content_log.py (70 lines)
+   - artifact_units.py (459 lines)
+   - hashing.py (39 lines)
+   - storage.py (58 lines)
+   - renderer.py (227 lines)
+   - policy.py (140 lines)
+   - readiness.py (141 lines)
+
+The task prerequisites require complete file coverage of all 11 files before the first mutation.
+
+Now let me look at the code I've seen so far to identify regressions:
+
+**saved_runs.py** - Looking at the boundary contract:
+- "a file whose byte size equals max_file_bytes is eligible" - In `_events_from_jsonl`: `if path.stat().st_size > MAX_JSONL_BYTES: continue` - this means files with size == MAX_JSONL_BYTES are eligible (correct), files larger are skipped (correct).
+- "max_files=N admits at most the first N eligible files" - In importers.py: `if len(artifacts) > max_files: break` - this means it admits max_files + 1 files (regression!). It should be `>=` not `>`. Wait, let me re-read. It appends first, then checks `if len(artifacts) > max_files: break`. So if max_files=200, it appends until len becomes 201, then breaks. That means it admits 201 files, not 200. The fix should be `if len(artifacts) >= max_files: break` - but wait, the check is AFTER the append. Let me trace:
+  - Start: artifacts=[]
+  - Append path1: artifacts=[1], len=1, 1>200? No
+  - Append path2: artifacts=[1,2], len=2, 2>200? No
+  - ...
+  - Append path200: artifacts=[1..200], len=200, 200>200? No
+  - Append path201: artifacts=[1..201], len=201, 201>200? Yes, break
+  
+  So it admits 201 files when max_files=200. The fix: change `>` to `>=` so it breaks when len reaches max_files (i.e., after appending the max_files-th file, the next iteration would break before appending). Wait no, the break is after the append. Let me re-think.
+
+  Actually looking more carefully:
+  ```python
+  artifacts.append({"path": rel})
+  if len(artifacts) > max_files:
+      break
+  ```
+  
+  With max_files=200:
+  - After 1st append: len=1, 1>200? No
+  - After 200th append: len=200, 200>200? No
+  - After 201st append: len=201, 201>200? Yes, break
+  
+  So it processes 201 files but only 201 are in the list. The contract says "max_files=N admits at most the first N eligible files". So we need at most N=200. The fix is to change `>` to `>=`:
+  - After 200th append: len=200, 200>=200? Yes, break
+  
+  That gives exactly 200. ✓
+
+- "JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion" - In `_events_from_jsonl`: `for idx, item in enumerate(_read_jsonl_lines(path), start=1): if idx >= MAX_JSONL_LINES: break`. With MAX_JSONL_LINES=1000:
+  - idx=1: 1>=1000? No, process
+  - idx=999: 999>=1000? No, process
+  - idx=1000: 1000>=1000? Yes, break
+  
+  So records 1-999 are processed, but record 1000 is NOT processed. The contract says records 1 through MAX_JSONL_LINES (i.e., 1-1000) are eligible. So the fix is `if idx > MAX_JSONL_LINES: break` so that idx=1000 is still processed.
+
+- "an embedded artifact on line MAX_JSONL_LINES is eligible" - In `_embedded_artifacts_from_jsonl`: `if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS: break`. Same issue: idx=1000 would break before processing. Fix: `if idx > MAX_JSONL_LINES or ...`
+
+So the 4 regressions I can identify so far:
+1. importers.py: `if len(artifacts) > max_files: break` should be `if len(artifacts) >= max_files: break`
+2. saved_runs.py `_events_from_jsonl`: `if idx >= MAX_JSONL_LINES: break` should be `if idx > MAX_JSONL_LINES: break`
+3. saved_runs.py `_embedded_artifacts_from_jsonl`: `if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS: break` should be `if idx > MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS: break`
+
+That's 3 so far. I need to find a 4th. Let me also check the size comparison:
+- In importers.py: `if path.stat().st_size >= max_file_bytes: continue` - This means files with size == max_file_bytes are SKIPPED. But the contract says "a file whose byte size equals max_file_bytes is eligible". So this is a regression! It should be `if path.stat().st_size > max_file_bytes: continue`.
+
+So the 4 regressions are:
+1. importers.py line 56: `>=` should be `>` (size comparison)
+2. importers.py line 62: `>` should be `>=` (max_files count)
+3. saved_runs.py `_events_from_jsonl`: `>=` should be `>` (JSONL line count)
+4. saved_runs.py `_embedded_artifacts_from_jsonl`: `>=` should be `>` (JSONL line count)
+
+Now I need to read all remaining files before I can make mutations. Let me continue reading files. I have 68 actions remaining and 22 requests remaining.
+
+Let me read the next files. I'll read them in order. Let me start with fixture_packs.py and content_log.py (small files) to save requests.
