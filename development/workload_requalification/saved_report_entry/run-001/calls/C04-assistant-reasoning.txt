@@ -1,0 +1,385 @@
+Let me analyze the situation carefully.
+
+The task is to:
+1. Investigate two captured optimized builds of a calculation module that changed behavior
+2. Repair the optimizer while preserving the compilation contract
+3. Complete `reports/incident.json` with observed comparison for each build
+4. Report which functions changed and the first changed expression in each build
+5. Distinguish captured behavior from verification of repair
+6. Check the current candidate and submit
+
+The public check currently fails with:
+- "FAIL incident report agrees with captured builds: AssertionError: report must cover each emitted capture exactly once"
+- "25/26 contract cases passed"
+
+So the optimizer repair (25/26 contract cases) seems to be in place - 25 out of 26 pass. Wait, "25/26 contract cases passed" - one contract case is failing? No wait, let me re-read. The check says "25/26 contract cases passed" and the report failure is separate. Actually looking more carefully:
+
+The stdout says:
+"FAIL incident report agrees with captured builds: AssertionError: report must cover each emitted capture exactly once\r\n25/26 contract cases passed\r\n"
+
+So the report needs to cover each emitted capture exactly once. Currently the report only has one build entry (OBS-0002). There are two emitted captures: OBS-0002 (BUILD-A) and OBS-0003 (BUILD-B). The report needs to include both.
+
+Now let me understand the two builds:
+
+**OBS-0002 (BUILD-A):**
+- `build`: "BUILD-A"
+- `called_function`: "_normal_dist_inv_cdf"
+- `compile_request`: `{"functions": ["_normal_dist_inv_cdf"]}`
+- `observed_call`: `{"kind": "raised", "message": "math domain error", "type": "ValueError"}`
+- `record_kind`: "emitted module"
+
+**OBS-0003 (BUILD-B):**
+- `build`: "BUILD-B"
+- `called_function`: "weibullvariate"
+- `compile_request`: `{"functions": ["_normal_dist_inv_cdf", "weibullvariate"]}`
+- `observed_call`: `{"kind": "returned", "type": "complex", "value_repr": "(1.0195853396696437e-16+1.6651092223153954j)"}`
+- `record_kind`: "emitted module"
+
+**OBS-0001 (original/reference):**
+- `record_kind`: "parsed input module"
+- `reference_calls`:
+  - `_normal_dist_inv_cdf`: `{"kind": "returned", "type": "float", "value_repr": "-2.3263478740408408"}`
+  - `weibullvariate`: `{"kind": "returned", "type": "float", "value_repr": "1.6651092223153954"}`
+
+Now I need to compare the ASTs to find what changed.
+
+Looking at OBS-0001 (original) AST for `_normal_dist_inv_cdf`:
+- The key line in the else branch (when |q| > 0.425):
+  - `r = sqrt(-log(r))` → In the original: `Assign(r, Call(sqrt, args=[UnaryOp(USub, Call(log, args=[r]))]))`
+  
+Wait, let me look more carefully at the AST dumps.
+
+In OBS-0001 (original), the `_normal_dist_inv_cdf` function has:
+- After the `if abs(q) <= 0.425` block (orelse):
+  - `r = IfExp(q <= 0, p, 1-p)`
+  - `r = sqrt(-log(r))` → `Call(sqrt, args=[UnaryOp(USub, Call(log, args=[r]))])`
+  
+Wait, let me look at the actual AST. In OBS-0001's AST for `_normal_dist_inv_cdf`:
+
+Looking at the orelse of the first if:
+```
+Assign(r, Call(sqrt, args=[UnaryOp(USub, Call(log, args=[r]))]))
+```
+
+Wait no. Let me re-read the AST more carefully.
+
+In OBS-0001 (RES-0013), the AST dump shows for `_normal_dist_inv_cdf`:
+- The `If` node with test `abs(q) <= 0.425`:
+  - body: (the polynomial approximation)
+  - orelse: `[]` (empty!)
+
+Then after the If:
+- `r = IfExp(q <= 0, p, 1-p)`
+- `r = sqrt(-log(r))` → Looking at the actual AST...
+
+Wait, I need to be more careful. Let me look at the actual AST text in OBS-0001.
+
+From RES-0013 (OBS-0001):
+```
+Assign(r, Call(sqrt, args=[UnaryOp(USub, Call(log, args=[r]))]))
+```
+
+Actually wait - looking at the raw text of OBS-0001 more carefully:
+
+In the orelse of the first If (abs(q) <= 0.425), it's empty `[]`.
+
+Then:
+```
+Assign(r, IfExp(q <= 0, p, 1-p))
+Assign(r, Call(sqrt, args=[UnaryOp(USub, Call(log, args=[r]))]))
+```
+
+Hmm wait, that doesn't match what I see. Let me look at the actual text again.
+
+From OBS-0001 (RES-0013 content_utf8):
+The `_normal_dist_inv_cdf` function body includes:
+1. `q = p - 0.5`
+2. `If(abs(q) <= 0.425, body=[polynomial approx], orelse=[])`
+3. `r = IfExp(q <= 0, p, 1-p)`
+4. `r = sqrt(-log(r))` - wait, is it `sqrt(log(r))` or `sqrt(-log(r))`?
+
+Let me look at the exact text. In OBS-0001:
+```
+Assign(targets=[Name(id='r', ctx=Store())], value=Call(func=Name(id='sqrt', ctx=Load()), args=[UnaryOp(op=USub(), operand=Call(func=Name(id='log', ctx=Load()), args=[Name(id='r', ctx=Load())], keywords=[]))], keywords=[]))
+```
+
+So in the original: `r = sqrt(-log(r))` - there's a USub (unary minus) around `log(r)`.
+
+Now in OBS-0002 (BUILD-A, RES-0015):
+```
+Assign(targets=[Name(id='r', ctx=Store())], value=Call(func=Name(id='sqrt', ctx=Load()), args=[Call(func=Name(id='log', ctx=Load()), args=[Name(id='r', ctx=Load())], keywords=[])], keywords=[]))
+```
+
+So in BUILD-A: `r = sqrt(log(r))` - the USub is gone! The unary minus was eliminated.
+
+This makes sense - the optimizer's "simplify unary signs" feature incorrectly removed the unary minus on `log(r)`. The optimizer is supposed to only eliminate unary plus on exact built-in integer and float literals, but it's also eliminating unary minus on non-literal expressions.
+
+Wait, actually re-reading the README: "It must at least eliminate unary plus on exact built-in integer and float literals in selected functions." So it should eliminate unary plus on literals. But the bug seems to be that it's also removing unary minus from non-literal expressions.
+
+Actually wait - let me re-read. The README says "may simplify unary signs applied to numeric literals." So it's supposed to only apply to numeric literals. The bug is that the optimizer is removing `USub` (unary minus) from `log(r)` which is NOT a numeric literal.
+
+Now for OBS-0003 (BUILD-B, RES-0014):
+The `compile_request` includes both `_normal_dist_inv_cdf` AND `weibullvariate`.
+
+Looking at `_normal_dist_inv_cdf` in BUILD-B:
+Same as original - `r = sqrt(-log(r))` is preserved (has USub). Wait let me check...
+
+From OBS-0003 (RES-0014):
+```
+Assign(targets=[Name(id='r', ctx=Store())], value=Call(func=Name(id='sqrt', ctx=Load()), args=[Call(func=Name(id='log', ctx=Load()), args=[Name(id='r', ctx=Load())], keywords=[])], keywords=[]))
+```
+
+Wait, that's `sqrt(log(r))` without the USub! So BUILD-B also has the same issue with `_normal_dist_inv_cdf`.
+
+But the observed behavior for BUILD-B is on `weibullvariate`. Let me compare `weibullvariate`:
+
+Original (OBS-0001):
+```
+Return(alpha * (-_log(u)) ** (1/beta))
+```
+Specifically: `Return(BinOp(alpha, Mult, BinOp(UnaryOp(USub, Call(_log, [u])), Pow, BinOp(1, Div, beta))))`
+
+BUILD-B (OBS-0003):
+```
+Return(alpha * _log(u) ** (1/beta))
+```
+Specifically: `Return(BinOp(alpha, Mult, BinOp(Call(_log, [u]), Pow, BinOp(1, Div, beta))))`
+
+So in BUILD-B, the `_normal_dist_inv_cdf` function ALSO lost its USub on `log(r)`, AND `weibullvariate` lost its USub on `_log(u)`.
+
+Wait, but BUILD-A only selected `_normal_dist_inv_cdf`, so only that function was processed. BUILD-B selected both functions, so both were processed and both had their USubs removed.
+
+Now let me figure out what the "first change" is for each build, per the README instructions:
+"Locate the first expression whose node kind changed, traversing functions in source order and their fields in normal Python AST order."
+
+For BUILD-A (OBS-0002):
+- Only `_normal_dist_inv_cdf` was in scope
+- The first change is in `_normal_dist_inv_cdf`: `-log(r)` → `log(r)`
+- The function is `_normal_dist_inv_cdf`
+
+For BUILD-B (OBS-0003):
+- Both `_normal_dist_inv_cdf` and `weibullvariate` were in scope
+- In source order, `_normal_dist_inv_cdf` comes first
+- The first change in `_normal_dist_inv_cdf` is: `-log(r)` → `log(r)` (same as BUILD-A)
+- Wait, but I need to check if there are changes in `weibullvariate` too
+
+Let me compare `weibullvariate` between original and BUILD-B:
+
+Original:
+```
+Return(alpha * (-_log(u)) ** (1/beta))
+```
+AST: `Return(BinOp(alpha, Mult, BinOp(UnaryOp(USub, Call(_log, [u])), Pow, BinOp(1.0, Div, beta))))`
+
+BUILD-B:
+```
+Return(alpha * _log(u) ** (1/beta))
+```
+AST: `Return(BinOp(alpha, Mult, BinOp(Call(_log, [u]), Pow, BinOp(1.0, Div, beta))))`
+
+So yes, `weibullvariate` also changed: `-_log(u)` → `_log(u)`.
+
+Now for BUILD-B, the "first change" traversing in source order:
+- `_normal_dist_inv_cdf` comes first in source order
+- Within it, the first node kind change is the USub removal on `log(r)`
+- So first_change function is `_normal_dist_inv_cdf`, before: `-log(r)`, after: `log(r)`
+
+Wait, but I need to be more careful about "first expression whose node kind changed." Let me think about what "node kind changed" means. 
+
+In the original: `UnaryOp(op=USub(), operand=Call(func=Name(id='log', ...), args=[...]))`
+In the build: `Call(func=Name(id='log', ...), args=[...])`
+
+The node kind at that position changed from `UnaryOp` to `Call`. So the "before" expression is `-log(r)` (the full UnaryOp expression) and "after" is `log(r)` (just the Call).
+
+Now let me also check: are there any changes to `weibullvariate` in BUILD-A? No - BUILD-A only selected `_normal_dist_inv_cdf`, so `weibullvariate` should be unchanged. Let me verify.
+
+In OBS-0002 (BUILD-A), looking at `weibullvariate`:
+```
+Return(alpha * (-_log(u)) ** (1/beta))
+```
+With USub present. Good - unchanged.
+
+And in OBS-0002, `_normal_dist_inv_cdf` has:
+```
+r = sqrt(log(r))  # USub removed
+```
+
+And the `If(q < 0, body=[x = -x])` - wait, let me check this.
+
+Original:
+```
+If(q < 0, body=[Assign(x, UnaryOp(USub, x))])
+```
+
+BUILD-A:
+Let me look... In OBS-0002's AST for `_normal_dist_inv_cdf`:
+```
+If(test=Compare(q, Lt, 0), body=[Assign(targets=[Name(id='x')], value=Name(id='x', ctx=Load()))], orelse=[])
+```
+
+Wait! In BUILD-A, the `If(q < 0)` body is `x = x` (no negation!), while in the original it's `x = -x`.
+
+Let me double-check. Original (OBS-0001):
+```
+If(test=Compare(left=Name(id='q', ctx=Load()), ops=[Lt()], comparators=[Constant(value=0.0)]), body=[Assign(targets=[Name(id='x', ctx=Store())], value=UnaryOp(op=USub(), operand=Name(id='x', ctx=Load())))], orelse=[])
+```
+
+BUILD-A (OBS-0002):
+```
+If(test=Compare(left=Name(id='q', ctx=Load()), ops=[Lt()], comparators=[Constant(value=0.0)]), body=[Assign(targets=[Name(id='x', ctx=Store())], value=Name(id='x', ctx=Load()))], orelse=[])
+```
+
+Yes! So in BUILD-A, `x = -x` became `x = x`. The USub on `x` was also removed.
+
+So for BUILD-A, the changes in `_normal_dist_inv_cdf` are:
+1. `r = sqrt(-log(r))` → `r = sqrt(log(r))` (USub on log(r) removed)
+2. `x = -x` → `x = x` (USub on x removed)
+
+The "first" change in source/AST order would be the `log(r)` one since it appears earlier in the function body.
+
+Wait, actually I need to be more careful about AST traversal order. The function body is a list of statements. Let me trace through:
+
+Body of `_normal_dist_inv_cdf`:
+1. `q = p - 0.5`
+2. `If(abs(q) <= 0.425, [polynomial], [])`
+3. `r = IfExp(q <= 0, p, 1-p)`
+4. `r = sqrt(-log(r))` → HERE is the first change
+5. `If(r <= 5, [poly1], [poly2])`
+6. `x = num/den`
+7. `If(q < 0, [x = -x → x = x])` → second change
+8. `return mu + x * sigma`
+
+So the first change is at statement 4: `-log(r)` → `log(r)`.
+
+For BUILD-B, same first change in `_normal_dist_inv_cdf`, plus changes in `weibullvariate`.
+
+Now, the current report only has OBS-0002. I need to add OBS-0003.
+
+The report structure per README:
+```json
+{"builds": [
+  {"capture": "<emitted-tree handle>",
+   "changed_functions": ["<function name>", "..."],
+   "first_change": {"function": "<name>",
+                    "before": "<original expression>",
+                    "after": "<emitted expression>"}}
+]}
+```
+
+For OBS-0002 (BUILD-A):
+- capture: "OBS-0002"
+- changed_functions: ["_normal_dist_inv_cdf"] (only this function was in scope and changed)
+- first_change: function: "_normal_dist_inv_cdf", before: "-log(r)", after: "log(r)"
+
+For OBS-0003 (BUILD-B):
+- capture: "OBS-0003"
+- changed_functions: ["_normal_dist_inv_cdf", "weibullvariate"] (both were in scope and both changed)
+- first_change: function: "_normal_dist_inv_cdf", before: "-log(r)", after: "log(r)" (first in source order)
+
+Wait, I need to double-check the `weibullvariate` change in BUILD-B. Let me look at the exact AST.
+
+Original `weibullvariate`:
+```
+FunctionDef(name='weibullvariate', args=[self, alpha, beta], body=[
+  Expr(Constant('Weibull distribution...')),
+  Assign(u, 1 - self.random()),
+  Return(alpha * (-_log(u)) ** (1/beta))
+])
+```
+
+The Return is:
+```
+Return(BinOp(alpha, Mult, BinOp(UnaryOp(USub, Call(_log, [u])), Pow, BinOp(1.0, Div, beta))))
+```
+
+BUILD-B `weibullvariate`:
+```
+Return(BinOp(alpha, Mult, BinOp(Call(_log, [u]), Pow, BinOp(1.0, Div, beta))))
+```
+
+Yes, the USub was removed from `_log(u)`.
+
+So the `weibullvariate` change is: `-_log(u)` → `_log(u)` (or in the full expression context: `alpha * (-_log(u)) ** (1/beta)` → `alpha * _log(u) ** (1/beta)`)
+
+But the "first_change" for BUILD-B is still in `_normal_dist_inv_cdf` since it comes first in source order.
+
+Now let me also verify: in BUILD-B, does `_normal_dist_inv_cdf` have the same changes as BUILD-A?
+
+BUILD-B's `_normal_dist_inv_cdf`:
+- `r = sqrt(log(r))` - yes, USub removed (same as BUILD-A)
+- `If(q < 0, [x = x])` - yes, USub removed (same as BUILD-A)
+
+And `weibullvariate`:
+- `Return(alpha * _log(u) ** (1/beta))` - USub removed
+
+So changed_functions for BUILD-B: ["_normal_dist_inv_cdf", "weibullvariate"]
+
+Now I need to write the complete report. The current file has:
+```json
+{"builds": [{"capture": "OBS-0002", "changed_functions": ["_normal_dist_inv_cdf"], "first_change": {"function": "_normal_dist_inv_cdf", "before": "-log(r)", "after": "log(r)"}}]}
+```
+
+I need to add the OBS-0003 entry. The full report should be:
+```json
+{"builds": [{"capture": "OBS-0002", "changed_functions": ["_normal_dist_inv_cdf"], "first_change": {"function": "_normal_dist_inv_cdf", "before": "-log(r)", "after": "log(r)"}}, {"capture": "OBS-0003", "changed_functions": ["_normal_dist_inv_cdf", "weibullvariate"], "first_change": {"function": "_normal_dist_inv_cdf", "before": "-log(r)", "after": "log(r)"}}]}
+```
+
+Wait, but I need to think about what "before" and "after" mean. The README says:
+"Locate the first expression whose node kind changed, traversing functions in source order and their fields in normal Python AST order. Express its original and emitted forms as ordinary Python expressions (equivalent parentheses/spacing are accepted)."
+
+So "before" is the original expression (from the original AST) and "after" is the emitted expression (from the build's AST). The node kind changed from `UnaryOp` to `Call` at that position.
+
+The original expression at that position is `-log(r)` (a UnaryOp wrapping a Call).
+The emitted expression is `log(r)` (just a Call).
+
+So before: "-log(r)" and after: "log(r)" seems right.
+
+Now, I also need to make sure the existing report content for OBS-0002 is correct. Let me verify:
+- capture: "OBS-0002" ✓
+- changed_functions: ["_normal_dist_inv_cdf"] ✓ (only this function was selected and it changed)
+- first_change.function: "_normal_dist_inv_cdf" ✓
+- first_change.before: "-log(r)" ✓
+- first_change.after: "log(r)" ✓
+
+Good. Now I need to add the OBS-0003 entry.
+
+Let me also think about whether the "first_change" for BUILD-B should be different. In BUILD-B, both functions are in scope. Traversing in source order:
+- `_normal_dist_inv_cdf` comes first
+- The first node kind change in it is at `r = sqrt(-log(r))` → the UnaryOp becomes just the Call
+- So first_change is the same: function="_normal_dist_inv_cdf", before="-log(r)", after="log(r)"
+
+Yes, that's correct.
+
+Now let me write the patch. The current file content is:
+```
+{"builds": [{"capture": "OBS-0002", "changed_functions": ["_normal_dist_inv_cdf"], "first_change": {"function": "_normal_dist_inv_cdf", "before": "-log(r)", "after": "log(r)"}}]}
+```
+
+I need to change it to:
+```
+{"builds": [{"capture": "OBS-0002", "changed_functions": ["_normal_dist_inv_cdf"], "first_change": {"function": "_normal_dist_inv_cdf", "before": "-log(r)", "after": "log(r)"}}, {"capture": "OBS-0003", "changed_functions": ["_normal_dist_inv_cdf", "weibullvariate"], "first_change": {"function": "_normal_dist_inv_cdf", "before": "-log(r)", "after": "log(r)"}}]}
+```
+
+I'll use a patch to replace the end of the JSON. Let me use the file SHA: `ab0fba0714e4b221f2d913f8814da1494aab90f5fb9d243c6be4a35c3ea8c36f`
+
+The old text to find: `{"function": "_normal_dist_inv_cdf", "before": "-log(r)", "after": "log(r)"}}]}`
+
+Wait, I need to be more precise. The full file is one line:
+```
+{"builds": [{"capture": "OBS-0002", "changed_functions": ["_normal_dist_inv_cdf"], "first_change": {"function": "_normal_dist_inv_cdf", "before": "-log(r)", "after": "log(r)"}}]}
+```
+
+I'll replace the ending `}}]}` with `}}, {"capture": "OBS-0003", "changed_functions": ["_normal_dist_inv_cdf", "weibullvariate"], "first_change": {"function": "_normal_dist_inv_cdf", "before": "-log(r)", "after": "log(r)"}}]}`
+
+Actually, let me just replace the whole line to be safe. The old is the entire content, the new is the corrected content.
+
+Actually, let me use a smaller unique match. The string `"after": "log(r)"}}]}` appears at the end. Let me replace:
+
+old: `"after": "log(r)"}}]}`
+new: `"after": "log(r)"}}, {"capture": "OBS-0003", "changed_functions": ["_normal_dist_inv_cdf", "weibullvariate"], "first_change": {"function": "_normal_dist_inv_cdf", "before": "-log(r)", "after": "log(r)"}}]}`
+
+This should be unique in the file since it's the end of the file.
+
+Let me verify this is the right approach. The file is 1 line, 179 bytes total in the directory. The file SHA is `ab0fba0714e4b221f2d913f8814da1494aab90f5fb9d243c6be4a35c3ea8c36f`.
+
+Let me construct the patch carefully.

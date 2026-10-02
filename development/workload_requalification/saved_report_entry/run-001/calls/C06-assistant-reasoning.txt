@@ -1,0 +1,60 @@
+Let me analyze the current state:
+
+1. **Task**: Investigate two captured optimized builds of a calculation module, repair the optimizer, and complete `reports/incident.json` with the observed comparison for each build.
+
+2. **Current state**:
+   - The public check (CHK-0017) **passed** on candidate `d05c7ed89f9de61f67872faeb06c84688a02f68134eb40bbf5db889c6c08204b`
+   - The report `reports/incident.json` is already filled with content
+   - `verification.submission` shows `{"eligible":true,"scope":"public"}` - meaning we can submit
+   - The previous check that failed (CHK-0009) was on an earlier candidate and failed because "report must cover each emitted capture exactly once"
+   - The current report covers OBS-0002 (BUILD-A) and OBS-0003 (BUILD-B)
+
+3. **What's been done**:
+   - The optimizer repair was done (the "Qwen's D2 proposal" was applied earlier)
+   - The report was written to `reports/incident.json`
+   - The public check passed
+
+4. **What remains**: The task says "Check the current candidate and submit." The public check has already passed (CHK-0017), and submission is eligible.
+
+Let me verify the report content is correct:
+
+From the captures:
+- **OBS-0002 (BUILD-A)**: `called_function: "_normal_dist_inv_cdf"`, `observed_call: raised ValueError "math domain error"`. The AST shows the `sqrt` call lost its `UnaryOp(op=USub())` wrapper - i.e., `sqrt(-log(r))` became `sqrt(log(r))`. This would cause a math domain error when `log(r)` is negative (i.e., when `r < 1`).
+  - Wait, looking more carefully at the AST for BUILD-A: `Call(func=Name(id='sqrt', ctx=Load()), args=[Call(func=Name(id='log', ctx=Load()), args=[Name(id='r', ctx=Load())], keywords=[])], keywords=[])`
+  - The original (from OBS-0001) has: `Call(func=Name(id='sqrt', ctx=Load()), args=[UnaryOp(op=USub(), operand=Call(func=Name(id='log', ctx=Load()), args=[Name(id='r', ctx=Load())], keywords=[]))], keywords=[])`
+  - So in BUILD-A, the `-log(r)` became `log(r)` - the unary minus was removed. This makes `sqrt(log(r))` which would raise "math domain error" when log(r) < 0.
+
+- **OBS-0003 (BUILD-B)**: `called_function: "weibullvariate"`, `observed_call: returned complex "(1.0195853396696437e-16+1.6651092223153954j)"`. 
+  - Looking at the AST for BUILD-B: The `sqrt` call also lost the `UnaryOp(op=USub())` - same as BUILD-A.
+  - AND the `weibullvariate` function: `Call(func=Name(id='_log', ctx=Load()), args=[Name(id='u', ctx=Load())], keywords=[])` - the `UnaryOp(op=USub())` that was in the original around `_log(u)` is missing. So `-log(u)` became `log(u)`.
+  - Wait, let me re-check. Original: `Return(value=BinOp(left=Name(id='alpha', ctx=Load()), op=Mult(), right=BinOp(left=UnaryOp(op=USub(), operand=Call(func=Name(id='_log', ctx=Load()), args=[Name(id='u', ctx=Load())], keywords=[])), op=Pow(), right=BinOp(left=Constant(value=1.0), op=Div(), right=Name(id='beta', ctx=Load())))))`
+  - BUILD-B: `Return(value=BinOp(left=Name(id='alpha', ctx=Load()), op=Mult(), right=BinOp(left=Call(func=Name(id='_log', ctx=Load()), args=[Name(id='u', ctx=Load())], keywords=[]), op=Pow(), right=BinOp(left=Constant(value=1.0), op=Div(), right=Name(id='beta', ctx=Load())))))`
+  - So yes, `-log(u)` became `log(u)` in the `weibullvariate` function.
+  - Also the `sqrt(-log(r))` → `sqrt(log(r))` change is present in BUILD-B's `_normal_dist_inv_cdf`.
+  - Additionally, in BUILD-B, the `x = -x` (when q < 0) became `x = x` - the negation was removed:
+    - Original: `Assign(targets=[Name(id='x', ctx=Store())], value=UnaryOp(op=USub(), operand=Name(id='x', ctx=Load())))`
+    - BUILD-B: `Assign(targets=[Name(id='x', ctx=Store())], value=Name(id='x', ctx=Load()))`
+
+Wait, let me re-check. Looking at the original (OBS-0001):
+- `If(test=Compare(left=Name(id='q', ctx=Load()), ops=[Lt()], comparators=[Constant(value=0.0)]), body=[Assign(targets=[Name(id='x', ctx=Store())], value=UnaryOp(op=USub(), operand=Name(id='x', ctx=Load())))], orelse=[])`
+
+BUILD-A (OBS-0002):
+- `If(test=Compare(left=Name(id='q', ctx=Load()), ops=[Lt()], comparators=[Constant(value=0.0)]), body=[Assign(targets=[Name(id='x', ctx=Store())], value=Name(id='x', ctx=Load()))], orelse=[])`
+
+BUILD-B (OBS-0003):
+- `If(test=Compare(left=Name(id='q', ctx=Load()), ops=[Lt()], comparators=[Constant(value=0.0)]), body=[Assign(targets=[Name(id='x', ctx=Store())], value=Name(id='x', ctx=Load()))], orelse=[])`
+
+So in both builds, `x = -x` became `x = x`. That's another change.
+
+Now the report says:
+- BUILD-A: `changed_functions: ["_normal_dist_inv_cdf"]`, `first_change: {"function": "_normal_dist_inv_cdf", "before": "-log(r)", "after": "log(r)"}`
+- BUILD-B: `changed_functions: ["_normal_dist_inv_cdf", "weibullvariate"]`, `first_change: {"function": "_normal_dist_inv_cdf", "before": "-log(r)", "after": "log(r)"}`
+
+Let me verify:
+- BUILD-A only compiled `_normal_dist_inv_cdf` (compile_request.functions: ["_normal_dist_inv_cdf"]), so `weibullvariate` is outside scope. The changed function is `_normal_dist_inv_cdf`. The first change in source order would be the `sqrt(-log(r))` → `sqrt(log(r))` since that appears before the `x = -x` → `x = x` in the function body. So "before": "-log(r)", "after": "log(r)" is correct for the first expression change.
+
+- BUILD-B compiled both functions. The first change in source order would be in `_normal_dist_inv_cdf` (first in source), specifically the `sqrt(-log(r))` → `sqrt(log(r))`. So `changed_functions: ["_normal_dist_inv_cdf", "weibullvariate"]` and `first_change` pointing to `_normal_dist_inv_cdf` with `-log(r)` → `log(r)` is correct.
+
+The report looks correct. The check passed. Submission is eligible.
+
+I should submit now.

@@ -1,3 +1,19 @@
+# Completed saved-report restart and open checkpoint repair
+
+saved_report_entry/review/RESULTS-001.md closes the d82cdc84 assisted continuation:
+six requests/seven actor operations, correct preserved/extended report, actual
+26/26 pass and submission, 26.521 model minutes/27.156 loop minutes. Nine new
+setup operations and three inherited records remain separate. All actual inputs
+and complete outputs were reviewed; first-entry correctness is independently
+checked, not established by the earlier incomplete-report pass count. The closing
+account has no subsequent use. No natural pressure/recovery outcome is claimed.
+Original post-closure replay fails final restoration on identical diff-map keys
+2/8/16 sorting as JSON strings versus runtime integers. Preserve that failure,
+source and sealed run. Publish RESTORE_REPAIR_PLAN.md before a narrow typed-address
+repair and separate offline qualification; no model rerun is earned by decoder
+repair alone. Exact roundtrip and authenticating diffs against receipts are distinct.
+Retain the original compiler pressure and wider corpus obligations.
+
 # Qualified distinct saved-report restart
 
 saved_report_entry/PREPARATION_REVIEW.md qualifies the exact assisted f7939c49

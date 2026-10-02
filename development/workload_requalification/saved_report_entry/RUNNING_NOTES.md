@@ -53,3 +53,33 @@ replacement restores ordinary comparison at 21,073. Saved work, account, check
 and archive prefix remain exact; phase opportunity advances without reset.
 Own script and main seal are separately bound; main preparation remains unchanged.
 Capture identity comes from the full pre-rejection view, not inventory alone.
+
+## 2026-10-02 UTC — live continuation and original verification failure
+
+Published preparation d82cdc84 precedes the finite live attempt. Six completed
+requests produce seven actor operations, nine new prescribed setup operations
+and nineteen total archive records including the three inherited reviewer records.
+Qwen writes the correct OBS2 entry, receives an actual incomplete-report check,
+preserves the entry through restart, reacquires absent OBS2, adds correct OBS3,
+explicitly checks the current successor and submits it. All five nonreport files
+remain exact. No live coaching, retry or allowance reset occurs. The only account
+is written at closure, not consumed by a subsequent decision.
+
+All actual input states, six complete thinking/final responses and results were
+reviewed directly. C03 does not receive phase one's explicit report-gate-order
+qualification; it resolves uncertainty by independent evidence recovery. Preserve
+this information-boundary finding rather than blaming failure to remember an
+instruction absent from that input. Cost:116256 input/23009 generated tokens,
+1591.266 model seconds/1629.360 loop seconds; peak input22301,combined27512.
+Minimum sampled free GPU244MiB remains advisory; runtime shutdown/port closure pass.
+
+The original read-only verifier reaches final replay comparisons, then fails Task
+restore at its exact reconstruction guard. Its complete log remains in ignored
+private-runtime/VERIFY-001.log. Root and independent review reproduce the same
+sole field difference: identical diff records at2/8/16 sort differently as JSON
+string keys versus restored integers. Phase counters and candidate are valid.
+METRICS-001.json and independent artifact/custody audits pass; the whole original
+replay must not be relabeled passed. RESTORE_FINDING-001.md preserves the failure.
+RESTORE_REPAIR_PLAN.md specifies a prospective task-local typed-address repair,
+receipt validation and all-checkpoint offline qualification. Publish this result
+and plan before source edits. Preserve original run/preparation and their seals.

@@ -1,0 +1,319 @@
+Let me analyze the situation carefully.
+
+**Task**: Complete `reports/incident.json` for both historical emitted captures (OBS-0002 and OBS-0003). The current report only covers OBS-0002. I need to add OBS-0003 as well.
+
+**What I know so far:**
+
+From the current `reports/incident.json`:
+```json
+{"builds": [{"capture": "OBS-0002", "changed_functions": ["_normal_dist_inv_cdf"], "first_change": {"function": "_normal_dist_inv_cdf", "before": "-log(r)", "after": "log(r)"}}]}
+```
+
+**From OBS-0001 (input calculation module - the original/reference):**
+The original module has:
+- `_normal_dist_inv_cdf(p, mu, sigma)`:
+  - `r = sqrt(-log(r))` where the inner expression uses `UnaryOp(op=USub(), operand=Call(func=Name(id='log', ...)))` — i.e., `sqrt(-log(r))`
+  - At the end: `x = -x` (negation) when `q < 0.0`
+  - Returns `mu + x * sigma`
+
+- `weibullvariate(self, alpha, beta)`:
+  - `u = 1.0 - self.random()`
+  - Returns `alpha * (-log(u)) ** (1.0/beta)` — uses `UnaryOp(op=USub(), operand=Call(func=Name(id='_log', ...)))`
+
+Reference calls:
+- `_normal_dist_inv_cdf`: returned float, value_repr="-2.3263478740408408"
+- `weibullvariate`: returned float, value_repr="1.6651092223153954"
+
+**From OBS-0002 (BUILD-A emitted module):**
+Looking at the content in RES-0013 (OBS-0001) which is the input module. Wait, let me re-read.
+
+Actually, let me re-read the observations:
+
+- OBS-0001: target="input calculation module" — this is the original/reference module (parsed input)
+- OBS-0002: target="BUILD-A emitted module" — this is the first build output
+- OBS-0003: target="BUILD-B emitted module" — this is the second build output
+
+From the latest_feedback, I can see OBS-0003's content was just retrieved. Let me parse it:
+
+OBS-0003 (BUILD-B emitted module):
+- `build`: "BUILD-B"
+- `called_function`: "weibullvariate"
+- `observed_call`: kind="returned", type="complex", value_repr="(1.0195853396696437e-16+1.6651092223153954j)"
+- `record_kind`: "emitted module"
+
+The AST in OBS-0003:
+- `_normal_dist_inv_cdf`:
+  - `r = q - 0.5`
+  - If `fabs(q) <= 0.425`: polynomial path (same as original)
+  - Else: `r = p if q <= 0.0 else 1.0 - p`
+  - `r = sqrt(log(r))` — wait, let me look more carefully.
+
+In OBS-0003's AST for `_normal_dist_inv_cdf`:
+```
+Assign(targets=[Name(id='r', ...)], value=Call(func=Name(id='sqrt', ...), args=[Call(func=Name(id='log', ...), args=[Name(id='r', ...)], keywords=[])], keywords=[]))
+```
+
+So `r = sqrt(log(r))` — the negative sign is missing! The original has `sqrt(-log(r))`.
+
+Then at the end:
+```
+If(test=Compare(left=Name(id='q', ...), ops=[Lt()], comparators=[Constant(value=0.0)]), body=[Assign(targets=[Name(id='x', ...)], value=Name(id='x', ...))], orelse=[])
+```
+
+So `x = x` — the negation is missing! Original has `x = -x`.
+
+For `weibullvariate` in OBS-0003:
+```
+Assign(targets=[Name(id='u', ...)], value=BinOp(left=Constant(value=1.0), op=Sub(), right=Call(func=Attribute(value=Name(id='self', ...), attr='random', ...), args=[], keywords=[])))
+Return(value=BinOp(left=Name(id='alpha', ...), op=Mult(), right=BinOp(left=Call(func=Name(id='_log', ...), args=[Name(id='u', ...)], keywords=[]), op=Pow(), right=BinOp(left=Constant(value=1.0), op=Div(), right=Name(id='beta', ...)))))
+```
+
+So `return alpha * log(u) ** (1.0/beta)` — the negation is missing! Original has `alpha * (-log(u)) ** (1.0/beta)`.
+
+Wait, but `u = 1.0 - self.random()`, and in the original `u` is in (0,1). So `-log(u)` should be positive (since log(u) < 0 for u in (0,1)). Without the negation, `log(u)` is negative, and raising a negative number to a fractional power `1.0/beta` gives a complex result. That matches the observed complex value!
+
+**Now for OBS-0002 (BUILD-A):**
+I need to look at what OBS-0002 contains. It's target="BUILD-A emitted module". I don't have its full content directly in the working set, but I have RES-0007 as its latest_acquisition_result.
+
+Wait, looking at the imported_observations:
+- OBS-0002: `latest_acquisition_result: "RES-0007"`, `shown_complete: false`
+
+But I don't see RES-0007 in the working_set.saved_results. Let me check what's available.
+
+From the current incident.json, OBS-0002's entry says:
+- changed_functions: ["_normal_dist_inv_cdf"]
+- first_change: function="_normal_dist_inv_cdf", before="-log(r)", after="log(r)"
+
+This was apparently already determined by previous work. The check says "report must cover each emitted capture exactly once" — meaning I need to cover both OBS-0002 AND OBS-0003.
+
+Now for OBS-0003 (BUILD-B), I need to determine:
+1. Which functions changed?
+2. What's the first change?
+
+From comparing OBS-0003 (BUILD-B) with OBS-0001 (original input):
+
+`_normal_dist_inv_cdf`:
+- Original: `r = sqrt(-log(r))` → Emitted: `r = sqrt(log(r))` — the USub (negative sign) is gone
+- Original: `x = -x` (when q < 0) → Emitted: `x = x` — the USub is gone
+
+`weibullvariate`:
+- Original: `alpha * (-log(u)) ** (1.0/beta)` → Emitted: `alpha * log(u) ** (1.0/beta)` — the USub is gone
+
+So both `_normal_dist_inv_cdf` and `weibullvariate` changed.
+
+The first change (traversing in source order, fields in normal AST order):
+- In `_normal_dist_inv_cdf`, the first expression where node kind changed would be... Let me think about what "normal Python AST order" means for fields.
+
+The function body of `_normal_dist_inv_cdf` in the original:
+1. `q = p - 0.5` (Assign)
+2. `if fabs(q) <= 0.425:` block (If) — contains polynomial path
+3. `r = p if q <= 0.0 else 1.0 - p` (IfExp)
+4. `r = sqrt(-log(r))` (Assign with Call containing UnaryOp USub)
+5. `if r <= 5.0:` block (If) — contains polynomial approximation
+6. `x = num / den` (Assign)
+7. `if q < 0.0: x = -x` (If with Assign)
+8. `return mu + x * sigma` (Return)
+
+In the emitted (OBS-0003):
+- Step 4: `r = sqrt(log(r))` — the UnaryOp(USub) wrapper is gone, so `log(r)` is directly the arg instead of `-log(r)`. The node kind changed from UnaryOp to Call (the log call is now directly where the UnaryOp was).
+
+Wait, actually let me think about this more carefully. In the AST:
+- Original: `Call(func=sqrt, args=[UnaryOp(op=USub, operand=Call(func=log, args=[r]))])`
+- Emitted: `Call(func=sqrt, args=[Call(func=log, args=[r])])`
+
+So the argument to sqrt changed from a UnaryOp node to a Call node. The "expression" at that position changed from `-log(r)` to `log(r)`.
+
+Is this the first change? Let me check the polynomial block (step 2) first. The If block with the polynomial:
+- In original: `r = 0.180625 - q*q` → in emitted: `r = 0.180625 - q*q` (same)
+- The polynomial num/den assignments: same in both
+- `x = num/den` — same
+- `return mu + x*sigma` — same
+
+So the polynomial block is unchanged. The first change in `_normal_dist_inv_cdf` is at step 4: `r = sqrt(-log(r))` → `r = sqrt(log(r))`.
+
+The "first changed expression" would be the argument to sqrt: before="-log(r)", after="log(r)".
+
+Wait, but I need to be more precise. The README says: "Locate the first expression whose node kind changed, traversing functions in source order and their fields in normal Python AST order."
+
+In `_normal_dist_inv_cdf`, traversing in source order:
+- First statement: `q = p - 0.5` — no change
+- Second statement (If block): polynomial — no change (the polynomial coefficients are the same)
+- Third statement: `r = p if q <= 0.0 else 1.0 - p` — no change
+- Fourth statement: `r = sqrt(-log(r))` → `r = sqrt(log(r))` — CHANGE!
+
+So the first change is in `_normal_dist_inv_cdf`, and the expression is the argument to `sqrt`:
+- before: `-log(r)` (a UnaryOp with USub wrapping a Call to log)
+- after: `log(r)` (just the Call to log)
+
+Now I need to verify this is correct. Let me look at what "expression" means here. The README says "Express its original and emitted forms as ordinary Python expressions." So:
+- before: `-log(r)` 
+- after: `log(r)`
+
+This matches the pattern of OBS-0002's entry (same change, same function, same expressions).
+
+Now for OBS-0002 (BUILD-A), the existing entry already has:
+- changed_functions: ["_normal_dist_inv_cdf"]
+- first_change: function="_normal_dist_inv_cdf", before="-log(r)", after="log(r)"
+
+But wait — I need to verify whether OBS-0002 also has the `x = -x` → `x = x` change and the `weibullvariate` change. Let me think about what I know.
+
+Looking at the task description: "one raised an unexpected arithmetic error and another returned a complex result where the original returned a real number."
+
+- BUILD-A (OBS-0002): raised an unexpected arithmetic error (likely `ValueError: math domain error` from `sqrt(log(r))` when `log(r)` is negative, i.e., when `r < 1`)
+- BUILD-B (OBS-0003): returned a complex result (from `log(u) ** (1.0/beta)` where `log(u)` is negative and the power is fractional)
+
+So BUILD-A's failure mode is in `_normal_dist_inv_cdf` (sqrt of negative number → arithmetic error), and BUILD-B's is in `weibullvariate` (complex result).
+
+But the question is: what exactly did BUILD-A emit? Does it also have the `x = -x` → `x = x` change? Does it also have the `weibullvariate` change?
+
+I need to look at OBS-0002's content. Let me check if I have it.
+
+From the working set, I see RES-0013 (OBS-0001) and RES-0014 (OBS-0003) in saved_results. OBS-0002's latest acquisition is RES-0007, which is NOT in the current saved_results.
+
+Wait, but the current incident.json already has an entry for OBS-0002. And the check error says "report must cover each emitted capture exactly once" — meaning it needs both OBS-0002 and OBS-0003. The existing entry for OBS-0002 might be correct (it was presumably verified by the 25/26 passing cases... wait, no. The check says "25/26 contract cases passed" and the failure is "report must cover each emitted capture exactly once").
+
+Hmm, actually re-reading: the check failed with "report must cover each emitted capture exactly once" and "25/26 contract cases passed". So 25 out of 26 cases passed. The one failing is the report completeness check. The 25 passing cases likely include the optimizer contract tests AND possibly a partial report validation.
+
+Wait, actually I think the "25/26 contract cases" means 25 optimizer contract tests passed (the optimizer repair is correct), and the 26th "case" is the report check which failed because it doesn't cover both captures.
+
+So the optimizer repair is correct (25/25 optimizer cases pass), and I just need to fix the report.
+
+Now, for OBS-0002, I need to verify what the correct entry should be. The existing entry says only `_normal_dist_inv_cdf` changed with first change `-log(r)` → `log(r)`. But I need to verify this against the actual OBS-0002 content.
+
+Let me think about what I know:
+- The task says BUILD-A "raised an unexpected arithmetic error"
+- If BUILD-A only removed the USub from `sqrt(-log(r))` → `sqrt(log(r))`, that would cause a math domain error when r < 1 (since log(r) < 0 for r < 1)
+- If BUILD-A also removed USub from `x = -x` and from `weibullvariate`, those would be additional changes
+
+But I should verify by looking at the actual OBS-0002 content. Let me retrieve it.
+
+Actually wait — I already have the OBS-0002 entry in the report from previous work. The question is whether it's correct. The check's failure is specifically about coverage (both captures must be present), not about correctness of the OBS-0002 entry. If the OBS-0002 entry were wrong, the check would likely fail differently.
+
+But let me be careful. Let me retrieve OBS-0002 to verify.
+
+Actually, let me first look at what I have. I have:
+- RES-0013: OBS-0001 content (the original/input module) — visible in working_set
+- RES-0014: OBS-0003 content (BUILD-B) — visible in latest_feedback
+
+I need to retrieve OBS-0002 to verify the existing entry. Let me do that.
+
+Actually, wait. Let me re-read the task description more carefully:
+
+"Two captured optimized builds of a calculation module changed its behavior: one raised an unexpected arithmetic error and another returned a complex result where the original returned a real number."
+
+So:
+- One build (BUILD-A, OBS-0002): raised an arithmetic error
+- Other build (BUILD-B, OBS-0003): returned a complex result
+
+"Repair the optimizer while preserving the supported compilation contract, and complete reports/incident.json with the observed comparison for each build."
+
+"The original optimizer repair remains part of the current candidate unless subsequent recorded edits changed it."
+
+So the optimizer repair is already done. I just need to complete the report.
+
+Let me retrieve OBS-0002 to verify the existing report entry, then write the complete report with both entries.
+
+Let me plan my actions:
+1. Retrieve OBS-0002 to verify the existing report entry
+2. Write the complete incident.json with both entries
+3. Run the public check
+4. Submit if it passes
+
+Let me start by retrieving OBS-0002.
+
+Actually, wait. Let me look at what's already in my working set more carefully. The working_set.saved_results contains RES-0009 (check result), RES-0013 (OBS-0001), and... let me check. No, it contains RES-0009 and RES-0013. The latest_feedback has OBS-0003's content.
+
+I need to retrieve OBS-0002. Let me do that.
+
+Actually, I realize I should be more efficient. The existing report entry for OBS-0002 was presumably written by previous work that had access to OBS-0002. The check only fails on coverage (both captures needed), not on the content of the OBS-0002 entry. So the OBS-0002 entry is likely correct.
+
+For OBS-0003 (BUILD-B), based on my analysis of the AST:
+- Changed functions: `_normal_dist_inv_cdf` and `weibullvariate`
+- First change: in `_normal_dist_inv_cdf`, the `sqrt(-log(r))` → `sqrt(log(r))` change
+  - before: `-log(r)`
+  - after: `log(r)`
+
+Wait, but I need to be more careful. Let me re-examine.
+
+In the original (OBS-0001):
+```
+r = sqrt(-log(r))
+```
+The AST is: `Call(func=sqrt, args=[UnaryOp(op=USub, operand=Call(func=log, args=[r]))])`
+
+In OBS-0003 (BUILD-B):
+```
+r = sqrt(log(r))
+```
+The AST is: `Call(func=sqrt, args=[Call(func=log, args=[r])])`
+
+So the node kind at the argument position changed from `UnaryOp` to `Call`. The "expression" in ordinary Python:
+- before: `-log(r)`
+- after: `log(r)`
+
+This is the same first change as OBS-0002 makes sense if both builds have the same optimizer bug (removing unary minus signs).
+
+But wait — for OBS-0002, the existing report says changed_functions is just `["_normal_dist_inv_cdf"]`. For OBS-0003, I believe both functions changed. Let me verify by comparing OBS-0003's AST with OBS-0001's AST more carefully.
+
+OBS-0001 (original) `_normal_dist_inv_cdf`:
+- `r = sqrt(-log(r))` — has USub
+- `if q < 0.0: x = -x` — has USub (the body is `Assign(x, UnaryOp(USub, x))`)
+
+OBS-0003 (BUILD-B) `_normal_dist_inv_cdf`:
+- `r = sqrt(log(r))` — no USub
+- `if q < 0.0: x = x` — no USub (the body is `Assign(x, x)`)
+
+So in `_normal_dist_inv_cdf`, two expressions changed:
+1. `sqrt(-log(r))` → `sqrt(log(r))` (first in source order)
+2. `x = -x` → `x = x`
+
+OBS-0001 (original) `weibullvariate`:
+- `return alpha * (-log(u)) ** (1.0/beta)` — has USub
+
+OBS-0003 (BUILD-B) `weibullvariate`:
+- `return alpha * log(u) ** (1.0/beta)` — no USub
+
+So `weibullvariate` also changed.
+
+Therefore for OBS-0003:
+- changed_functions: ["_normal_dist_inv_cdf", "weibullvariate"]
+- first_change: function="_normal_dist_inv_cdf", before="-log(r)", after="log(r)"
+
+The first change is the same as OBS-0002's first change (it's the first expression in source order that changed).
+
+Now let me write the complete report:
+
+```json
+{"builds": [
+  {"capture": "OBS-0002", "changed_functions": ["_normal_dist_inv_cdf"], "first_change": {"function": "_normal_dist_inv_cdf", "before": "-log(r)", "after": "log(r)"}},
+  {"capture": "OBS-0003", "changed_functions": ["_normal_dist_inv_cdf", "weibullvariate"], "first_change": {"function": "_normal_dist_inv_cdf", "before": "-log(r)", "after": "log(r)"}}
+]}
+```
+
+Wait, but I should verify OBS-0002's changed_functions. Does BUILD-A also change `weibullvariate`? The task says BUILD-A "raised an unexpected arithmetic error" — this would be from `sqrt(log(r))` when log(r) is negative. If `weibullvariate` also lost its USub, it would return a complex number too, but the task says BUILD-A raised an error (not returned complex). So maybe BUILD-A only changed `_normal_dist_inv_cdf`?
+
+Actually, the optimizer bug is "simplify unary signs applied to numeric literals" — but it's incorrectly removing ALL unary minuses, not just on numeric literals. The question is whether BUILD-A's optimizer removed the sign from `weibullvariate` too.
+
+I think I need to actually look at OBS-0002 to be sure. Let me retrieve it.
+
+Actually, let me think about this differently. The existing report entry for OBS-0002 says changed_functions is just `["_normal_dist_inv_cdf"]`. This was presumably written by previous work that had the actual OBS-0002 data. If it were wrong, the check might catch it (but the check error is specifically about coverage, not content correctness). 
+
+Hmm, but actually the check says "25/26 contract cases passed" — maybe the 26th case IS the report check, and if the OBS-0002 entry were wrong, it would fail in a different way. The current failure is "report must cover each emitted capture exactly once" which is clearly about missing OBS-0003.
+
+Let me be safe and retrieve OBS-0002 to verify. I have 8 requests and 16 operations available.
+
+Let me retrieve OBS-0002 first.
+
+Actually wait — I just realized something. Let me re-read the OBS-0002 entry in the report. It says the first change is `-log(r)` → `log(r)`. But what if in BUILD-A, the change is different? What if BUILD-A removes the USub from a different expression first?
+
+I think the safest approach is to retrieve OBS-0002 and verify. Let me do that.
+
+Let me plan:
+1. `reopen_observation` for OBS-0002 — to verify the existing entry
+2. Then write the complete report
+3. Then check
+4. Then submit
+
+That's 4 operations, well within my budget.
+
+Let me start with retrieving OBS-0002.

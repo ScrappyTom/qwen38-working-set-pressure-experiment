@@ -1,0 +1,334 @@
+Let me analyze the situation carefully.
+
+**Task context:**
+- I'm in a "saved optimizer repair" contribution. I need to complete the OBS-0002 entry in `reports/incident.json` from historical captures.
+- OBS-0003 is left for the next working context.
+- I have the current report (empty `{"builds": []}`), the README contract, and OBS-0001 and OBS-0002 already acquired.
+- I need to figure out what changed between the original (OBS-0001) and the BUILD-A emitted module (OBS-0002).
+
+**What I have so far:**
+
+1. **README.md** - The contract for the report structure:
+```json
+{
+  "builds": [
+    {
+      "capture": "<emitted-tree handle>",
+      "changed_functions": ["<function name>", "..."],
+      "first_change": {
+        "function": "<name>",
+        "before": "<original expression>",
+        "after": "<emitted expression>"
+      }
+    }
+  ]
+}
+```
+
+Instructions:
+- Include every captured emitted build
+- Compare with the captured original tree
+- List all top-level functions whose AST changed, in source order
+- Locate the first expression whose node kind changed, traversing functions in source order and their fields in normal Python AST order
+- Express original and emitted forms as ordinary Python expressions
+- "equivalent parentheses/spacing are accepted"
+
+2. **OBS-0001** (input calculation module) - The original/reference:
+- `record_kind`: "parsed input module"
+- Has `reference_calls` showing:
+  - `_normal_dist_inv_cdf`: returned float -2.3263478740408408
+  - `weibullvariate`: returned float 1.6651092223153954
+
+The AST in OBS-0001 (the original):
+- `_normal_dist_inv_cdf`: In the last `If` block (checking `q < 0`), the body is:
+  `Assign(targets=[Name(id='x', ctx=Store())], value=UnaryOp(op=USub(), operand=Name(id='x', ctx=Load())))`
+  
+  Wait, let me re-read the OBS-0001 AST more carefully from the RES-0006 content...
+
+Actually, looking at the RES-0006 content, the OBS-0001 AST shows:
+- In `_normal_dist_inv_cdf`, the last If block (`q < 0`):
+  `body=[Assign(targets=[Name(id='x', ctx=Store())], value=UnaryOp(op=USub(), operand=Name(id='x', ctx=Load())))`
+
+Wait, that doesn't look right. Let me re-read more carefully.
+
+From the RES-0006 content (OBS-0001), looking at the AST dump:
+- In `_normal_dist_inv_cdf`, the final section after the big if/else with `r <= 5.0`:
+  - `Assign(targets=[Name(id='x', ctx=Store())], value=BinOp(left=Name(id='num', ctx=Load()), op=Div(), right=Name(id='den', ctx=Load())))`
+  - `If(test=Compare(left=Name(id='q', ctx=Load()), ops=[Lt()], comparators=[Constant(value=0.0)]), body=[Assign(targets=[Name(id='x', ctx=Store())], value=UnaryOp(op=USub(), operand=Name(id='x', ctx=Load())))], orelse=[])`
+  - `Return(value=BinOp(left=Name(id='mu', ctx=Load()), op=Add(), right=BinOp(left=Name(id='x', ctx=Load()), op=Mult(), right=Name(id='sigma', ctx=Load()))))`
+
+Wait, I need to be more careful. Let me look at the actual content from OBS-0001 (RES-0006) vs OBS-0002 (latest_feedback).
+
+From **OBS-0001** (RES-0006), the `_normal_dist_inv_cdf` function's last If block:
+```
+If(test=Compare(left=Name(id='q', ctx=Load()), ops=[Lt()], comparators=[Constant(value=0.0)]), body=[Assign(targets=[Name(id='x', ctx=Store())], value=UnaryOp(op=USub(), operand=Name(id='x', ctx=Load())))], orelse=[])
+```
+
+Wait, that's `x = -x` when `q < 0`. That makes sense for the inverse CDF - when p < 0.5, the quantile is negative.
+
+From **OBS-0002** (BUILD-A emitted module), the same section:
+```
+If(test=Compare(left=Name(id='q', ctx=Load()), ops=[Lt()], comparators=[Constant(value=0.0)]), body=[Assign(targets=[Name(id='x', ctx=Store())], value=Name(id='x', ctx=Load()))], orelse=[])
+```
+
+Wait, let me look at this more carefully. In the latest_feedback for OBS-0002:
+
+Looking at the content_utf8 of OBS-0002:
+```
+If(test=Compare(left=Name(id='q', ctx=Load()), ops=[Lt()], comparators=[Constant(value=0.0)]), body=[Assign(targets=[Name(id='x', ctx=Store())], value=Name(id='x', ctx=Load()))], orelse=[])
+```
+
+So in BUILD-A, `x = x` (the negation was removed!) instead of `x = -x`.
+
+That's the bug! The optimizer's unary simplification removed the negation. Instead of `x = -x`, it emitted `x = x`.
+
+Wait, but the README says:
+> The small optimizer may simplify unary signs applied to numeric literals. It must at least eliminate unary plus on exact built-in integer and float literals in selected functions. It must preserve Python's values, types, exceptions and operator dispatch everywhere else, including negative zero and user-defined unary operators.
+
+So the optimizer should only simplify `+literal` and maybe `-literal` where literal is a numeric literal. It should NOT touch `x = -x` where x is a Name, not a literal.
+
+So the bug is: the optimizer incorrectly removed the unary minus from `-x` where `x` is a variable, not a numeric literal.
+
+Now let me verify: In OBS-0001 (original):
+- `value=UnaryOp(op=USub(), operand=Name(id='x', ctx=Load()))` → this is `-x`
+
+In OBS-0002 (BUILD-A):
+- `value=Name(id='x', ctx=Load())` → this is just `x`
+
+So the change is:
+- Function: `_normal_dist_inv_cdf`
+- Before: `-x` (or equivalently `- x`)
+- After: `x`
+
+Now, are there other changes? Let me look more carefully at the full ASTs.
+
+Let me compare the two ASTs systematically.
+
+**OBS-0001 (original) `_normal_dist_inv_cdf`:**
+- `q = p - 0.5`
+- If `fabs(q) <= 0.425`: polynomial branch
+- `r = p if q <= 0 else 1 - p`
+- `r = sqrt(log(r))`  ← Wait, let me check
+
+In OBS-0001:
+```
+Assign(targets=[Name(id='r', ctx=Store())], value=Call(func=Name(id='sqrt', ctx=Load()), args=[UnaryOp(op=USub(), operand=Call(func=Name(id='log', ctx=Load()), args=[Name(id='r', ctx=Load())], keywords=[]))], keywords=[]))
+```
+
+So `r = sqrt(-log(r))`
+
+In OBS-0002 (BUILD-A):
+```
+Assign(targets=[Name(id='r', ctx=Store())], value=Call(func=Name(id='sqrt', ctx=Load()), args=[Call(func=Name(id='log', ctx=Load()), args=[Name(id='r', ctx=Load())], keywords=[])], keywords=[]))
+```
+
+So `r = sqrt(log(r))`
+
+Wait, that's another change! The `-log(r)` became `log(r)` in BUILD-A. That's a second removal of unary minus!
+
+So there are TWO changes in `_normal_dist_inv_cdf`:
+1. `r = sqrt(-log(r))` → `r = sqrt(log(r))` (the unary minus on the log call was removed)
+2. `x = -x` → `x = x` (the unary minus on x was removed)
+
+Now I need to find the FIRST change in source order. The function `_normal_dist_inv_cdf` comes first in source order. Within it, I need to traverse in "normal Python AST order" - which means traversing the body statements in order, and within each statement, traversing its fields in the order they appear in the AST node.
+
+Let me trace through the body of `_normal_dist_inv_cdf`:
+
+Statement 1: `q = p - 0.5` - no change
+Statement 2: `If(fabs(q) <= 0.425, ...)` - the polynomial branch - no change (checking)
+Statement 3: `r = p if q <= 0 else 1 - p` - no change
+Statement 4: `r = sqrt(-log(r))` → `r = sqrt(log(r))` - CHANGED!
+Statement 5: `If(r <= 5.0, ...)` - need to check
+Statement 6: `x = num / den` - no change
+Statement 7: `If(q < 0, x = -x)` → `If(q < 0, x = x)` - CHANGED!
+Statement 8: `return mu + x * sigma` - no change
+
+So the FIRST change is in Statement 4: `r = sqrt(-log(r))` → `r = sqrt(log(r))`
+
+Wait, but I need to be more precise about "node kind changed" and "first expression whose node kind changed."
+
+The original has `sqrt(-log(r))` and the emitted has `sqrt(log(r))`. The expression inside sqrt changed from `UnaryOp(op=USub(), operand=Call(...))` to `Call(...)`. So the node kind changed from UnaryOp to Call (or rather, the UnaryOp wrapper was removed).
+
+Actually, let me think about this differently. The README says:
+> Locate the first expression whose node kind changed, traversing functions in source order and their fields in normal Python AST order.
+
+So I need to find the first position in the AST traversal where the node types differ.
+
+In the original: `Call(func=sqrt, args=[UnaryOp(op=USub, operand=Call(func=log, args=[Name(r)]))])`
+In the emitted: `Call(func=sqrt, args=[Call(func=log, args=[Name(r)])])`
+
+The argument to sqrt is:
+- Original: `UnaryOp(op=USub(), operand=Call(func=log, args=[Name(id='r')]))` → i.e., `-log(r)`
+- Emitted: `Call(func=log, args=[Name(id='r')])` → i.e., `log(r)`
+
+So the first changed expression is the argument to `sqrt()`:
+- Before: `-log(r)` 
+- After: `log(r)`
+
+Wait, but I should express these as "ordinary Python expressions." So:
+- Before: `-log(r)` 
+- After: `log(r)`
+
+And the function is `_normal_dist_inv_cdf`.
+
+Now, what about `changed_functions`? The README says "List all top-level functions whose AST changed, in source order." The only function that changed is `_normal_dist_inv_cdf`. The `weibullvariate` function - let me check if it changed.
+
+In OBS-0001, `weibullvariate`:
+```
+FunctionDef(name='weibullvariate', args=arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='alpha'), arg(arg='beta')], kwonlyargs=[], kw_defaults=[], defaults=[]), body=[Expr(value=Constant(value='Weibull distribution.\\n\\n    alpha is the scale parameter and beta is the shape parameter.\\n\\n    ')), Assign(targets=[Name(id='u', ctx=Store())], value=BinOp(left=Constant(value=1.0), op=Sub(), right=Call(func=Attribute(value=Name(id='self', ctx=Load()), attr='random', ctx=Load()), args=[], keywords=[]))), Return(value=BinOp(left=Name(id='alpha', ctx=Load()), op=Mult(), right=BinOp(left=UnaryOp(op=USub(), operand=Call(func=Name(id='_log', ctx=Load()), args=[Name(id='u', ctx=Load())], keywords=[])), op=Pow(), right=BinOp(left=Constant(value=1.0), op=Div(), right=Name(id='beta', ctx=Load())))))], decorator_list=[], type_params=[])
+```
+
+In OBS-0002 (BUILD-A), `weibullvariate`:
+```
+FunctionDef(name='weibullvariate', args=arguments(posonlyargs=[], args=[arg(arg='self'), arg(arg='alpha'), arg(arg='beta')], kwonlyargs=[], kw_defaults=[], defaults=[]), body=[Expr(value=Constant(value='Weibull distribution.\\n\\n    alpha is the scale parameter and beta is the shape parameter.\\n\\n    ')), Assign(targets=[Name(id='u', ctx=Store())], value=BinOp(left=Constant(value=1.0), op=Sub(), right=Call(func=Attribute(value=Name(id='self', ctx=Load()), attr='random', ctx=Load()), args=[], keywords=[]))), Return(value=BinOp(left=Name(id='alpha', ctx=Load()), op=Mult(), right=BinOp(left=UnaryOp(op=USub(), operand=Call(func=Name(id='_log', ctx=Load()), args=[Name(id='u', ctx=Load())], keywords=[])), op=Pow(), right=BinOp(left=Constant(value=1.0), op=Div(), right=Name(id='beta', ctx=Load())))))], decorator_list=[], type_params=[])
+```
+
+These look identical! The `weibullvariate` function has `-log(u)` which uses `_log` (aliased import), and the unary minus is preserved. So `weibullvariate` is NOT changed.
+
+Wait, but that's interesting. In `weibullvariate`, the expression is `(-log(u)) ** (1/beta)`. The unary minus is on a `Call` to `_log`. In the original, it's preserved. In BUILD-A, it's also preserved. So the optimizer didn't touch this one.
+
+But in `_normal_dist_inv_cdf`, the expression `sqrt(-log(r))` had its unary minus removed. Why would the optimizer treat them differently?
+
+Hmm, wait. Let me re-read the optimizer contract:
+> The small optimizer may simplify unary signs applied to numeric literals.
+
+So it should ONLY simplify unary signs on numeric literals. Both `-log(r)` and `-log(u)` are unary minus on a Call, not on a numeric literal. So neither should be simplified. The fact that `weibullvariate`'s `-log(u)` was preserved but `_normal_dist_inv_cdf`'s `-log(r)` was not is the bug.
+
+Actually wait, I need to be more careful. Let me re-read the OBS-0002 content from latest_feedback.
+
+Looking at the latest_feedback content_utf8 for OBS-0002, in `_normal_dist_inv_cdf`:
+
+The `r = sqrt(...)` line:
+```
+Assign(targets=[Name(id='r', ctx=Store())], value=Call(func=Name(id='sqrt', ctx=Load()), args=[Call(func=Name(id='log', ctx=Load()), args=[Name(id='r', ctx=Load())], keywords=[])], keywords=[]))
+```
+
+Yes, `sqrt(log(r))` - the negative sign is gone.
+
+And in the `If(q < 0)` block:
+```
+body=[Assign(targets=[Name(id='x', ctx=Store())], value=Name(id='x', ctx=Load()))]
+```
+
+Yes, `x = x` - the negative sign is gone.
+
+So both changes are in `_normal_dist_inv_cdf`.
+
+Now for the report entry for OBS-0002 (BUILD-A):
+```json
+{
+  "capture": "OBS-0002",
+  "changed_functions": ["_normal_dist_inv_cdf"],
+  "first_change": {
+    "function": "_normal_dist_inv_cdf",
+    "before": "-log(r)",
+    "after": "log(r)"
+  }
+}
+```
+
+Wait, the README says `"capture": "<emitted-tree handle>"`. What's the handle? Looking at the OBS-0002 data, the handle is "OBS-0002". That should be the emitted-tree handle.
+
+Now, the task says "Complete the OBS-0002 entry in reports/incident.json from the historical captures. Leave OBS-0003 for the next working context."
+
+So I only need to add the OBS-0002 entry. The current file is `{"builds": []}` and I need to make it:
+```json
+{"builds": [{"capture": "OBS-0002", "changed_functions": ["_normal_dist_inv_cdf"], "first_change": {"function": "_normal_dist_inv_cdf", "before": "-log(r)", "after": "log(r)"}}]}
+```
+
+Wait, but I should double-check: is the "first change" really the `-log(r)` → `log(r)` change? Let me think about "normal Python AST order" more carefully.
+
+The AST traversal order for a function body would be:
+1. For each statement in order:
+   - For an Assign: targets, then value
+   - For a value expression: traverse left-to-right in the expression tree
+
+Actually, "normal Python AST order" likely means the order in which nodes appear in the AST structure, which for a function body is:
+- Body statements in order
+- Within each statement, the fields in the order defined by the AST node class
+
+For `Assign`: targets, value
+For `BinOp`: left, op, right
+For `Call`: func, args, keywords
+For `UnaryOp`: operand (and op is an enum, not really a sub-node)
+For `Name`: id (just a string)
+
+So traversing `_normal_dist_inv_cdf` body:
+
+Statement 1: `q = p - 0.5`
+- Assign: targets=[Name(q)], value=BinOp(left=Name(p), op=Sub(), right=Constant(0.5))
+- No changes
+
+Statement 2: `If(fabs(q) <= 0.425, [body...])`
+- The polynomial assignments... let me check if any changed.
+
+Actually, let me look at the polynomial part more carefully. In both OBS-0001 and OBS-0002, the polynomial `num` and `den` assignments look the same (same constants, same structure). I'll trust that they're the same since I don't see any obvious difference.
+
+Statement 3: `r = p if q <= 0 else 1 - p`
+- `IfExp(test=Compare(q, LtE(), 0.0), body=Name(p), orelse=BinOp(1.0, Sub(), Name(p)))`
+- No changes
+
+Statement 4: `r = sqrt(-log(r))`
+- Original: `Call(func=Name(sqrt), args=[UnaryOp(op=USub(), operand=Call(func=Name(log), args=[Name(r)]))])`
+- BUILD-A: `Call(func=Name(sqrt), args=[Call(func=Name(log), args=[Name(r)])])`
+- **CHANGED**: The argument to sqrt changed from UnaryOp to Call
+
+This is the first change! The expression is:
+- Before: `-log(r)` (i.e., `-log(r)`)
+- After: `log(r)`
+
+So the first_change entry should be:
+```json
+{
+  "function": "_normal_dist_inv_cdf",
+  "before": "-log(r)",
+  "after": "log(r)"
+}
+```
+
+Now I need to write this into `reports/incident.json`. The current content is `{"builds": []}` (a single line).
+
+I'll use a patch to replace the content. The file is 1 line: `{"builds": []}`.
+
+Let me construct the new content. Since the README shows the structure with specific formatting, I'll write it as:
+```json
+{"builds": [{"capture": "OBS-0002", "changed_functions": ["_normal_dist_inv_cdf"], "first_change": {"function": "_normal_dist_inv_cdf", "before": "-log(r)", "after": "log(r)"}}]}
+```
+
+Actually wait - I should think about whether the "before" and "after" should be more descriptive. The README says:
+> Express its original and emitted forms as ordinary Python expressions (equivalent parentheses/spacing are accepted).
+
+The expression `-log(r)` is a valid Python expression. `log(r)` is also valid. These are "ordinary Python expressions."
+
+But wait - should it be `-log(r)` or `- log(r)`? The README says "equivalent parentheses/spacing are accepted" so either should work. I'll use `-log(r)` as it's the most natural Python expression.
+
+Now, for the patch:
+- File: `reports/incident.json`
+- Current content: `{"builds": []}`
+- File SHA: `22efad348a13802b9bc50b72ff44cdb2234b2c9faacc9f4b33ddaea77ea68509`
+- Candidate: `f7939c49b60d57f19b88dde8d31c6deb0ea036b6a3746c5d27b61d5ce0b99fd6`
+
+Let me write the patch. I'll replace `{"builds": []}` with the full new content.
+
+Actually, let me reconsider the exact JSON. The README shows:
+```
+    {\"builds\": [
+      {\"capture\": \"<emitted-tree handle>\",
+       \"changed_functions\": [\"<function name>\", \"...\"],
+       \"first_change\": {\"function\": \"<name>\",
+                        \"before\": \"<original expression>\",
+                        \"after\": \"<emitted expression>\"}}
+    ]}
+```
+
+The "capture" field should be the handle of the emitted tree. Looking at the observations:
+- OBS-0002 has `handle: "OBS-0002"` and `target: "BUILD-A emitted module"`
+
+So the capture handle is "OBS-0002".
+
+Let me write the final JSON:
+```json
+{"builds": [{"capture": "OBS-0002", "changed_functions": ["_normal_dist_inv_cdf"], "first_change": {"function": "_normal_dist_inv_cdf", "before": "-log(r)", "after": "log(r)"}}]}
+```
+
+Now let me do the patch.
