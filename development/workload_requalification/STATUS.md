@@ -24,12 +24,14 @@ Historical successes remain preserved; the new-host column requires new evidence
 
 The exact fresh E19 source entry is closed and reviewed; its original25files,
 named inspection and guards remain explicit. Read RESULTS-002.md for the nine
-request outcome and limits. The distinct ecological_observation_entry/PLAN.md
-precedes implementation: fresh original25files/twoexact observations, no prior
-actor work, model-selected acquisition and unchanged public/hidden scope. Keep
-original verifier provenance separate from capture transport and preserve both
-through reconstruction. Qualify/publish before one finite uncoached24/72attempt.
-Current functional success cannot close E20 or R50/X25pressure obligations.
+request outcome and limits. The distinct ecological_observation_entry has now
+qualified its fresh original25files/twoexact observations with5CPU tests,
+36native forms,12actual inputs and3scripted executions,0model completions.
+Original verifier provenance and capture transport both restore exactly.
+PREPARATION_REVIEW-002.md preserves the failed001 evidence-path attempt and
+unsupported evaluator adjective. Publish before one fresh uncoached24/72run002;
+actor selection/use and completion remain untested. Current functional success
+cannot close E20 or R50/X25pressure obligations.
 
 INVENTORY.json records discovered task texts and locations. Its untriaged entries
 are obligations to reconcile, not an exclusion list. Different contexts, seeds and

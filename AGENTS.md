@@ -1,3 +1,19 @@
+# Qualified original E19 observation-selection entry
+
+ecological_observation_entry/PREPARATION_REVIEW-002.md qualifies the original
+fresh25-file/two-observation entry:5CPU tests,36native forms,12actual inputs,
+three scripted public executions and12exact checkpoint restores;0completions.
+Both original verifier provenance and capture transport survive reconstruction.
+Root and independent audit directly review actual inputs/source/raw observations;
+the step1 evaluator-only "passing record" adjective is not input-supported and
+must not be credited as visible status. The candidate match alone justifies that
+scripted acquisition. Historical legacy candidate equality cannot replace a
+current graph check. Preserve failed001 Windows evidence-path stop and exact old
+route;002 changes only its route label. Publish before one fresh uncoached24/72
+seed173205 run002. No coaching/retry/extension or pressure/account-benefit claim.
+Review actual model selection, complete outputs, delivered source and saved work.
+E20 and wider corpus remain open.
+
 # Completed original E19 source entry and next observation entry
 
 ecological_source_entry/review/RESULTS-002.md closes the exact fresh uncoached
