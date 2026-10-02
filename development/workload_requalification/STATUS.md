@@ -22,6 +22,13 @@ Historical successes remain preserved; the new-host column requires new evidence
 | INC-042 export policy, two prepared worlds | Zero model calls; pressure prerequisite rejected | Engineering regression, not a historical failed model workload |
 | Embedded E017 historical-action marker recovery | Exposed development task absent from TASK.txt inventory | Pending recovery-entry regression |
 
+The URL saved-failure continuation is separately qualified under published plan
+e61dadd1: exact20/30 ancestry, max36requests/60operations, unchanged task and
+settings. First16664tokens; six selected CPU tests,13native inputs, reused31form
+proof and2scripted checks,0inference. Scripted correction/docs/submission remains
+evaluator evidence. Publish preparation before C21-onward exposure; the original
+run outcome remains incomplete until separately reviewed continuation work.
+
 INVENTORY.json records discovered task texts and locations. Its untriaged entries
 are obligations to reconcile, not an exclusion list. Different contexts, seeds and
 policy variants will remain recorded even when they share a task. The task-specific

@@ -1,0 +1,149 @@
+"""Account for a sealed, exactly replayed continuation using saved files only."""
+import argparse
+from collections import Counter
+from hashlib import sha256
+import json
+from pathlib import Path
+import re
+
+HERE = Path(__file__).resolve().parent
+OLD = HERE.parents[1] / 'url_port_entry/run-002'
+
+
+def read(path):
+    return json.loads(path.read_text(encoding='utf-8'))
+
+
+def digest(path):
+    return sha256(path.read_bytes()).hexdigest()
+
+
+def records(folder):
+    return [json.loads(line) for line in (folder/'records.jsonl').read_text(encoding='utf-8').splitlines()]
+
+
+def checked_seal(folder):
+    seal = read(folder/'RESPONSE_SEAL.json')
+    for artifact in seal['files']:
+        path = (folder/artifact['path']).resolve()
+        assert path.is_relative_to(folder.resolve())
+        assert path.stat().st_size == artifact['size_bytes']
+        assert digest(path) == artifact['sha256']
+    return seal
+
+
+def calls(folder, values):
+    rows = []
+    for record in values:
+        if record['record_type'] != 'invocation_started':
+            continue
+        payload = record['payload']
+        tag = payload['id']
+        wire = read(folder/f'calls/{tag}-wire-request.json')
+        content = json.loads(wire['messages'][-1]['content'])
+        view = content['workspace']
+        path = folder/f'calls/{tag}-endpoint-response.json'
+        received = [r['payload'] for r in values if r['record_type'] == 'response_received' and r['payload']['id'] == tag]
+        completed = [r['payload'] for r in values if r['record_type'] == 'invocation_completed' and r['payload']['id'] == tag]
+        processed = [r['payload'] for r in values if r['record_type'] == 'reply_processed' and r['payload']['id'] == tag]
+        assert len(received) <= 1 and len(completed) <= 1 and len(processed) <= 1
+        response = read(path) if path.exists() else None
+        usage = response.get('usage') if isinstance(response, dict) else None
+        details = usage.get('prompt_tokens_details') if isinstance(usage, dict) else None
+        valid_usage = (isinstance(usage, dict) and all(type(usage.get(k)) is int for k in
+                        ('prompt_tokens', 'completion_tokens', 'total_tokens'))
+                       and usage['prompt_tokens'] >= 0 and usage['completion_tokens'] > 0
+                       and usage['prompt_tokens'] == payload['prompt_tokens']
+                       and usage['total_tokens'] == usage['prompt_tokens'] + usage['completion_tokens'] <= 56576)
+        if completed:
+            assert valid_usage and usage == completed[0]['usage']
+            assert received and completed[0]['elapsed_seconds'] == received[0]['elapsed_seconds']
+        rows.append(dict(id=tag, input_tokens=payload['prompt_tokens'],
+            generated_tokens=usage['completion_tokens'] if valid_usage else None,
+            input_plus_generation=usage['total_tokens'] if valid_usage else None,
+            cached_input_tokens=details.get('cached_tokens') if valid_usage and isinstance(details, dict) else None,
+            model_seconds=received[0]['elapsed_seconds'] if received else None,
+            complete_response_processed=bool(completed),
+            processing_seconds=processed[0]['processing_seconds'] if processed else None,
+            prepared_feedback_input_tokens=processed[0]['feedback_input_tokens'] if processed else None,
+            input_mode=view['presentation']['mode'],
+            requests_used_before_response=view['allowance']['requests_used'],
+            operations_used_before_response=view['allowance']['actions_used']))
+    return rows
+
+
+def aggregate(rows):
+    return dict(sent_requests=len(rows), complete_responses_processed=sum(r['complete_response_processed'] for r in rows),
+        sent_input_tokens=sum(r['input_tokens'] for r in rows),
+        generated_tokens_observed=sum(r['generated_tokens'] for r in rows if r['generated_tokens'] is not None),
+        missing_generation_usage=sum(r['generated_tokens'] is None for r in rows),
+        model_request_seconds_observed=sum(r['model_seconds'] for r in rows if r['model_seconds'] is not None),
+        missing_request_duration=sum(r['model_seconds'] is None for r in rows),
+        response_processing_seconds_observed=sum(r['processing_seconds'] for r in rows if r['processing_seconds'] is not None),
+        peak_sent_input_tokens=max((r['input_tokens'] for r in rows), default=None),
+        peak_generated_tokens=max((r['generated_tokens'] for r in rows if r['generated_tokens'] is not None), default=None),
+        peak_input_plus_generation=max((r['input_plus_generation'] for r in rows if r['input_plus_generation'] is not None), default=None))
+
+
+def measure(version):
+    assert re.fullmatch(r'[0-9]{3}', version)
+    run = HERE.parent/f'run-{version}'
+    assert (run/'RESPONSE_SEAL.json').exists(), 'Do not inspect accounting as a closed run before its seal.'
+    verification_path = HERE/f'VERIFICATION-{version}.json'
+    verification = read(verification_path)
+    assert verification['status'] == 'replayed_exactly'
+    assert verification['response_seal_sha256'] == digest(run/'RESPONSE_SEAL.json')
+    assert verification['records_sha256'] == digest(run/'records.jsonl')
+    old_seal, seal = checked_seal(OLD), checked_seal(run)
+    assert digest(OLD/'RESPONSE_SEAL.json') == '22261c75844433e47dd3f65f71cdc4b40801085bcd3f95e1ee42003e20607645'
+    old_records, new_records = records(OLD), records(run)
+    inherited, new = calls(OLD, old_records), calls(run, new_records)
+    assert len(inherited) == old_seal['sent_requests'] == 20
+    assert old_seal['actual_operations'] == 30
+    assert len(new) == seal['sent_requests'] == verification['new_requests']
+    assert seal['actual_operations'] == verification['cumulative_operations']
+    assert verification['cumulative_requests'] == 20 + len(new)
+    assert [row['id'] for row in new] == [f'C{i:02}' for i in range(21, 21+len(new))]
+    assert all(row['requests_used_before_response'] == i for i, row in enumerate(new, 20))
+    actual_new_ops = [row for row in new_records if row['record_type'] == 'contribution_operation']
+    assert len(actual_new_ops) == seal['new_operations'] == verification['new_operations']
+    types = Counter(read(run/row['artifacts'][0]['path'])['action']['action'] for row in actual_new_ops)
+    native = [row['payload'] for row in new_records if row['record_type'] == 'native_input_prepared']
+    loops = [row['payload'] for row in new_records if row['record_type'] == 'task_loop_completed']
+    closures = [row['payload'] for row in new_records if row['record_type'] == 'runtime_closed']
+    assert len(loops) <= 1 and len(closures) == 1
+    assert closures[0]['owned_server_shutdown_verified'] and closures[0]['dedicated_port_free']
+    result = dict(status='recomputed_from_sealed_saved_wires_and_endpoints',
+        response_seal_sha256=digest(run/'RESPONSE_SEAL.json'), original_seal_sha256=digest(OLD/'RESPONSE_SEAL.json'),
+        verification_sha256=digest(verification_path), accounting_source_sha256=digest(Path(__file__)),
+        disposition=seal['disposition'], inherited=aggregate(inherited), new=aggregate(new), cumulative=aggregate(inherited+new),
+        inherited_operations=30, new_operations=len(actual_new_ops), cumulative_operations=seal['actual_operations'],
+        new_operation_types=dict(types), new_native_measurements_including_unsent=len(native),
+        new_peak_native_input_including_unsent=max((row['prompt_tokens'] for row in native), default=None),
+        new_task_loop_seconds=loops[0]['task_loop_seconds'] if loops else None,
+        final_feedback_has_no_later_request=bool(new and new[-1]['complete_response_processed']),
+        final_candidate_id=verification['final_candidate_id'], submitted=verification['submitted'],
+        runtime_closure=closures[0], calls=new,
+        no_additional_checker_model_or_native_execution=True,
+        interpretation_limits=[
+            'New and cumulative adaptive request counts remain distinct; no allowance was reset.',
+            'A prepared final receipt is not delivered to a nonexistent following request.',
+            'Native sizing maxima include rejected/unsent proposals and are not sent input maxima.',
+            'Unavailable generation or timing remains unknown rather than estimated.',
+            'Generated usage includes thinking and final output; accounting does not identify wasted reasoning.'])
+    return result
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--version', default='001')
+    parser.add_argument('--output', type=Path)
+    args = parser.parse_args()
+    output = args.output or HERE/f'METRICS-{args.version}.json'
+    result = measure(args.version)
+    raw = (json.dumps(result, indent=2, ensure_ascii=False)+'\n').encode()
+    if output.exists():
+        assert output.read_bytes() == raw, 'Preserve an earlier different accounting attempt.'
+    else:
+        output.write_bytes(raw)
+    print(json.dumps(result, indent=2))

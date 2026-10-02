@@ -1,3 +1,19 @@
+# Qualified URL saved-failure continuation
+
+url_port_continuation/PREPARATION_REVIEW-001.md qualifies the exact failed
+83d8704c successor: retain20requests/30operations; extend only request_limit36,
+operations remain60. First16664-token input differs from oldI0094 only its
+two allowance fields; task/system/reference/account/source/check remain exact.
+Six selected CPU tests,13native inputs, reused31forms and2scripted successor
+checks qualify saved correction/docs/submission and restoration with0inference.
+155sealed artifacts/1545sources; minGPUfree406MiB. Scripted27/42 is evaluator
+feasibility, not Qwen selection, feedback use or budget adequacy. Publish before
+one uncoached C21-onward run. Preserve actual failure/account and preceding
+receipts, no supplied correction/group/private thinking, reset/retry/coaching.
+Review actual inputs/full outputs, current verification, exact assertions and
+prose beyond passing examples, cost and closure. Original20-request attempt
+and wider ecological/pressure obligations remain unchanged.
+
 # URL original-entry outcome and explicit continuation boundary
 
 url_port_entry/review/RESULTS-002.md closes the e93051ec uncoached original
