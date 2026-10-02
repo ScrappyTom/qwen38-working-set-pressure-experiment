@@ -1,0 +1,100 @@
+Let me understand the task:
+
+1. I need to repair `summary_graph.py` so that:
+   - `collection_stale` is true when:
+     - Any artifact summary is stale
+     - The current artifact-summary IDs differ from the graph IDs
+     - The collection's input IDs differ
+   - `missing_artifact_ids` must list summary artifacts that lack an address map, in deterministic order
+   - Preserve public APIs and don't modify tests
+
+2. I need to inspect exact current source in `src/addressable_information_layer/summary_graph.py`, `summaries.py`, `records.py`, and `policy.py` before mutation.
+
+3. I need to reopen the observation OBS-0002 (which is bound to the current candidate `476f83a90c40b0897e1ab5d6bc00bbb52cf3a4fe60cc11c1dd47ab3da85d0172`).
+
+Let me first look at what I have. I already have `summary_graph.py` visible. Let me analyze the bugs:
+
+Looking at `summary_graph_status`:
+```python
+stale_artifact_summary_ids = stale_summaries(summaries, address_maps)
+current_summary_ids = sorted(summary.summary_id for summary in summaries.values())
+graph_summary_ids = sorted(graph.artifact_summary_ids)
+collection_stale = bool(stale_artifact_summary_ids) and current_summary_ids != graph_summary_ids
+```
+
+The bug here: `collection_stale` uses `and` (both conditions must be true), but the task says it should be true when ANY of:
+- Any artifact summary is stale
+- The current artifact-summary IDs differ from the graph IDs
+- The collection's input IDs differ
+
+So it should be `or` not `and`.
+
+Then:
+```python
+if graph.collection_summary is not None:
+    collection_stale = collection_stale or sorted(graph.collection_summary.input_hashes) != graph_summary_ids
+```
+
+This checks the collection's input hashes against graph_summary_ids. That seems like it's checking "collection's input IDs differ" — but it compares against `graph_summary_ids` rather than `current_summary_ids`. Let me think about what "collection's input IDs differ" means.
+
+Actually, let me re-read the requirements:
+- `collection_stale` is true when:
+  1. Any artifact summary is stale
+  2. The current artifact-summary IDs differ from the graph IDs
+  3. The collection's input IDs differ
+
+For condition 3, "the collection's input IDs differ" — differs from what? Probably from the current artifact summary IDs. Let me think...
+
+The collection summary's `input_hashes` is set to `[summary.summary_id for summary in ordered]` in `_build_collection_summary`. So the collection's input IDs are the summary IDs at the time the collection was built. They should be compared to the current summary IDs.
+
+So the correct logic should be:
+```python
+collection_stale = (
+    bool(stale_artifact_summary_ids)
+    or current_summary_ids != graph_summary_ids
+    or (graph.collection_summary is not None and sorted(graph.collection_summary.input_hashes) != current_summary_ids)
+)
+```
+
+Wait, let me re-read: "when the collection's input IDs differ". Differ from what? The current summary IDs, I think. Because the collection was built with certain input IDs, and if those differ from what's currently present, it's stale.
+
+Now for `missing_artifact_ids`:
+```python
+missing_artifact_ids = sorted(artifact_id for artifact_id in address_maps if artifact_id not in summaries)
+```
+
+The task says: "must list summary artifacts that lack an address map". So it should be artifacts in `summaries` that don't have a corresponding entry in `address_maps`:
+```python
+missing_artifact_ids = sorted(artifact_id for artifact_id in summaries if artifact_id not in address_maps)
+```
+
+That's the fix for `missing_artifact_ids` — it's reversed. Currently it lists artifacts in `address_maps` not in `summaries`, but it should list artifacts in `summaries` not in `address_maps`.
+
+Now let me also look at `stale_summaries`:
+```python
+def stale_summaries(summaries: dict[str, SummaryNode], address_maps: dict[str, AddressMap]) -> list[str]:
+    stale: list[str] = []
+    for artifact_id, summary in summaries.items():
+        address_map = address_maps.get(artifact_id)
+        if address_map is None:
+            stale.append(summary.summary_id)
+            continue
+        current_hashes = sorted(unit.content_hash for unit in address_map.units.values())
+        summary_hashes = sorted(summary.input_hashes)
+        if current_hashes != summary_hashes:
+            stale.append(summary.summary_id)
+    return stale
+```
+
+This looks reasonable. If an artifact has no address map, it's stale. If the hashes don't match, it's stale.
+
+Let me now plan my operations:
+1. First, reopen OBS-0002 (bound to current candidate) to see the verifier's report
+2. Read the other files: `summaries.py`, `records.py`, `policy.py`
+3. Make the edits
+4. Run check public
+5. Submit
+
+Let me start by reopening OBS-0002 and reading the other source files. I can do one operation per response, so let me start with the observation.
+
+Actually, let me be efficient. I'll reopen OBS-0002 first since it's bound to the current candidate and gives me the regression details.

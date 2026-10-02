@@ -1,3 +1,20 @@
+# E19 observation repair passes checks but misses task inspection order
+
+ecological_observation_entry/review/RESULTS-002.md closes the uncoached6-request/
+9-operation attempt: correct two-line repair,currentpublicpass/submission and
+post-sealhiddenpass,24otherfiles exact. Actualcompleteinputs/outputs show only
+targetsource exposed before firstmutation; three requiredpaths neverread. Do not
+close the fulltask or let passingchecks substitute for temporalinspection.
+All7nonterminalreceipts arrive; exactreplay passes150custody/444sources/11snapshots.
+Preserve11.567modelminutes/12.094loopminutes, account's unsupportedthirdbug and
+overstatedclosure, C06legacy-binding reconsideration and root's failed parallel
+accountingdependency. Sequence accounting after its replayoutput; no modelretry.
+Publish ecological_prerequisites/PLAN.md before its task-local exposure barrier:
+actual sent exactsource for four declaredpaths before firstmutation, cumulative
+across release, separatefrom comprehension/currentediteligibility/E20whole-file
+coverage. Keep alloldbound sources/records unchanged; qualify/publish before a
+fresh uncoached24/72attempt. No livecoaching, silentextension or pressureclaim.
+
 # Qualified original E19 observation-selection entry
 
 ecological_observation_entry/PREPARATION_REVIEW-002.md qualifies the original

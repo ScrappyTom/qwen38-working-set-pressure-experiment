@@ -1,0 +1,67 @@
+Let me analyze the current state:
+
+1. I have the full source of `summary_graph.py` (148 lines) visible.
+2. The OBS-0002 observation shows two test failures:
+   - `collection_stale_when_graph_ids_differ`: expected `true`, observed `false`
+   - `missing_artifact_ids_direction`: expected `"summary without map"`, observed `"map without summary"`
+
+3. Looking at the code in `summary_graph_status`:
+
+```python
+def summary_graph_status(
+    summaries: dict[str, SummaryNode],
+    graph: SummaryGraph,
+    address_maps: dict[str, AddressMap],
+) -> dict[str, Any]:
+    """Return deterministic freshness information for artifact and collection summaries."""
+
+    stale_artifact_summary_ids = stale_summaries(summaries, address_maps)
+    current_summary_ids = sorted(summary.summary_id for summary in summaries.values())
+    graph_summary_ids = sorted(graph.artifact_summary_ids)
+    collection_stale = bool(stale_artifact_summary_ids) and current_summary_ids != graph_summary_ids
+    if graph.collection_summary is not None:
+        collection_stale = collection_stale or sorted(graph.collection_summary.input_hashes) != graph_summary_ids
+    missing_artifact_ids = sorted(artifact_id for artifact_id in address_maps if artifact_id not in summaries)
+    return {
+        ...
+    }
+```
+
+Now let me identify the bugs:
+
+**Bug 1: `collection_stale` logic**
+
+Current: `collection_stale = bool(stale_artifact_summary_ids) and current_summary_ids != graph_summary_ids`
+
+This uses `and`, meaning collection is stale ONLY IF both conditions are true: there are stale artifact summaries AND the current summary IDs differ from graph IDs.
+
+But the task says: `collection_stale` should be true when:
+- (a) any artifact summary is stale
+- (b) the current artifact-summary IDs differ from the graph IDs
+- (c) the collection's input IDs differ
+
+So it should be `or` for conditions (a) and (b), and then (c) is already handled by the next line.
+
+The fix: `collection_stale = bool(stale_artifact_summary_ids) or current_summary_ids != graph_summary_ids`
+
+**Bug 2: `missing_artifact_ids` direction**
+
+Current: `missing_artifact_ids = sorted(artifact_id for artifact_id in address_maps if artifact_id not in summaries)`
+
+This lists address_maps that lack a summary (map without summary). But the task says: "missing_artifact_ids must list summary artifacts that lack an address map" - i.e., summaries that don't have a corresponding address map.
+
+The fix: `missing_artifact_ids = sorted(artifact_id for artifact_id in summaries if artifact_id not in address_maps)`
+
+Let me now prepare the patches. I need to fix both bugs in `summary_graph.py`.
+
+For the `collection_stale` line:
+Old: `    collection_stale = bool(stale_artifact_summary_ids) and current_summary_ids != graph_summary_ids`
+New: `    collection_stale = bool(stale_artifact_summary_ids) or current_summary_ids != graph_summary_ids`
+
+For the `missing_artifact_ids` line:
+Old: `    missing_artifact_ids = sorted(artifact_id for artifact_id in address_maps if artifact_id not in summaries)`
+New: `    missing_artifact_ids = sorted(artifact_id for artifact_id in summaries if artifact_id not in address_maps)`
+
+I have the file visible and selected with SHA `70a00edd8c48d40609aa912c524895bb8799c7270af5687210097715370e4d23`, candidate `476f83a90c40b0897e1ab5d6bc00bbb52cf3a4fe60cc11c1dd47ab3da85d0172`.
+
+Let me do the first patch.

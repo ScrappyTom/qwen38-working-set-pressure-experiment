@@ -1,0 +1,224 @@
+Let me analyze the current state:
+
+1. The task is to fix `summary_graph.py` so that:
+   - `collection_stale` is true when any artifact summary is stale, when current artifact-summary IDs differ from graph IDs, or when the collection's input IDs differ
+   - `missing_artifact_ids` must list summary artifacts that lack an address map, in deterministic order
+
+2. Looking at the current source (after the patch that was already applied), the relevant section is:
+
+```python
+stale_artifact_summary_ids = stale_summaries(summaries, address_maps)
+current_summary_ids = sorted(summary.summary_id for summary in summaries.values())
+graph_summary_ids = sorted(graph.artifact_summary_ids)
+collection_stale = bool(stale_artifact_summary_ids) or current_summary_ids != graph_summary_ids
+if graph.collection_summary is not None:
+    collection_stale = collection_stale or sorted(graph.collection_summary.input_hashes) != graph_summary_ids
+missing_artifact_ids = sorted(artifact_id for artifact_id in summaries if artifact_id not in address_maps)
+```
+
+Let me check what the observation said was failing:
+- `collection_stale_when_graph_ids_differ`: expected `true`, observed `false`
+- `missing_artifact_ids_direction`: expected `"summary without map"`, observed `"map without summary"`
+
+The patch that was already applied (EVT-0005) fixed `missing_artifact_ids` from iterating `address_maps` to iterating `summaries`. That's correct - it now lists summary artifacts that lack an address map.
+
+Now let me look at the `collection_stale` logic:
+- `bool(stale_artifact_summary_ids)` - true if any artifact summary is stale ✓
+- `current_summary_ids != graph_summary_ids` - true when current artifact-summary IDs differ from graph IDs ✓
+- `sorted(graph.collection_summary.input_hashes) != graph_summary_ids` - this checks if the collection's input IDs differ from graph_summary_ids
+
+Wait, the task says: "collection_stale is true when any artifact summary is stale, when the current artifact-summary IDs differ from the graph IDs, or when the collection's input IDs differ"
+
+The third condition should be about "the collection's input IDs differ" - meaning they differ from what they should be (the current summary IDs). Let me think about this more carefully.
+
+Looking at the collection summary construction:
+```python
+input_hashes=[summary.summary_id for summary in ordered]
+```
+
+So `graph.collection_summary.input_hashes` is the list of summary IDs at the time the collection was built. The check `sorted(graph.collection_summary.input_hashes) != graph_summary_ids` compares them against the graph's artifact_summary_ids.
+
+But wait - the task says "when the collection's input IDs differ". The collection's input IDs are `graph.collection_summary.input_hashes`. They should be compared against... what? They should match the current summary IDs (since the collection was built from those summaries).
+
+Actually, let me re-read: "collection_stale is true when any artifact summary is stale, when the current artifact-summary IDs differ from the graph IDs, or when the collection's input IDs differ"
+
+I think "the collection's input IDs differ" means they differ from what they should be - i.e., from the graph's artifact summary IDs. So `sorted(graph.collection_summary.input_hashes) != graph_summary_ids` seems correct.
+
+But wait - the observation says `collection_stale_when_graph_ids_differ` failed (expected true, observed false). Let me think about when that would happen.
+
+If graph IDs differ from current IDs, then `current_summary_ids != graph_summary_ids` would be True, making `collection_stale` True. So that should work...
+
+Unless the issue was in the ORIGINAL code before the patches. Let me look at what was there before:
+
+The first patch (EVT-0004) was applied to candidate `476f83a9...` and the second patch (EVT-0005) was applied to candidate `3cfc0e5e...` (result of first patch).
+
+Wait, looking at the recent_activity:
+- EVT-0004: patch on path summary_graph.py, previous candidate 476f83a9..., result candidate 3cfc0e5e...
+- EVT-0005: patch on path summary_graph.py, previous candidate 3cfc0e5e..., result candidate 5c7eba4f...
+
+So two patches were applied. The first one (EVT-0004) I don't see the diff for in the current input. The second (EVT-0005) fixed the missing_artifact_ids direction.
+
+Let me look at the current code again:
+```python
+collection_stale = bool(stale_artifact_summary_ids) or current_summary_ids != graph_summary_ids
+if graph.collection_summary is not None:
+    collection_stale = collection_stale or sorted(graph.collection_summary.input_hashes) != graph_summary_ids
+```
+
+The task says: "collection_stale is true when any artifact summary is stale, when the current artifact-summary IDs differ from the graph IDs, or when the collection's input IDs differ"
+
+So the three conditions are:
+1. `bool(stale_artifact_summary_ids)` ✓
+2. `current_summary_ids != graph_summary_ids` ✓  
+3. Collection's input IDs differ - from what?
+
+For condition 3, "the collection's input IDs differ" - this is a bit ambiguous. It could mean:
+- The collection's input_hashes differ from the graph's artifact_summary_ids
+- The collection's input_hashes differ from the current summary IDs
+
+Looking at the test that failed: `collection_stale_when_graph_ids_differ` - this test expects collection_stale to be true when graph IDs differ. Condition 2 (`current_summary_ids != graph_summary_ids`) should handle this.
+
+Wait, but maybe the first patch (EVT-0004) already fixed the `and` to `or` issue and the collection check. Let me look at what the current code shows vs what the working account says was wrong.
+
+The working account says:
+"Identified bugs: 1) collection_stale uses 'and' instead of 'or' for the first two conditions; 2) collection input check compares against graph_summary_ids instead of current_summary_ids; 3) missing_artifact_ids iterates address_maps instead of summaries (reversed logic)."
+
+So the original code had:
+- `and` instead of `or` (fixed by EVT-0004 presumably)
+- Collection input check compared against `graph_summary_ids` instead of `current_summary_ids`
+- missing_artifact_ids iterated `address_maps` instead of `summaries`
+
+Wait, the working account says bug 2 is: "collection input check compares against graph_summary_ids instead of current_summary_ids". But the current code still has `graph_summary_ids`:
+
+```python
+collection_stale = collection_stale or sorted(graph.collection_summary.input_hashes) != graph_summary_ids
+```
+
+Hmm, but wait. Let me re-read the task: "when the collection's input IDs differ"
+
+What does "differ" mean here? The collection's input IDs are the summary IDs that were used to build the collection. They should match... the current summary IDs? Or the graph's artifact summary IDs?
+
+Actually, I think the correct interpretation is: the collection's input IDs should match the current summary IDs (since the collection is built from the current summaries). If they differ, the collection is stale.
+
+But actually, looking at how the collection is built:
+```python
+def _build_collection_summary(summaries: dict[str, SummaryNode]) -> SummaryNode | None:
+    ...
+    input_hashes=[summary.summary_id for summary in ordered]
+```
+
+And the graph stores:
+```python
+artifact_summary_ids=[summary.summary_id for summary in summaries.values()],
+collection_summary=collection,
+```
+
+So at build time, `collection.input_hashes` == the sorted list of summary IDs == `graph.artifact_summary_ids` (unsorted). They're the same set.
+
+Now, the status function receives `summaries` (current) and `graph` (possibly from a previous build). The three staleness conditions:
+1. Any artifact summary is stale (hash mismatch) → `bool(stale_artifact_summary_ids)`
+2. Current artifact-summary IDs differ from graph IDs → `current_summary_ids != graph_summary_ids`
+3. Collection's input IDs differ → `sorted(graph.collection_summary.input_hashes) != ???`
+
+For condition 3, the collection's input IDs were set at build time. They should match the graph's artifact summary IDs (since they were both derived from the same summaries at build time). So checking `sorted(graph.collection_summary.input_hashes) != graph_summary_ids` is checking internal consistency of the graph, which is always true at build time...
+
+Unless the graph was somehow corrupted. But more likely, the intended check is: the collection's input IDs should match the CURRENT summary IDs. If the current summaries changed, the collection is stale.
+
+But wait, that's redundant with condition 2! If `current_summary_ids != graph_summary_ids`, that already captures the case where summaries changed.
+
+Hmm, let me reconsider. Maybe condition 3 is about checking if the collection's input_hashes match `current_summary_ids` rather than `graph_summary_ids`. This would matter if:
+- The graph's artifact_summary_ids somehow differ from the collection's input_hashes (internal inconsistency), OR
+- We want to check against current rather than graph
+
+Actually, I think I'm overcomplicating this. Let me re-read the task requirement:
+
+"Repair source so `collection_stale` is true when any artifact summary is stale, when the current artifact-summary IDs differ from the graph IDs, or when the collection's input IDs differ."
+
+"the collection's input IDs differ" - differ from what? The most natural reading is "differ from the current summary IDs" or "differ from the graph's artifact summary IDs".
+
+Given that the working account identified the bug as "collection input check compares against graph_summary_ids instead of current_summary_ids", I think the fix should be:
+
+```python
+collection_stale = collection_stale or sorted(graph.collection_summary.input_hashes) != current_summary_ids
+```
+
+This makes sense: if the collection was built with certain input IDs, and those IDs don't match the current summary IDs, the collection is stale.
+
+But wait - if condition 2 already checks `current_summary_ids != graph_summary_ids`, and condition 3 checks `sorted(collection.input_hashes) != current_summary_ids`, then condition 3 adds value when `graph_summary_ids == current_summary_ids` but `collection.input_hashes != current_summary_ids` (i.e., the collection's internal inputs don't match the graph's artifact IDs, even though the graph matches current).
+
+Actually, I think the three conditions cover different failure modes:
+1. Hash staleness (content changed but IDs same)
+2. ID set changed (different artifacts)
+3. Collection's specific inputs are inconsistent
+
+Let me look at this from the test perspective. The failing test was `collection_stale_when_graph_ids_differ`. This test name suggests: when graph IDs differ (from current), collection_stale should be true. Condition 2 handles this.
+
+So maybe the first patch (EVT-0004) already fixed the `and`→`or` issue and that's sufficient for the `collection_stale_when_graph_ids_differ` test. And the second patch (EVT-0005) fixed the `missing_artifact_ids` direction.
+
+Let me verify: the current code has:
+```python
+collection_stale = bool(stale_artifact_summary_ids) or current_summary_ids != graph_summary_ids
+```
+
+This uses `or`, so condition 2 will make collection_stale true when graph IDs differ. Good.
+
+And:
+```python
+missing_artifact_ids = sorted(artifact_id for artifact_id in summaries if artifact_id not in address_maps)
+```
+
+This lists summary artifacts that lack an address map. Good.
+
+So it seems like both bugs might already be fixed! The question is whether there's still a remaining issue with the collection input check.
+
+The working account said bug 2 was: "collection input check compares against graph_summary_ids instead of current_summary_ids". But looking at the task description again: "when the collection's input IDs differ" - this is intentionally vague about what they differ FROM.
+
+Let me think about what makes semantic sense:
+- The collection summary was built with certain input_hashes (the summary IDs at build time)
+- If those input_hashes don't match the CURRENT summary IDs, the collection is stale (it was built from different summaries than what exists now)
+- Comparing to `graph_summary_ids` would check internal consistency of the graph, not staleness relative to current state
+
+I think the correct fix is to compare against `current_summary_ids`:
+```python
+collection_stale = collection_stale or sorted(graph.collection_summary.input_hashes) != current_summary_ids
+```
+
+This way, even if the graph's artifact_summary_ids match current (condition 2 is false), if the collection's own recorded inputs differ from current, it's stale.
+
+But actually, at build time: `collection.input_hashes = [s.summary_id for s in ordered]` where ordered is sorted summaries. And `graph.artifact_summary_ids = [s.summary_id for s in summaries.values()]`. These are the same set (just potentially different order). So `sorted(collection.input_hashes) == sorted(graph.artifact_summary_ids)` always at build time.
+
+If I change condition 3 to compare against `current_summary_ids`:
+- At build time: `sorted(collection.input_hashes) == sorted(graph.artifact_summary_ids)` and if no changes, `== current_summary_ids`. All good.
+- If artifacts change: `current_summary_ids != graph_summary_ids` (condition 2 catches it) AND `sorted(collection.input_hashes) != current_summary_ids` (condition 3 also catches it).
+- If somehow collection was built with wrong inputs but graph IDs are correct: condition 3 catches what condition 2 misses.
+
+So changing to `current_summary_ids` is strictly more correct and covers an additional case.
+
+Let me check if the current code already passes or if I need to make this change. The observation was from the OLD candidate (476f83a9...). The current candidate is 5c7eba4f... after two patches. I need to run the public check to see if it passes now.
+
+Actually wait - let me re-read the observation more carefully:
+```json
+{
+  "candidate_id": "476f83a9...",
+  "failures": [
+    {"expected": true, "observed": false, "test": "collection_stale_when_graph_ids_differ"},
+    {"expected": "summary without map", "observed": "map without summary", "test": "missing_artifact_ids_direction"}
+  ],
+  "status": "failed",
+  "suite": "summary graph status"
+}
+```
+
+The first failure: `collection_stale_when_graph_ids_differ` expected true but got false. In the ORIGINAL code (before patches), this was likely because of the `and` vs `or` bug. The first patch (EVT-0004) presumably fixed this.
+
+The second failure: `missing_artifact_ids_direction` expected "summary without map" but got "map without summary". The second patch (EVT-0005) fixed this by changing iteration from `address_maps` to `summaries`.
+
+So both observed failures should now be fixed. But I should verify by running the public check.
+
+However, I'm still concerned about the collection input check comparing against `graph_summary_ids` vs `current_summary_ids`. The task says to fix `collection_stale` to be true "when the collection's input IDs differ" - and the working account identified this as a bug. Let me check if the public check would catch this.
+
+Actually, let me just run the public check on the current candidate to see if it passes. If it does, great. If not, I'll need to fix the remaining issue.
+
+Current candidate: `5c7eba4fbad9c51325a9abc4f4b27c5b8d9eedb5b344558b5921915ed854a49f`
+
+Let me run the check.
