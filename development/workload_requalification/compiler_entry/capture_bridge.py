@@ -14,7 +14,7 @@ import operational_reply
 import repair_task
 from search_navigation import SearchNavigationMixin
 from working_set_exp import decision_view, working_view
-from working_set_exp.accounted_contribution import account_rule
+from working_set_exp.accounted_contribution import AccountedSession, account_rule
 from working_set_exp.jsonutil import canonical_json_bytes, load_json_strict, sha256_bytes
 
 
@@ -43,6 +43,23 @@ input, not merely that an acquisition previously succeeded. Imported captures
 are historical evidence, supply no source-edit authority and never establish an
 applicable check on the current candidate. Selecting or rereading them does not
 execute a saved operation or alter their original binding.
+""".strip()
+
+RETAINED_REFERENCE = """
+reopen_observation: Retrieves one complete immutable incident capture without
+rerunning the capture, compiler or check. An accepted acquisition also retains its
+complete RES receipt in the selected working set through unrelated operations.
+Repeated acquisition of the same OBS identity replaces its earlier selected
+acquisition receipts; every actual acquisition remains exactly archived at its own
+RES address. In ordinary presentation, the complete resulting input must fit or
+the acquisition is rejected, preserving the prior selection and exposing recovery
+control. In recovery presentation, retained bodies may be explicitly omitted;
+acquisition does not
+silently resume ordinary presentation. work_on or work_on_exact explicitly replaces
+the selection and can release these records. Reopening a selected RES still uses
+the documented saved-page replacement behavior. Imported captures remain bound to
+their original observed candidate and supply neither editing authority nor a
+current passing check.
 """.strip()
 
 
@@ -102,8 +119,17 @@ def decode_reply(content, checks):
     return reply
 
 
-def operating_reference(existing_text):
-    return operational_reply.operating_reference(existing_text) + "\n\n" + REFERENCE_ADDITION
+def operating_reference(existing_text, *, retain_imported_captures=False):
+    text = operational_reply.operating_reference(existing_text)
+    if not retain_imported_captures:
+        return text + "\n\n" + REFERENCE_ADDITION
+    marker = "\nreopen_result:"
+    if text.count(marker) != 1:
+        raise ValueError("saved-result reference entry changed; review capture contract placement")
+    form = canonical_json_bytes(imported_action_form()).decode()
+    entry = RETAINED_REFERENCE + "\nRequired argument forms: " + form
+    text = text.replace(marker, "\n" + entry + "\n" + marker, 1)
+    return text + "\n\n" + REFERENCE_ADDITION
 
 
 def _normalized_imports(observations, bodies):
@@ -147,9 +173,13 @@ def _normalized_imports(observations, bodies):
 
 
 def capture_snapshot(session):
-    return dict(schema="compiler-imported-observations-v1",
+    value = dict(schema="compiler-imported-observations-v1",
                 inventory=[load_json_strict(raw) for _, raw in session._imported_manifests],
                 body_sha256={handle: sha256_bytes(raw) for handle, raw in session._imported_bodies})
+    if session.retain_imported_captures:
+        value.update(schema="compiler-imported-observations-v2",
+                     retention_policy="retain-requested-immutable-captures-v1")
+    return value
 
 
 def restore_capture_state(session, state):
@@ -160,7 +190,11 @@ def restore_capture_state(session, state):
 
 
 class Session(SearchNavigationMixin, navigation.NavigationMixin, repair_task.Session):
-    def __init__(self, *args, imported_observations, imported_bodies=None, **kwargs):
+    def __init__(self, *args, imported_observations, imported_bodies=None,
+                 retain_imported_captures=False, **kwargs):
+        if type(retain_imported_captures) is not bool:
+            raise ValueError("capture retention policy must be explicitly true or false")
+        self.retain_imported_captures = retain_imported_captures
         self._imported_manifests, self._imported_bodies = _normalized_imports(
             imported_observations, imported_bodies)
         super().__init__(*args, **kwargs)
@@ -188,11 +222,62 @@ class Session(SearchNavigationMixin, navigation.NavigationMixin, repair_task.Ses
         if action["action"] != "reopen_observation":
             return super()._ordinary(action)
         row, raw = self.imported_record(action["handle"])
-        return dict(accepted=True, kind="imported_observation", handle=row["handle"],
+        result = dict(accepted=True, kind="imported_observation", handle=row["handle"],
             observed_candidate_id=row["candidate_id"], target=row["target"],
             size_bytes=len(raw), sha256=row["sha256"], content_utf8=raw.decode(),
             exact_result_handle=f"RES-{len(self.pairs)+1:04d}",
             retrieval_only=True, source_edit_authority=False)
+        if self.retain_imported_captures:
+            # Ordinary execution stages this change in a clone. Resolve old
+            # acquisition identity from exact custody, including when its selected
+            # representation is a partial saved-result page, rather than trusting
+            # an inventory flag or removing an unrelated historical group.
+            for handle in list(self.saved):
+                prior = load_json_strict(self.payload(handle))
+                if self._capture_identity(prior) == row["handle"]:
+                    del self.saved[handle]
+            body = canonical_json_bytes(result)
+            handle = result["exact_result_handle"]
+            self.saved[handle] = dict(kind="saved_bytes", handle=handle, offset=0,
+                next_offset=None, total_bytes=len(body), sha256=sha256_bytes(body),
+                exact_utf8=body.decode())
+        return result
+
+    def _capture_identity(self, result):
+        """Recognize only an exact direct acquisition of a bound imported OBS."""
+        if (not isinstance(result, dict) or result.get("accepted") is not True
+                or result.get("kind") != "imported_observation"):
+            return None
+        try:
+            row, raw = self.imported_record(result["handle"])
+        except (KeyError, ValueError, UnicodeError):
+            return None
+        if (result.get("observed_candidate_id") == row["candidate_id"]
+                and result.get("target") == row["target"]
+                and result.get("size_bytes") == len(raw)
+                and result.get("sha256") == row["sha256"]
+                and result.get("content_utf8") == raw.decode()
+                and result.get("retrieval_only") is True
+                and result.get("source_edit_authority") is False):
+            return row["handle"]
+        return None
+
+    def _fits_feedback(self, measure):
+        if (self.retain_imported_captures and not self.recovery and self.last
+                and self.last["action_summary"].get("action") == "reopen_observation"
+                and self._capture_identity(self.last["result"]) is not None):
+            # Full ordinary selection admission, with the existing optional-history
+            # fallback. Generic read-only status/recovery fallback must not commit
+            # an unfit selection under a promise of retained comparison evidence.
+            return AccountedSession._fits_feedback(self, measure)
+        return super()._fits_feedback(measure)
+
+    def commit_admission_error(self, action):
+        if self.retain_imported_captures and action["action"] == "reopen_observation":
+            return ("The complete capture and retained working group cannot fit ordinary "
+                    "presentation; no acquisition or selection change committed. "
+                    "Previous selection retained. Use work_on to select the evidence needed together.")
+        return super().commit_admission_error(action)
 
     def _shown_acquisitions(self, value):
         results = []
@@ -234,6 +319,20 @@ class Session(SearchNavigationMixin, navigation.NavigationMixin, repair_task.Ses
 
     def view(self, **kwargs):
         value = super().view(**kwargs)
+        if self.retain_imported_captures and value.get("latest_feedback"):
+            result = value["latest_feedback"]["result"]
+            if self._capture_identity(result) is not None:
+                body = canonical_json_bytes(result)
+                # The selected receipt is already shown exactly as latest feedback.
+                # Its address remains in the selection inventory; only redundant
+                # presentation bytes are removed, never custody or designation.
+                value["working_set"]["saved_results"] = [page for page in
+                    value["working_set"]["saved_results"] if not (
+                        page.get("handle") == result.get("exact_result_handle")
+                        and page.get("kind") == "saved_bytes"
+                        and page.get("offset") == 0
+                        and page.get("next_offset") is None
+                        and page.get("exact_utf8", "").encode() == body)]
         shown = self._shown_acquisitions(value)
         entries = []
         for handle, manifest in self._imported_manifests:

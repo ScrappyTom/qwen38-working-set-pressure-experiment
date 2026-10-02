@@ -5,6 +5,7 @@ The original check's EXPECTED_REPORT and donor source are not consulted.
 """
 import ast
 import copy
+from collections import Counter
 
 from working_set_exp.accounted_contribution import process_reply
 from working_set_exp.jsonutil import canonical_json_bytes, load_json_strict, sha256_bytes
@@ -98,9 +99,8 @@ def derive_report(bodies):
     return {'builds': rows}
 
 
-def delivered_capture_bodies(view):
-    """Inspect explicit shown receipts and complete shown RES bodies only."""
-    result = {}
+def displayed_capture_receipts(view):
+    """Validate every actually shown complete receipt, without inventory flags."""
     receipts = []
     pages = list(view['working_set']['saved_results'])
     latest = view.get('latest_feedback')
@@ -117,15 +117,29 @@ def delivered_capture_bodies(view):
             if len(raw) != page['total_bytes'] or sha256_bytes(raw) != page['sha256']:
                 raise ValueError('displayed saved result identity differs')
             receipts.append(load_json_strict(raw))
+    shown = []
     for receipt in receipts:
         if receipt.get('accepted') and receipt.get('kind') == 'imported_observation':
             raw = receipt['content_utf8'].encode()
             if len(raw) != receipt['size_bytes'] or sha256_bytes(raw) != receipt['sha256']:
                 raise ValueError('displayed capture identity differs')
-            handle = receipt['handle']
-            if handle in result and result[handle] != raw:
-                raise ValueError('one capture has conflicting displayed bodies')
-            result[handle] = raw
+            shown.append(receipt)
+    return shown
+
+
+def displayed_capture_counts(view):
+    return dict(Counter(row['handle'] for row in displayed_capture_receipts(view)))
+
+
+def delivered_capture_bodies(view):
+    """Inspect explicit shown receipts and complete shown RES bodies only."""
+    result = {}
+    for receipt in displayed_capture_receipts(view):
+        raw = receipt['content_utf8'].encode()
+        handle = receipt['handle']
+        if handle in result and result[handle] != raw:
+            raise ValueError('one capture has conflicting displayed bodies')
+        result[handle] = raw
     return result
 
 
@@ -138,7 +152,7 @@ def delivered_sources(view):
     return {row['path']: row for row in sources}
 
 
-def qualify_contribution(session, measure, record=None, *, correction=False):
+def qualify_contribution(session, measure, record=None, *, correction=False, preceding_feedback=None):
     """One researcher-selected route through real tools and actual input views.
 
     measure is the production request/template/tokenizer callback for native
@@ -146,7 +160,8 @@ def qualify_contribution(session, measure, record=None, *, correction=False):
     Every saved before/after view can be independently checked for the evidence
     justifying that scripted choice; this is feasibility, not model selection.
     """
-    snapshots, preceding = [], []
+    snapshots = []
+    preceding = [] if preceding_feedback is None else preceding_feedback
     initial = session.candidate
 
     def act(action, basis, account=None):
@@ -234,6 +249,152 @@ def qualify_contribution(session, measure, record=None, *, correction=False):
             'snapshots': snapshots}
 
 
+def restore_stopped002_for_diagnostic(module):
+    """Explicit evaluator-only policy migration, not a fresh actor entry.
+
+    Carry the exact closed source, account, selection, actions and consumed
+    counters. Only the prospectively declared imported-retention policy changes.
+    Old acquisitions are not silently added to the retained selection.
+    """
+    folder = module.AREA/'run-002'
+    seal_raw = (folder/'RESPONSE_SEAL.json').read_bytes()
+    seal = load_json_strict(seal_raw)
+    assert seal['disposition']=='operator_stopped'
+    assert sha256_bytes(canonical_json_bytes(seal['files']))==seal['aggregate_sha256']
+    index = {row['path']:row for row in seal['files']}
+    def exact(name):
+        raw = (folder/name).read_bytes()
+        assert len(raw)==index[name]['size_bytes'] and sha256_bytes(raw)==index[name]['sha256']
+        return raw
+    state_raw, candidate_raw = exact('final-state.json'), exact('final-candidate.json')
+    state = load_json_strict(state_raw)
+    assert load_json_strict(exact('final-preceding-feedback.json'))==[]
+    session = module.initial_session()
+    assert session.retain_imported_captures
+    import capture_bridge
+    legacy = session.clone()
+    legacy.retain_imported_captures = False
+    capture_bridge.restore_capture_state(legacy, state['imported_capture_state'])
+    assert state['imported_capture_state']['schema']=='compiler-imported-observations-v1'
+    assert session.candidate.candidate_id==state['candidate_id']==module.STARTING_ID
+    assert module.candidate_bytes(session.candidate)==candidate_raw
+    for key, value in state.items():
+        if key not in ('candidate_id','imported_capture_state'):
+            setattr(session,key,copy.deepcopy(value))
+    session.diffs = {int(key):value for key,value in session.diffs.items()}
+    session.restored_control_fields = tuple(session.restored_control_fields)
+    session.parked_source_regions = tuple(tuple(row) for row in session.parked_source_regions)
+    assert canonical_json_bytes(module.host.snapshot(session))==canonical_json_bytes(
+        {key:value for key,value in state.items() if key!='imported_capture_state'})
+    assert (session.requests_used,session.calls_used,session.starting_archive_length)==(14,20,0)
+    assert session.saved=={} and not session.submitted and not session.delivery_blocked
+    metadata = dict(source_run='run-002', source_response_seal_sha256=sha256_bytes(seal_raw),
+        source_state_sha256=sha256_bytes(state_raw), policy_migration='legacy-v1 to retained-captures-v2',
+        consumed_requests_preserved=14, consumed_operations_preserved=20,
+        old_acquisitions_not_promoted=True, actor_continuation=False)
+    return session, metadata
+
+
+def qualify_retained_lifecycle(session, measure, record=None, *, preceding_feedback=None):
+    """Actual serial acquisition/release path followed by one checked contribution.
+
+    Every report fact comes from co-present capture bytes. This deterministic
+    engineering route supplies choices, so it is never model-performance evidence.
+    It supports both a fresh empty entry and the explicitly migrated stopped state.
+    """
+    assert session.retain_imported_captures
+    starting = (session.requests_used,session.calls_used)
+    initial = session.candidate
+    snapshots = []
+    preceding = [] if preceding_feedback is None else preceding_feedback
+    def act(action, basis, account=None):
+        before = session.view()
+        count = measure(before)
+        session.mark_delivered(before)
+        session.begin_request()
+        reply = dict(discussion=basis,operation=action)
+        if account is not None:
+            reply['account'] = account
+        outcome = process_reply(session,reply,measure,preceding)
+        assert all(op['result'].get('accepted') for op in outcome['operations']), outcome
+        after = session.view()
+        row = dict(before_view=copy.deepcopy(before),reply=reply,outcome=copy.deepcopy(outcome),
+            after_view=copy.deepcopy(after),input_tokens=count,next_input_tokens=measure(after),
+            basis_scope='researcher-selected information-path qualification, not actor choices')
+        snapshots.append(row)
+        if record:record(row)
+        return outcome['operations'][-1]['result']
+    expected, acquired = {}, {}
+    for handle in ('OBS-0001','OBS-0002','OBS-0003'):
+        assert handle in {row['handle'] for row in session.view()['imported_observations']['entries']}
+        result = act(dict(action='reopen_observation',handle=handle),
+                     'The actual imported inventory identifies the historical capture to acquire.')
+        acquired[handle] = result['exact_result_handle']
+        expected[handle] = session.imported_record(handle)[1]
+        # A migrated checkpoint can initially show its old latest receipt too.
+        # After all three acquisitions, every required body must remain present.
+        assert all(delivered_capture_bodies(session.view())[h]==raw for h,raw in expected.items())
+    assert displayed_capture_counts(session.view())=={h:1 for h in expected}
+    act(dict(action='tree',path='compiler',offset=0,limit=16),
+        'The root inventory names compiler; inspect its actual paths while retaining the comparison.')
+    assert delivered_capture_bodies(session.view())==expected
+    act(dict(action='read',path='README.md',start_line=1,end_line=0),
+        'The root names README.md; inspect the complete contract and report definition.')
+    assert delivered_capture_bodies(session.view())==expected
+    previous = acquired['OBS-0001']
+    acquired['OBS-0001'] = act(dict(action='reopen_observation',handle='OBS-0001'),
+        'Reinspection of the immutable original must not evict either comparison build.')['exact_result_handle']
+    assert previous not in session.saved and len(session.saved)==3
+    assert displayed_capture_counts(session.view())=={h:1 for h in expected}
+    assert load_json_strict(session.payload(previous))['content_utf8'].encode()==expected['OBS-0001']
+    region = delivered_sources(session.view())['README.md']['region_ref']
+    act(dict(action='work_on_exact',regions=[region],results=[acquired['OBS-0001'],acquired['OBS-0002']]),
+        'Release BUILD-B explicitly while keeping the provided README region and original/BUILD-A receipts.')
+    assert set(delivered_capture_bodies(session.view()))=={'OBS-0001','OBS-0002'}
+    act(dict(action='tree',path='reports',offset=0,limit=16),
+        'The task names reports/incident.json; inspect its directory without restoring a released capture.')
+    assert set(delivered_capture_bodies(session.view()))=={'OBS-0001','OBS-0002'}
+    acquired['OBS-0003'] = act(dict(action='reopen_observation',handle='OBS-0003'),
+        'The complete report needs both emitted builds; reacquire the explicitly released immutable build.')['exact_result_handle']
+    assert delivered_capture_bodies(session.view())==expected
+    sources = [dict(path=path,start_line=1,end_line=0) for path in ('README.md',TARGET,REPORT)]
+    act(dict(action='work_on',sources=sources,results=list(acquired.values())),
+        'Task and discovered paths identify the current targets; retain exact captures with those current sources.',
+        account='Capture comparison is pending; these historical observations do not check the proposed repair.')
+    shown = session.view()
+    text = delivered_sources(shown)
+    assert OLD in text[TARGET]['content'] and 'exact built-in' in text['README.md']['content']
+    assert text[REPORT]['content']==initial.file_map[REPORT].decode()
+    report = derive_report(delivered_capture_bodies(shown))
+    act(dict(action='patch',path=TARGET,old=OLD,new=GOOD,
+             expected_candidate_id=session.candidate.candidate_id,
+             expected_file_sha256=session.candidate.file_sha256(TARGET)),
+        'Displayed transform removes both signs; exact-literal plus removal follows the displayed contract.')
+    assert delivered_capture_bodies(session.view())==expected
+    act(dict(action='patch',path=REPORT,old=initial.file_map[REPORT].decode(),
+             new=canonical_json_bytes(report).decode()+'\n',
+             expected_candidate_id=session.candidate.candidate_id,
+             expected_file_sha256=session.candidate.file_sha256(REPORT)),
+        'Compare the three actually co-present trees in the README-defined order; do not use checker expectations.')
+    checked = act(dict(action='check',check_id='public',expected_candidate_id=session.candidate.candidate_id),
+                  'The saved successor has both contributions; execute its unchanged original public check.')
+    assert checked['passed']
+    act(dict(action='submit',expected_candidate_id=session.candidate.candidate_id),
+        'The actual public receipt passes on the unchanged current successor.',
+        account='The historical comparison is saved and this successor passed the public check; no historical build was rerun.')
+    assert session.submitted
+    assert all(session.candidate.file_map[path]==raw for path,raw in initial.files if path not in (TARGET,REPORT))
+    return dict(status='qualified_no_model_inference',completion_requests=0,
+        starting_requests=starting[0],starting_operations=starting[1],
+        additional_scripted_requests=session.requests_used-starting[0],
+        additional_scripted_operations=session.calls_used-starting[1],
+        total_requests=session.requests_used,total_operations=session.calls_used,
+        maximum_input_tokens=max(row['next_input_tokens'] for row in snapshots),
+        serial_capture_delivery=True,reread_deduplicated=True,released_capture_stays_released=True,
+        report_derived_from_delivered_captures=report,candidate_id=session.candidate.candidate_id,
+        snapshots=snapshots)
+
+
 def qualify(module, loop, adapter, store, folder):
     """Native runner hook: direct route and real failed-check correction route."""
     trials, checks = [], []
@@ -262,7 +423,8 @@ def qualify(module, loop, adapter, store, folder):
             loop.log.append('scripted_information_path_step',
                 {'route': label, 'step': n, 'input_tokens': row['input_tokens'],
                  'next_input_tokens': row['next_input_tokens'], 'completion_sent': False}, [artifact])
-        value = qualify_contribution(session, loop.measure, record, correction=correction)
+        value = qualify_contribution(session, loop.measure, record, correction=correction,
+                                     preceding_feedback=adapter.preceding_feedback)
         scoped_snapshot(session, f'scripted/{label}/final')
         summary = {key: item for key, item in value.items() if key != 'snapshots'}
         store.put(f'scripted/{label}/RESULTS.json', canonical_json_bytes(summary))
@@ -278,7 +440,8 @@ def qualify(module, loop, adapter, store, folder):
     # This is native capacity stress, not extra task evidence or model behavior.
     session = module.initial_session()
     module.attach_observations(session, folder/'scripted'/'capacity_recovery', loop.log)
-    previous = []
+    adapter.preceding_feedback.clear()
+    previous = adapter.preceding_feedback
     steps = []
     def act(action, accepted=True):
         session.mark_delivered(session.view())
@@ -336,6 +499,36 @@ def qualify(module, loop, adapter, store, folder):
         'maximum_input_tokens':max(r['input_tokens'] for r in steps),
         'oversized_group_rejected':True,'previous_selection_preserved':True,
         'complete_replacement_delivered':True,'checked_submission':True})
+    if initial.retain_imported_captures:
+        for label in ('fresh_serial_retention','stopped002_policy_migration'):
+            if label=='fresh_serial_retention':
+                session, migration = module.initial_session(), None
+            else:
+                session, migration = restore_stopped002_for_diagnostic(module)
+            module.attach_observations(session,folder/'scripted'/label,loop.log)
+            adapter.preceding_feedback.clear()
+            scoped_snapshot(session,f'scripted/{label}/starting')
+            number = 0
+            def record_lifecycle(row):
+                nonlocal number
+                number += 1
+                artifact = store.put(f'scripted/{label}/steps/{number:02d}.json',canonical_json_bytes(row))
+                loop.log.append('scripted_capture_lifecycle_step',dict(route=label,step=number,
+                    input_tokens=row['input_tokens'],next_input_tokens=row['next_input_tokens'],
+                    completion_sent=False),[artifact])
+            value = qualify_retained_lifecycle(session,loop.measure,record_lifecycle,
+                                               preceding_feedback=adapter.preceding_feedback)
+            scoped_snapshot(session,f'scripted/{label}/final')
+            summary = {key:item for key,item in value.items() if key!='snapshots'}
+            if migration is not None:
+                summary['explicit_diagnostic_migration'] = migration
+            store.put(f'scripted/{label}/RESULTS.json',canonical_json_bytes(summary))
+            trials.append(dict(route=label,**summary))
+            checks.extend(dict(route=label,step=i+1,passed=op['result']['passed'],
+                               candidate_id=op['result']['checked_candidate_id'])
+                for i,row in enumerate(value['snapshots']) for op in row['outcome']['operations']
+                if op['action']['action']=='check')
+        assert canonical_json_bytes(module.snapshot(initial))==initial_bytes
     adapter.preceding_feedback.clear()
-    return {'trials': trials, 'checks': checks, 'checks_executed': 4,
+    return {'trials': trials, 'checks': checks, 'checks_executed': len(checks),
             'completion_requests': 0, 'model_starting_state_untouched': True}

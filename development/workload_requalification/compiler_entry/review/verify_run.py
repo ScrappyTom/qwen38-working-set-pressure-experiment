@@ -55,6 +55,7 @@ def _sent_capture_bytes(envelope, pairs, inventory, bodies):
         handle = _check_capture_receipt(receipt, inventory, bodies)
         if handle:
             observations.append(dict(origin=origin, handle=handle, representation='complete_capture_receipt',
+                result_handle=receipt.get('exact_result_handle'),
                 content_bytes=len(bodies[handle]), content_sha256=sha256_bytes(bodies[handle])))
     for origin, page in pages:
         if page.get('kind') != 'saved_bytes' or not page.get('handle', '').startswith('RES-'):
@@ -88,6 +89,8 @@ def _verify_preparation(module, seal):
     assert manifest['actor'] == seal['actor'] == module.ACTOR
     assert (manifest['maximum_requests'], manifest['maximum_operations']) == (
         module.MAX_REQUESTS, module.MAX_OPERATIONS)
+    if module.retain_imported_captures:
+        assert manifest['imported_capture_retention'] == 'retain-requested-immutable-captures-v1'
     preparation = module.PACKAGE
     assert sha256_file(preparation/'SEAL.json') == manifest['preparation_seal_sha256']
     proof = study.read(preparation/'SEAL.json')
@@ -201,9 +204,25 @@ def verify(version='002'):
         shown = replay_session._shown_acquisitions(view)
         assert shown == {row['handle'] for row in inventory['entries'] if row['shown_complete']}
         bytes_shown = _sent_capture_bytes(envelope, ending_state['pairs'], imported_inventory, imported_bodies)
+        complete_counts = {handle: sum(row['handle'] == handle and (
+            row['representation'] == 'complete_capture_receipt' or row.get('complete_receipt_shown'))
+            for row in bytes_shown) for handle in imported_bodies}
         capture_presentations.append(dict(request_file=path.relative_to(run).as_posix(),
             candidate_id=view['candidate_id'], presentation_mode=view['presentation']['mode'],
-            complete_capture_receipts_shown=sorted(shown), actual_capture_bytes_shown=bytes_shown))
+            complete_capture_receipts_shown=sorted(shown), actual_capture_bytes_shown=bytes_shown,
+            complete_capture_body_counts=complete_counts))
+    by_request = {int(Path(row['request_file']).name.split('-')[0][1:]): row
+                  for row in capture_presentations}
+    for acquisition in acquisitions:
+        number = int(Path(acquisition['operation_file']).name.split('-')[0][1:])
+        following = by_request.get(number + 1)
+        acquisition['following_model_input_exists'] = following is not None
+        if following is not None and acquisition['accepted']:
+            acquisition['exact_acquisition_receipt_delivered_next'] = any(
+                row.get('result_handle') == acquisition['exact_result_handle'] and (
+                    row['representation'] == 'complete_capture_receipt' or row.get('complete_receipt_shown'))
+                for row in following['actual_capture_bytes_shown'])
+            acquisition['complete_capture_identities_in_following_input'] = following['complete_capture_receipts_shown']
     assert ending_state['imported_capture_state'] == starting['imported_capture_state']
     # The common verifier counts only optional preservation-log callbacks. Count
     # actual replayed check operations separately, including stores without one.
@@ -211,6 +230,7 @@ def verify(version='002'):
     result.update(original_entry=True, inherited_actor_operations=0,
         imported_records=len(imported_bodies), imported_bytes=sum(map(len, imported_bodies.values())),
         imported_capture_bindings_unchanged=True, imported_acquisitions=acquisitions,
+        imported_capture_retention=manifest.get('imported_capture_retention', 'latest-feedback-only'),
         capture_presentations=capture_presentations, check_operations=checks,
         observations=observed, observation_custody_callback_records=optional_records,
         observations_replayed_without_execution=len(observed),

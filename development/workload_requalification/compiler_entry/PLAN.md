@@ -17,3 +17,10 @@ silent retries or automatic successor. Review every complete actual input,
 thinking, public reply, receipt and artifact before diagnosing the outcome.
 Original pressure comparison and assisted saved-report continuation remain
 separate open obligations. Apparatus batching is deferred from this configuration.
+
+Run002 is operator-closed and exactly replayed. CAPTURE_RETENTION_PLAN.md records
+the earned acquisition-lifetime correction before implementation. Qualify sequential
+capture retention, reread deduplication, release, immutable bindings and whole-group
+capacity recovery on native inputs; use the recorded broad checkpoint only as a
+separately labelled engineering case. Publish successor003 preparation before its
+fresh uncoached entry. Preserve the stopped attempt and its full cost.

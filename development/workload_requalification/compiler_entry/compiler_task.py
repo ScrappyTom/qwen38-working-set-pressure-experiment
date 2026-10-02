@@ -53,13 +53,14 @@ def original_material():
         inventory[r['handle']] = copy.deepcopy(r)
     return candidate, exact('PUBLIC_CHECK.py'), exact('TASK.txt').decode(), inventory, bodies
 
-def initial_session(folder=None, replay=False):
+def initial_session(folder=None, replay=False, *, retain_imported_captures=False):
     candidate, checker, task, inventory, bodies = original_material()
     return Session(candidate, {'public': checker}, task, edit_checks={},
         call_limit=MAX_OPERATIONS, request_limit=MAX_REQUESTS,
         observations=ObservationStore((folder or AREA/'unexecuted')/'observations', replay=replay),
         check_contracts={'public': {'checker_sha256': sha256_bytes(checker)}},
-        imported_observations=inventory, imported_bodies=bodies)
+        imported_observations=inventory, imported_bodies=bodies,
+        retain_imported_captures=retain_imported_captures)
 
 @lru_cache(maxsize=1)
 def response_constraints():
@@ -95,7 +96,7 @@ def attach_observations(session, folder, log):
     log.append('imported_capture_custody', {'historical_candidate_id': STARTING_ID,
         'records':len(bodies), 'actor_acquisitions':0, 'source_edit_authority':False}, artifacts)
 
-def implementation_identities():
+def implementation_identities(*, retain_imported_captures=False):
     paths = [*AREA.glob('*.py'), *(AREA/'tests').glob('*.py'),
              *(AREA/n for n in ('SPEC.md','SYSTEM.txt','PLAN.md','TASK.txt')),
              ROOT/'development/workload_requalification/search_continuity/search_navigation.py',
@@ -104,23 +105,31 @@ def implementation_identities():
              ROOT/'development/bounded_working_set/parser-documentation/grammar-review/NATIVE_GBNF_ORDER_PROBE.json',
              ORIGINAL/'PREPARATION_SEAL.json',
              *(ORIGINAL/n for n in ('candidate.json','PUBLIC_CHECK.py','TASK.txt','captures.json','observations.json'))]
+    if retain_imported_captures:
+        paths.extend(AREA/'run-002'/n for n in ('RESPONSE_SEAL.json',
+            'final-state.json', 'final-candidate.json', 'final-preceding-feedback.json'))
     return {**host.source_identities(), **{p.relative_to(ROOT).as_posix(): sha256_file(p) for p in paths}}
 
 class Task:
     def __init__(self, version='001', replay_folder=None):
         assert len(version)==3 and version.isdecimal()
+        self.version = version
+        self.retain_imported_captures = int(version) >= 3
         self.AREA=AREA; self.PACKAGE=AREA/f'preparation-{version}'; self.RUN=AREA/f'run-{version}'
         self.MANIFEST=AREA/f'EXECUTION_MANIFEST-{version}.json'
         self.replay_folder=Path(replay_folder) if replay_folder else None
-    def initial_session(self): return initial_session(self.replay_folder, self.replay_folder is not None)
+    def initial_session(self):
+        return initial_session(self.replay_folder, self.replay_folder is not None,
+                               retain_imported_captures=self.retain_imported_captures)
     def reply_schema(self): return capture_bridge.reply_schema(DESCRIPTIONS)
     def operating_reference(self):
         text = host.Task('artifact_map').operating_reference() + '\n\n' + navigation.REFERENCE_ADDITION + '\n\n' + REFERENCE_ADDITION
-        return capture_bridge.operating_reference(text)
+        return capture_bridge.operating_reference(text, retain_imported_captures=self.retain_imported_captures)
     def response_constraints(self): return response_constraints()
     def decode_reply(self, content): return capture_bridge.decode_reply(content, DESCRIPTIONS)
-    def source_identities(self): return implementation_identities()
-    def implementation_identities(self): return implementation_identities()
+    def source_identities(self):
+        return implementation_identities(retain_imported_captures=self.retain_imported_captures)
+    def implementation_identities(self): return self.source_identities()
     def initial_preceding_feedback(self): return []
     def snapshot(self, session): return snapshot(session)
     def attach_observations(self, session, folder, log): return attach_observations(session,folder,log)

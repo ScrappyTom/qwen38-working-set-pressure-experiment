@@ -185,4 +185,186 @@ class CompilerEntryTests(unittest.TestCase):
                 self.assertIn('26/26',session.observations.directory(check['observation']).joinpath('stdout.bin').read_text())
 
 
+class RetainedCompilerEntryTests(unittest.TestCase):
+    """The declared successor policy; legacy fixtures above remain unchanged."""
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix='compiler-retention-test-')
+        self.addCleanup(self.temp.cleanup)
+        self.session = task.initial_session(Path(self.temp.name), retain_imported_captures=True)
+        self.preceding = []
+
+    def act(self, action, measure=lambda view: 0, account=None):
+        self.session.mark_delivered(self.session.view())
+        self.session.begin_request()
+        reply = {'discussion':'CPU retention boundary qualification.', 'operation':action}
+        if account is not None:
+            reply['account'] = account
+        return process_reply(self.session, reply, measure, self.preceding)['operations'][-1]['result']
+
+    def acquire(self, handle):
+        result = self.act({'action':'reopen_observation','handle':handle})
+        self.assertTrue(result['accepted'])
+        return result['exact_result_handle']
+
+    def test_serial_acquisition_reread_and_unrelated_actions_preserve_one_body_per_capture(self):
+        expected = {}
+        addresses = {}
+        for handle in ('OBS-0001','OBS-0002','OBS-0003'):
+            addresses[handle] = self.acquire(handle)
+            expected[handle] = self.session.imported_record(handle)[1]
+            self.assertEqual(route.delivered_capture_bodies(self.session.view()), expected)
+            self.assertEqual(len(self.session.saved), len(expected))
+            self.assertEqual(route.displayed_capture_counts(self.session.view()),
+                             {name:1 for name in expected})
+        self.act({'action':'tree','path':'compiler','offset':0,'limit':16})
+        self.act({'action':'read','path':'README.md','start_line':1,'end_line':0})
+        self.assertEqual(route.delivered_capture_bodies(self.session.view()), expected)
+        before = self.session.candidate
+        partial = self.act({'action':'reopen_result','handle':addresses['OBS-0001'],'offset':1})
+        self.assertEqual(partial['offset'], 1)
+        self.assertEqual(set(route.delivered_capture_bodies(self.session.view())), {'OBS-0002','OBS-0003'})
+        repeated = self.acquire('OBS-0001')
+        self.assertNotEqual(repeated, addresses['OBS-0001'])
+        self.assertEqual(len(self.session.saved), 3)
+        self.assertNotIn(addresses['OBS-0001'], self.session.saved)
+        self.assertEqual(route.displayed_capture_counts(self.session.view()),
+                         {name:1 for name in expected})
+        self.assertEqual(self.session.candidate, before)
+        for address in (addresses['OBS-0001'], repeated):
+            stored = load_json_strict(self.session.payload(address))
+            self.assertEqual(stored['content_utf8'].encode(), expected['OBS-0001'])
+            self.assertEqual(stored['observed_candidate_id'], task.STARTING_ID)
+        self.assertEqual(len([p for p in self.session.pairs
+            if p['response'].get('handle')=='OBS-0001' and p['result']['accepted']]), 2)
+
+    def test_both_replacement_routes_release_captures_without_erasing_custody(self):
+        addresses = {h:self.acquire(h) for h in ('OBS-0001','OBS-0002','OBS-0003')}
+        self.act({'action':'read','path':'README.md','start_line':1,'end_line':0})
+        region = route.delivered_sources(self.session.view())['README.md']['region_ref']
+        self.act({'action':'work_on','sources':[{'path':'README.md','start_line':1,'end_line':0}],
+                  'results':[addresses['OBS-0001']]})
+        self.assertEqual(set(route.delivered_capture_bodies(self.session.view())), {'OBS-0001'})
+        self.act({'action':'tree','path':'.','offset':0,'limit':16})
+        self.assertEqual(set(route.delivered_capture_bodies(self.session.view())), {'OBS-0001'})
+        self.act({'action':'work_on_exact','regions':[region],'results':[addresses['OBS-0003']]})
+        self.assertEqual(set(route.delivered_capture_bodies(self.session.view())), {'OBS-0003'})
+        self.act({'action':'work_on_exact','regions':[],'results':[]})
+        self.assertEqual(route.delivered_capture_bodies(self.session.view()), {})
+        self.assertEqual(self.session.saved, {})
+        for handle, address in addresses.items():
+            self.assertEqual(load_json_strict(self.session.payload(address))['content_utf8'].encode(),
+                             self.session.imported_record(handle)[1])
+        again = self.acquire('OBS-0002')
+        self.assertEqual(list(self.session.saved), [again])
+        self.assertEqual(set(route.delivered_capture_bodies(self.session.view())), {'OBS-0002'})
+
+    def test_retention_does_not_make_historical_captures_source_or_check_authority(self):
+        expected = {h:self.session.imported_record(h)[1] for h in ('OBS-0001','OBS-0002','OBS-0003')}
+        for handle in expected:
+            self.acquire(handle)
+        self.session.mark_delivered(self.session.view())
+        self.assertEqual(self.session.delivered_sources, [])
+        before = self.session.candidate
+        patch = {'action':'patch','path':route.TARGET,'old':route.OLD,'new':route.GOOD,
+            'expected_candidate_id':before.candidate_id,
+            'expected_file_sha256':before.file_sha256(route.TARGET)}
+        self.assertFalse(self.act(patch)['accepted'])
+        self.assertFalse(self.act({'action':'submit','expected_candidate_id':before.candidate_id})['accepted'])
+        self.assertEqual(self.session.candidate, before)
+        self.act({'action':'read','path':route.TARGET,'start_line':1,'end_line':0})
+        self.assertTrue(self.act(patch)['accepted'])
+        self.assertNotEqual(self.session.candidate.candidate_id, task.STARTING_ID)
+        self.assertEqual(route.delivered_capture_bodies(self.session.view()), expected)
+        self.assertTrue(all(r['observed_candidate_id']==task.STARTING_ID
+            and r['shown_complete'] for r in self.session.view()['imported_observations']['entries']))
+        self.assertIsNone(self.session.check_state())
+
+    def test_unfit_ordinary_acquisition_preserves_designations_then_allows_recovery_replacement(self):
+        self.act({'action':'read','path':'README.md','start_line':1,'end_line':0},
+                 account='The exact original and emitted trees are needed together; no repair is checked.')
+        first = self.acquire('OBS-0001')
+        self.acquire('OBS-0002')
+        before = (self.session.candidate, copy.deepcopy(self.session.ranges),
+                  copy.deepcopy(self.session.saved), self.session.working_account())
+        # A synthetic capacity boundary verifies transaction/control semantics.
+        # Native qualification separately measures the real full input.
+        def measure(view):
+            return 23_809 if len(route.delivered_capture_bodies(view))==3 else 1000
+        rejected = self.act({'action':'reopen_observation','handle':'OBS-0003'}, measure)
+        self.assertFalse(rejected['accepted'])
+        self.assertIn('cannot fit ordinary', rejected['error'])
+        self.assertEqual((self.session.candidate,self.session.ranges,self.session.saved,
+                          self.session.working_account()), before)
+        recovery = self.session.view()
+        self.assertEqual(recovery['presentation']['mode'], 'recovery')
+        self.assertFalse(self.session.delivery_blocked)
+        self.assertEqual(recovery['latest_feedback']['result']['accepted'], False)
+        self.assertIsNone(recovery['imported_observations']['entries'][2]['latest_acquisition_result'])
+        result = self.act({'action':'work_on','sources':[],'results':[first]}, measure)
+        self.assertTrue(result['accepted'])
+        self.assertEqual(self.session.view()['presentation']['mode'], 'ordinary')
+        self.assertTrue(self.act({'action':'reopen_observation','handle':'OBS-0003'}, measure)['accepted'])
+        self.assertEqual(set(route.delivered_capture_bodies(self.session.view())), {'OBS-0001','OBS-0003'})
+
+    def test_policy_checkpoint_and_legacy_reference_are_explicit(self):
+        legacy = task.initial_session(Path(self.temp.name)/'legacy')
+        default = capture_bridge.capture_snapshot(legacy)
+        retained = capture_bridge.capture_snapshot(self.session)
+        self.assertEqual(default['schema'], 'compiler-imported-observations-v1')
+        self.assertEqual(retained['retention_policy'], 'retain-requested-immutable-captures-v1')
+        self.assertEqual(retained['inventory'], default['inventory'])
+        self.assertEqual(retained['body_sha256'], default['body_sha256'])
+        with self.assertRaises(ValueError):capture_bridge.restore_capture_state(self.session, default)
+        with self.assertRaises(ValueError):capture_bridge.restore_capture_state(legacy, retained)
+        self.acquire('OBS-0001')
+        clone = self.session.clone()
+        self.assertIs(capture_bridge.restore_capture_state(clone,
+            capture_bridge.capture_snapshot(self.session)), clone)
+        self.assertEqual(task.snapshot(clone), task.snapshot(self.session))
+        self.assertEqual(clone.view(), self.session.view())
+        checkpoint = load_json_strict(canonical_json_bytes(task.snapshot(self.session)))
+        rebuilt = task.initial_session(Path(self.temp.name)/'rebuilt',retain_imported_captures=True)
+        capture_bridge.restore_capture_state(rebuilt,checkpoint['imported_capture_state'])
+        for key,value in checkpoint.items():
+            if key not in ('candidate_id','imported_capture_state'):
+                setattr(rebuilt,key,copy.deepcopy(value))
+        rebuilt.diffs = {int(key):value for key,value in rebuilt.diffs.items()}
+        rebuilt.restored_control_fields = tuple(rebuilt.restored_control_fields)
+        rebuilt.parked_source_regions = tuple(tuple(row) for row in rebuilt.parked_source_regions)
+        self.assertEqual(canonical_json_bytes(task.snapshot(rebuilt)),canonical_json_bytes(checkpoint))
+        self.assertEqual(rebuilt.view(),self.session.view())
+        # The first development fixture used the placeholder "reference";
+        # inherited contract validation correctly rejected it. Use the actual
+        # inherited reference for equivalence, without changing production code.
+        inherited = task.host.Task('artifact_map').operating_reference()+'\n\n'+task.navigation.REFERENCE_ADDITION+'\n\n'+task.REFERENCE_ADDITION
+        self.assertEqual(capture_bridge.operating_reference(inherited),
+                         capture_bridge.operating_reference(inherited,retain_imported_captures=False))
+        self.assertEqual(capture_bridge.operating_reference(inherited), task.Task('002').operating_reference())
+        self.assertTrue(task.Task('003').initial_session().retain_imported_captures)
+        self.assertFalse(task.Task('002').initial_session().retain_imported_captures)
+
+    def test_serial_lifecycle_completes_fresh_and_explicit_stopped_state_migration(self):
+        module = task.Task('003')
+        fresh = task.initial_session(Path(self.temp.name)/'fresh-route',retain_imported_captures=True)
+        value = route.qualify_retained_lifecycle(fresh,lambda view:0)
+        self.assertTrue(fresh.submitted)
+        self.assertEqual((value['starting_requests'],value['starting_operations']), (0,0))
+        self.assertTrue(value['serial_capture_delivery'] and value['reread_deduplicated'])
+        migrated, metadata = route.restore_stopped002_for_diagnostic(module)
+        self.assertEqual((migrated.requests_used,migrated.calls_used), (14,20))
+        self.assertEqual(migrated.working_account()['action_handle'],'EVT-0018')
+        self.assertEqual(migrated.saved,{})
+        self.assertFalse(metadata['actor_continuation'])
+        self.assertTrue(metadata['old_acquisitions_not_promoted'])
+        # Keep checker observation files isolated from any unexecuted task path.
+        from working_set_exp.observations import ObservationStore
+        migrated.observations = ObservationStore(Path(self.temp.name)/'migrated-route')
+        value = route.qualify_retained_lifecycle(migrated,lambda view:0)
+        self.assertTrue(migrated.submitted)
+        self.assertEqual((value['starting_requests'],value['starting_operations']), (14,20))
+        self.assertEqual(value['total_requests'],14+value['additional_scripted_requests'])
+        self.assertEqual(value['total_operations'],20+value['additional_scripted_operations'])
+        self.assertEqual(fresh.candidate,migrated.candidate)
+
+
 if __name__=='__main__':unittest.main()

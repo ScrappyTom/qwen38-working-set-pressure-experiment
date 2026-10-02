@@ -49,6 +49,8 @@ def prepare(module):
     study.save(module.AREA,module.MANIFEST.name,dict(actor=module.ACTOR,seed=module.SEED,
         maximum_requests=module.MAX_REQUESTS,maximum_operations=module.MAX_OPERATIONS,
         source_sha256=bound,preparation_seal_sha256=sha256_file(folder/'SEAL.json'),initial=initial,
+        imported_capture_retention=('retain-requested-immutable-captures-v1'
+            if module.retain_imported_captures else 'latest-feedback-only'),
         owner_direction=study.OWNER_DIRECTION,no_live_coaching=True,automatic_retry=False))
     runner.verify_package(module)
     print(json.dumps(dict(status='qualified',initial=initial,route=route,completion_requests=0)),flush=True)

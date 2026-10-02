@@ -1,3 +1,14 @@
+# Qualified retained compiler captures
+
+compiler_entry/PREPARATION_REVIEW-003.md qualifies the opt-in capture-lifetime
+package:16CPU checks,36native grammar cases,70native inputs,6actual scripted checks,
+408source bindings,zero inference. Initial5965tokens,peak23032,minGPUfree406MiB.
+Sequential requested captures stay selected; reread deduplication and explicit
+release preserve custody and original bindings. Recorded run002 migration is
+engineering-only with14/20retained; fresh run003 starts empty under40/100.
+Publish before uncoached execution. Preserve the stopped run and do not claim
+scripted feasible transitions as model behavior or a functional pass as pressure.
+
 # Compiler capture lifetime finding and successor boundary
 
 compiler_entry/review/RESULTS-002.md preserves the operator-drained 14-request/20-

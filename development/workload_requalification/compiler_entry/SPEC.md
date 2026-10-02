@@ -23,3 +23,16 @@ Success means correct bounded optimizer repair, accurate capture-derived report,
 preserved supported compilation, actual current check and submission. Review
 artifact meaning independently of pass status and report total cost. A successful
 functional run does not establish pressure continuity or assisted restart ability.
+
+For separately declared successor versions003 onward, imported-capture acquisition
+also retains the requested complete capture in ordinary working material. Repeated
+OBS acquisition replaces that identity's selected representation; each acquisition
+still has its own archived RES receipt. Explicit work_on/work_on_exact replacement
+can release it. Complete transition admission must preserve truthful rejection and
+recovery if the proposed retained group cannot fit. Historical versions001/002
+retain their original transient-acquisition policy and exact evidence.
+
+Run003 starts freshly from the sealed original task and candidate, zero prior actor
+operations/accounts/selection, with the same finite maxima and model settings.
+This is a retention-and-reference documentation package, not a controlled attribution
+to one sentence or a silent continuation/reset of operator-stopped run002.

@@ -63,3 +63,30 @@ Do not mislabel that as an unavailable operation. Preserve 36.033 model minutes,
 37.098 loop minutes, 140,725 input / 33,856 generated tokens and 240 MiB sampled GPU minimum.
 Publish the stopped result and CAPTURE_RETENTION_PLAN before opt-in implementation,
 qualification and a separate fresh run. No in-run source or prompt change occurred.
+
+## 2026-10-02 UTC — compiler retention implementation and qualification
+
+The run002 lifetime finding earns an opt-in policy, not a new store. Requested OBS
+receipts use existing retained saved-result selection, one selected representation
+per immutable identity; each actual acquisition remains archived. work_on and
+work_on_exact explicitly release it. Ordinary unfit acquisition rolls back the
+selection and delivers truthful recovery. Recovery omission remains explicit.
+The new reference shows the actual required form beside retrieval contracts.
+Legacy versions/default remain unchanged; snapshot policy is explicit.
+
+Sixteen CPU tests and preparation003 pass. First new reference-equivalence fixture
+used an invalid placeholder; correction was evaluator-only. Native verification:
+858sealed files,408source bindings,636custody records,70actual inputs,36grammar/EOS
+cases,6scripted checks,0model calls. Peak23032input,initial5965,minGPUfree406MiB.
+Fresh and stopped-state serial qualification establishes exact co-presence, release,
+reread replacement, artifact preservation and checked completion. The stopped-state
+case preserves14/20and is not actor continuation. Independent bridge/reference
+review found no actionable issue. The task-local verifier now distinguishes exact
+receipt delivery, complete-body counts and the explicit retention manifest.
+
+Publish the package, then fresh uncoached run003. Qualification is not evidence of
+model contribution, causal efficiency or pressure continuity. Keep all run002 cost
+and independent saved-report restart obligations. No silent reset/retry/coaching.
+A documentation helper initially looked for running notes at the repository root;
+the existing notes are in this task area. Its partial doc writes are retained and
+completed at the actual location; no qualification source or evidence changed.
