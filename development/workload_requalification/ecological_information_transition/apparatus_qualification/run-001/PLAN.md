@@ -1,0 +1,13 @@
+# Bounded input-processing and memory qualification
+
+This is apparatus work, separate from the two behavioral attempts. Preserve the completed E20 lineage. Full GPU layer assignment, a 398 MiB CPU-mapped buffer, the 53 MiB free-VRAM minimum, and slow prefill do not establish CPU layer execution or shared-memory fallback. The original monitor captured neither server RAM nor Windows shared GPU allocation; that missing measurement cannot be reconstructed.
+
+After zero-completion preparation, use its two representative initial inputs twice each, in A/B/B/A order, with a fixed 32-token whole-generation allowance. This cap applies only to the apparatus screen, not to an actor run or reasoning-policy comparison. Preserve exact requests, complete returned responses or transport failures, rendered inputs, separate prompt/decode timings and cache counts. No reply is interpreted or executed as work. Clear cache through the existing no-cache request policy and verify reported reuse remains zero.
+
+Keep the pinned runtime, model, medium thinking, q4 K/V, 56,576 physical context, batching, threads, full GPU assignment and no MTP. No driver-setting change, CPU offload, smaller context or other runtime tuning is part of this qualification. Use the existing exclusively owned server; close it after the screen.
+
+Bound live measurement to fifteen minutes from readiness, at most four completion requests, with no retry. A timed-out request is preserved as an apparatus stop, not a model-action failure; do not claim its unfinished timing is a complete measurement. Qualify native input/endpoint counts and runtime closure. A failure that prevents stable completion blocks the behavioral exposure pending a separately declared correction. Stable but slow measurements permit behavioral evaluation with conditional cost interpretation.
+
+Sample server working set and private bytes, available system RAM, dedicated/shared Windows GPU process counters when available, GPU VRAM/utilization/power, and competing GPU process inventory. Identify the owned PID from the existing launch receipt, not by guessing the only process. Missing counters are explicitly unavailable, never zero. Record raw samples and time associations; allocation evidence and timing association still do not by themselves establish causation.
+
+This earns a scoped monitor and screen, not a new host, model change, hardware recommendation, or unlimited profiling programme. Publish its qualification and chosen unchanged runtime policy before both behavioral attempts. Keep host preparation, native prefill, generation, checking, and reviewer effort separate.

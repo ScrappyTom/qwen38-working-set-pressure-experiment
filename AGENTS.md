@@ -1,3 +1,19 @@
+# Preserved apparatus timebox; prospective limited behavioral qualification
+
+ecological_information_transition/review/APPARATUS-RESULTS-001.md preserves
+the incomplete fifteen-minute screen: two complete representative responses,
+third deadline timeout, no fourth/modeloperation; exact20artifacts/1231sources/
+15records and owned closure. Both prefill rates about47tokens/sec; RAM/sharedGPU
+and promptcache observed, cause/repeatability unresolved. Blender scripts select
+CPU; sampledGPU rows do not contain theirPIDs. No driver/runtime/model change.
+Publish APPARATUS-DECISION-001.json before narrowly revising the four-repeat
+gate for successor preparations002: only this authenticated deadline stop and
+two complete representative measurements may qualify behavior with speedclaims
+withheld. Every other apparatus failure still blocks. Preserve all001preparations
+and stopped screen. Both002actualinitialwires must remain byte-identical to001;
+task/account/checker/selection/opportunity/actor unchanged. Qualify and publish
+before one uncoached attempt each. No retry, extra profiling or live coaching.
+
 # Qualified C16 pair; bounded apparatus screen before behavior
 
 ecological_information_transition/PREPARATION_REVIEW-001.md qualifies both
