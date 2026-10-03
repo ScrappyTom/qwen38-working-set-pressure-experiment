@@ -1,3 +1,24 @@
+# Qualified assertion completion after the closed comparison
+
+Read current_job_presentation/contract_completion/PLAN.md, SPEC.md and
+PREPARATION_REVIEW-001.md. The nested successor preserves all sealed ancestors and
+qualifies truthful fault scope, new methods inside an old class, original method
+AST/assertions, per-observed-site class/text sensitivity and cumulative accounting.
+Five CPU checks, 44 native forms and five supported scripted decisions pass with
+zero completions: initial6,291/peak11,727,313artifacts/2,100sources/51custody. The
+actual weak suites fail, a separately identified strict engineering correction
+passes, seven other files remain exact, and complete meaningful failure feedback
+reaches the next input. Earlier failed fixture screens/partial route are preserved.
+
+Publish before the single review-directed test-only completion from actual control
+3f726b6d,47requests/77ops/fourteenversions. Additional12requests/36ops means absolute
+59/113; no patch/group/live coaching/retry/extension/private-draft execution.
+Mediumuncapped/runtime/forms/account policy and requested checking stay fixed.
+Current-job projection is truthful scope, not a speed winner. Review actual full
+inputs/thinking/replies/receipts/artifacts/custody before assessing the outcome.
+Original pair scores remain exact; this is review-directed contract completion,
+not another matched seed or fresh autonomous success. Wider ledger remains open.
+
 # Closed status comparison; prospective coverage-boundary repair
 
 Read current_job_presentation/review/RESULTS-003.md, READING_NOTES.md and

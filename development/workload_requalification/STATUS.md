@@ -1,3 +1,17 @@
+# Assertion completion qualified; live behavior remains untested
+
+The nested current_job_presentation/contract_completion successor repairs the
+specific checker/report/accounting gaps without changing either sealed pair arm.
+Five CPU checks,44 native forms and five supported scripted decisions pass with
+zero completions; initial6,291/peak11,727,313artifacts/2,100bindings/51custody. Actual
+weak artifacts fail class/text qualification; the engineering correction passes
+and keeps seven other files exact. Complete diagnostics and successor pass arrive.
+See PREPARATION_REVIEW-001.md and its read-only verification. Publish before the
+one review-directed test-only completion on control3f726b6d,12newrequests/36ops.
+Keep mediumuncapped/runtime/forms/account policy and no automatic check/coaching/
+retry/extension. Feasibility is qualified; useful model behavior is not yet shown.
+Original pair scores and wider open-workload status remain unchanged.
+
 # Current-job comparison closed; authored coverage remains incomplete
 
 Both uncoached003 arms reach registered checked submission and preserve prior
