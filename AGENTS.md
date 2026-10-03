@@ -1,3 +1,19 @@
+# Qualified current-job presentation comparison on new coverage
+
+Read development/workload_requalification/current_job_presentation/PLAN.md and
+PREPARATION_REVIEW-002.md. Five CPU boundary checks,44 native forms per condition,
+eleven supported scripted decisions each and ordinary execution pass/failure
+comparisons qualify zero-completion preparations. Initial6326/6330 and peaks12911/
+12652 fit; exact starting states/account/task/checker/opportunity are shared, only
+status composition differs. Publish before one uncoached control002 then current_job002
+pair from actual saved6112bdcf/36requests57ops/twelve versions,24newrequests72ops each.
+Keep mediumuncapped/runtime/tool formats/account policy fixed. No reference group,
+expected outputs, coaching, retry, extension, semantic account repair or automatic
+check. Review full actual inputs/reasoning/actions/effects before performance claims.
+Preserve superseded001 and erroneous environment002 evaluator failure count. This
+is new overlap-coverage work on saved code, not reopening the closed correction or
+adopting a new memory policy. Historical acceptance does not become current assurance.
+
 # Closed fresh dispatch lineage; checker context is part of assurance
 
 Read dispatch_continuity/documentation_continuation/review/run-001/RESULTS.md,

@@ -1,3 +1,16 @@
+# Qualified prospective current-job presentation comparison
+
+current_job_presentation/PREPARATION_REVIEW-002.md qualifies one matched pair on a
+new overlapping virtual-membership extension to actual saved dispatch work.
+Five CPU checks,44 native forms per condition, eleven supported scripted decisions
+and ordinary unittest/doctest pass/failure comparisons; zero completions. Initial
+6326/6330 tokens and peaks12911/12652 fit. Exact input isolation changes only status
+composition, preserves account wording/history/checker/guards/runtime and gives
+both arms24newrequests72ops. Publish then run control002/current_job002 once each,
+uncoached. Preparation establishes feasibility, not model capability or efficiency.
+Preserve superseded001 and environment002's mistaken evaluator count. The prior
+dispatch lineage remains complete and unchanged; wider workloads remain open.
+
 # Fresh dispatch contribution and continuation closed
 
 The original union-registration code/test job, late virtual-registration code/test
