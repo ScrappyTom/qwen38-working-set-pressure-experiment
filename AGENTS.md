@@ -1,3 +1,19 @@
+# Qualified actual saved-work dispatch continuation
+
+Read dispatch_continuity/dynamic/ENTRY_PLAN.md and PREPARATION_REVIEW-001.md.
+Actual entry preserves checked firstcandidate5c20075d,7versions/23acts/15requests,
+uneditedprecheckaccount and exactobservations; releases source bodies explicitly.
+Thinwrapper corrects prior-workscope while cumulativecounts remain23used/72new,
+15used/24new,95/39absolute. SixCPUchecks/44nativeforms/10scripteddecisions and
+0completions qualify actualfailednewcheck/tool-derivedsource/minimalcacheedit/
+tests/docs/currentpass.347sealedfiles/930sources/93custody exact;6230initial/
+12758peak, advisory329MiB, ownedclosure. Publish before one uncoacheddynamic001,
+samehost/runtime/mediumuncapped/format; C16first. No group/repair/coaching/retry/
+extension/mandatoryaccount/private-draft execution. Full actual review precedes
+diagnosis and postseal assessment; engineering specimens are not actor evidence.
+Preserve first sealed roots, naturalaccountimperfection, deferredreport wording/
+duplication and widerprogramme. No accountbenefit/naturalpressure/causalspeed claim.
+
 # Closed fresh dispatch contribution; qualify actual later job
 
 Read dispatch_continuity/review/union-002/RESULTS.md and reading/artifact audits.

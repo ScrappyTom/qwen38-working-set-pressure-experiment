@@ -23,7 +23,7 @@ first-job source and evidence exact. The wrapper has two narrow responsibilities
   old/new identity, restoration and separate applicability rather than adding an
   identity scheme or a new host lineage.
 
-The actual entry keeps the exact artifact,8 pre-edit source versions,23 original
+The actual entry keeps the exact artifact,7 source versions,23 original
 actions,15 original requests and imperfect pre-check account. It explicitly
 releases current source bodies and saved-result selection. The earlier public
 pass is historical under the different checker. Limits become39 total requests

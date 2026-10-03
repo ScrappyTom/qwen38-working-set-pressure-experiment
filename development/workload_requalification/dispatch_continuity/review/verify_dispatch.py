@@ -135,4 +135,9 @@ def verify(module, output):
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('--phase',default='union');parser.add_argument('--version',default='002')
     parser.add_argument('--inherited');parser.add_argument('--output',required=True);args=parser.parse_args()
-    verify(study.Task(args.phase,args.version,args.inherited),Path(args.output))
+    if args.phase == 'dynamic':
+        sys.path.insert(0,str(study.AREA/'dynamic'))
+        from run_saved_dispatch import Task
+    else:
+        Task = study.Task
+    verify(Task(args.phase,args.version,args.inherited),Path(args.output))
