@@ -1,5 +1,14 @@
 # Information, operations, and the model's working set
 
+The [closed controlled information transition](development/workload_requalification/ecological_information_transition/review/RESULTS-002.md)
+adds local operating evidence: selected source may leave the input while saved
+work survives, an actual failed check identifies unresolved behavior, and ordinary
+current acquisition enables correction and checked closure. Source and results
+also remain available when accounts are used, so this does not isolate account
+benefit. The archive, current source authority, authored interpretation and
+applicable observation remain distinct; definitions and functions below are
+unchanged. Fresh work must qualify broader continuity.
+
 This is the stable architecture map for the development host. It describes the
 implemented system and its open questions; it does not redefine frozen experiments
 or turn engineering qualifications into model capability evidence. The owner asked

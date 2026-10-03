@@ -2,6 +2,23 @@
 
 ## Project status
 
+The [controlled E20 information transition is complete](development/workload_requalification/ecological_information_transition/review/RESULTS-002.md).
+Both uncoached branches preserve saved work, correct the remaining zero-count
+defect after a real failed check, obtain a current full-contract pass and submit
+the same correct artifact. Unchanged takes five new requests/nine operations;
+released takes six/ten and retrieves the missing importer through ordinary tools.
+Exact replay and independent hidden/boundary checks pass. No further account or
+retention mechanism is earned; [fresh work is next](development/workload_requalification/ecological_information_transition/review/NEXT_DECISION.md).
+
+The comparison consumes25.630 model-request minutes. Source release lowers input
+processed in this pair while adding acquisition; account benefit, general speed
+and natural-pressure continuity remain unestablished. The apparatus screen remains
+stopped with its reduced qualification basis explicitly recorded. RAM/prefill
+causes remain unresolved; observed Blender scripts select CPU. The wider
+[workload ledger](development/workload_requalification/STATUS.md) remains open.
+
+Earlier closed development packages follow.
+
 The [response-boundary repair and same-task rerun are complete](development/decision_interface/channel_repair/review/RESULTS.md).
 The transport now returns sixteen complete final replies. Qwen chooses its recovery
 selection, saves tests, corrects actual failures and eventually saves documentation

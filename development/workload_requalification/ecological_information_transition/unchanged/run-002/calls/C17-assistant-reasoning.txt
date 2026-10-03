@@ -1,0 +1,92 @@
+Let me analyze the current state:
+
+1. **Task**: Repair 4 regressions in the offline audit package with specific boundary contract fixes.
+
+2. **Working account progress**:
+   - Fix 1: importers.py:56 `st_size >=` → `>` [DONE] - confirmed in the current source showing `if path.stat().st_size > max_file_bytes:`
+   - Fix 2: importers.py:62 `len(artifacts) >` → `>=` [NEXT] - looking at current source: `if len(artifacts) >= max_files:` - Wait, the account says "len(artifacts) > → >=" meaning the regression was `>` and it should be `>=`. The current source shows `if len(artifacts) >= max_files:` - so this appears to already be fixed? Let me re-read...
+
+   Wait, looking at the working_account text: "(2) importers.py:62 len(artifacts) > → >= [NEXT]". This means the fix is to change `>` to `>=`. Looking at the current source of importers.py line 62: `if len(artifacts) >= max_files:` - this is already `>=`. So this fix was already applied in a previous edit.
+
+   Wait, let me re-read the recent activity:
+   - EVT-0021: patch on importers.py (candidate 91d4b...)
+   - EVT-0023: patch on importers.py (candidate dc3efb...)
+   - EVT-0024: patch on saved_runs.py (current candidate 8009375...)
+
+   So two patches on importers.py and one on saved_runs.py have been applied. The working account says:
+   - Fix 1: importers.py:56 st_size >= → > [DONE]
+   - Fix 2: importers.py:62 len(artifacts) > → >= [NEXT]
+   - Fix 3: saved_runs.py _events_from_jsonl idx >= MAX_JSONL_LINES → idx > MAX_JSONL_LINES
+   - Fix 4: saved_runs.py _embedded_artifacts_from_jsonl idx >= MAX_JSONL_LINES → idx > MAX_JSONL_LINES
+
+   Now looking at the current source:
+   - importers.py line 56: `if path.stat().st_size > max_file_bytes:` - this is `>`, which matches "Fix 1: st_size >= → >" [DONE] ✓
+   - importers.py line 62: `if len(artifacts) >= max_files:` - this is `>=`, which matches "Fix 2: len(artifacts) > → >=" [DONE] ✓
+   - saved_runs.py _events_from_jsonl: `if idx > MAX_JSONL_LINES:` - this is `>`, which matches "Fix 3" ✓ (from the latest patch EVT-0024)
+   - saved_runs.py _embedded_artifacts_from_jsonl: `if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:` - this is still `>=`, which needs to be `>` for Fix 4!
+
+   Wait, let me re-read the boundary contract: "JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion; and an embedded artifact on line MAX_JSONL_LINES is eligible."
+
+   So records 1 through MAX_JSONL_LINES (inclusive) are eligible. With `enumerate(start=1)`:
+   - `idx > MAX_JSONL_LINES` means break when idx is 1001, so records 1-1000 are processed. That's correct for "records 1 through MAX_JSONL_LINES".
+   - `idx >= MAX_JSONL_LINES` means break when idx is 1000, so records 1-999 are processed. That's wrong - it excludes record 1000.
+
+   For the embedded artifacts: "an embedded artifact on line MAX_JSONL_LINES is eligible" - so line MAX_JSONL_LINES (1000) should be processed. With `idx >= MAX_JSONL_LINES`, it breaks at idx=1000, excluding it. So we need `idx > MAX_JSONL_LINES` to include line 1000.
+
+   So Fix 4: In `_embedded_artifacts_from_jsonl`, change `idx >= MAX_JSONL_LINES` to `idx > MAX_JSONL_LINES`.
+
+   Looking at the current source of saved_runs.py, the relevant line is:
+   ```
+            if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+   ```
+
+   This needs to become:
+   ```
+            if idx > MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+   ```
+
+   Wait, but I also need to check the `len(artifacts) >= MAX_EMBEDDED_ARTIFACTS` part. The boundary contract says "max_files=N admits at most the first N eligible files". For embedded artifacts, MAX_EMBEDDED_ARTIFACTS=80 is the limit. The check `len(artifacts) >= MAX_EMBEDDED_ARTIFACTS` means: if we already have 80 artifacts, break. That means at most 80 are admitted, which is correct (at most the first 80).
+
+   Actually wait - let me think about this more carefully. The break happens BEFORE processing the current item. So:
+   - `len(artifacts) >= MAX_EMBEDDED_ARTIFACTS`: if we already have 80, break without processing current. So max 80 are added. Correct.
+   - `idx > MAX_JSONL_LINES`: if idx is 1001, break. So items 1-1000 are processed. Correct.
+
+   Now for the `len(artifacts) >= max_files` in importers.py:
+   - The break happens after appending. Let me look at the code:
+   ```python
+        artifacts.append({"path": rel})
+        if len(artifacts) >= max_files:
+            break
+   ```
+   So it appends first, then checks. If max_files=5, after appending the 5th, len=5, 5>=5, break. So 5 are admitted. That's "at most the first N eligible files" - correct.
+
+   Now I need to apply Fix 4. Let me use the patch action on saved_runs.py.
+
+   Current candidate: 8009375d715d85c91b329ec12e58df9c091c95c521cd2b56f1e5b725ad05c60e
+   File: src/addressable_information_layer/saved_runs.py
+   File SHA: 94c4ee1ab3233b3c9fc50727371456e4a2fade82f10ad8dd4b74c85af0ff9fb2
+
+   The old text to find (must be unique):
+   ```
+            if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+   ```
+
+   New text:
+   ```
+            if idx > MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+   ```
+
+   Let me verify this is unique in the file. Looking at the source, there's only one occurrence of `idx >= MAX_JSONL_LINES` in the file (in `_embedded_artifacts_from_jsonl`). The `_events_from_jsonl` function now has `idx > MAX_JSONL_LINES` (already fixed). So yes, `idx >= MAX_JSONL_LINES` appears only once.
+
+   I'll use the patch action. Let me also update the working account.
+
+   Actually, let me also think about whether I should check if there are other issues. The task says "four regressions" and the working account lists exactly 4. Let me verify all 4 are addressed:
+
+   1. importers.py:56 `st_size >=` → `>` - Current shows `>` ✓
+   2. importers.py:62 `len(artifacts) >` → `>=` - Current shows `>=` ✓  
+   3. saved_runs.py `_events_from_jsonl` `idx >= MAX_JSONL_LINES` → `idx > MAX_JSONL_LINES` - Current shows `>` ✓
+   4. saved_runs.py `_embedded_artifacts_from_jsonl` `idx >= MAX_JSONL_LINES` → `idx > MAX_JSONL_LINES` - Current still shows `>=` ✗
+
+   So I need to fix #4, then run the public check, and if it passes, submit.
+
+   Let me proceed with the patch.

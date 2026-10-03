@@ -1,5 +1,15 @@
 # Workload requalification ledger
 
+The controlled C16 information transition is closed under a8d3d85d. Both arms
+preserve earlier work, repair embedded/zero boundaries, consume their own actual
+fullpublicpass and submit the same correct candidate. Unchanged5newrequests/9ops;
+released6/10, with actor-chosen current importer reacquisition after real failure.
+All17nonterminaloutcomes arrive; exact replay and separate originalhidden/12case
+checks pass.25.630newmodelminutes; no account-benefit, general speed, autonomous
+assembly or natural-pressure claim. Read ecological_information_transition/review/
+RESULTS-002.md and NEXT_DECISION.md. Fresh information-dependent work takes priority;
+no repeat C16 exposure or additional memory mechanism is selected.
+
 E20 full-contract reference is closed. The uncoached contract continuation under
 a5c2ecce uses3new requests/5ops: correct count-guard relocation, actual newpublic
 pass and checkedsubmission. Separate postseal originalhidden and unchanged12case
@@ -10,10 +20,9 @@ unexplained slowerprefill and advisory53MiB margin remain limitations. Original
 grades and9/12supplemental stay unchanged. See ecological_contract_continuation/
 review/RESULTS-001.md. No turnover or isolatedaccountbenefit is established.
 
-Next: ecological_information_transition/PLAN.md, one matched controlled release
-at the actual C16 saved-work checkpoint, then freshwork. Preserve actual account,
-receipts, fullchecker and knownzero gap in both arrangements. Publish before
-implementation; qualify before inference. No new hostfeature is selected.
+The separately prepared information-transition pair above preserves this reference
+lineage. Its C16 entry precedes the original submission; the actual stale account
+and knownzero gap were retained, not transplanted from the completed reference.
 
 Historical E20source run001 under8335f6f7 closed with a fullcontract gap:19requests/
 28ops, eleven complete originals beforefirstmutation, actor-chosen recovery and
@@ -44,7 +53,7 @@ Historical successes remain preserved; the new-host column requires new evidence
 | URL-port tests/documentation, original entry | multiple interrupted/incomplete attempts | Original e93051ec run002 exhausts20requests/30operations with saved tests and actual failed exact-class sensitivity; preserve57.171model minutes and incomplete outcome. Separately qualified uncoached continuation under d71e9b98 uses12new requests/17operations, corrects exact-class coverage, saves accurate focused docs/examples, receives actual current public pass and submits. Combined32/47,154.083model minutes/160.474loop minutes. All16new nonterminal outcomes delivered; direct complete input/output/observation/artifact review and exact replay pass. Narrow-reference/body containment wording and four rejected drafts remain recorded; no new mechanical defect or isolated account/pressure/efficiency benefit is established. Entry closed with explicit extra opportunity, not within its original budget. |
 | URL-port preserved-work correction | coherent_diagnostics: reviewed checked submission | Passed for this entry at ec51de65 |
 | Ecological source/observation repairs | Experiments 019/020: interrupted / eight passing 020 trajectories | Exact fresh E19-SOURCE-REOPEN under cd78a932 completes uncoached9requests/12operations with two correct repairs, current public pass/submission and post-seal hidden pass;23other files exact. All4complete named sources precede first mutation; all11nonterminal receipts delivered, full-input/output/artifact review and exact replay pass.11.139model minutes/11.836loop; no failed check/turnover/pressure/account-benefit claim. Preserve preparation001 root source-freeze error. Distinct E19-OBS run002 under a13adbaf completes6requests/9operations with correct two-line repair/current public pass/submission/post-seal hidden pass and24exact other files, but3required paths never read before mutation. Full task remains incomplete; all7nonterminal receipts arrive, exact replay passes;11.567modelminutes/12.094loop. Separate fresh ecological_prerequisites run001 under1c0c9776 completes9requests/12operations with all4complete files before EVT-0009, correct repair/currentpublicpass/submission and separate hiddenpass;24otherfiles exact. All11nonterminal operation outcomes arrive; exact460source/201custody/14checkpoint replay and full-input/output/artifact review pass.10.965modelminutes/11.799loopminutes; stale account remains documented, no pressure/turnover/failedcheck or isolated policy/account effect. Original OBS inspection failure stays preserved. Publish ecological_next/PLAN.md before original E20source entry with declared continuous eleven-file delivered coverage; known zero-count contract assessed separately post-seal. E20OBS/pressure/wider corpus stay open. |
-| E20 source import boundaries | Original Experiment 020: four source trajectories passed frozen grading | Fresh ecological_import_entry run001 completes eleven-file inspection and original checked submission in19requests/28ops but separate zero-count probe is9/12. Explicit ecological_contract_continuation under a5c2ecce adds3requests/5ops, corrects count-guard placement, obtains current fullpublicpass and submits; independent originalhidden and unchanged12caseprobe pass. Combined22/33; all23otheroriginalfiles/APIs exact. Replay/direct fullinput-output-artifact review pass. Reference closed with declared successor scope; no account-benefit/turnover/pressure or general efficiency claim. Next controlled information-transition plan, then fresh work. |
+| E20 source import boundaries | Original Experiment 020: four source trajectories passed frozen grading | Fresh ecological_import_entry run001 completes eleven-file inspection and original checked submission in19requests/28ops but separate zero-count probe is9/12. Explicit ecological_contract_continuation under a5c2ecce adds3requests/5ops, corrects count-guard placement, obtains current fullpublicpass and submits; independent originalhidden and unchanged12caseprobe pass. Combined22/33; all23otheroriginalfiles/APIs exact. Replay/direct fullinput-output-artifact review pass. Reference closed with declared successor scope; no account-benefit/turnover/pressure or general efficiency claim. Controlled C16 pair also closes under a8d3d85d:5/9 versus6/10 new requests/ops, same correct checked artifact and ordinary importer recovery in released; exact replay and separate checks pass. Fresh work follows; no account/pressure/general speed benefit is established. |
 | Earlier synthetic source and observation continuity tasks | Experiments 002-018: mixed; includes phase/restart/retrieval obligations | Pending exact-case reconciliation and regression |
 | Predecessor task corpus and non-task engineering qualifications | Local predecessor and experimental packages | Pending duplicate/unique reconciliation |
 | INC-042 export policy, two prepared worlds | Zero model calls; pressure prerequisite rejected | Engineering regression, not a historical failed model workload |

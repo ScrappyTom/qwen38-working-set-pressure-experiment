@@ -1,0 +1,54 @@
+Let me analyze the current state:
+
+1. The task is to repair 4 regressions in an offline audit package.
+2. Looking at the working account, the four fixes are:
+   - (1) importers.py:56 st_size >= → > [DONE EVT-0021]
+   - (2) importers.py:62 len(artifacts) > → >= [DONE EVT-0023]
+   - (3) saved_runs.py _events_from_jsonl idx >= → > [DONE EVT-0024]
+   - (4) saved_runs.py _embedded_artifacts_from_jsonl idx >= → > [DOING NOW]
+
+Wait, let me re-read. The account says fix (4) is "saved_runs.py _embedded_artifacts_from_jsonl idx >= → >" and it's marked [DOING NOW].
+
+But looking at the latest_feedback, the most recent patch (EVT-0026) changed line 203 in saved_runs.py from `idx >= MAX_JSONL_LINES` to `idx > MAX_JSONL_LINES`. Let me look at what that line corresponds to.
+
+Looking at the current source of saved_runs.py, I can see:
+
+In `_events_from_jsonl`:
+```python
+for idx, item in enumerate(_read_jsonl_lines(path), start=1):
+    if idx > MAX_JSONL_LINES:
+        break
+```
+This is already fixed (was `>=`, now `>`).
+
+In `_embedded_artifacts_from_jsonl`:
+```python
+for idx, item in enumerate(_read_jsonl_lines(path), start=1):
+    if idx > MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+        break
+```
+This is also already fixed (was `>=`, now `>`).
+
+Wait, looking more carefully at the diff from EVT-0026:
+```
+-            if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
++            if idx > MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+```
+
+This was in `_embedded_artifacts_from_jsonl` (the second function). And EVT-0024 was the first one in `_events_from_jsonl`.
+
+So all four fixes appear to be done:
+1. importers.py:56 st_size >= → > [DONE]
+2. importers.py:62 len(artifacts) > → >= [DONE]
+3. saved_runs.py _events_from_jsonl idx >= → > [DONE]
+4. saved_runs.py _embedded_artifacts_from_jsonl idx >= → > [DONE]
+
+Now I need to run the public check on the current candidate. The current candidate is `23b5c17999963faf7453c68a6b537ae6c447555f77eb0a835bfa659ad47e89aa`.
+
+Let me verify by looking at the boundary contract:
+- "a file whose byte size equals max_file_bytes is eligible" → `st_size > MAX_JSONL_BYTES` means files with size > max are excluded, so size == max is eligible. ✓ (already was `>` in saved_runs.py, and importers.py was fixed from `>=` to `>`)
+- "max_files=N admits at most the first N eligible files" → `len(artifacts) >= MAX_EMBEDDED_ARTIFACTS` means when we already have N, we stop. ✓
+- "JSONL records 1 through MAX_JSONL_LINES are eligible" → `idx > MAX_JSONL_LINES` means we break after line MAX_JSONL_LINES, so lines 1 through MAX_JSONL_LINES are processed. ✓
+- "an embedded artifact on line MAX_JSONL_LINES is eligible" → same as above, idx = MAX_JSONL_LINES is processed before the break check. ✓
+
+All four regressions are fixed. Now I should run the public check.

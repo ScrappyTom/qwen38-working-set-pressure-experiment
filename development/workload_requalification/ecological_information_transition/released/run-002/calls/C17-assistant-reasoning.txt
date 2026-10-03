@@ -1,0 +1,73 @@
+Let me analyze the current state:
+
+1. **Task**: Repair 4 regressions in an offline audit package with specific boundary contract rules.
+
+2. **The 4 regressions** (from the working account):
+   - (1) importers.py:56 `st_size >=` → `>` [DONE - patch applied]
+   - (2) importers.py:62 `len(artifacts) >` → `>=` [DONE - patch applied]
+   - (3) saved_runs.py `_events_from_jsonl` `idx >= MAX_JSONL_LINES` → `idx > MAX_JSONL_LINES` [DONE - patch applied]
+   - (4) saved_runs.py `_embedded_artifacts_from_jsonl` `idx >= MAX_JSONL_LINES` → `idx > MAX_JSONL_LINES` [NEEDS TO BE DONE]
+
+3. **Current state**: 
+   - Three patches have been applied (EVT-0021, EVT-0023, EVT-0024)
+   - The working account says fix (4) is NEXT: `saved_runs.py _embedded_artifacts_from_jsonl idx >= MAX_JSONL_LINES → idx > MAX_JSONL_LINES`
+   - Current candidate: `8009375d715d85c91b329ec12e58df9c091c95c521cd2b56f1e5b725ad05c60e`
+   - Current file sha256 for saved_runs.py: `94c4ee1ab3233b3c9fc50727371456e4a2fade82f10ad8dd4b74c85af0ff9fb2`
+
+4. **Looking at the current source** (saved_runs.py), I can see the `_embedded_artifacts_from_jsonl` function:
+
+```python
+def _embedded_artifacts_from_jsonl(root: Path) -> list[dict[str, Any]]:
+    artifacts: list[dict[str, Any]] = []
+    for path in sorted(root.rglob("*.jsonl")):
+        if len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+            break
+        if path.stat().st_size > MAX_JSONL_BYTES:
+            continue
+        if not _looks_like_saved_run_jsonl(path):
+            continue
+        for idx, item in enumerate(_read_jsonl_lines(path), start=1):
+            if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+                break
+            embedded = _embedded_artifact_from_item(item, path, idx)
+            if embedded is not None:
+                artifacts.append(embedded)
+    return artifacts
+```
+
+The issue is line `if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:` - this should be `if idx > MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:`.
+
+Wait, let me re-read the boundary contract:
+- "JSONL records 1 through MAX_JSONL_LINES are eligible for event conversion" - so records 1 to MAX_JSONL_LINES (inclusive) are eligible, meaning record MAX_JSONL_LINES IS eligible.
+- "an embedded artifact on line MAX_JSONL_LINES is eligible" - so line MAX_JSONL_LINES is eligible for embedded artifacts.
+
+So the check should be: break when idx > MAX_JSONL_LINES (i.e., records 1 through MAX_JSONL_LINES are processed, and record MAX_JSONL_LINES+1 breaks).
+
+Currently in `_embedded_artifacts_from_jsonl`, the check is `idx >= MAX_JSONL_LINES` which means it breaks at idx == MAX_JSONL_LINES, so line MAX_JSONL_LINES is NOT processed. This is the regression - it should be `idx > MAX_JSONL_LINES`.
+
+But wait, there's also the `len(artifacts) >= MAX_EMBEDDED_ARTIFACTS` check on the same line. Let me think about whether that's correct.
+
+The boundary contract says "max_files=N admits at most the first N eligible files" - this is about files, not artifacts. For embedded artifacts, the limit is MAX_EMBEDDED_ARTIFACTS. The check `len(artifacts) >= MAX_EMBEDDED_ARTIFACTS` means "if we already have MAX_EMBEDDED_ARTIFACTS artifacts, stop" - this is correct because we want "at most" MAX_EMBEDDED_ARTIFACTS.
+
+So the fix for (4) is: change `idx >= MAX_JSONL_LINES` to `idx > MAX_JSONL_LINES` in the `_embedded_artifacts_from_jsonl` function.
+
+The exact line to patch is:
+```
+            if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+```
+should become:
+```
+            if idx > MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+```
+
+Now, I need to do this patch. I have:
+- Current candidate: `8009375d715d85c91b329ec12e58df9c091c95c521cd2b56f1e5b725ad05c60e`
+- File sha256: `94c4ee1ab3233b3c9fc50727371456e4a2fade82f10ad8dd4b74c85af0ff9fb2`
+- Path: `src/addressable_information_layer/saved_runs.py`
+
+The old text: `            if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:`
+The new text: `            if idx > MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:`
+
+Let me also update the working account to reflect this is now being done.
+
+Actually, let me just do the patch and update the account together.

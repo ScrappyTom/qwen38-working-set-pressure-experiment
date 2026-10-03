@@ -1,0 +1,167 @@
+Let me analyze the current situation:
+
+1. The task is to repair four regressions in an offline audit package.
+2. Four fixes were previously made:
+   - Fix 1: importers.py:56 st_size >= → > [DONE EVT-0021]
+   - Fix 2: importers.py:62 len(artifacts) > → >= [DONE EVT-0023]
+   - Fix 3: saved_runs.py _events_from_jsonl idx >= → > [DONE EVT-0024]
+   - Fix 4: saved_runs.py _embedded_artifacts_from_jsonl idx >= → > [DONE EVT-0026]
+
+3. The check still fails. Looking at the verification:
+   - `boundary_probe.max_files_0.max_file_bytes_0` - FAILED: actual=[{"path":"a.txt"}], expected=[]
+   - `boundary_probe.max_files_0.max_file_bytes_1` - FAILED: actual=[{"path":"a.txt"}], expected=[]
+   - `boundary_probe.max_files_0.max_file_bytes_5` - FAILED (in failed_criteria list but not shown in detail)
+   - `boundary_probe.execution` - FAILED
+
+The issue is: when max_files=0, no files should be admitted. But the current code still admits files.
+
+Looking at the importers.py code:
+```python
+def fixture_from_directory(
+    directory: str | Path,
+    *,
+    objective: str | None = None,
+    max_files: int = 200,
+    max_file_bytes: int = 250_000,
+) -> dict[str, Any]:
+    root = Path(directory).resolve()
+    artifacts: list[dict[str, Any]] = []
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        if _is_excluded(path, root):
+            continue
+        if path.suffix.lower() not in TEXT_EXTENSIONS:
+            continue
+        if path.stat().st_size > max_file_bytes:
+            continue
+        rel = path.relative_to(root).as_posix()
+        artifacts.append({"path": rel})
+        if len(artifacts) >= max_files:
+            break
+```
+
+The problem: when `max_files=0`, the loop still iterates and appends files. The check `if len(artifacts) >= max_files: break` is checked AFTER appending. So for max_files=0, it appends one file, then checks len(artifacts) >= 0 which is 1 >= 0 = True, so it breaks. But it already appended one file!
+
+The fix: we need to check if max_files == 0 before appending, or check the limit before appending rather than after. 
+
+Actually, let me think more carefully. The boundary contract says: "max_files=N admits at most the first N eligible files". So if max_files=0, at most 0 files should be admitted.
+
+The current logic:
+1. Iterate through files
+2. Check exclusions and extensions
+3. Check file size (st_size > max_file_bytes → skip)
+4. Append to artifacts
+5. Check if len(artifacts) >= max_files → break
+
+For max_files=0:
+- File passes all checks
+- Gets appended (artifacts now has 1 item)
+- len(artifacts) >= max_files → 1 >= 0 → True → break
+
+So it appends 1 file before breaking. The fix should check the limit BEFORE appending.
+
+The fix should be:
+```python
+        if len(artifacts) >= max_files:
+            break
+        rel = path.relative_to(root).as_posix()
+        artifacts.append({"path": rel})
+```
+
+Wait, but that changes the order. Let me think about what the correct fix is.
+
+Actually, the simplest fix is to add an early check at the top of the loop body, or to move the `if len(artifacts) >= max_files: break` check before the `artifacts.append` line.
+
+Let me re-read the current code:
+```python
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        if _is_excluded(path, root):
+            continue
+        if path.suffix.lower() not in TEXT_EXTENSIONS:
+            continue
+        if path.stat().st_size > max_file_bytes:
+            continue
+        rel = path.relative_to(root).as_posix()
+        artifacts.append({"path": rel})
+        if len(artifacts) >= max_files:
+            break
+```
+
+The fix is to move the break check before the append:
+```python
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        if _is_excluded(path, root):
+            continue
+        if path.suffix.lower() not in TEXT_EXTENSIONS:
+            continue
+        if path.stat().st_size > max_file_bytes:
+            continue
+        if len(artifacts) >= max_files:
+            break
+        rel = path.relative_to(root).as_posix()
+        artifacts.append({"path": rel})
+```
+
+This way, when max_files=0, `len(artifacts) >= 0` is `0 >= 0` which is True, so it breaks immediately without appending anything.
+
+When max_files=1, it appends the first eligible file (len goes to 1), then on the next iteration, `1 >= 1` is True and it breaks. So it admits exactly 1 file. Correct.
+
+When max_files=2, it appends first file (len=1), second iteration: `1 >= 2` is False, appends second file (len=2), third iteration: `2 >= 2` is True, breaks. Admits exactly 2 files. Correct.
+
+Now let me look at what I need to do. I have the full source of importers.py visible (SRC-464506160afbefaf178f03da303bbe872e8955c28bd527b56a40e837110d70e9). The file_sha256 is e61aa755e3be2471b5dcc3f493be3c723b13f66791a14046cacc03aee43e2f91.
+
+The old text I need to match:
+```
+        rel = path.relative_to(root).as_posix()
+        artifacts.append({"path": rel})
+        if len(artifacts) >= max_files:
+            break
+```
+
+The new text:
+```
+        if len(artifacts) >= max_files:
+            break
+        rel = path.relative_to(root).as_posix()
+        artifacts.append({"path": rel})
+```
+
+Let me use patch with the exact text. I need to be careful with the exact whitespace.
+
+Looking at the source:
+```
+        if path.stat().st_size > max_file_bytes:
+            continue
+        rel = path.relative_to(root).as_posix()
+        artifacts.append({"path": rel})
+        if len(artifacts) >= max_files:
+            break
+```
+
+I'll replace:
+```
+        rel = path.relative_to(root).as_posix()
+        artifacts.append({"path": rel})
+        if len(artifacts) >= max_files:
+            break
+```
+
+with:
+```
+        if len(artifacts) >= max_files:
+            break
+        rel = path.relative_to(root).as_posix()
+        artifacts.append({"path": rel})
+```
+
+This is a simple reordering of two blocks. Let me make sure the indentation is correct (8 spaces for the for-loop body level).
+
+Current candidate ID: 23b5c17999963faf7453c68a6b537ae6c447555f77eb0a835bfa659ad47e89aa
+File sha256: e61aa755e3be2471b5dcc3f493be3c723b13f66791a14046cacc03aee43e2f91
+
+Let me construct the patch action.

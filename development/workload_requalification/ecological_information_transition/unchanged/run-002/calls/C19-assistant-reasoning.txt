@@ -1,0 +1,183 @@
+Let me analyze the current situation:
+
+1. The public check failed with 3 boundary probe cases failing:
+   - `boundary_probe.max_files_0.max_file_bytes_0`: max_files=0, max_file_bytes=0, actual=[{"path":"a.txt"}], expected=[]
+   - `boundary_probe.max_files_0.max_file_bytes_1`: max_files=0, max_file_bytes=1, actual=[{"path":"a.txt"}], expected=[]
+   - `boundary_probe.max_files_0.max_file_bytes_5`: max_files=0, max_file_bytes=5, actual=[{"path":"a.txt"}], expected=[]
+
+2. The original_public check passes.
+
+3. The issue is clear: when `max_files=0`, the `fixture_from_directory` function should return an empty artifacts list, but it's including files.
+
+Looking at the current code in `importers.py`:
+
+```python
+def fixture_from_directory(
+    directory: str | Path,
+    *,
+    objective: str | None = None,
+    max_files: int = 200,
+    max_file_bytes: int = 250_000,
+) -> dict[str, Any]:
+    root = Path(directory).resolve()
+    artifacts: list[dict[str, Any]] = []
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        if _is_excluded(path, root):
+            continue
+        if path.suffix.lower() not in TEXT_EXTENSIONS:
+            continue
+        if path.stat().st_size > max_file_bytes:
+            continue
+        rel = path.relative_to(root).as_posix()
+        artifacts.append({"path": rel})
+        if len(artifacts) >= max_files:
+            break
+```
+
+The problem: when `max_files=0`, the loop still iterates and appends files. The check `if len(artifacts) >= max_files: break` happens AFTER appending. So with `max_files=0`:
+- First eligible file: `artifacts.append(...)` makes len=1, then `1 >= 0` is True, so it breaks. But it already appended!
+
+The fix: we need to check `max_files` BEFORE appending. Specifically, if `max_files <= 0`, we should not append any files.
+
+The correct boundary contract says: "max_files=N admits at most the first N eligible files". So when max_files=0, zero files should be admitted.
+
+The fix should be:
+```python
+        if len(artifacts) >= max_files:
+            break
+        rel = path.relative_to(root).as_posix()
+        artifacts.append({"path": rel})
+```
+
+Wait, but that would still work for max_files=0 because `len(artifacts)=0 >= 0` would be True immediately, breaking before appending. But wait - the break is at the top of the loop iteration check. Let me think again...
+
+Actually the issue is the order. Currently:
+```python
+        if path.stat().st_size > max_file_bytes:
+            continue
+        rel = path.relative_to(root).as_posix()
+        artifacts.append({"path": rel})
+        if len(artifacts) >= max_files:
+            break
+```
+
+With max_files=0:
+- File is checked for exclusion, extension, size
+- It passes all filters (since max_file_bytes=0 means files with size > 0 are excluded... wait)
+
+Actually wait - let me re-read the boundary contract: "a file whose byte size equals max_file_bytes is eligible". So the check should be `>= max_file_bytes` is NOT eligible, i.e., `st_size > max_file_bytes` means NOT eligible. But the contract says "a file whose byte size equals max_file_bytes is eligible" - meaning `st_size == max_file_bytes` should be eligible. The current code uses `st_size > max_file_bytes` which means files with size == max_file_bytes ARE eligible. That's correct per the contract.
+
+But for max_file_bytes=0: a file with size 0 (empty file) would be eligible (0 > 0 is False). But a.txt presumably has some content (size > 0), so it would be filtered out by `st_size > max_file_bytes`.
+
+Wait, but the test shows `max_files_0.max_file_bytes_0` failing with actual=[{"path":"a.txt"}]. That means a.txt IS being included. Let me think about what a.txt's size is...
+
+If a.txt has size 1 byte (like a single newline or character), then:
+- max_file_bytes=0: `1 > 0` is True, so it's excluded. That should work.
+- But the test says it's NOT excluded...
+
+Hmm, wait. Let me re-read. The test says actual=[{"path":"a.txt"}] for max_file_bytes=0. So a.txt is being included when it shouldn't be.
+
+Actually, maybe the issue is different. Let me look more carefully at the boundary contract:
+
+"a file whose byte size equals max_file_bytes is eligible; max_files=N admits at most the first N eligible files"
+
+So:
+- `max_file_bytes=0`: Only files with size exactly 0 are eligible. A file with size > 0 is NOT eligible.
+- `max_file_bytes=1`: Files with size <= 1 are eligible? No wait...
+
+Actually re-reading: "a file whose byte size equals max_file_bytes is eligible" - this says a file with size EQUAL to max_file_bytes is eligible. It doesn't say files with size LESS than max_file_bytes are eligible.
+
+But the current code uses `st_size > max_file_bytes` as the exclusion criterion, meaning files with size > max_file_bytes are excluded, and files with size <= max_file_bytes are included.
+
+Hmm, but the original contract from the task says: "a file whose byte size equals max_file_bytes is eligible". This is ambiguous - does it mean ONLY files with exactly that size are eligible, or that a file with that size IS eligible (implying smaller files are also eligible)?
+
+Looking at the test results:
+- max_file_bytes=0, max_files=0: expected=[], actual=[{"path":"a.txt"}]
+- max_file_bytes=1, max_files=0: expected=[], actual=[{"path":"a.txt"}]
+- max_file_bytes=5, max_files=0: expected=[], actual=[{"path":"a.txt"}]
+
+All three failures have max_files=0. The expected result is empty (no files). The actual result includes a.txt.
+
+So the issue is specifically with max_files=0. When max_files=0, NO files should be included regardless of size. The current code appends the file first, THEN checks if len >= max_files to break. With max_files=0, it appends one file (making len=1), then breaks. But that one file was already added.
+
+The fix: move the `max_files` check BEFORE the append:
+
+```python
+        if path.stat().st_size > max_file_bytes:
+            continue
+        if len(artifacts) >= max_files:
+            break
+        rel = path.relative_to(root).as_posix()
+        artifacts.append({"path": rel})
+```
+
+This way, when max_files=0, `len(artifacts)=0 >= 0` is True, and we break immediately without appending anything.
+
+Wait, but I need to also consider: what about the `max_file_bytes` boundary? The contract says "a file whose byte size equals max_file_bytes is eligible". The current code excludes files where `st_size > max_file_bytes`. This means:
+- size == max_file_bytes: NOT excluded (eligible) ✓
+- size < max_file_bytes: NOT excluded (eligible) 
+- size > max_file_bytes: excluded (not eligible)
+
+So the current size check treats "size <= max_file_bytes" as eligible. The contract says "a file whose byte size equals max_file_bytes is eligible" which is consistent with this (it's just confirming the boundary case). I think the size check is fine.
+
+Let me also check: is there an issue with `max_file_bytes=0` and empty files? If a file has size 0 (empty), then `0 > 0` is False, so it would be eligible. That seems correct per the contract.
+
+So the only fix needed is to move the `max_files` check before the append. Let me write the patch.
+
+Current code in the loop:
+```python
+        if path.stat().st_size > max_file_bytes:
+            continue
+        rel = path.relative_to(root).as_posix()
+        artifacts.append({"path": rel})
+        if len(artifacts) >= max_files:
+            break
+```
+
+Should become:
+```python
+        if path.stat().st_size > max_file_bytes:
+            continue
+        if len(artifacts) >= max_files:
+            break
+        rel = path.relative_to(root).as_posix()
+        artifacts.append({"path": rel})
+```
+
+This is the minimal fix. Let me do the patch.
+
+I need:
+- path: src/addressable_information_layer/importers.py
+- old: the current code
+- new: the fixed code
+- expected_candidate_id: 23b5c17999963faf7453c68a6b537ae6c447555f77eb0a835bfa659ad47e89aa
+- expected_file_sha256: e61aa755e3be2471b5dcc3f493be3c723b13f66791a14046cacc03aee43e2f91
+
+Let me construct the patch carefully. The old text:
+```
+        if path.stat().st_size > max_file_bytes:
+            continue
+        rel = path.relative_to(root).as_posix()
+        artifacts.append({"path": rel})
+        if len(artifacts) >= max_files:
+            break
+```
+
+The new text:
+```
+        if path.stat().st_size > max_file_bytes:
+            continue
+        if len(artifacts) >= max_files:
+            break
+        rel = path.relative_to(root).as_posix()
+        artifacts.append({"path": rel})
+```
+
+This should fix the max_files=0 case. Let me verify the logic:
+- max_files=0: at the start, len(artifacts)=0, 0>=0 is True, break. No files added. ✓
+- max_files=1: first eligible file, len=0, 0>=1 is False, proceed to append. len becomes 1. Next file: len=1, 1>=1 is True, break. One file added. ✓
+- max_files=2: first file: 0>=2 False, append (len=1). Second file: 1>=2 False, append (len=2). Third file: 2>=2 True, break. Two files added. ✓
+
+This looks correct. Let me issue the patch.

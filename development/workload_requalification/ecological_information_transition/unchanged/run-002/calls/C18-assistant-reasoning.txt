@@ -1,0 +1,60 @@
+Let me analyze the current state:
+
+1. The task is to repair 4 regressions in an offline audit package.
+2. The boundary contract is:
+   - File size == max_file_bytes is eligible (not >)
+   - max_files=N admits at most the first N eligible files (not >=)
+   - JSONL records 1 through MAX_JSONL_LINES are eligible (so idx <= MAX_JSONL_LINES, meaning break when idx > MAX_JSONL_LINES)
+   - Embedded artifact on line MAX_JSONL_LINES is eligible (same as above)
+
+3. Looking at the working account, the fixes were:
+   - (1) importers.py:56 st_size >= → > [DONE] - Wait, let me re-read. The boundary says "a file whose byte size equals max_file_bytes is eligible". So if size == max_file_bytes, it IS eligible. That means we should skip only if size > max_file_bytes. The current code shows `if path.stat().st_size > max_file_bytes: continue` - this looks correct already.
+   
+   Wait, let me re-read the working account:
+   - (1) importers.py:56 st_size >= → > [DONE]
+   - (2) importers.py:62 len(artifacts) > → >= [DONE]
+   - (3) saved_runs.py _events_from_jsonl idx >= → > [DONE]
+   - (4) saved_runs.py _embedded_artifacts_from_jsonl idx >= → > [APPLYING NOW]
+
+   But wait, the latest patch (EVT-0026) was applying fix (4). Let me check what was actually applied.
+
+   The diff shows:
+   ```
+   -            if idx >= MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+   +            if idx > MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:
+   ```
+
+   This was in saved_runs.py at line 203. This is in `_embedded_artifacts_from_jsonl`.
+
+   Wait, but the working account says fix (4) was "saved_runs.py _embedded_artifacts_from_jsonl idx >= → > [APPLYING NOW]". The patch that was just applied (EVT-0026) shows the change from `idx >= MAX_JSONL_LINES` to `idx > MAX_JSONL_LINES` in `_embedded_artifacts_from_jsonl`. That's fix (4) being applied.
+
+   Now let me verify all four fixes are done by looking at the current source:
+
+   **importers.py (current source visible):**
+   - Line 56: `if path.stat().st_size > max_file_bytes:` - This means files with size > max_file_bytes are excluded, files with size == max_file_bytes are included. ✓ (Fix 1 done)
+   - Line 62: `if len(artifacts) >= max_files:` - This means when we already have max_files artifacts, we stop. So at most max_files are admitted. ✓ (Fix 2 done)
+
+   Wait, let me look more carefully at importers.py. The current source shows:
+   ```python
+   if path.stat().st_size > max_file_bytes:
+       continue
+   ```
+   and
+   ```python
+   if len(artifacts) >= max_files:
+       break
+   ```
+
+   Boundary contract: "max_files=N admits at most the first N eligible files" - so if max_files=2, we should get at most 2 files. The code appends then checks `if len(artifacts) >= max_files: break`. So after appending the Nth file, len becomes N, and we break. That's correct - at most N files. ✓
+
+   **saved_runs.py (current source visible):**
+   - In `_events_from_jsonl`: `if idx > MAX_JSONL_LINES:` - This means we process records 1 through MAX_JSONL_LINES (idx 1 to 1000), and break at idx 1001. ✓ (Fix 3 done)
+   - In `_embedded_artifacts_from_jsonl`: `if idx > MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS:` - Same logic. Records 1 through MAX_JSONL_LINES are processed. ✓ (Fix 4 done)
+
+   All four fixes appear to be applied. Now I need to:
+   1. Run the public check on the current candidate
+   2. If it passes, submit
+
+   The current candidate_id is `23b5c17999963faf7453c68a6b537ae6c447555f77eb0a835bfa659ad47e89aa`.
+
+   Let me run the public check.

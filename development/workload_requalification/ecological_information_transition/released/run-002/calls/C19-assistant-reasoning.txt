@@ -1,0 +1,95 @@
+Let me analyze the current situation:
+
+1. The public check failed with 3 failed boundary probe cases:
+   - `boundary_probe.max_files_0.max_file_bytes_0`: max_files=0, max_file_bytes=0, actual=[{"path":"a.txt"}], expected=[]
+   - `boundary_probe.max_files_0.max_file_bytes_1`: max_files=0, max_file_bytes=1, actual=[{"path":"a.txt"}], expected=[]
+   - `boundary_probe.max_files_0.max_file_bytes_5`: max_files=0, max_file_bytes=5, actual=[{"path":"a.txt"}], expected=[]
+
+All three failures are when `max_files=0`. The expected result is an empty list (no files admitted), but the actual result includes "a.txt". This means when `max_files=0`, the code should admit ZERO files, but it's still admitting files.
+
+Let me look at the importers.py file to understand the current state. The working account says fix #1 was `importers.py:56 st_size >= → >` [DONE EVT-0021], but I don't have importers.py in my current visible sources. Let me check what I have.
+
+Current visible source: only `saved_runs.py` is shown in working_set.sources.
+
+The failures are all `max_files=0` cases where a file "a.txt" is still being admitted. This suggests that in importers.py, the `max_files` check isn't properly filtering when max_files=0.
+
+Let me think about what the code likely looks like in importers.py. The boundary contract says:
+- max_files=N admits at most the first N eligible files
+- A file whose byte size equals max_file_bytes is eligible
+
+So when max_files=0, NO files should be admitted regardless of their size.
+
+The fix #1 was changing `st_size >= max_file_bytes` to `st_size > max_file_bytes` (to make equality eligible). But the max_files=0 case suggests there's another issue - perhaps the max_files check uses `>` instead of `>=`, or the count check doesn't properly handle 0.
+
+Let me look at importers.py. I need to read it first since it's not in my current visible sources.
+
+Wait, let me re-read the working account: "Fixes: (1) importers.py:56 st_size >= → > [DONE EVT-0021]; (2) importers.py:62 len(artifacts) > → >= [DONE EVT-0023]"
+
+So fix #2 was about `len(artifacts) > MAX_EMBEDDED_ARTIFACTS` → `len(artifacts) >= MAX_EMBEDDED_ARTIFACTS`. But wait, that's in saved_runs.py context... Actually no, looking more carefully, the account says importers.py:62. Let me re-read.
+
+Actually the working account says:
+1. importers.py:56 st_size >= → > [DONE EVT-0021]
+2. importers.py:62 len(artifacts) > → >= [DONE EVT-0023]
+3. saved_runs.py _events_from_jsonl idx >= → > [DONE EVT-0024]
+4. saved_runs.py _embedded_artifacts_from_jsonl idx >= → > [DOING NOW]
+
+Wait, but looking at the current saved_runs.py source, I can see:
+- `_events_from_jsonl`: `if idx > MAX_JSONL_LINES: break` - this is already `>` (fix #3 done)
+- `_embedded_artifacts_from_jsonl`: `if idx > MAX_JSONL_LINES or len(artifacts) >= MAX_EMBEDDED_ARTIFACTS: break` - this is already `>` and `>=` (fix #4 done)
+
+So all four fixes appear to be done in saved_runs.py. The remaining issue is in importers.py.
+
+The failing cases are all `max_files=0` where files are still being admitted. This means in importers.py, there's likely a check like:
+```python
+if len(selected) < max_files:  # or similar
+```
+that doesn't properly handle max_files=0.
+
+Or perhaps the check is something like:
+```python
+if max_files and len(selected) >= max_files:
+    break
+```
+Where `max_files=0` is falsy, so the check is never triggered.
+
+Or maybe it's:
+```python
+if len(files) > max_files:
+    files = files[:max_files]
+```
+Where with max_files=0, `len(files) > 0` is True, so it would correctly truncate to `files[:0]` = []. But that would work...
+
+Actually wait - let me reconsider. The issue might be that the eligibility check passes the file through (size check), but then the max_files cap isn't applied correctly. Let me think about what code pattern would cause `max_files=0` to still return files.
+
+A common bug pattern:
+```python
+if max_files > 0 and len(selected) >= max_files:
+    break
+```
+When max_files=0, `max_files > 0` is False, so the break never triggers, and all eligible files are included.
+
+Or:
+```python
+for f in files:
+    if len(selected) >= max_files:
+        break
+```
+This would actually work correctly with max_files=0 because `len([]) >= 0` is True immediately.
+
+Hmm, another pattern:
+```python
+eligible = [f for f in files if f.size <= max_file_bytes]
+if max_files:
+    eligible = eligible[:max_files]
+```
+When max_files=0, `if max_files:` is False (0 is falsy), so the truncation is skipped.
+
+I need to read importers.py to see the actual code. Let me do that.
+
+Actually, I only have 6 requests remaining and 45 actions remaining. Let me be strategic. I need to:
+1. Read importers.py to see the current code
+2. Fix the max_files=0 bug
+3. Run check public
+4. Submit
+
+That's 4 operations minimum. Let me read importers.py first.

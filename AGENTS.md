@@ -1,3 +1,21 @@
+# Closed C16 information transition; fresh work next
+
+Read ecological_information_transition/review/RESULTS-002.md and decision,
+host/artifact audits. Both uncoached run002 arms under a8d3d85d complete the same
+correct checked artifact: unchanged5requests/9ops, released6/10. Actual failed
+zero feedback leads to source-based correction; released recognizes missing
+importer and obtains ordinary current source. All17nonterminal receipts arrive;
+exact172/190artifact,1233source,147/164custody and11/12checkpoint replay passes.
+Separate originalhidden/unchanged12caseprobe pass; original lineage stays exact.
+Keep25.630newmodelminutes, extra acquisition,345more generated tokens in released,
+runtime variance and advisory65/175MiB margins. No causal speed/account benefit,
+autonomous assembly or naturalpressure claim. Accounts retain the placement
+explanation but pending check text persists; applicable current outcome supports
+closure. Keep the inaccurate inactive-coverage sentence as a frozen finding;
+correct it prospectively if reused. No extra C16 exposure or new memory mechanism.
+Follow NEXT_DECISION.md for fresh information-dependent work; wider ledger stays
+open. Full actual support/replies/artifacts precede diagnosis, no live coaching.
+
 # Published successor C16 pair under limited apparatus evidence
 
 ecological_information_transition/PREPARATION_REVIEW-002.md and
