@@ -1,0 +1,294 @@
+Let me analyze the current state:
+
+1. The task is to fix 4 raising sites in `tests/test_virtual_registration.py` to assert exact exception class and full diagnostic text.
+
+2. Looking at the current source, I can see:
+   - Sites 1-2 (unrelated ABCs tests) - `test_pep604_overlapping_unrelated_abcs` and `test_typing_union_overlapping_unrelated_abcs` - These ALREADY have `self.assertIs(type(ctx.exception), RuntimeError)` and `self.assertEqual(str(ctx.exception), ...)` - these are done!
+   
+   - Sites 3-4 (explicit registration tests) - `test_pep604_explicit_registration_resolves_ambiguity` and `test_typing_union_explicit_registration_resolves_ambiguity` - These use `with self.assertRaises(RuntimeError):` without `as ctx:` and have NO diagnostic assertion.
+
+3. So I need to fix sites 3 and 4 (the explicit registration tests). They currently have:
+```python
+        with self.assertRaises(RuntimeError):
+            handler(c)
+```
+
+They need to become:
+```python
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertIs(type(ctx.exception), RuntimeError)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+```
+
+Wait, but I need to verify the exact diagnostic text. Looking at the implementation (from the selected source of Lib/functools.py lines 790-805):
+```python
+            if (t in registry and t not in cls.__mro__
+                  and match not in cls.__mro__
+                  and not issubclass(match, t)):
+                raise RuntimeError("Ambiguous dispatch: {} or {}".format(
+                    match, t))
+```
+
+So the message is `"Ambiguous dispatch: {} or {}".format(match, t)` where `match` and `t` are the two types being compared.
+
+In the explicit registration tests, both `AlphaBase` and `BetaBase` are registered as virtual subclasses of `Concrete`. The order of iteration matters. Looking at the unrelated ABCs tests (sites 1-2), they use `f"Ambiguous dispatch: {AlphaBase} or {BetaBase}"` - so `match` comes first, then `t`.
+
+But wait - in the explicit registration tests, the order might be different because both are registered before the handler call. Let me think about this...
+
+In the unrelated ABCs tests:
+- First `AlphaBase.register(Concrete)` succeeds (single match)
+- Then `BetaBase.register(Concrete)` triggers the ambiguity
+
+In the explicit registration tests:
+- Both `AlphaBase.register(Concrete)` and `BetaBase.register(Concrete)` are called
+- Then `handler(c)` is called which triggers the ambiguity
+
+The iteration order in the registry depends on the order of registration. Since `AlphaBase` is registered first, it would likely be encountered first, making it `match` and `BetaBase` would be `t`.
+
+But actually, I need to be more careful. The `_find_impl` function iterates over the MRO of the concrete type. The virtual registration adds the ABC to some set. Let me think about what order the types would be in.
+
+Actually, looking at the implementation more carefully - the function iterates over `cls.__mro__` (or similar), and for each type `t` in the MRO that's in the registry, it checks if there's already a `match`. The order depends on the MRO.
+
+Wait, I don't have the full implementation. I only have lines 790-805. Let me look at what I know:
+
+The format is `"Ambiguous dispatch: {} or {}".format(match, t)` where `match` is the previously found match and `t` is the current type being checked.
+
+In the unrelated ABCs tests (which already pass), the expected message is `f"Ambiguous dispatch: {AlphaBase} or {BetaBase}"`. This means `AlphaBase` is the `match` (found first) and `BetaBase` is the `t` (found second).
+
+In the explicit registration tests, the same two ABCs are registered in the same order (AlphaBase first, then BetaBase). So the iteration should encounter them in the same order, giving the same message.
+
+So the fix for both explicit registration tests should be:
+```python
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertIs(type(ctx.exception), RuntimeError)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+```
+
+Now let me make the edits. I need to do two patches:
+
+1. For `test_pep604_explicit_registration_resolves_ambiguity`:
+Old:
+```python
+        with self.assertRaises(RuntimeError):
+            handler(c)
+
+        @handler.register(Concrete)
+```
+New:
+```python
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertIs(type(ctx.exception), RuntimeError)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+
+        @handler.register(Concrete)
+```
+
+2. For `test_typing_union_explicit_registration_resolves_ambiguity`:
+Same pattern.
+
+Let me use the current candidate ID: `f161d9aa3ad9c107fb660267ad648fdb4f7d280500a37466a682ce9e4807a7a9`
+File SHA: `f9b51a01cdfe2de7c7fbad9206fcbd16062a3cf9990e4f01de0359da19246aa3`
+
+Wait, but the two patches need to be done sequentially since the first one changes the file. Let me do them one at a time.
+
+Actually, looking more carefully at the file content, the two occurrences of `with self.assertRaises(RuntimeError):\n            handler(c)\n\n        @handler.register(Concrete)` - are they unique? Let me check:
+
+In `test_pep604_explicit_registration_resolves_ambiguity`:
+```python
+        AlphaBase.register(Concrete)
+        BetaBase.register(Concrete)
+
+        with self.assertRaises(RuntimeError):
+            handler(c)
+
+        @handler.register(Concrete)
+        def concrete_handler(x):
+            return "concrete"
+
+        self.assertEqual(handler(c), "concrete")
+```
+
+In `test_typing_union_explicit_registration_resolves_ambiguity`:
+```python
+        AlphaBase.register(Concrete)
+        BetaBase.register(Concrete)
+
+        with self.assertRaises(RuntimeError):
+            handler(c)
+
+        @handler.register(Concrete)
+        def concrete_handler(x):
+            return "concrete"
+
+        self.assertEqual(handler(c), "concrete")
+```
+
+These two blocks are identical! So `old` would not be unique. I need to include more context to make each unique.
+
+For the first one, I can include the preceding context that differs. Let me look at what's before each:
+
+First test has `test_pep604_explicit_registration_resolves_ambiguity` as the method name, and before the `with` block:
+```python
+        AlphaBase.register(Concrete)
+        BetaBase.register(Concrete)
+
+        with self.assertRaises(RuntimeError):
+            handler(c)
+```
+
+Second test has `test_typing_union_explicit_registration_resolves_ambiguity` and before:
+```python
+        AlphaBase.register(Concrete)
+        BetaBase.register(Concrete)
+
+        with self.assertRaises(RuntimeError):
+            handler(c)
+```
+
+Hmm, these are truly identical in the immediate context. I need to include the method definition or something that differs.
+
+Actually wait - let me look at the full context. The first test's docstring is different: `"""Explicit registration of the concrete type overrides ambiguous MRO."""` vs `"""typing.Union: explicit registration resolves ambiguity."""`
+
+And the handler registration differs: `@handler.register(AlphaBase | BetaBase)` vs `@handler.register(typing.Union[AlphaBase, BetaBase])`
+
+Let me use enough context to make each unique. I'll include from the `@handler.register(...)` line through the `with` block.
+
+For test 1 (PEP 604):
+```
+        @handler.register(AlphaBase | BetaBase)
+        def union_handler(x):
+            return "union"
+
+        c = Concrete()
+        self.assertEqual(handler(c), "default")
+
+        AlphaBase.register(Concrete)
+        BetaBase.register(Concrete)
+
+        with self.assertRaises(RuntimeError):
+            handler(c)
+```
+
+For test 2 (typing.Union):
+```
+        @handler.register(typing.Union[AlphaBase, BetaBase])
+        def union_handler(x):
+            return "union"
+
+        c = Concrete()
+        self.assertEqual(handler(c), "default")
+
+        AlphaBase.register(Concrete)
+        BetaBase.register(Concrete)
+
+        with self.assertRaises(RuntimeError):
+            handler(c)
+```
+
+These should be unique. Let me do them one at a time.
+
+Actually, I realize I should be more careful. Let me re-read the file content to get the exact text.
+
+From the source:
+```
+    def test_pep604_explicit_registration_resolves_ambiguity(self):
+        """Explicit registration of the concrete type overrides ambiguous MRO."""
+        class AlphaBase(ABC):
+            pass
+        class BetaBase(ABC):
+            pass
+        class Concrete:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(AlphaBase | BetaBase)
+        def union_handler(x):
+            return "union"
+
+        c = Concrete()
+        self.assertEqual(handler(c), "default")
+
+        AlphaBase.register(Concrete)
+        BetaBase.register(Concrete)
+
+        with self.assertRaises(RuntimeError):
+            handler(c)
+
+        @handler.register(Concrete)
+        def concrete_handler(x):
+            return "concrete"
+
+        self.assertEqual(handler(c), "concrete")
+```
+
+And:
+```
+    def test_typing_union_explicit_registration_resolves_ambiguity(self):
+        """typing.Union: explicit registration resolves ambiguity."""
+        class AlphaBase(ABC):
+            pass
+        class BetaBase(ABC):
+            pass
+        class Concrete:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(typing.Union[AlphaBase, BetaBase])
+        def union_handler(x):
+            return "union"
+
+        c = Concrete()
+        self.assertEqual(handler(c), "default")
+
+        AlphaBase.register(Concrete)
+        BetaBase.register(Concrete)
+
+        with self.assertRaises(RuntimeError):
+            handler(c)
+
+        @handler.register(Concrete)
+        def concrete_handler(x):
+            return "concrete"
+
+        self.assertEqual(handler(c), "concrete")
+```
+
+OK so the distinguishing part is `@handler.register(AlphaBase | BetaBase)` vs `@handler.register(typing.Union[AlphaBase, BetaBase])`.
+
+Let me use a minimal unique anchor. For the first:
+old: `        @handler.register(AlphaBase | BetaBase)\n        def union_handler(x):\n            return "union"\n\n        c = Concrete()\n        self.assertEqual(handler(c), "default")\n\n        AlphaBase.register(Concrete)\n        BetaBase.register(Concrete)\n\n        with self.assertRaises(RuntimeError):\n            handler(c)`
+
+new: `        @handler.register(AlphaBase | BetaBase)\n        def union_handler(x):\n            return "union"\n\n        c = Concrete()\n        self.assertEqual(handler(c), "default")\n\n        AlphaBase.register(Concrete)\n        BetaBase.register(Concrete)\n\n        with self.assertRaises(RuntimeError) as ctx:\n            handler(c)\n        self.assertIs(type(ctx.exception), RuntimeError)\n        self.assertEqual(\n            str(ctx.exception),\n            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",\n        )`
+
+For the second:
+old: `        @handler.register(typing.Union[AlphaBase, BetaBase])\n        def union_handler(x):\n            return "union"\n\n        c = Concrete()\n        self.assertEqual(handler(c), "default")\n\n        AlphaBase.register(Concrete)\n        BetaBase.register(Concrete)\n\n        with self.assertRaises(RuntimeError):\n            handler(c)`
+
+new: `        @handler.register(typing.Union[AlphaBase, BetaBase])\n        def union_handler(x):\n            return "union"\n\n        c = Concrete()\n        self.assertEqual(handler(c), "default")\n\n        AlphaBase.register(Concrete)\n        BetaBase.register(Concrete)\n\n        with self.assertRaises(RuntimeError) as ctx:\n            handler(c)\n        self.assertIs(type(ctx.exception), RuntimeError)\n        self.assertEqual(\n            str(ctx.exception),\n            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",\n        )`
+
+Let me do the first patch now. I'll use the file SHA and candidate ID from the current state.
+
+Wait, I need to double-check: the task says "Two sites in the later-concrete-registration scenarios do not assert the diagnostic." So sites 3-4 need:
+1. Exact exception class assertion: `self.assertIs(type(ctx.exception), RuntimeError)`
+2. Full diagnostic text: `self.assertEqual(str(ctx.exception), f"Ambiguous dispatch: {AlphaBase} or {BetaBase}")`
+
+And looking at sites 1-2, they already have both. Good.
+
+Let me proceed with the first patch.

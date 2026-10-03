@@ -1,3 +1,19 @@
+# Exact assertion contribution completed; wider ledger remains open
+
+contract_completion/run001 closes the control's review-directed test-only job at
+505d3b46:10newrequests/13operations,18.932model/22.572audit-loop minutes. Four edits
+add exact exception type identity everywhere and missing full diagnostic checks.
+Qualified current pass and unchanged-candidate submission occur without coaching,
+retry, extension or rejected action. Seven other files, two old method bodies/
+assertions and all six overlap scenarios remain. Independent postseal check and
+per-site fault sensitivity pass;52preserved ordinary examples pass.279artifacts/
+2,100bindings/219custody/15checkpoints and all11nonterminal receipts verify.
+Read current_job_presentation/contract_completion/review/RESULTS-001.md and
+GOVERNANCE_NOTES.md. Preserve both original comparison arms/scores; no efficiency
+win or new account/memory policy is established. No failed live check or pressure
+transition occurs. This local contract is closed; next return to fresh work from
+the wider information-dependent workload ledger, which remains open.
+
 # Assertion completion qualified; live behavior remains untested
 
 The nested current_job_presentation/contract_completion successor repairs the

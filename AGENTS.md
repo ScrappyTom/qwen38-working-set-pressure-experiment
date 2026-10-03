@@ -1,3 +1,31 @@
+# Closed assertion completion; preserve the pair's original scores
+
+Read current_job_presentation/contract_completion/review/RESULTS-001.md,
+READING_NOTES.md, contract_completion/GOVERNANCE_NOTES.md and
+current_job_presentation/NEXT_DECISION.md. The single review-directed test-only
+run001 closes at505d3b46:10newrequests/13ops,18.932model/22.572audit-loop minutes,
+17,417generatedtokens. Four precise edits enforce exact RuntimeError identity and
+full diagnostic at all four raising sites. Current qualified pass is consumed
+before unchanged-candidate submission; seven other files, two original method
+ASTs/assertions and six scenarios remain. Separate postseal execution reproduces
+ordinary pass/per-site subtype/text sensitivity;52preserved examples pass both
+registered and ordinary standalone execution. Repeats are not new coverage.
+
+279artifacts/2,100bindings/219custody/15checkpoints and all11nonterminal receipts
+verify;15current-source presentations match actual versions. Cumulative57requests/
+90ops/eighteenversions and actual check opportunity88/job11/26before25after agree.
+The owned runtime closes fully offloaded, without CUDA failure or truncation;
+225MiB minimum free GPU memory is advisory. Full actual inputs/thinking/public
+effects/artifact/custody review precedes these conclusions. Some private MRO/
+method-attribution explanations are wrong; they are not validated by the pass.
+
+The assignment supplies verified review gaps, no patch/group/live coaching/retry/
+extension/private-draft execution. No failed live check, pressure, eviction or
+isolated account benefit occurs. Original pair scores/bound sources remain exact;
+current-job presentation has no demonstrated efficiency win and stays opt-in.
+Close this contribution; return to fresh information-dependent work in the wider
+open ledger. No new memory/account/format/effort policy or repeat seed is selected.
+
 # Qualified assertion completion after the closed comparison
 
 Read current_job_presentation/contract_completion/PLAN.md, SPEC.md and

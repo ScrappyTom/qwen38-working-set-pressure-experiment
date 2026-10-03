@@ -1,0 +1,302 @@
+Let me analyze the task. I need to fix the test file `tests/test_virtual_registration.py` to:
+
+1. Assert exact exception class (not just `RuntimeError` which accepts subclasses) - use `assertRaises` with the exact class or use `assertRaisesRegex`/manual check
+2. Assert full diagnostic text at all raising sites
+3. Sites 1-2 (unrelated ABCs) already assert diagnostic but not exact class
+4. Sites 3-4 (explicit registration) lack diagnostic assertion entirely
+
+Looking at the current test file:
+
+**Sites 1 & 2** (`test_pep604_overlapping_unrelated_abcs` and `test_typing_union_overlapping_unrelated_abcs`):
+```python
+with self.assertRaises(RuntimeError) as ctx:
+    handler(c)
+self.assertEqual(
+    str(ctx.exception),
+    f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+)
+```
+These already assert the diagnostic text. But they use `assertRaises(RuntimeError)` which accepts subclasses. The fix is to ensure the exception is exactly `RuntimeError`, not a subclass. I can do this by checking `type(ctx.exception) is RuntimeError` or by using `assertRaises` and then checking the type.
+
+Actually, looking more carefully: `assertRaises(RuntimeError)` catches `RuntimeError` and all its subclasses. To assert the exact class, I should check that `type(ctx.exception) is RuntimeError` or use a different approach.
+
+**Sites 3 & 4** (`test_pep604_explicit_registration_resolves_ambiguity` and `test_typing_union_explicit_registration_resolves_ambiguity`):
+```python
+with self.assertRaises(RuntimeError):
+    handler(c)
+```
+These don't assert the diagnostic text at all. They need both the exact class assertion AND the diagnostic text.
+
+The diagnostic text from the implementation is:
+```python
+raise RuntimeError("Ambiguous dispatch: {} or {}".format(match, t))
+```
+
+So the message is `"Ambiguous dispatch: {match} or {t}"` where `match` and `t` are the two ABCs.
+
+Looking at the test scenarios:
+- In the explicit registration tests, both `AlphaBase` and `BetaBase` are registered as virtual bases of `Concrete`. The ambiguity arises because both match. The order in the message depends on the implementation's iteration.
+
+Let me think about what the exact diagnostic would be for sites 3 and 4. Looking at the implementation code:
+```python
+if (t in registry and t not in cls.__mro__
+      and match not in cls.__mro__
+      and not issubclass(match, t)):
+    raise RuntimeError("Ambiguous dispatch: {} or {}".format(
+        match, t))
+```
+
+In the explicit registration tests, both `AlphaBase` and `BetaBase` are virtual bases. The `match` and `t` variables depend on the iteration order. Since the test already asserts the diagnostic in sites 1 and 2 using `f"Ambiguous dispatch: {AlphaBase} or {BetaBase}"`, and the same pattern applies to sites 3 and 4 (same class names), the diagnostic should be the same format.
+
+But wait - I need to be careful about the order. In sites 1-2, `AlphaBase.register(Concrete)` is called first, then `BetaBase.register(Concrete)`. In sites 3-4, both registrations happen before the handler call. The iteration order in `_find_impl` depends on the MRO order of `Concrete`.
+
+Actually, let me look at this more carefully. The `_find_impl` function iterates over the MRO of the instance's class. For `Concrete`, the MRO would be `[Concrete, object]` initially, but after virtual registration, the ABCs would appear in the MRO.
+
+Wait, actually `ABC.register` adds the class as a virtual subclass, which modifies `__mro__` (well, it adds to `__subclasses__` of the ABC and modifies the virtual subclass mechanism). The actual MRO of `Concrete` would change.
+
+Let me think about this differently. In the explicit registration tests (sites 3-4), both `AlphaBase.register(Concrete)` and `BetaBase.register(Concrete)` are called before `handler(c)` is invoked. So when `_find_impl` runs, it finds both ABCs in the registry that match `Concrete`.
+
+The diagnostic message format is `"Ambiguous dispatch: {} or {}".format(match, t)`. The `match` is the previously found match, and `t` is the new one being checked. So the order depends on which one is found first in the MRO iteration.
+
+For sites 1 and 2, the test asserts `f"Ambiguous dispatch: {AlphaBase} or {BetaBase}"` - this means `match` is `AlphaBase` and `t` is `BetaBase`. This makes sense because `AlphaBase.register(Concrete)` is called first, so `AlphaBase` appears earlier in `Concrete`'s MRO (or at least is found first).
+
+For sites 3 and 4, both registrations happen before the handler call. The order in the MRO would depend on the order of registration. Since `AlphaBase.register(Concrete)` is called first and then `BetaBase.register(Concrete)`, the same order should apply. So the diagnostic should be the same: `f"Ambiguous dispatch: {AlphaBase} or {BetaBase}"`.
+
+Actually wait, I need to be more careful. Let me re-read the implementation. The `_find_impl` function iterates over `cls.__mro__` and checks which types are in the registry. For a PEP 604 union `AlphaBase | BetaBase`, the registry would have both `AlphaBase` and `BetaBase` as keys.
+
+When `Concrete` is a virtual subclass of both, its MRO would include both. The iteration goes through the MRO, and for each type `t` in the MRO, it checks if `t` is in the registry. The first match becomes `match`, and subsequent matches trigger the ambiguity check.
+
+So if `AlphaBase` appears before `BetaBase` in `Concrete.__mro__`, then `match = AlphaBase` and when `t = BetaBase`, the check fires with message `"Ambiguous dispatch: {AlphaBase} or {BetaBase}"`.
+
+This should be the same for sites 3 and 4 as for sites 1 and 2, since the registration order is the same.
+
+Now, for the fix:
+
+1. **All four sites**: Change `assertRaises(RuntimeError)` to also verify the exact type. The way to do this while using `assertRaises` context manager is to check `type(ctx.exception) is RuntimeError` after the `with` block. Or I could use `assertRaises` and add a type check.
+
+Actually, the cleanest approach in unittest is:
+```python
+with self.assertRaises(RuntimeError) as ctx:
+    handler(c)
+self.assertIs(type(ctx.exception), RuntimeError)
+self.assertEqual(str(ctx.exception), f"Ambiguous dispatch: {AlphaBase} or {BetaBase}")
+```
+
+Or alternatively:
+```python
+with self.assertRaises(RuntimeError) as ctx:
+    handler(c)
+self.assertIsInstance(ctx.exception, RuntimeError)  # already guaranteed by assertRaises
+self.assertNotIsInstance(ctx.exception, ...)  # can't easily check "not a subclass"
+```
+
+The most direct way is `self.assertIs(type(ctx.exception), RuntimeError)` which checks that the exact type is `RuntimeError` and not a subclass.
+
+Let me now write the patches:
+
+**Site 1** (`test_pep604_overlapping_unrelated_abcs`):
+Current:
+```python
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+```
+New:
+```python
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertIs(type(ctx.exception), RuntimeError)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+```
+
+**Site 2** (`test_typing_union_overlapping_unrelated_abcs`):
+Same change as site 1.
+
+**Site 3** (`test_pep604_explicit_registration_resolves_ambiguity`):
+Current:
+```python
+        with self.assertRaises(RuntimeError):
+            handler(c)
+```
+New:
+```python
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertIs(type(ctx.exception), RuntimeError)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+```
+
+**Site 4** (`test_typing_union_explicit_registration_resolves_ambiguity`):
+Same change as site 3.
+
+Now let me figure out the exact text to use for patches. I have the full file visible. Let me identify unique old strings for each patch.
+
+For site 1, the unique context is:
+```python
+        BetaBase.register(Concrete)
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+
+    def test_typing_union_overlapping_unrelated_abcs(self):
+```
+
+Wait, sites 1 and 2 have identical code blocks. Let me check... Yes, both sites 1 and 2 have:
+```python
+        BetaBase.register(Concrete)
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+```
+
+These are not unique! I need to include more context to make them unique. Let me include the method name or the preceding lines.
+
+For site 1, I can include:
+```python
+        # Second virtual registration: two unrelated ABCs now match.
+        BetaBase.register(Concrete)
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+```
+
+For site 2:
+```python
+        BetaBase.register(Concrete)
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+
+    def test_pep604_subclass_related_abcs(self):
+```
+
+Hmm, actually let me look at this differently. The comment `# Second virtual registration: two unrelated ABCs now match.` is only in site 1. Let me use that.
+
+Actually wait, let me re-read the file more carefully:
+
+Site 1 (test_pep604_overlapping_unrelated_abcs):
+```python
+        # Second virtual registration: two unrelated ABCs now match.
+        BetaBase.register(Concrete)
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+```
+
+Site 2 (test_typing_union_overlapping_unrelated_abcs):
+```python
+        BetaBase.register(Concrete)
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+
+    def test_pep604_subclass_related_abcs(self):
+```
+
+So for site 1, I can use the comment line as a distinguishing factor.
+For site 2, I can include the trailing blank line and method definition.
+
+Actually, let me think about this differently. I'll use the `replace_region` approach with the full file region, or I'll use `patch` with sufficiently unique old strings.
+
+Let me use patch for each of the 4 changes. The file sha256 is `a67036f0ce91c43bb6a961a696eac658ad6bbb68d8c728fa76862e25008f1a07`.
+
+Site 1 - include the comment to make it unique:
+old:
+```
+        # Second virtual registration: two unrelated ABCs now match.
+        BetaBase.register(Concrete)
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+```
+new:
+```
+        # Second virtual registration: two unrelated ABCs now match.
+        BetaBase.register(Concrete)
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertIs(type(ctx.exception), RuntimeError)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+```
+
+Site 2 - need to distinguish from site 1. The text after site 2's block is different:
+old:
+```
+        BetaBase.register(Concrete)
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+
+    def test_pep604_subclass_related_abcs(self):
+```
+new:
+```
+        BetaBase.register(Concrete)
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertIs(type(ctx.exception), RuntimeError)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+
+    def test_pep604_subclass_related_abcs(self):
+```
+
+Wait, but after I make the first patch, the file changes and the sha256 changes. I need to do these sequentially. Let me think about whether I can do them in one go or need to do them one at a time.
+
+Each patch changes the file, so the next patch needs the new sha256. I'll need to do them one at a time and get the new sha256 from each response.
+
+Actually, let me reconsider. Can I do a single large patch that covers all four sites? That would be more efficient but the old string would be very long and might not be unique. Let me think...
+
+Actually, the four sites are:
+1. In `test_pep604_overlapping_unrelated_abcs` - has the comment before it
+2. In `test_typing_union_overlapping_unrelated_abcs` - follows after site 1's block
+3. In `test_pep604_explicit_registration_resolves_ambiguity` - different context
+4. In `test_typing_union_explicit_registration_resolves_ambiguity` - follows after site 3
+
+Let me just do them one at a time. 4 patches + 1 check + 1 submit = 6 operations. I have 31 actions remaining.
+
+Wait, actually I realize I should double-check: does `assertRaises` with `as ctx` already give me the exception? Yes. And `type(ctx.exception)` gives the exact type. `self.assertIs(type(ctx.exception), RuntimeError)` checks that the type is exactly `RuntimeError` (not a subclass).
+
+Let me start with site 1.
+
+Actually, let me reconsider the approach. I could also use `replace_region` with the full file region since I have the whole file visible as `SRC-828af1a1ce2df10f9584a362935eb315730b5e5e253128e74da11466f93dc3a9`. But that would replace the entire file, which is risky. Let me stick with individual patches.
+
+Let me do the first patch now.

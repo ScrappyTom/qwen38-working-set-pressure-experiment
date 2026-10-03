@@ -1,0 +1,161 @@
+Let me analyze the current state:
+
+1. I've been editing `tests/test_virtual_registration.py` to add exact exception class assertions and diagnostic text checks to the raising sites.
+
+2. Looking at the current source, I can see:
+   - Sites 1-2 (unrelated ABCs in `test_pep604_overlapping_unrelated_abcs` and `test_typing_union_overlapping_unrelated_abcs`): Already have `assertIs(type(ctx.exception), RuntimeError)` and diagnostic text assertion. ✓
+   - Sites 3-4 (explicit registration in `test_pep604_explicit_registration_resolves_ambiguity` and `test_typing_union_explicit_registration_resolves_ambiguity`): 
+     - `test_pep604_explicit_registration_resolves_ambiguity`: Already has the full assertion with `assertIs` and diagnostic. ✓
+     - `test_typing_union_explicit_registration_resolves_ambiguity`: Still has just `with self.assertRaises(RuntimeError):` without the diagnostic assertion. ✗
+
+So I still need to fix `test_typing_union_explicit_registration_resolves_ambiguity` to add the exact class and diagnostic assertions, similar to the other three sites.
+
+Let me look at the current source for that section:
+
+```python
+        AlphaBase.register(Concrete)
+        BetaBase.register(Concrete)
+
+        with self.assertRaises(RuntimeError):
+            handler(c)
+
+        @handler.register(Concrete)
+        def concrete_handler(x):
+            return "concrete"
+
+        self.assertEqual(handler(c), "concrete")
+```
+
+I need to change it to:
+```python
+        AlphaBase.register(Concrete)
+        BetaBase.register(Concrete)
+
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertIs(type(ctx.exception), RuntimeError)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+
+        @handler.register(Concrete)
+        def concrete_handler(x):
+            return "concrete"
+
+        self.assertEqual(handler(c), "concrete")
+```
+
+The current candidate is `268df9e17c955719196d6e1f3074447a96b5fc2b825aeaebaf071550b7bd6a5a`.
+The file sha is `2b42d8b5a14ac5b11f502f5b660da821d57ec12d25e837cf864d67e1049ad194`.
+
+I can see the full file in working_set.sources, so I have editing authority. Let me use the `replace_region` approach with the full file region, or better, use a patch.
+
+Actually, let me use a patch to replace the specific section. The old text is:
+
+```
+        with self.assertRaises(RuntimeError):
+            handler(c)
+
+        @handler.register(Concrete)
+        def concrete_handler(x):
+            return "concrete"
+
+        self.assertEqual(handler(c), "concrete")
+```
+
+And the new text should be:
+
+```
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertIs(type(ctx.exception), RuntimeError)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+
+        @handler.register(Concrete)
+        def concrete_handler(x):
+            return "concrete"
+
+        self.assertEqual(handler(c), "concrete")
+```
+
+Wait, but I need to be careful - the `old` text must be unique in the file. Let me check... Looking at the file, there are two places with `@handler.register(Concrete)` pattern - one in `test_pep604_explicit_registration_resolves_ambiguity` and one in `test_typing_union_explicit_registration_resolves_ambiguity`. But the first one already has the fix applied, so the `with self.assertRaises(RuntimeError):` (without `as ctx`) should now be unique to the second test.
+
+Let me verify: In the current source, the first test has:
+```
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertIs(type(ctx.exception), RuntimeError)
+```
+
+And the second test has:
+```
+        with self.assertRaises(RuntimeError):
+            handler(c)
+```
+
+So `        with self.assertRaises(RuntimeError):\n            handler(c)\n\n        @handler.register(Concrete)` should be unique (only in the second test since the first now uses `as ctx`).
+
+Let me construct the patch carefully. I'll use the exact text from the source.
+
+Looking at the source more carefully for the second test (`test_typing_union_explicit_registration_resolves_ambiguity`):
+
+```
+        c = Concrete()
+        self.assertEqual(handler(c), "default")
+
+        AlphaBase.register(Concrete)
+        BetaBase.register(Concrete)
+
+        with self.assertRaises(RuntimeError):
+            handler(c)
+
+        @handler.register(Concrete)
+        def concrete_handler(x):
+            return "concrete"
+
+        self.assertEqual(handler(c), "concrete")
+```
+
+The old text I'll match:
+```
+        with self.assertRaises(RuntimeError):
+            handler(c)
+
+        @handler.register(Concrete)
+        def concrete_handler(x):
+            return "concrete"
+
+        self.assertEqual(handler(c), "concrete")
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+Actually, let me be more precise. I'll just match the unique part. Since the first test now has `as ctx`, the bare `with self.assertRaises(RuntimeError):` followed by `handler(c)` is unique to the second test.
+
+Let me use:
+old:
+```
+        with self.assertRaises(RuntimeError):
+            handler(c)
+```
+
+new:
+```
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertIs(type(ctx.exception), RuntimeError)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+```
+
+This should be unique in the file since the other three sites now all have `as ctx`. Let me verify by scanning the source... Yes, the other three sites all have `with self.assertRaises(RuntimeError) as ctx:`, so the bare `with self.assertRaises(RuntimeError):` is now unique.
+
+I have the file fully visible in working_set.sources, so I can use patch directly.

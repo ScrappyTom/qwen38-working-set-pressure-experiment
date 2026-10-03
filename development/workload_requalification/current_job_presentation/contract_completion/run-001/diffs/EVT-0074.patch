@@ -1,0 +1,134 @@
+--- a/Doc/howto/union-dispatch.rst
++++ b/Doc/howto/union-dispatch.rst
+@@ -87,4 +87,131 @@
+ ...         pass
+ ... except TypeError as exc:
+ ...     print(exc)
+-Invalid union member list[int]: must be a runtime class+Invalid union member list[int]: must be a runtime class
++
++
++Overlapping virtual membership
++-----------------------------
++
++Virtual membership (``ABC.register(cls)``) differs from concrete
++inheritance: it makes ``issubclass(cls, ABC)`` return ``True`` and
++causes the dispatcher to match, but it does not add ``ABC`` to
++``cls.__bases__`` or alter ``cls.__mro__``.  Handler selection is
++determined by the dispatcher's registry lookup and MRO walk: a direct
++``registry[cls]`` entry always wins, while an ABC match is resolved
++through C3-linearised MRO.
++
++When a concrete class becomes a virtual subclass of two *unrelated* ABCs
++that are both union members, the MRO walk encounters two equally valid
++implicit matches and the dispatcher raises ``RuntimeError`` rather than
++guessing.  When the two ABCs are related by subclassing, the more
++specific one appears earlier in the MRO and no error occurs.  A direct
++registration for the concrete class itself short-circuits the MRO walk
++entirely.
++
++Unrelated members: ambiguity
++~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
++
++>>> import functools
++>>> from abc import ABC
++>>>
++>>> class AlphaBase(ABC):
++...     pass
++>>> class BetaBase(ABC):
++...     pass
++>>> class Concrete:
++...     pass
++>>>
++>>> @functools.singledispatch
++... def handler(x):
++...     return "default"
++>>>
++>>> @handler.register(AlphaBase | BetaBase)
++... def union_handler(x):
++...     return "union"
++>>>
++>>> c = Concrete()
++>>> handler(c)
++'default'
++>>>
++>>> AlphaBase.register(Concrete)
++<class '__main__.Concrete'>
++>>> handler(c)
++'union'
++>>>
++>>> BetaBase.register(Concrete)
++<class '__main__.Concrete'>
++>>> try:
++...     handler(c)
++... except RuntimeError as e:
++...     print(e)
++Ambiguous dispatch: <class '__main__.AlphaBase'> or <class '__main__.BetaBase'>
++
++Subclass-related members: no ambiguity
++~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
++
++>>> class Base(ABC):
++...     pass
++>>> class Sub(Base):
++...     pass
++>>> class Concrete:
++...     pass
++>>>
++>>> @functools.singledispatch
++... def handler(x):
++...     return "default"
++>>>
++>>> @handler.register(Sub | Base)
++... def union_handler(x):
++...     return "union"
++>>>
++>>> c = Concrete()
++>>> handler(c)
++'default'
++>>>
++>>> Sub.register(Concrete)
++<class '__main__.Concrete'>
++>>> handler(c)
++'union'
++>>>
++>>> Base.register(Concrete)
++<class '__main__.Concrete'>
++>>> handler(c)
++'union'
++
++Explicit registration resolves ambiguity
++~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
++
++>>> class AlphaBase(ABC):
++...     pass
++>>> class BetaBase(ABC):
++...     pass
++>>> class Concrete:
++...     pass
++>>>
++>>> @functools.singledispatch
++... def handler(x):
++...     return "default"
++>>>
++>>> @handler.register(AlphaBase | BetaBase)
++... def union_handler(x):
++...     return "union"
++>>>
++>>> c = Concrete()
++>>> AlphaBase.register(Concrete)
++<class '__main__.Concrete'>
++>>> BetaBase.register(Concrete)
++<class '__main__.Concrete'>
++>>>
++>>> try:
++...     handler(c)
++... except RuntimeError as e:
++...     print(e)
++Ambiguous dispatch: <class '__main__.AlphaBase'> or <class '__main__.BetaBase'>
++>>>
++>>> @handler.register(Concrete)
++... def concrete_handler(x):
++...     return "concrete"
++>>>
++>>> handler(c)
++'concrete'

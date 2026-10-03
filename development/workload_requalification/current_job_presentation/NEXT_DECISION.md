@@ -1,4 +1,24 @@
-# Close the comparison and finish the actual contract
+# Assertion completion closed; return to fresh work
+
+contract_completion/review/RESULTS-001.md records the completed single successor:
+10 new requests/13 operations,18.932 model minutes, four targeted assertion repairs,
+actual qualified pass and unchanged-candidate submission. Seven other files,
+two old method bodies/assertions and all six scenarios remain.279artifacts/
+2,100bindings/219custody/15checkpoints and all11nonterminal receipts verify.
+The actual per-site faults now establish class/text sensitivity. The original
+pair results stay unchanged; the successor is review-directed, without live
+coaching, reference group, retry or extension. Keep its full evidence and
+GOVERNANCE_NOTES.md. No failed live check, pressure or isolated account benefit.
+
+Close this coverage job. Keep the presentation result mixed/adverse rather than
+repeat for a favorable aggregate. Current-job projection is still opt-in, not a
+proven efficiency remedy. Next select fresh information-dependent work from the
+wider ledger: a new decision using previously saved work and newly acquired
+evidence, with normal retrieval available and prior contribution preserved.
+Do not reopen this task, require an account or invent pressure solely to exercise
+a mechanism. No new storage, memory, payload or reasoning policy is selected.
+
+# Historical plan: close the comparison and finish the actual contract
 
 Retain both003 results unchanged. The current-job projection makes historical
 acceptance and current applicability more explicit, but this pair supplies no

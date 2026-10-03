@@ -1,0 +1,265 @@
+Let me analyze the current state:
+
+1. I've already applied one patch (EVT-0083) adding `self.assertIs(type(ctx.exception), RuntimeError)` to the `test_pep604_overlapping_unrelated_abcs` method (site 1).
+
+2. Looking at the current test file, I can see the state:
+   - **Site 1** (`test_pep604_overlapping_unrelated_abcs`): Has `assertRaises(RuntimeError) as ctx`, then `assertIs(type(ctx.exception), RuntimeError)` (just added), and asserts diagnostic text. ✓ COMPLETE
+   - **Site 2** (`test_typing_union_overlapping_unrelated_abcs`): Has `assertRaises(RuntimeError) as ctx` and asserts diagnostic text, but does NOT assert exact class. Needs `assertIs(type(ctx.exception), RuntimeError)`.
+   - **Site 3** (`test_pep604_explicit_registration_resolves_ambiguity`): Has `assertRaises(RuntimeError)` (no `as ctx`) and does NOT assert diagnostic text. Needs both exact class assertion and diagnostic text.
+   - **Site 4** (`test_typing_union_explicit_registration_resolves_ambiguity`): Has `assertRaises(RuntimeError)` (no `as ctx`) and does NOT assert diagnostic text. Needs both exact class assertion and diagnostic text.
+
+So I need to:
+1. Site 2: Add `self.assertIs(type(ctx.exception), RuntimeError)` after the `assertRaises` line in `test_typing_union_overlapping_unrelated_abcs`.
+2. Site 3: Change `with self.assertRaises(RuntimeError):` to `with self.assertRaises(RuntimeError) as ctx:` and add `self.assertIs(type(ctx.exception), RuntimeError)` and the diagnostic text assertion in `test_pep604_explicit_registration_resolves_ambiguity`.
+3. Site 4: Same changes for `test_typing_union_explicit_registration_resolves_ambiguity`.
+
+For sites 3 and 4, the diagnostic text would be `f"Ambiguous dispatch: {AlphaBase} or {BetaBase}"` since both AlphaBase and BetaBase are unrelated ABCs being registered.
+
+Let me look at the exact text I need to patch. The file is fully visible (SRC-7045e1268dc215409915c315492e92b28eb45668fe1814c298e72fefe2a9fc88, lines 1-256).
+
+For Site 2, I need to find the exact text:
+```
+        BetaBase.register(Concrete)
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertEqual(
+```
+
+Wait, looking more carefully at the current content of `test_typing_union_overlapping_unrelated_abcs`:
+```
+        BetaBase.register(Concrete)
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+```
+
+I need to add `self.assertIs(type(ctx.exception), RuntimeError)` after `handler(c)` and before `self.assertEqual`.
+
+For Site 3 (`test_pep604_explicit_registration_resolves_ambiguity`):
+```
+        with self.assertRaises(RuntimeError):
+            handler(c)
+```
+This needs to become:
+```
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertIs(type(ctx.exception), RuntimeError)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+```
+
+For Site 4 (`test_typing_union_explicit_registration_resolves_ambiguity`):
+Same change as site 3.
+
+Let me do these patches one at a time. I'll start with site 2 since it's simpler (just adding one line).
+
+Current candidate: 4f07b8306ae0303be8525cfa57729d69ff66fcfdcd752e4c6aab3897310bee6e
+File SHA: 3be05b725cc6d9bae84fceeadf554950220659db11d1aab540bc1dd011336174
+
+Let me patch site 2 first. The old text needs to be unique. Let me find a unique string.
+
+Looking at the test_typing_union_overlapping_unrelated_abcs method:
+```
+        BetaBase.register(Concrete)
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+```
+
+But this same pattern appears in test_pep604_overlapping_unrelated_abcs (site 1) too! Let me check...
+
+Site 1 now has:
+```
+        BetaBase.register(Concrete)
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertIs(type(ctx.exception), RuntimeError)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+```
+
+Site 2 has:
+```
+        BetaBase.register(Concrete)
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+```
+
+So the difference is that site 1 has `self.assertIs(type(ctx.exception), RuntimeError)` between `handler(c)` and `self.assertEqual`. 
+
+For site 2, I can use:
+```
+            handler(c)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+
+    def test_pep604_subclass_related_abcs(self):
+```
+
+This would be unique because site 1 has the `assertIs` line in between. Let me verify...
+
+Actually wait, let me look at the exact content again more carefully. The test methods in order are:
+1. `test_pep604_union_late_virtual_registration`
+2. `test_typing_union_late_virtual_registration`
+3. `test_pep604_overlapping_unrelated_abcs` (site 1 - DONE)
+4. `test_typing_union_overlapping_unrelated_abcs` (site 2 - needs assertIs)
+5. `test_pep604_subclass_related_abcs`
+6. `test_typing_union_subclass_related_abcs`
+7. `test_pep604_explicit_registration_resolves_ambiguity` (site 3 - needs assertIs + diagnostic)
+8. `test_typing_union_explicit_registration_resolves_ambiguity` (site 4 - needs assertIs + diagnostic)
+
+For site 2, the unique context would be including the method name or the preceding line. Let me use:
+
+```
+        BetaBase.register(Concrete)
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+
+    def test_pep604_subclass_related_abcs(self):
+```
+
+This is unique because site 1 has `self.assertIs` between `handler(c)` and `self.assertEqual`, and the next method after site 2 is `test_pep604_subclass_related_abcs`.
+
+For sites 3 and 4, they have:
+```
+        with self.assertRaises(RuntimeError):
+            handler(c)
+```
+
+These are in different methods. Let me check if the surrounding context makes them unique.
+
+Site 3 context:
+```
+        AlphaBase.register(Concrete)
+        BetaBase.register(Concrete)
+
+        with self.assertRaises(RuntimeError):
+            handler(c)
+
+        @handler.register(Concrete)
+```
+
+Site 4 context:
+```
+        AlphaBase.register(Concrete)
+        BetaBase.register(Concrete)
+
+        with self.assertRaises(RuntimeError):
+            handler(c)
+
+        @handler.register(Concrete)
+```
+
+These look identical! I need more context to distinguish them. Let me look at what comes before:
+
+Site 3 is in `test_pep604_explicit_registration_resolves_ambiguity`:
+```
+    def test_pep604_explicit_registration_resolves_ambiguity(self):
+        """Explicit registration of the concrete type overrides ambiguous MRO."""
+        ...
+        @handler.register(AlphaBase | BetaBase)
+```
+
+Site 4 is in `test_typing_union_explicit_registration_resolves_ambiguity`:
+```
+    def test_typing_union_explicit_registration_resolves_ambiguity(self):
+        """typing.Union: explicit registration resolves ambiguity."""
+        ...
+        @handler.register(typing.Union[AlphaBase, BetaBase])
+```
+
+So the full context including the method decoration is different. But for the patch, I need a unique `old` string. Let me use more context.
+
+For site 3:
+```
+        @handler.register(AlphaBase | BetaBase)
+        def union_handler(x):
+            return "union"
+
+        c = Concrete()
+        self.assertEqual(handler(c), "default")
+
+        AlphaBase.register(Concrete)
+        BetaBase.register(Concrete)
+
+        with self.assertRaises(RuntimeError):
+            handler(c)
+```
+
+This should be unique because site 4 uses `typing.Union[AlphaBase, BetaBase]` instead of `AlphaBase | BetaBase`.
+
+For site 4:
+```
+        @handler.register(typing.Union[AlphaBase, BetaBase])
+        def union_handler(x):
+            return "union"
+
+        c = Concrete()
+        self.assertEqual(handler(c), "default")
+
+        AlphaBase.register(Concrete)
+        BetaBase.register(Concrete)
+
+        with self.assertRaises(RuntimeError):
+            handler(c)
+```
+
+This should be unique.
+
+Let me do all three patches. I'll do them one at a time since each changes the candidate_id.
+
+Actually wait - I can only do one operation per reply. Let me start with site 2.
+
+Let me construct the patch for site 2:
+
+old:
+```
+            handler(c)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+
+    def test_pep604_subclass_related_abcs(self):
+```
+
+new:
+```
+            handler(c)
+        self.assertIs(type(ctx.exception), RuntimeError)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+
+    def test_pep604_subclass_related_abcs(self):
+```
+
+Wait, but I need to make sure this `old` string is unique in the file. Let me check: site 1 already has `self.assertIs(type(ctx.exception), RuntimeError)` before `self.assertEqual`, so the pattern `handler(c)\n        self.assertEqual(` only appears in site 2 (and potentially in sites 3/4 but those don't have `as ctx`).
+
+Actually in sites 3 and 4, the pattern is `handler(c)\n\n        @handler.register(Concrete)` which is different.
+
+So `handler(c)\n        self.assertEqual(\n            str(ctx.exception),\n            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",\n        )\n\n    def test_pep604_subclass_related_abcs(self):` should be unique - it only matches in site 2.
+
+Let me proceed with the patch.
