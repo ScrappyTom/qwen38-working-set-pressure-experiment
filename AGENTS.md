@@ -1,3 +1,19 @@
+# Qualified documentation correction; preserve original dispatch runs
+
+Read dispatch_continuity/documentation_continuation/PLAN.md and
+PREPARATION_REVIEW-001.md. The nested derived checker corrects the proved omitted
+namespace and protects seven actual non-document files; both original scores and
+bound sources stay exact. Actual entry keeps candidate2d4a20cf, eleven versions,
+32requests/51operations, unedited account/history/observations; releases initial
+source bodies. Absolute44/87 permits12newrequests/36ops, mediumuncapped/fixedruntime.
+Five CPU checks/44native forms/five scripted decisions/0completions qualify actual
+failure, exact doc acquisition, correction/pass/submission:6143initial/8940peak,
+302artifacts/1470sources/58custody, advisory315MiB, owned closure. Publish before
+one review-directed doc job; supplied review facts are declared assistance, no
+replacement/sourcegroup/live coaching/retry/extension/private-draft execution.
+Complete direct input/output/artifact/custody/prose review before diagnosis. Keep
+registered pass separate from prose truth, original scores and wider open ledger.
+
 # Closed dispatch loop; scoped documentation correction required
 
 Read dispatch_continuity/review/dynamic-001/RESULTS.md and documentation-probe.

@@ -1,3 +1,12 @@
+# Documentation correction ready for one declared run
+
+The two dispatch jobs are closed and reviewed. Code and regression work is correct;
+the saved standalone document remains incomplete after direct namespace/precedence
+probes. Read dispatch_continuity/documentation_continuation/PREPARATION_REVIEW-001.md.
+The corrected definition and actual saved entry are CPU/native qualified without
+completion requests. One review-directed doc-only run follows publication; prior
+code/tests and original scores remain exact. The wider workload programme stays open.
+
 # Workload requalification ledger
 
 Fresh dispatch work adds a real saved-work lineage. Union002 closes15requests/
