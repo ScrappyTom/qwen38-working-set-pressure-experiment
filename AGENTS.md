@@ -1,3 +1,22 @@
+# Closed fresh dispatch contribution; qualify actual later job
+
+Read dispatch_continuity/review/union-002/RESULTS.md and reading/artifact audits.
+Run002 under99e81bfc completes15requests/23ops, real failed check -> actor's
+union-recognition/delimiter corrections -> current pass -> checked submission.
+24original/8independent/5authored methods pass; same5 regressions failoriginal.
+398artifacts/459sources/354custody/25checkpoint replay and22nonterminalreceipt
+delivery pass. Preserve85.097modelminutes/86.476loopminutes,78,888generatedtokens,
+advisory122MiBmargin and unstable intermediate recalled premises. Accounts carry
+correction plan but finalprecheck note stays stale; no isolated account benefit.
+No host rejection/eviction, no naturalpressure or generalreliability claim.
+The fixed dynamic task remains next: exact checked firstwork, explicit source
+release, unchanged account/history, ordinary retrieval/newchecker/opportunity.
+Qualify and publish its actual entry before one uncoached24additional/72ops job;
+no coaching/referencegroup/retry/extension. Tailor only evaluator qualification
+to actual union-capable code; preserve firstsealed roots. Duplicate failure report
+and inheritedfault/original-checker wording remain prospective presentation
+findings, not changes to this frozen continuation. Wider ledger stays open.
+
 # Qualified fresh dispatch contribution and declared later question
 
 Read dispatch_continuity/PLAN.md and PREPARATION_REVIEW-002.md. Preparation002

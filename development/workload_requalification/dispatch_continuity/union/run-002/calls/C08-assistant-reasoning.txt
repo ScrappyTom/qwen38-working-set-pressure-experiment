@@ -1,0 +1,893 @@
+Let me analyze the current state:
+
+1. I've already made one edit to `Lib/functools.py` - adding `import types` after the `from _thread import RLock` line.
+2. The current candidate is `22acbd811e62b05c94d65c613c061dd402518668874b648026fbe2c6a883be7f`.
+3. I need to implement union registration support in the `singledispatch` function.
+
+Looking at the current code, the `register` function in `singledispatch` currently:
+- Handles explicit `register(cls, func)` 
+- Handles decorator form `register(cls)` returning a lambda
+- Handles annotation-based registration via `@register` on an annotated function
+- Stores `registry[cls] = func`
+
+For union support, I need to:
+1. Detect if `cls` is a union type (either `typing.Union` or the `|` form which creates `types.UnionType`)
+2. If it's a union, register the handler for each member type in the union
+3. Reject parameterized generics (like `List[int]`) in unions
+4. The `register` should still return the func consistently
+
+Let me think about what changes are needed:
+
+For `typing.Union[A, B]`, the type is `typing.Union` and `cls.__args__` gives `(A, B)`.
+For `A | B` (Python 3.10+), the type is `types.UnionType` (actually it's `types.UnionType` which is checked via `isinstance(cls, types.UnionType)`).
+
+Wait, let me reconsider. In Python 3.10+:
+- `A | B` creates a `types.UnionType` instance
+- `typing.Union[A, B]` creates a `typing.Union` type
+
+To check if something is a union:
+- `typing.Union[A, B]` - can check with `typing.get_origin(cls) is typing.Union` or `isinstance(cls, type) and cls.__origin__ is type`... Actually the standard way is:
+  - For `typing.Union[A, B]`: `typing.get_origin(x) is typing.Union`
+  - For `A | B`: `isinstance(x, types.UnionType)`
+
+Actually, a simpler unified check: `typing.get_origin(x) is typing.Union` works for both in Python 3.10+, because `A | B` is also recognized. Wait, no. Let me think again.
+
+In Python 3.10+:
+- `typing.get_origin(int | str)` returns `None`... no wait, actually it does NOT. Let me think more carefully.
+
+Actually:
+- `typing.get_origin(typing.Union[int, str])` returns `None` in older Python, but in 3.10+ it returns... hmm.
+
+Let me think about this differently. The standard approach in CPython's own implementation (which this is backporting):
+
+Looking at the actual CPython commit that added this (bpo-43123 / GH-83635), the approach was:
+
+```python
+def _is_union(typ):
+    """Check if *typ* is a union type."""
+    from typing import Union
+    return (
+        getattr(typ, '__origin__', None) is Union
+        or isinstance(typ, types.UnionType)
+    )
+```
+
+Wait, actually `typing.Union[A, B]` has `__origin__` set to `type` (the metaclass), not to `typing.Union`. Let me reconsider.
+
+Actually in Python:
+- `typing.Union[int, str].__origin__` is `type` (the metaclass of `type`)... no, that's not right either.
+
+Let me think about this more carefully:
+- `typing.Union[int, str]` - this is an instance of `typing._UnionGenericAlias`. `getattr(typing.Union[int, str], '__origin__', None)` returns `type` in Python 3.7+. Wait no, I think it's actually...
+
+OK let me just think about what the CPython implementation does. Looking at the actual upstream patch for this feature (https://github.com/python/cpython/pull/83635 or similar):
+
+The check is:
+```python
+def _is_union(typ):
+    from typing import Union
+    # Check for typing.Union
+    if getattr(typ, '__origin__', None) is Union:
+        return True
+    # Check for types.UnionType (X | Y syntax)
+    if isinstance(typ, types.UnionType):
+        return True
+    return False
+```
+
+Wait, I need to verify: does `typing.Union[int, str].__origin__` equal `typing.Union`? Let me think...
+
+In CPython:
+- `typing.Union[int, str]` creates a `typing.Union[...]` object
+- Its `__origin__` attribute... In Python 3.7+, `typing.Union[int, str].__origin__` is actually `type` (the metaclass). No wait...
+
+Actually, I recall now: In Python 3.10+, `typing.Union[int, str]` is actually equivalent to `int | str` at the typing level, but the object creation differs.
+
+Let me look at what actually works:
+- `typing.get_origin(typing.Union[int, str])` - In Python 3.10+, this returns `None` because `Union` is special. Wait no, I think it does return something.
+
+OK, I think the safest approach that matches the upstream implementation is:
+
+```python
+def _is_union(typ):
+    from typing import Union
+    # typing.Union[X, Y] has __origin__ == type (the metaclass)
+    # Actually no...
+```
+
+Let me look at this from a different angle. The actual CPython source for this feature:
+
+From the CPython commit (bpo-43123), the relevant code in `functools.py`:
+
+```python
+def _is_union(cls):
+    from typing import Union
+    # cls could be a typing.Union or types.UnionType (X | Y)
+    if isinstance(cls, type) and issubclass(cls, type):
+        return False  # it's actually a class, not a union
+    # Check if it's typing.Union
+    if getattr(cls, '__origin__', None) is Union:
+        return True
+    # Check if it's types.UnionType (X | Y)
+    if isinstance(cls, types.UnionType):
+        return True
+    return False
+```
+
+Hmm, actually I recall that the check for `typing.Union` is different. Let me think about what `typing.Union[int, str]` actually is:
+
+In CPython 3.10+:
+- `typing.Union[int, str]` creates an object of type `typing.Union` (which is a special form)
+- Actually no, in 3.10+, `typing.Union[int, str]` is literally `int | str`, which is a `types.UnionType`
+
+Wait, I think in Python 3.10+, `typing.Union[int, str]` IS `int | str` (they're the same object). So `isinstance(typing.Union[int, str], types.UnionType)` should be True.
+
+But for older Python versions (3.7-3.9), `typing.Union[int, str]` creates a different object. However, since we're looking at the current codebase which already has `import types` and `from types import GenericAlias`, this is likely Python 3.10+ code.
+
+Let me look at what's available. The file already imports `types` (which I just added). And `types.UnionType` is available in Python 3.10+.
+
+Actually, looking more carefully at the CPython source for this feature, I believe the correct approach is:
+
+```python
+def _is_union(cls):
+    from typing import Union
+    # Check for typing.Union[X, Y]
+    if getattr(cls, '__origin__', None) is Union:
+        return True
+    # Check for X | Y (types.UnionType in 3.10+)
+    if isinstance(cls, types.UnionType):
+        return True
+    return False
+```
+
+And to get the arguments:
+```python
+def _get_union_args(cls):
+    # typing.Union[X, Y] has __args__
+    # X | Y also has __args__
+    return cls.__args__
+```
+
+Both `typing.Union[int, str]` and `int | str` have `__args__` attribute.
+
+Now, for the register function, I need to modify it to:
+1. Check if `cls` is a union
+2. If so, iterate over the union members and register each one
+3. Reject parameterized generics (like `List[int]`, `dict[str, int]`, etc.)
+
+For detecting parameterized generics:
+- `typing.List[int]` has `__origin__` = `list`
+- `list[int]` has `__origin__` = `list`
+- `dict[str, int]` has `__origin__` = `dict`
+- A parameterized generic is detected by checking if `cls` has `__origin__` and `__origin__` is a class (but not `type` for unions)
+
+Actually, the rejection criterion is: "Reject annotations or explicit unions containing a parameterized generic rather than a runtime class". So if a union member is a parameterized generic (like `List[int]`), we should reject it.
+
+How to check if something is a parameterized generic:
+- It has `__origin__` attribute
+- `__origin__` is a class (not `type`)
+- It's not a union
+
+Actually, simpler: a parameterized generic is something like `typing.List[int]` or `list[int]` - it has `__origin__` set to a class. A "runtime class" is just a plain class like `int`, `str`, `MyClass`.
+
+The check would be:
+```python
+def _is_parameterized_generic(cls):
+    # A parameterized generic has __origin__ that is a class
+    origin = getattr(cls, '__origin__', None)
+    if origin is not None and isinstance(origin, type):
+        return True
+    return False
+```
+
+Wait, but for `typing.Union[int, str]`, `__origin__` is `type` (the metaclass), which IS an instance of `type`. So I need to be careful.
+
+Actually, let me reconsider. In Python 3.10+:
+- `int | str` is `types.UnionType`, `isinstance(int|str, types.UnionType)` is True
+- `typing.Union[int, str]` is... let me check. Actually in 3.10+, `typing.Union[int, str]` IS `int | str` (they produce the same object). So both would pass `isinstance(x, types.UnionType)`.
+
+For a parameterized generic like `list[int]`:
+- `isinstance(list[int], types.UnionType)` is False
+- `getattr(list[int], '__origin__', None)` is `list`
+- `isinstance(list, type)` is True
+
+For a plain class like `int`:
+- `getattr(int, '__origin__', None)` is None
+- `isinstance(int, types.UnionType)` is False
+
+So the check for "is a valid runtime class" (not a parameterized generic) would be:
+- It's an instance of `type` (i.e., `isinstance(x, type)`) AND not a union
+- OR it's a union (which we handle separately)
+
+Actually, I think the simplest approach matching upstream is:
+
+In the register function, after determining `cls` (the type to register):
+1. If `_is_union(cls)`:
+   - Get the args via `cls.__args__`
+   - For each arg, check it's a valid class (not a parameterized generic)
+   - Register func for each arg
+2. Otherwise, register normally
+
+And for the "reject parameterized generic" part:
+- In the annotation path, if `cls` (from type hints) is a parameterized generic, raise TypeError
+- In the union path, if any member is a parameterized generic, raise TypeError
+
+Let me now look at what the upstream implementation actually does. The key insight is that this is a backport of a known CPython feature. Let me reconstruct the implementation:
+
+```python
+def _is_union(cls):
+    from typing import Union
+    # Check for typing.Union[X, Y]  
+    if getattr(cls, '__origin__', None) is Union:
+        return True
+    # Check for X | Y (types.UnionType in 3.10+)
+    if isinstance(cls, types.UnionType):
+        return True
+    return False
+```
+
+Wait, I need to double-check: does `typing.Union[int, str]` have `__origin__` set to `typing.Union`?
+
+In CPython source (3.10+), `typing.Union[int, str]`:
+- This calls `Union[int, str]` which is `__class_getitem__` on the `Union` special form
+- In 3.10+, this actually returns `int | str` (a `types.UnionType` instance)
+
+Hmm, but what about in 3.9 where `|` syntax isn't available? In 3.9, `typing.Union[int, str]` creates a `typing._GenericAlias` with `__origin__` = `type`.
+
+But looking at the code we have, it already uses `from types import GenericAlias` and `__class_getitem__ = classmethod(GenericAlias)`, which suggests Python 3.9+ features. And `types.UnionType` was added in 3.10.
+
+Given that the code already has `import types` (which I added), and the task says to support both `typing.Union` and `|` form, I'll assume Python 3.10+ where both forms produce `types.UnionType` instances.
+
+Actually wait - in Python 3.10+:
+- `int | str` → `types.UnionType` instance
+- `typing.Union[int, str]` → Also a `types.UnionType` instance (they're unified)
+
+So `isinstance(cls, types.UnionType)` should catch both!
+
+Let me verify: In CPython 3.10, `typing.Union[int, str]` is implemented as `int | str`. Yes, that's correct.
+
+So the check is simply:
+```python
+isinstance(cls, types.UnionType)
+```
+
+And to get members: `cls.__args__`
+
+Now, for detecting parameterized generics in union members:
+- `list[int]` is a `types.GenericAlias` (in 3.10+) or `typing._GenericAlias`
+- `int` is just `int` (a class)
+- Check: `isinstance(member, type)` - True for `int`, False for `list[int]`
+
+Wait, `isinstance(list[int], type)` - is this True or False? `list[int]` is an instance of `types.GenericAlias`, not of `type`. So `isinstance(list[int], type)` is False. Good.
+
+And `isinstance(int, type)` is True. Good.
+
+So the validation for union members is: `isinstance(member, type)`.
+
+Now let me write the implementation. I'll modify the `register` function:
+
+```python
+def register(cls, func=None):
+    """generic_func.register(cls, func) -> func
+
+    Registers a new implementation for the given *cls* on a *generic_func*.
+
+    """
+    nonlocal cache_token
+    if func is None:
+        if isinstance(cls, type):
+            return lambda f: register(cls, f)
+        ann = getattr(cls, '__annotations__', {})
+        if not ann:
+            raise TypeError(
+                f"Invalid first argument to `register()`: {cls!r}. "
+                f"Use either `@register(some_class)` or plain `@register` "
+                f"on an annotated function."
+            )
+        func = cls
+
+        # only import typing if annotation parsing is necessary
+        from typing import get_type_hints
+        argname, cls = next(iter(get_type_hints(func).items()))
+        if not _is_union(cls):
+            if not isinstance(cls, type):
+                raise TypeError(
+                    f"Invalid annotation for {argname!r}. "
+                    f"{cls!r} is not a class."
+                )
+    # Register
+    if _is_union(cls):
+        for t in cls.__args__:
+            if not isinstance(t, type):
+                raise TypeError(
+                    f"Invalid union member: {t!r}. "
+                    f"Union members must be runtime classes, not parameterized generics."
+                )
+            registry[t] = func
+    else:
+        registry[cls] = func
+    if cache_token is None and hasattr(cls, '__abstractmethods__'):
+        cache_token = get_cache_token()
+    dispatch_cache.clear()
+    return func
+```
+
+Wait, but there's a subtlety. When `func` is provided (the `register(cls, func)` form), we skip the annotation parsing. When `cls` is a union and `func` is provided directly, we just register. When `cls` is a class and `func` is None, we return the decorator. When `cls` is a function (with annotations), we parse annotations.
+
+Let me re-examine the flow:
+1. `register(cls, func)` - explicit: cls is a type/union, func is the handler
+2. `@register(cls)` - decorator: cls is a type/union, returns decorator
+3. `@register` on annotated func - cls is the function, parse annotations
+
+For case 1: `func` is not None, so we go to registration directly.
+For case 2: `func` is None, `isinstance(cls, type)` is True → return decorator lambda.
+   But wait! If `cls` is a union (types.UnionType), `isinstance(cls, type)` is False! So it would fall through to the annotation check. That's a problem.
+
+I need to handle the union case in the `func is None` path too:
+```python
+if func is None:
+    if isinstance(cls, type) or _is_union(cls):
+        return lambda f: register(cls, f)
+    # ... annotation path
+```
+
+Actually wait, for `@register(int | str)`, `cls` would be `int | str` which is a `types.UnionType` instance. `isinstance(int | str, type)` is False. So I need to add the union check.
+
+But then in the decorator form, `register(int | str)` returns `lambda f: register(int | str, f)`, and when called with a function, `register(int | str, f)` is called with `cls=int|str` and `func=f`. In that call, `func` is not None, so it goes to registration.
+
+For the annotation path: if someone does:
+```python
+@register
+def handler(x: int | str):
+    ...
+```
+Then `cls` is the function, we get annotations, and `cls` becomes `int | str`. Then we need to register it as a union.
+
+Let me also consider: what about `typing.Union[int, str]` in the annotation? `get_type_hints` would resolve it. In Python 3.10+, `get_type_hints` would return `int | str` for the annotation `int | str`, or `typing.Union[int, str]` for `Union[int, str]`. But since in 3.10+ both are `types.UnionType`, it should be fine.
+
+Now, one more consideration: the `_is_union` helper. Since we're using `types.UnionType`, I need to make sure it's available. In Python 3.10+, `types.UnionType` is available. The file already has `import types` (which I added).
+
+But wait - should I define `_is_union` as a module-level function or inside `singledispatch`? Looking at the structure, it could be either. Since it only uses `types.UnionType` (already imported) and doesn't need closure variables, module-level makes sense. But to keep the diff minimal and match the upstream style, let me put it inside `singledispatch` or as a module-level helper.
+
+Actually, looking at the upstream implementation more carefully, I think the cleanest approach is:
+
+1. Add a module-level `_is_union` helper (or inline the check)
+2. Modify `register` to handle unions
+
+Let me also think about what "parameterized generic" means for rejection. The task says:
+"Reject annotations or explicit unions containing a parameterized generic rather than a runtime class without partially changing the registry."
+
+So:
+- `register(list[int], func)` should be rejected (not a runtime class, not a union)
+- `register(int | list[str], func)` should be rejected (union containing a parameterized generic)
+- `register(int | str, func)` should work
+
+For the first case (`register(list[int], func)` where `func` is provided):
+- `cls = list[int]`, `func` is not None
+- It's not a union, so we go to `registry[cls] = func`
+- But `list[int]` is not a class! `isinstance(list[int], type)` is False
+- Actually, in the current code, there's no check for this in the direct registration path. The current code just does `registry[cls] = func` regardless.
+- But the task says to reject it. So I need to add validation.
+
+Wait, let me re-read the task: "Reject annotations or explicit unions containing a parameterized generic rather than a runtime class without partially changing the registry."
+
+This means:
+1. In the annotation path: if the resolved type hint is a parameterized generic (not a class, not a union), reject it.
+2. In explicit union registration: if any member of the union is a parameterized generic, reject the entire registration.
+3. "without partially changing the registry" means we should validate ALL members before registering any.
+
+For the explicit non-union, non-class case (like `register(list[int], func)`):
+- The current code doesn't reject this
+- The task says "Reject annotations or explicit unions containing a parameterized generic" - this seems to specifically target the annotation path and the union path
+- For direct `register(list[int], func)`, this is outside the scope of the union feature
+
+Actually wait, re-reading: "Reject annotations or explicit unions containing a parameterized generic rather than a runtime class". I think this means:
+- In annotations: reject if the annotation is a parameterized generic
+- In explicit unions: reject if any member is a parameterized generic
+
+For direct registration of a non-class, non-union type, the existing behavior is preserved (it just gets stored in the registry).
+
+Hmm, but actually the existing code already has a check in the annotation path:
+```python
+if not isinstance(cls, type):
+    raise TypeError(...)
+```
+
+This would already reject `list[int]` in the annotation path since `isinstance(list[int], type)` is False. But it would also reject a union! So I need to modify this check to allow unions:
+
+```python
+if not _is_union(cls) and not isinstance(cls, type):
+    raise TypeError(...)
+```
+
+And for the union path, I need to check each member is a valid class:
+```python
+if _is_union(cls):
+    for member in cls.__args__:
+        if not isinstance(member, type):
+            raise TypeError(...)
+```
+
+OK, let me now write the actual code. I'll need to:
+
+1. Define `_is_union` (module-level, before `singledispatch`)
+2. Modify the `register` function inside `singledispatch`
+
+Let me look at the current `register` function in the source:
+
+```python
+    def register(cls, func=None):
+        """generic_func.register(cls, func) -> func
+
+        Registers a new implementation for the given *cls* on a *generic_func*.
+
+        """
+        nonlocal cache_token
+        if func is None:
+            if isinstance(cls, type):
+                return lambda f: register(cls, f)
+            ann = getattr(cls, '__annotations__', {})
+            if not ann:
+                raise TypeError(
+                    f"Invalid first argument to `register()`: {cls!r}. "
+                    f"Use either `@register(some_class)` or plain `@register` "
+                    f"on an annotated function."
+                )
+            func = cls
+
+            # only import typing if annotation parsing is necessary
+            from typing import get_type_hints
+            argname, cls = next(iter(get_type_hints(func).items()))
+            if not isinstance(cls, type):
+                raise TypeError(
+                    f"Invalid annotation for {argname!r}. "
+                    f"{cls!r} is not a class."
+                )
+        registry[cls] = func
+        if cache_token is None and hasattr(cls, '__abstractmethods__'):
+            cache_token = get_cache_token()
+        dispatch_cache.clear()
+        return func
+```
+
+My modified version:
+
+```python
+    def register(cls, func=None):
+        """generic_func.register(cls, func) -> func
+
+        Registers a new implementation for the given *cls* on a *generic_func*.
+
+        """
+        nonlocal cache_token
+        if func is None:
+            if isinstance(cls, type) or _is_union(cls):
+                return lambda f: register(cls, f)
+            ann = getattr(cls, '__annotations__', {})
+            if not ann:
+                raise TypeError(
+                    f"Invalid first argument to `register()`: {cls!r}. "
+                    f"Use either `@register(some_class)` or plain `@register` "
+                    f"on an annotated function."
+                )
+            func = cls
+
+            # only import typing if annotation parsing is necessary
+            from typing import get_type_hints
+            argname, cls = next(iter(get_type_hints(func).items()))
+            if _is_union(cls):
+                for member in cls.__args__:
+                    if not isinstance(member, type):
+                        raise TypeError(
+                            f"Invalid union member for {argname!r}: "
+                            f"{member!r} is not a runtime class."
+                        )
+            elif not isinstance(cls, type):
+                raise TypeError(
+                    f"Invalid annotation for {argname!r}. "
+                    f"{cls!r} is not a class."
+                )
+        else:
+            if _is_union(cls):
+                for member in cls.__args__:
+                    if not isinstance(member, type):
+                        raise TypeError(
+                            f"Invalid union member: "
+                            f"{member!r} is not a runtime class."
+                        )
+        if _is_union(cls):
+            for member in cls.__args__:
+                registry[member] = func
+        else:
+            registry[cls] = func
+        if cache_token is None and hasattr(cls, '__abstractmethods__'):
+            cache_token = get_cache_token()
+        dispatch_cache.clear()
+        return func
+```
+
+And the `_is_union` helper:
+```python
+def _is_union(cls):
+    return isinstance(cls, types.UnionType)
+```
+
+Wait, but I also need to handle `typing.Union`. In Python 3.10+, `typing.Union[int, str]` IS `int | str`, so `isinstance(cls, types.UnionType)` catches it. But what if someone has a Python version where they're different? Since the code already uses `types.UnionType` (via `from types import GenericAlias` which is 3.9+), and `types.UnionType` is 3.10+, I'll assume 3.10+ where both forms are unified.
+
+Actually, let me double-check: in Python 3.10, is `typing.Union[int, str]` actually `int | str`? Yes! From the 3.10 changelog: "typing.Union is now an alias for the | operator." They produce the same `types.UnionType` object.
+
+So `isinstance(cls, types.UnionType)` is sufficient.
+
+But wait, what about `typing.Union` in older Python (3.7-3.9)? The `__origin__` would be `type`. But since we're working with a codebase that already uses 3.10+ features (`GenericAlias` from `types`), I'll go with the 3.10+ assumption.
+
+Now, for the `cache_token` line: `hasattr(cls, '__abstractmethods__')` - for a union, this would be False (unions don't have `__abstractmethods__`), so it would skip the cache token update. But we still call `dispatch_cache.clear()`. That seems fine.
+
+Actually wait, for the union case with `cache_token`:
+```python
+if cache_token is None and hasattr(cls, '__abstractmethods__'):
+    cache_token = get_cache_token()
+```
+If `cls` is a union, `hasattr(cls, '__abstractmethods__')` is False, so this line is skipped. That's fine - we just clear the dispatch cache.
+
+Now let me plan my edits:
+
+1. Add `_is_union` function before `singledispatch` (or right after the `_find_impl` function, before `singledispatch`)
+2. Modify the `register` function
+
+Let me find the exact text to patch. Looking at the source:
+
+After `_find_impl` ends and before `def singledispatch(func):`, I'll add `_is_union`.
+
+The current text around there:
+```
+    return registry.get(match)
+
+def singledispatch(func):
+```
+
+I'll insert `_is_union` between them.
+
+Then I need to modify the `register` function. Let me identify the exact old text.
+
+Actually, let me be more careful about the patch. The `old` text must be unique in the file. Let me identify good anchors.
+
+For adding `_is_union`:
+```
+    return registry.get(match)
+
+def singledispatch(func):
+```
+This should be unique.
+
+New text:
+```
+    return registry.get(match)
+
+def _is_union(cls):
+    return isinstance(cls, types.UnionType)
+
+def singledispatch(func):
+```
+
+For modifying `register`, the old text is:
+```
+    def register(cls, func=None):
+        """generic_func.register(cls, func) -> func
+
+        Registers a new implementation for the given *cls* on a *generic_func*.
+
+        """
+        nonlocal cache_token
+        if func is None:
+            if isinstance(cls, type):
+                return lambda f: register(cls, f)
+            ann = getattr(cls, '__annotations__', {})
+            if not ann:
+                raise TypeError(
+                    f"Invalid first argument to `register()`: {cls!r}. "
+                    f"Use either `@register(some_class)` or plain `@register` "
+                    f"on an annotated function."
+                )
+            func = cls
+
+            # only import typing if annotation parsing is necessary
+            from typing import get_type_hints
+            argname, cls = next(iter(get_type_hints(func).items()))
+            if not isinstance(cls, type):
+                raise TypeError(
+                    f"Invalid annotation for {argname!r}. "
+                    f"{cls!r} is not a class."
+                )
+        registry[cls] = func
+        if cache_token is None and hasattr(cls, '__abstractmethods__'):
+            cache_token = get_cache_token()
+        dispatch_cache.clear()
+        return func
+```
+
+Let me write the new version:
+```
+    def register(cls, func=None):
+        """generic_func.register(cls, func) -> func
+
+        Registers a new implementation for the given *cls* on a *generic_func*.
+
+        """
+        nonlocal cache_token
+        if func is None:
+            if isinstance(cls, type) or _is_union(cls):
+                return lambda f: register(cls, f)
+            ann = getattr(cls, '__annotations__', {})
+            if not ann:
+                raise TypeError(
+                    f"Invalid first argument to `register()`: {cls!r}. "
+                    f"Use either `@register(some_class)` or plain `@register` "
+                    f"on an annotated function."
+                )
+            func = cls
+
+            # only import typing if annotation parsing is necessary
+            from typing import get_type_hints
+            argname, cls = next(iter(get_type_hints(func).items()))
+            if _is_union(cls):
+                for member in cls.__args__:
+                    if not isinstance(member, type):
+                        raise TypeError(
+                            f"Invalid union member for {argname!r}: "
+                            f"{member!r} is not a runtime class."
+                        )
+            elif not isinstance(cls, type):
+                raise TypeError(
+                    f"Invalid annotation for {argname!r}. "
+                    f"{cls!r} is not a class."
+                )
+        elif _is_union(cls):
+            for member in cls.__args__:
+                if not isinstance(member, type):
+                    raise TypeError(
+                        f"Invalid union member: "
+                        f"{member!r} is not a runtime class."
+                    )
+        if _is_union(cls):
+            for member in cls.__args__:
+                registry[member] = func
+        else:
+            registry[cls] = func
+        if cache_token is None and hasattr(cls, '__abstractmethods__'):
+            cache_token = get_cache_token()
+        dispatch_cache.clear()
+        return func
+```
+
+Now I need to write the tests. The test file currently has:
+```python
+import functools
+import unittest
+
+
+# Add regression TestCase classes here.
+```
+
+I need at least 3 executable test methods. Let me write meaningful tests:
+
+1. Test explicit register with `typing.Union`
+2. Test `|` syntax registration
+3. Test decorator form with union
+4. Test annotation-based registration with union
+5. Test rejection of parameterized generic in union
+6. Test that individual classes still dispatch correctly after union registration
+
+Let me write the test file:
+
+```python
+import functools
+import unittest
+from typing import Union
+
+
+class A:
+    pass
+
+class B:
+    pass
+
+class C:
+    pass
+
+
+def make_func():
+    @functools.singledispatch
+    def func(x):
+        return 'default'
+    return func
+
+
+class TestUnionRegistration(unittest.TestCase):
+
+    def test_explicit_register_typing_union(self):
+        """register(typing.Union[A, B], handler) registers for both A and B."""
+        func = make_func()
+        func.register(Union[A, B], lambda x: 'ab')
+        a = A()
+        b = B()
+        self.assertEqual(func(a), 'ab')
+        self.assertEqual(func(b), 'ab')
+        # Other types still use default
+        c = C()
+        self.assertEqual(func(c), 'default')
+        # Registry contains A and B but not the union itself
+        self.assertIn(A, func.registry)
+        self.assertIn(B, func.registry)
+
+    def test_explicit_register_pipe_union(self):
+        """register(A | B, handler) registers for both A and B."""
+        func = make_func()
+        func.register(A | B, lambda x: 'ab')
+        self.assertEqual(func(A()), 'ab')
+        self.assertEqual(func(B()), 'ab')
+        self.assertIn(A, func.registry)
+        self.assertIn(B, func.registry)
+
+    def test_decorator_register_union(self):
+        """@register(Union[A, B]) works as a decorator."""
+        func = make_func()
+
+        @func.register(Union[A, B])
+        def handler(x):
+            return 'decorated'
+
+        self.assertEqual(func(A()), 'decorated')
+        self.assertEqual(func(B()), 'decorated')
+
+    def test_annotation_register_union(self):
+        """@register on annotated function with union annotation."""
+        func = make_func()
+
+        @func.register
+        def handler(x: Union[A, B]):
+            return 'annotated'
+
+        self.assertEqual(func(A()), 'annotated')
+        self.assertEqual(func(B()), 'annotated')
+
+    def test_pipe_annotation_register_union(self):
+        """@register on annotated function with pipe union annotation."""
+        func = make_func()
+
+        @func.register
+        def handler(x: 'A | B'):
+            return 'pipe_annotated'
+
+        self.assertEqual(func(A()), 'pipe_annotated')
+        self.assertEqual(func(B()), 'pipe_annotated')
+
+    def test_reject_parameterized_generic_in_union(self):
+        """Union containing a parameterized generic is rejected."""
+        from typing import List
+        func = make_func()
+        with self.assertRaises(TypeError):
+            func.register(Union[A, List[int]], lambda x: 'x')
+
+    def test_ordinary_registration_still_works(self):
+        """Normal single-class registration is unaffected."""
+        func = make_func()
+        func.register(A, lambda x: 'a')
+        self.assertEqual(func(A()), 'a')
+        self.assertEqual(func(B()), 'default')
+        self.assertIn(A, func.registry)
+
+
+if __name__ == '__main__':
+    unittest.main()
+```
+
+Wait, the `test_pipe_annotation_register_union` test uses a string annotation `'A | B'`. When `get_type_hints` resolves it, it needs to be able to find `A` and `B` in the namespace. Since they're module-level, this should work. Actually, `get_type_hints` uses the function's `__globals__`, so it should find `A` and `B`. But wait, `handler` is defined inside the test method, so its `__globals__` is the test module's globals, which includes `A` and `B`. Good.
+
+Actually, I need to be careful. The `handler` function is defined inside the method. Its `__globals__` will be the module's `__globals__`, which includes `A`, `B`, `C`, etc. So `get_type_hints(handler)` should resolve `A | B` correctly.
+
+But wait - will the string annotation `'A | B'` be evaluated? `get_type_hints` evaluates string annotations. So `'A | B'` would be evaluated as `A | B` in the function's global namespace. Since `A` and `B` are module-level, this should work.
+
+Let me also think about whether the tests "expose the original missing feature". The task says the check verifies "whether those regressions expose the original missing feature." This means the tests should FAIL on the original (unmodified) code and PASS on the modified code. Since the original code doesn't handle unions, registering a union would either:
+- Store the union object in the registry (which wouldn't match any type during dispatch)
+- Or fail in some way
+
+So the tests would fail on the original code because `func(A())` would return 'default' instead of 'ab' (since the union object in the registry doesn't match `A` or `B`). Good, the tests expose the missing feature.
+
+Let me also make sure the tests are correct. Actually, for the `test_explicit_register_typing_union` test, on the original code:
+- `func.register(Union[A, B], lambda x: 'ab')` would call `register` with `cls=Union[A,B]` and `func=lambda...`
+- `func` is not None, so it skips the `if func is None` block
+- `registry[cls] = func` → `registry[Union[A,B]] = lambda...`
+- Then `func(A())` → `dispatch(A)` → `A` not in registry → `_find_impl(A, registry)` → walks MRO of A → finds `object` in registry → returns default
+- So `func(A())` returns 'default', not 'ab' → test fails ✓
+
+Good.
+
+Now let me also think about edge cases in my implementation:
+
+1. What if someone does `register(A, B)` where both A and B are classes? That's just registering B as the handler for A. The `func` parameter is the handler. This is the normal case and my code handles it correctly (it goes to `registry[cls] = func`).
+
+2. What about `register(Union[A, B], Union[C, D])`? That would register `Union[C,D]` as the handler for both A and B. The `func` parameter would be `Union[C,D]` which is a callable? No, `types.UnionType` is not callable. But that's the user's error - we don't need to validate that `func` is callable. The original code doesn't validate it either.
+
+3. What about nested unions like `Union[A, Union[B, C]]`? In Python 3.10+, `Union[A, Union[B, C]]` is flattened to `A | B | C` automatically, so `__args__` would be `(A, B, C)`. No special handling needed.
+
+OK, I think my implementation is solid. Let me now execute the patches.
+
+I'll do two patches:
+1. Add `_is_union` before `singledispatch`
+2. Replace the `register` function
+
+Then I'll replace the test file.
+
+Actually, I realize I should be careful about the `from typing import Union` in my test. In Python 3.10+, `typing.Union` is still available for backward compatibility, but `A | B` is preferred. Let me use both forms in tests to cover both paths.
+
+Also, I should make sure the test file preserves `import functools` and `import unittest` at the top.
+
+Let me proceed with the patches. I'll do them one at a time to be safe.
+
+First patch: Add `_is_union` helper.
+
+The old text (must be unique):
+```
+    return registry.get(match)
+
+def singledispatch(func):
+```
+
+The new text:
+```
+    return registry.get(match)
+
+def _is_union(cls):
+    return isinstance(cls, types.UnionType)
+
+def singledispatch(func):
+```
+
+Second patch: Replace the register function.
+
+Let me identify the exact old text. I need to be very precise about whitespace.
+
+Looking at the source, the register function starts at the `    def register(cls, func=None):` line and ends at `        return func` followed by a blank line and then `    def wrapper(*args, **kw):`.
+
+Actually, let me just replace from `    def register(cls, func=None):` through `        return func` (the last line of the register function). The text after that is `\n    def wrapper(*args, **kw):`.
+
+Let me be precise. The old text for the second patch:
+
+```
+    def register(cls, func=None):
+        """generic_func.register(cls, func) -> func
+
+        Registers a new implementation for the given *cls* on a *generic_func*.
+
+        """
+        nonlocal cache_token
+        if func is None:
+            if isinstance(cls, type):
+                return lambda f: register(cls, f)
+            ann = getattr(cls, '__annotations__', {})
+            if not ann:
+                raise TypeError(
+                    f"Invalid first argument to `register()`: {cls!r}. "
+                    f"Use either `@register(some_class)` or plain `@register` "
+                    f"on an annotated function."
+                )
+            func = cls
+
+            # only import typing if annotation parsing is necessary
+            from typing import get_type_hints
+            argname, cls = next(iter(get_type_hints(func).items()))
+            if not isinstance(cls, type):
+                raise TypeError(
+                    f"Invalid annotation for {argname!r}. "
+                    f"{cls!r} is not a class."
+                )
+        registry[cls] = func
+        if cache_token is None and hasattr(cls, '__abstractmethods__'):
+            cache_token = get_cache_token()
+        dispatch_cache.clear()
+        return func
+```
+
+This should be unique in the file. Let me verify - the only other place with `return func` pattern... actually there's `return func` at the end of `register` and also in `_unwrap_partial`. But the full block with the docstring is unique.
+
+Let me now execute the first patch.

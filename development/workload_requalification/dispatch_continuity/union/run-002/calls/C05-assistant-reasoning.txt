@@ -1,0 +1,789 @@
+Let me analyze the task:
+
+1. I need to add support for registering unions of runtime classes in `Lib/functools.py`'s singledispatch implementation.
+2. Support both `typing.Union` and the `|` form.
+3. Support explicit `register(type, function)`, `register(type)` decorator, and inferred argument annotations.
+4. Dispatch each member to the supplied handler.
+5. The register return value and registry behavior should remain consistent with ordinary class registration.
+6. Reject annotations or explicit unions containing a parameterized generic rather than a runtime class without partially changing the registry.
+7. Preserve ordinary registration, inheritance, abstract-base dispatch, caching and singledispatchmethod behavior.
+8. Create `tests/test_union_registration.py` with at least 3 executable test methods.
+9. Use the supplied implementation as functools under the documented checker harness.
+10. Preserve the original upstream tests and documentation and the empty later-work files.
+11. Modify only `Lib/functools.py` and `tests/test_union_registration.py`.
+
+I've already read the entire `Lib/functools.py` file (981 lines). Now I need to understand the current implementation of `register` in the `singledispatch` function and modify it to support union types.
+
+Looking at the current `register` function in `singledispatch`:
+
+```python
+def register(cls, func=None):
+    """generic_func.register(cls, func) -> func
+
+    Registers a new implementation for the given *cls* on a *generic_func*.
+
+    """
+    nonlocal cache_token
+    if func is None:
+        if isinstance(cls, type):
+            return lambda f: register(cls, f)
+        ann = getattr(cls, '__annotations__', {})
+        if not ann:
+            raise TypeError(
+                f"Invalid first argument to `register()`: {cls!r}. "
+                f"Use either `@register(some_class)` or plain `@register` "
+                f"on an annotated function."
+            )
+        func = cls
+
+        # only import typing if annotation parsing is necessary
+        from typing import get_type_hints
+        argname, cls = next(iter(get_type_hints(func).items()))
+        if not isinstance(cls, type):
+            raise TypeError(
+                f"Invalid annotation for {argname!r}. "
+                f"{cls!r} is not a class."
+            )
+    registry[cls] = func
+    if cache_token is None and hasattr(cls, '__abstractmethods__'):
+        cache_token = get_cache_token()
+    dispatch_cache.clear()
+    return func
+```
+
+Now I need to modify this to handle union types. The key changes:
+
+1. When `cls` is a union type (either `typing.Union[A, B]` or `A | B`), I need to:
+   - Extract the member types from the union
+   - Validate that each member is a runtime class (not a parameterized generic)
+   - Register the function for each member type in the registry
+   - Return the function (same as ordinary registration)
+
+2. For the `|` form (PEP 604), in Python 3.10+, `int | str` produces a `types.UnionType`. `typing.Union[int, str]` produces a `typing._UnionGenericAlias`.
+
+3. I need to handle:
+   - `typing.Union[A, B]` - this is a `typing.Union` type
+   - `A | B` - this is a `types.UnionType`
+   - Both should work with `register(type, func)`, `register(type)` decorator, and inferred annotations.
+
+Let me think about how to detect union types:
+- `types.UnionType` (PEP 604, Python 3.10+): `isinstance(x, types.UnionType)` - but actually `int | str` returns a `types.UnionType` which is `int | str`. We can check with `type(x) is types.UnionType` or check `hasattr(x, '__args__')`.
+- `typing.Union[A, B]`: This is a `typing._UnionGenericAlias` or `typing.Union[A, B]`. We can check if it's a `typing.Union` subclass or check `hasattr(x, '__args__')` and it's not a plain type.
+
+Actually, let me think more carefully. In Python:
+- `int | str` in 3.10+ gives a `types.UnionType` instance
+- `typing.Union[int, str]` gives a `typing.Union` special form which, when called, gives a `typing.Union[int, str]` which is actually a `typing._UnionGenericAlias`
+
+For detecting unions:
+- `types.UnionType`: `isinstance(x, types.UnionType)` or check `type(x).__name__ == 'UnionType'`
+- `typing.Union`: We can check `getattr(x, '__origin__', None) is typing.Union` or use `typing.get_origin(x) is typing.Union`
+
+Actually, the cleanest approach:
+- For `types.UnionType` (PEP 604): `isinstance(x, types.UnionType)` - but this only exists in 3.10+. Alternatively, check `type(x) is types.UnionType`.
+- For `typing.Union[A, B]`: We can check `getattr(x, '__origin__', None) is typing.Union` or `hasattr(x, '__args__')` combined with checking origin.
+
+Wait, actually the simplest unified check is:
+- Both `types.UnionType` and `typing.Union[A, B]` have `__args__` attribute
+- A plain type like `int` does not have `__args__`
+- A parameterized generic like `list[int]` also has `__args__` but its origin is different
+
+Let me think about this differently. The approach should be:
+
+1. Detect if `cls` is a union type:
+   - Check if it's a `types.UnionType` (PEP 604): `isinstance(cls, types.UnionType)`
+   - Check if it's a `typing.Union`: `typing.get_origin(cls) is typing.Union`
+   
+   Actually, a simpler unified check: check `hasattr(cls, '__args__')` and it's not a plain type. But this could be confusing with other generic types.
+
+   Better approach:
+   ```python
+   import types
+   import typing
+   
+   def _is_union(t):
+       # PEP 604 union (types.UnionType)
+       if isinstance(t, types.UnionType):
+           return True
+       # typing.Union
+       if typing.get_origin(t) is typing.Union:
+           return True
+       return False
+   ```
+
+   Actually wait - `types.UnionType` only exists in Python 3.10+. Since this is a backport, I need to be careful. But the task says "historical feature backport", so I should handle both forms.
+
+   Let me look at what's available. In Python 3.10+:
+   - `int | str` → `types.UnionType` instance with `__args__ = (int, str)`
+   - `typing.Union[int, str]` → `typing.Union[int, str]` with `__origin__ = typing.Union` and `__args__ = (int, str)`
+
+   In Python 3.7-3.9:
+   - `typing.Union[int, str]` works
+   - `int | str` doesn't exist (would be a TypeError)
+
+   Since the task says to support both forms, I'll assume the runtime is 3.10+ (which is likely given the test environment).
+
+   Actually, looking at the import in the file: `from types import GenericAlias` - this suggests Python 3.10+ is assumed (GenericAlias was added in 3.9).
+
+   Let me design the solution:
+
+   In the `register` function, I need to add union handling. The key insight is:
+   
+   ```python
+   def register(cls, func=None):
+       nonlocal cache_token
+       
+       # Handle union types
+       if _is_union(cls):
+           # Get member types
+           args = getattr(cls, '__args__', None)
+           if args is None:
+               # fallback for typing.Union
+               ...
+           # Validate each member is a runtime class
+           for member in args:
+               if not isinstance(member, type):
+                   raise TypeError(...)
+           # Register func for each member
+           if func is None:
+               return lambda f: register(cls, f)
+           for member in args:
+               registry[member] = func
+           # Handle cache token
+           ...
+           return func
+       
+       # ... existing code ...
+   ```
+
+   Wait, but there's a subtlety. When `func is None` and `cls` is a union type, `isinstance(cls, type)` will be False (since union types aren't regular types in the `type` sense). So the existing code would fall through to the annotation path. I need to intercept before that.
+
+   Let me also think about the `types.UnionType` import. The file already has `from types import GenericAlias`, so I can add `UnionType` to that import, or import it separately.
+
+   Actually, looking more carefully at the code:
+   ```python
+   from types import GenericAlias
+   ```
+   
+   I could change this to:
+   ```python
+   from types import GenericAlias, UnionType
+   ```
+   
+   But wait - `types.UnionType` was added in Python 3.10. If the environment is 3.10+, this is fine. Let me check if there's a safer way.
+
+   Actually, `int | str` in Python 3.10+ creates a `types.UnionType`. The `type()` of `int | str` is `types.UnionType`. So `isinstance(x, types.UnionType)` works.
+
+   But for `typing.Union[int, str]`, the result is actually a `typing._SpecialGenericAlias` or similar. Let me think...
+
+   Actually in CPython:
+   - `typing.Union[int, str]` returns `typing.Union[int, str]` which is an instance of `typing._UnionGenericAlias` (or in older versions, it might be different).
+   - `int | str` returns an instance of `types.UnionType`.
+
+   A unified way to check:
+   ```python
+   def _is_union_type(t):
+       # Check for PEP 604 union (types.UnionType, Python 3.10+)
+       try:
+           if isinstance(t, types.UnionType):
+               return True
+       except AttributeError:
+           pass
+       # Check for typing.Union
+       origin = getattr(t, '__origin__', None)
+       if origin is typing.Union:
+           return True
+       return False
+   ```
+
+   Actually, simpler: both have `__args__`. Let me just check:
+   - `isinstance(cls, type)` is False (so it's not a regular class)
+   - `hasattr(cls, '__args__')` is True
+   - The origin is `typing.Union` or it's a `types.UnionType`
+
+   Hmm, but I want to be precise. Let me think about what the "parameterized generic" check should be. The task says:
+   "Reject annotations or explicit unions containing a parameterized generic rather than a runtime class without partially changing the registry."
+
+   So if someone does `register(Union[int, List[str]], func)`, I should reject it because `List[str]` is a parameterized generic, not a runtime class.
+
+   "Without partially changing the registry" means I should validate ALL members first, and only then register them. If any member is invalid, raise an error and don't register any of them.
+
+   Let me now design the full modification:
+
+   1. Import `types.UnionType` (or handle the import safely)
+   2. Add a helper or inline check for union types
+   3. Modify `register` to handle unions
+
+   Here's my plan for the `register` function:
+
+   ```python
+   def register(cls, func=None):
+       """generic_func.register(cls, func) -> func
+
+       Registers a new implementation for the given *cls* on a *generic_func*.
+       """
+       nonlocal cache_token
+       
+       # Check if cls is a union type (PEP 604 or typing.Union)
+       if _is_union(cls):
+           # Get the member types
+           args = cls.__args__
+           # Validate all members are runtime classes
+           for member in args:
+               if not isinstance(member, type):
+                   raise TypeError(
+                       f"Invalid type union member: {member!r}. "
+                       f"Union members must be runtime classes."
+                   )
+           if func is None:
+               return lambda f: register(cls, f)
+           # Register func for each member
+           for member in args:
+               registry[member] = func
+           if cache_token is None:
+               for member in args:
+                   if hasattr(member, '__abstractmethods__'):
+                       cache_token = get_cache_token()
+                       break
+           dispatch_cache.clear()
+           return func
+       
+       if func is None:
+           if isinstance(cls, type):
+               return lambda f: register(cls, f)
+           # ... existing annotation path ...
+       
+       registry[cls] = func
+       if cache_token is None and hasattr(cls, '__abstractmethods__'):
+           cache_token = get_cache_token()
+       dispatch_cache.clear()
+       return func
+   ```
+
+   Now for `_is_union`, I need to detect both `types.UnionType` and `typing.Union`:
+
+   ```python
+   def _is_union(t):
+       """Check if t is a union type (PEP 604 or typing.Union)."""
+       # PEP 604: types.UnionType (Python 3.10+)
+       if isinstance(t, types.UnionType):
+           return True
+       # typing.Union
+       import typing
+       origin = getattr(t, '__origin__', None)
+       if origin is typing.Union:
+           return True
+       return False
+   ```
+
+   Wait, but `types` is imported inside `singledispatch` function: `import types, weakref`. So I need to be careful about where I put the helper.
+
+   Actually, looking at the code structure:
+   - `types` is imported inside `singledispatch()`: `import types, weakref`
+   - `typing` is imported inside `register`: `from typing import get_type_hints`
+
+   So I should either:
+   - Import `types.UnionType` at module level (but it might not exist in older Python)
+   - Or check within the function where `types` is already imported
+
+   Since the file already has `from types import GenericAlias` at module level, and `types.UnionType` is available in 3.10+ (which is what we're targeting since we need `|` syntax), I can add it to the module-level import.
+
+   Wait, actually let me reconsider. The file has:
+   ```python
+   from types import GenericAlias
+   ```
+   
+   `types.UnionType` was added in Python 3.10. Since we're supporting `|` syntax which requires 3.10+, it's safe to import it at module level.
+
+   Actually, let me be more careful. Let me just handle it inline in the register function where `types` is already available (imported locally in `singledispatch`).
+
+   Here's my refined plan:
+
+   In the `register` function, before the `if func is None:` check:
+   
+   ```python
+   # Check for union types
+   import types as _types
+   import typing as _typing
+   _union_args = None
+   if isinstance(cls, _types.UnionType):
+       _union_args = cls.__args__
+   else:
+       _origin = getattr(cls, '__origin__', None)
+       if _origin is _typing.Union:
+           _union_args = getattr(cls, '__args__', None)
+   if _union_args is not None:
+       # validate all members
+       for _member in _union_args:
+           if not isinstance(_member, type):
+               raise TypeError(
+                   f"Union members must be runtime classes, got {_member!r}"
+               )
+       if func is None:
+           return lambda f: register(cls, f)
+       for _member in _union_args:
+           registry[_member] = func
+       if cache_token is None:
+           for _member in _union_args:
+               if hasattr(_member, '__abstractmethods__'):
+                   cache_token = get_cache_token()
+                   break
+       dispatch_cache.clear()
+       return func
+   ```
+
+   Hmm, but I want to keep it clean. Let me think about the exact placement and style.
+
+   Actually, let me reconsider the structure. The current `register` is:
+
+   ```python
+   def register(cls, func=None):
+       nonlocal cache_token
+       if func is None:
+           if isinstance(cls, type):
+               return lambda f: register(cls, f)
+           ann = getattr(cls, '__annotations__', {})
+           if not ann:
+               raise TypeError(...)
+           func = cls
+           from typing import get_type_hints
+           argname, cls = next(iter(get_type_hints(func).items()))
+           if not isinstance(cls, type):
+               raise TypeError(...)
+       registry[cls] = func
+       if cache_token is None and hasattr(cls, '__abstractmethods__'):
+           cache_token = get_cache_token()
+       dispatch_cache.clear()
+       return func
+   ```
+
+   The issue is:
+   - When `cls` is a union type and `func` is provided: we need to register for each member
+   - When `cls` is a union type and `func` is None: we need to return a decorator
+   - When `cls` is a function with union annotation: we need to extract the union from the annotation and register for each member
+
+   Let me restructure:
+
+   ```python
+   def register(cls, func=None):
+       """generic_func.register(cls, func) -> func
+
+       Registers a new implementation for the given *cls* on a *generic_func*.
+       
+       """
+       nonlocal cache_token
+       if func is None:
+           if isinstance(cls, type):
+               return lambda f: register(cls, f)
+           # Check if cls is a union type (PEP 604 or typing.Union)
+           _union_args = _get_union_args(cls)
+           if _union_args is not None:
+               # It's a union type used as decorator: @register(Union[A, B])
+               return lambda f: _register_union(_union_args, f)
+           ann = getattr(cls, '__annotations__', {})
+           if not ann:
+               raise TypeError(
+                   f"Invalid first argument to `register()`: {cls!r}. "
+                   f"Use either `@register(some_class)` or plain `@register` "
+                   f"on an annotated function."
+               )
+           func = cls
+           from typing import get_type_hints
+           argname, cls = next(iter(get_type_hints(func).items()))
+           # Check if the annotation is a union type
+           _union_args = _get_union_args(cls)
+           if _union_args is not None:
+               return _register_union(_union_args, func)
+           if not isinstance(cls, type):
+               raise TypeError(
+                   f"Invalid annotation for {argname!r}. "
+                   f"{cls!r} is not a class."
+               )
+           # Fall through to single-class registration
+           return _register_single(cls, func)
+       
+       # Check if cls is a union type with explicit func
+       _union_args = _get_union_args(cls)
+       if _union_args is not None:
+           return _register_union(_union_args, func)
+       
+       # Single class registration
+       return _register_single(cls, func)
+   ```
+
+   Hmm, this is getting complicated. Let me simplify. The key insight is:
+
+   1. Detect if `cls` is a union type
+   2. If yes, extract members, validate, register each
+   3. If no, proceed with existing logic
+
+   Let me write a cleaner version:
+
+   ```python
+   def register(cls, func=None):
+       """generic_func.register(cls, func) -> func
+
+       Registers a new implementation for the given *cls* on a *generic_func*.
+       """
+       nonlocal cache_token
+       if func is None:
+           if isinstance(cls, type):
+               return lambda f: register(cls, f)
+           # Check for union type decorator: @register(int | str)
+           if _get_union_args(cls) is not None:
+               return lambda f: register(cls, f)
+           ann = getattr(cls, '__annotations__', {})
+           if not ann:
+               raise TypeError(
+                   f"Invalid first argument to `register()`: {cls!r}. "
+                   f"Use either `@register(some_class)` or plain `@register` "
+                   f"on an annotated function."
+               )
+           func = cls
+           from typing import get_type_hints
+           argname, cls = next(iter(get_type_hints(func).items()))
+           # Check if annotation is a union
+           if _get_union_args(cls) is not None:
+               # union from annotation
+               pass  # fall through to union handling below
+           elif not isinstance(cls, type):
+               raise TypeError(
+                   f"Invalid annotation for {argname!r}. "
+                   f"{cls!r} is not a class."
+               )
+       
+       # Handle union types
+       union_args = _get_union_args(cls)
+       if union_args is not None:
+           for member in union_args:
+               if not isinstance(member, type):
+                   raise TypeError(
+                       f"Union member {member!r} is not a runtime class"
+                   )
+           if func is None:
+               # shouldn't reach here due to early return above
+               pass
+           for member in union_args:
+               registry[member] = func
+           if cache_token is None:
+               for member in union_args:
+                   if hasattr(member, '__abstractmethods__'):
+                       cache_token = get_cache_token()
+                       break
+           dispatch_cache.clear()
+           return func
+       
+       # Regular single-class registration
+       registry[cls] = func
+       if cache_token is None and hasattr(cls, '__abstractmethods__'):
+           cache_token = get_cache_token()
+       dispatch_cache.clear()
+       return func
+   ```
+
+   Wait, this is getting messy with the flow. Let me think more carefully about the cases:
+
+   Case 1: `register(Union[int, str], func)` - explicit union with func
+   Case 2: `@register(Union[int, str])` - union as decorator (func is None)
+   Case 3: `register(int, func)` - single class with func (existing)
+   Case 4: `@register(int)` - single class decorator (existing)
+   Case 5: `@register` with annotation `def f(x: Union[int, str])` - inferred union
+   Case 6: `@register` with annotation `def f(x: int)` - inferred single (existing)
+
+   For Case 2: `func is None` and `cls` is a union. `isinstance(cls, type)` is False. We detect union, return decorator.
+   For Case 5: `func is None` and `cls` is a function. We get annotation, which is a union. We need to handle it.
+   For Case 1: `func` is provided and `cls` is a union. We detect union and register members.
+
+   Let me restructure more carefully:
+
+   ```python
+   def register(cls, func=None):
+       """generic_func.register(cls, func) -> func
+       ...
+       """
+       nonlocal cache_token
+       if func is None:
+           if isinstance(cls, type):
+               return lambda f: register(cls, f)
+           # Check for union type (PEP 604 or typing.Union)
+           union_args = _get_union_args(cls)
+           if union_args is not None:
+               # Union used as decorator: @register(int | str)
+               return lambda f: register(cls, f)
+           ann = getattr(cls, '__annotations__', {})
+           if not ann:
+               raise TypeError(
+                   f"Invalid first argument to `register()`: {cls!r}. "
+                   f"Use either `@register(some_class)` or plain `@register` "
+                   f"on an annotated function."
+               )
+           func = cls
+           from typing import get_type_hints
+           argname, cls = next(iter(get_type_hints(func).items()))
+           # Check if annotation resolved to a union
+           union_args = _get_union_args(cls)
+           if union_args is None:
+               if not isinstance(cls, type):
+                   raise TypeError(
+                       f"Invalid annotation for {argname!r}. "
+                       f"{cls!r} is not a class."
+                   )
+       else:
+           union_args = _get_union_args(cls)
+       
+       if union_args is not None:
+           # Validate all members before registering
+           for member in union_args:
+               if not isinstance(member, type):
+                   raise TypeError(
+                       f"Union member {member!r} is not a runtime class"
+                   )
+           for member in union_args:
+               registry[member] = func
+           if cache_token is None:
+               for member in union_args:
+                   if hasattr(member, '__abstractmethods__'):
+                       cache_token = get_cache_token()
+                       break
+           dispatch_cache.clear()
+           return func
+       
+       # Single class registration (existing path)
+       registry[cls] = func
+       if cache_token is None and hasattr(cls, '__abstractmethods__'):
+           cache_token = get_cache_token()
+       dispatch_cache.clear()
+       return func
+   ```
+
+   Hmm wait, there's an issue with the `else` branch. If `func` is not None, I compute `union_args`, but then I fall into the `if union_args is not None:` block. But if `func` is None and we went through the annotation path and got a union, `union_args` is also set. But if `func` is None and we got a non-union type from annotation, `union_args` is None and we fall to the single class path. That works.
+
+   But wait, there's a bug: if `func` is None and `cls` is a regular class (not union, not function), we'd return the decorator lambda early. So the `else` branch (where `func` is not None) is the only case where we'd reach `union_args = _get_union_args(cls)` with a union. Actually no - if `func` is None and `cls` is a union, we return the lambda early. So by the time we reach the `if union_args is not None:` check after the if/else, the cases are:
+   - `func` was provided and `cls` is a union → `union_args` is set in else branch
+   - `func` was None, annotation resolved to a union → `union_args` is set in if branch
+   - `func` was None, annotation resolved to a class → `union_args` is None
+   - `func` was provided and `cls` is a class → `union_args` is None
+
+   This looks correct!
+
+   Now for `_get_union_args`, I need a helper that returns the args of a union type, or None:
+
+   ```python
+   def _get_union_args(t):
+       """Return the member types if t is a union type, else None."""
+       # PEP 604: types.UnionType
+       if isinstance(t, types.UnionType):
+           return t.__args__
+       # typing.Union[A, B]
+       origin = getattr(t, '__origin__', None)
+       if origin is typing.Union:
+           return getattr(t, '__args__', None)
+       return None
+   ```
+
+   But wait - where do I put this helper? It needs access to `types` and `typing`. In the current code, `types` is imported inside `singledispatch()`. And `typing` is imported inside `register`.
+
+   I think the cleanest approach is to define `_get_union_args` inside `singledispatch()` (where `types` is already imported) and have it also import `typing` when needed. Or better, I can define it as a local helper inside `register` itself, or as a module-level helper.
+
+   Actually, let me look at the structure again. The `types` import is:
+   ```python
+   def singledispatch(func):
+       import types, weakref
+       ...
+   ```
+
+   And `typing` is imported in register:
+   ```python
+   from typing import get_type_hints
+   ```
+
+   I think the cleanest approach is to define the union check inline or as a small helper within `singledispatch`. Let me put it right before `register`:
+
+   Actually, I'll just inline the check in `register`. Here's my final plan:
+
+   In `register`, replace the current body with:
+
+   ```python
+   def register(cls, func=None):
+       """generic_func.register(cls, func) -> func
+
+       Registers a new implementation for the given *cls* on a *generic_func*.
+       """
+       nonlocal cache_token
+       
+       def _union_args(t):
+           """Return member types if t is a union type, else None."""
+           if isinstance(t, types.UnionType):
+               return t.__args__
+           import typing
+           origin = getattr(t, '__origin__', None)
+           if origin is typing.Union:
+               return getattr(t, '__args__', None)
+           return None
+       
+       if func is None:
+           if isinstance(cls, type):
+               return lambda f: register(cls, f)
+           union = _union_args(cls)
+           if union is not None:
+               return lambda f: register(cls, f)
+           ann = getattr(cls, '__annotations__', {})
+           if not ann:
+               raise TypeError(
+                   f"Invalid first argument to `register()`: {cls!r}. "
+                   f"Use either `@register(some_class)` or plain `@register` "
+                   f"on an annotated function."
+               )
+           func = cls
+           from typing import get_type_hints
+           argname, cls = next(iter(get_type_hints(func).items()))
+           union = _union_args(cls)
+           if union is None and not isinstance(cls, type):
+               raise TypeError(
+                   f"Invalid annotation for {argname!r}. "
+                   f"{cls!r} is not a class."
+               )
+       else:
+           union = _union_args(cls)
+       
+       if union is not None:
+           for member in union:
+               if not isinstance(member, type):
+                   raise TypeError(
+                       f"Union member {member!r} is not a runtime class"
+                   )
+           for member in union:
+               registry[member] = func
+           if cache_token is None:
+               for member in union:
+                   if hasattr(member, '__abstractmethods__'):
+                       cache_token = get_cache_token()
+                       break
+           dispatch_cache.clear()
+           return func
+       
+       registry[cls] = func
+       if cache_token is None and hasattr(cls, '__abstractmethods__'):
+           cache_token = get_cache_token()
+       dispatch_cache.clear()
+       return func
+   ```
+
+   Wait, there's a scoping issue. In the `if func is None:` branch, when we go through the annotation path, we might set `union` (if the annotation is a union) or leave it as None. Then we fall to `if union is not None:`. But in the `else` branch (func provided), we also set `union`. This should work.
+
+   Actually wait - there's a subtle issue. In the `if func is None:` branch:
+   - If `isinstance(cls, type)` is True → return decorator (existing behavior)
+   - If `_union_args(cls)` is not None → return decorator (new behavior for union decorator)
+   - Otherwise, it's a function with annotations → parse annotation
+     - If annotation is a union → set `union`, fall through
+     - If annotation is a class → `union` is None, fall through
+     - If annotation is invalid → raise
+
+   Then after the if/else:
+   - If `union` is not None → register all members
+   - Otherwise → register single class (existing)
+
+   This looks correct!
+
+   But wait, I realize there might be an issue with `types.UnionType`. In the `singledispatch` function, `types` is imported as `import types`. So `types.UnionType` should be accessible. But `types.UnionType` only exists in Python 3.10+. If the environment is 3.9 or earlier, this would fail.
+
+   However, since the task explicitly mentions supporting the `|` form (PEP 604), which requires Python 3.10+, I'll assume 3.10+ is available.
+
+   Actually, let me be safe and use a try/except or hasattr check:
+   
+   ```python
+   def _union_args(t):
+       if hasattr(types, 'UnionType') and isinstance(t, types.UnionType):
+           return t.__args__
+       ...
+   ```
+
+   Or even simpler, since we're in a 3.10+ environment (the `|` form requires it):
+   ```python
+   if isinstance(t, types.UnionType):
+       return t.__args__
+   ```
+
+   Let me just go with the direct check since the task explicitly mentions `|` form support.
+
+   Now let me also think about the `typing.Union` case. `typing.Union[int, str]` in CPython creates an object. Let me verify:
+   - `type(typing.Union[int, str])` → in Python 3.10+, this is `typing._UnionGenericAlias` or just the special form
+   - `typing.Union[int, str].__origin__` → `typing.Union`
+   - `typing.Union[int, str].__args__` → `(int, str)`
+
+   So `getattr(t, '__origin__', None) is typing.Union` should work for detecting `typing.Union` types.
+
+   But wait - I need to import `typing` inside the helper. Let me restructure:
+
+   ```python
+   def _union_args(t):
+       if isinstance(t, types.UnionType):
+           return t.__args__
+       import typing
+       origin = getattr(t, '__origin__', None)
+       if origin is typing.Union:
+           return getattr(t, '__args__', None)
+       return None
+   ```
+
+   This should work. The `import typing` inside the function is fine (it's cached after first import).
+
+   Now let me also think about edge cases:
+   - `register(int, func)` - existing, no change
+   - `register(Union[int, str], func)` - new, registers int and str separately
+   - `register(int | str, func)` - new, same as above
+   - `@register(Union[int, str])` - new decorator form
+   - `@register` with `def f(x: int | str)` - new annotation form
+   - `register(Union[int, List[str]], func)` - should raise TypeError (List[str] is not a runtime class)
+   - `register(Union[int, str], func)` where func is also used for decorator - should work
+
+   One more thing: the task says "The register return value and registry behavior should remain consistent with ordinary class registration." This means:
+   - `register(cls, func)` returns `func` (same as before)
+   - `registry` contains the individual classes (not the union type)
+   - `dispatch` works normally for each registered class
+
+   And "Reject annotations or explicit unions containing a parameterized generic rather than a runtime class without partially changing the registry" means:
+   - If a union contains `List[str]`, reject the whole thing (don't register `int` either if the union is `Union[int, List[str]]`)
+   - The registry should not be modified at all in this case
+
+   My implementation validates all members before registering any, which satisfies this requirement.
+
+   Now let me think about the test file. I need `tests/test_union_registration.py` with at least 3 test methods. Let me design tests that:
+   1. Test basic union registration with `typing.Union`
+   2. Test basic union registration with `|` form (PEP 604)
+   3. Test union decorator form
+   4. Test union annotation inference
+   5. Test rejection of parameterized generics in unions
+   6. Test that registry is unchanged on failed registration
+   7. Test that ordinary class registration still works
+   8. Test singledispatchmethod with unions
+
+   Let me now look at what test infrastructure exists. The task mentions "Use the supplied implementation as functools under the documented checker harness." Let me check what's in the tests directory.
+
+   I've already read the file. Let me now check the tests directory to understand the test structure.
+
+   Actually, let me first check what's in the tests directory and what the existing test structure looks like. I see from the p0 that there's a `tests` directory with 2 files. Let me look at it.
+
+   Actually, I already have the full source of `Lib/functools.py`. Let me now look at the test file structure to understand how to write the tests. Let me check the tests directory.
+
+   Let me plan my next actions:
+   1. Look at the tests directory structure
+   2. Look at existing test files to understand the harness
+   3. Make the edit to `Lib/functools.py`
+   4. Create `tests/test_union_registration.py`
+   5. Run the public check
+   6. Submit
+
+   Let me start by examining the tests directory and then make the edit.
+
+   Actually, I have limited requests (20 remaining, 66 actions). Let me be efficient. Let me:
+   1. Check the tests directory (1 action)
+   2. Read the test file to understand harness (1 action)
+   3. Edit functools.py (1 action)
+   4. Create the test file (1 action)
+   5. Run check (1 action)
+   6. Fix if needed + recheck (2 actions)
+   7. Submit (1 action)
+
+   That's about 8-10 actions, well within budget.
+
+   Let me start by looking at the tests directory.
