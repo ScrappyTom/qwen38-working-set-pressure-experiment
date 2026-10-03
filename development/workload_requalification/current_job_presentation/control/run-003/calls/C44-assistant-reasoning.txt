@@ -1,0 +1,1945 @@
+Let me analyze the current state:
+
+1. I have the candidate `6112bdcf5215b62896c5690b1cc443db36325a8e078a511832316afc25c0d8f3`
+2. The public check has already passed (CHK-0056) on this candidate - but wait, looking more carefully at the verification section:
+   - `applies_to_current: false` - the check was run on a different check definition
+   - `check_definition_matches: false` - the checker SHA doesn't match
+   - But `passed: true` and `failed_criteria: []`
+   
+   Wait, let me re-read: "A public pass does not endorse every prose claim." and "Only a current passing public check permits submission."
+
+   Looking at verification.checks.public:
+   - `applies_to_current: false`
+   - `check_definition_matches: false`
+   - `passed: true`
+   - `candidate_id` matches current candidate
+   - `candidate_matches: true`
+
+   And `verification.submission`: `{"eligible": false, "scope": "public"}`
+
+   So the check passed but it doesn't apply to current / doesn't match the check definition. This means I need to run the check again on the current candidate to get a proper pass.
+
+   Actually wait - looking more carefully, `applies_to_current: false` and `check_definition_matches: false`. This means the existing passing check is from a different checker version. I need to run `check public` with the current candidate to get a fresh pass.
+
+   But actually, the task says "This job has a different public checker. Its actual applicable pass is required before submission." So I need to make my edits first, then run the public check.
+
+Now let me understand what I need to do:
+
+1. **Add new unittest coverage** in `tests/test_virtual_registration.py` for:
+   - A value that becomes a virtual subclass of two unrelated abstract union members after an earlier dispatch
+   - Subclass-related abstract union members
+   - A subsequent explicit registration of the concrete value type
+   - Both `A | B` and `typing.Union[A, B]`
+   - Assert exact exception class and diagnostic text where execution raises
+   - Use fresh local classes so membership doesn't leak
+   - Preserve old tests and their assertions
+   - New tests must expose a resolver fault that would silently select a handler in the overlapping unrelated-members case
+
+2. **Append a new explanatory section** to `Doc/howto/union-dispatch.rst` with:
+   - Runnable `>>>` examples showing overlapping virtual membership and explicit registration
+   - Distinguish virtual membership, concrete inheritance, and handler selection
+   - Don't generalize beyond inspected behavior
+   - Existing document must remain an exact prefix
+   - Examples run as ordinary standalone doctests with `__name__='__main__'` and import the candidate library
+
+Let me understand the library behavior:
+
+From `_find_impl`:
+```python
+def _find_impl(cls, registry):
+    mro = _compose_mro(cls, registry.keys())
+    match = None
+    for t in mro:
+        if match is not None:
+            # If *match* is an implicit ABC but there is another unrelated,
+            # equally matching implicit ABC, refuse the temptation to guess.
+            if (t in registry and t not in cls.__mro__
+                              and match not in cls.__mro__
+                              and not issubclass(match, t)):
+                raise RuntimeError("Ambiguous dispatch: {} or {}".format(
+                    match, t))
+            break
+        if t in registry:
+            match = t
+    return registry.get(match)
+```
+
+So the RuntimeError is raised when:
+- `match` is not None (we already found one match)
+- `t` is also in registry (another match found later in MRO)
+- `t not in cls.__mro__` (t is an implicit/ABC match, not in concrete MRO)
+- `match not in cls.__mro__` (match is also implicit)
+- `not issubclass(match, t)` (they're unrelated)
+
+This means: if a class is a virtual subclass of TWO UNRELATED ABCs that are both in the registry, `_find_impl` raises `RuntimeError("Ambiguous dispatch: X or Y")`.
+
+But wait - in the union dispatch case, when you register a union `A | B`, both `A` and `B` get registered in the registry with the same handler function. So if a concrete class `P` is registered as a virtual subclass of both `A` and `B` (which are both ABCs in the registry), then `_find_impl(P, registry)` would:
+- Find `A` in the MRO (as implicit ABC)
+- Find `B` in the MRO (as implicit ABC)
+- Both are not in `P.__mro__` (they're virtual)
+- Neither is a subclass of the other
+- → RuntimeError("Ambiguous dispatch: A or B")
+
+Wait, but that's only if both `A` and `B` are in the registry. In the union case, both are registered (they share the same handler function value).
+
+Actually, let me re-think. When you do `@handler.register(PluginBase | int)`, the register method does:
+```python
+if _is_union(cls):
+    for type_ in cls.__args__:
+        registry[type_] = func
+```
+
+So both `PluginBase` and `int` are in the registry, mapped to `union_handler`.
+
+Now, if I have two ABCs, say `ABC_A` and `ABC_B`, and I register a union `ABC_A | ABC_B`, then both are in the registry. If a concrete class `P` is virtually registered as a subclass of both `ABC_A` and `ABC_B`, then when dispatching `P`:
+- `_compose_mro(P, registry.keys())` would include both `ABC_A` and `ABC_B` in the MRO
+- `_find_impl` would find both in the registry
+- Since they're both implicit (not in `P.__mro__`), and unrelated → RuntimeError
+
+But wait, the task says "a value that becomes a virtual subclass of two unrelated abstract union members after an earlier dispatch". The key word is "after an earlier dispatch" - meaning the class was already dispatched before the virtual registration.
+
+Let me think about the "resolver fault that would silently select a handler in the overlapping unrelated-members case". This suggests that without the RuntimeError check, the resolver would just pick one of the two handlers. The test should assert that the RuntimeError IS raised (exposing that the guard exists).
+
+Now let me think about what tests to write:
+
+**Test 1: Overlapping virtual membership (two unrelated ABCs)**
+- Create two ABCs: `AlphaBase(ABC)` and `BetaBase(ABC)`
+- Create a concrete class `Concrete`
+- Register union `AlphaBase | BetaBase` with a handler
+- Dispatch `Concrete()` → should go to default (or wherever it was registered)
+- Register `Concrete` as virtual subclass of BOTH `AlphaBase` and `BetaBase`
+- Dispatch `Concrete()` → should raise RuntimeError("Ambiguous dispatch: ...")
+
+Wait, but actually, let me think about this more carefully. If `AlphaBase | BetaBase` is registered, both are in the registry. If `Concrete` is a virtual subclass of both, then in `_find_impl`:
+- MRO would include both AlphaBase and BetaBase
+- Both are in registry
+- Both are not in Concrete.__mro__ (virtual)
+- They're unrelated
+- → RuntimeError
+
+But what if we first register Concrete with AlphaBase, dispatch, then register with BetaBase? The "after an earlier dispatch" part means the token invalidation path matters.
+
+Actually, let me re-read the task more carefully:
+
+"Add new unittest coverage in tests/test_virtual_registration.py for a value that becomes a virtual subclass of two unrelated abstract union members after an earlier dispatch"
+
+So the scenario is:
+1. Have two unrelated ABCs A and B
+2. Register a union handler for A | B
+3. Have a concrete class C
+4. Dispatch C (gets default)
+5. Register C as virtual subclass of A (only)
+6. Dispatch C (now gets union handler) - "earlier dispatch"
+7. Register C as virtual subclass of B (now C is virtual subclass of BOTH)
+8. Dispatch C → RuntimeError because ambiguous
+
+"for subclass-related abstract union members"
+- Two ABCs where one is a subclass of the other? Or two ABCs that share a subclass relationship?
+- If ABC_A is a subclass of ABC_B (or vice versa), then issubclass match, so no RuntimeError
+- Actually, if they're subclass-related, the check `not issubclass(match, t)` would be False, so no exception
+- The resolver would just pick one based on MRO ordering
+
+"and for a subsequent explicit registration of the concrete value type"
+- After the virtual registrations, explicitly register the concrete class type with handler.register(C, some_func)
+- This should override/resolve the ambiguity because now C is directly in registry
+- Actually, `register` does `dispatch_cache.clear()`, and `registry[cls] = func`
+- In `_find_impl`, if C is directly in registry, it would be found first in MRO (it's the class itself)
+- Wait, actually `dispatch` checks `registry[cls]` first before calling `_find_impl`
+- So if C is explicitly registered, `dispatch(C)` would find it in `registry[C]` directly
+
+"Cover both A | B and typing.Union[A, B]"
+- Test both syntaxes
+
+"New tests must also expose a resolver fault that would silently select a handler in the overlapping unrelated-members case"
+- This means the test should verify that WITHOUT the ambiguity check, a handler would be silently selected
+- The test asserts the RuntimeError IS raised, which proves the guard exists
+- If someone removed the RuntimeError check, the test would fail because it expects an exception
+
+Let me now think about the actual behavior more carefully by tracing through the code:
+
+For the "earlier dispatch" scenario:
+1. `handler = singledispatch(default_func)`
+2. `handler.register(AlphaBase | BetaBase, union_handler)` → registry: {object: default, AlphaBase: union_handler, BetaBase: union_handler}
+3. `c = Concrete()`
+4. `handler(c)` → dispatch(Concrete) → not in registry → _find_impl(Concrete, {object, AlphaBase, BetaBase})
+   - _compose_mro(Concrete, {object, AlphaBase, BetaBase}) → Concrete is not a subclass of AlphaBase or BetaBase yet, so MRO is just [Concrete, object]
+   - In _find_impl: match starts None, Concrete not in registry, object is in registry → match = object
+   - returns registry[object] = default
+5. `AlphaBase.register(Concrete)` → Concrete becomes virtual subclass of AlphaBase
+6. `handler(c)` → dispatch(Concrete) → not in registry → _find_impl(Concrete, {object, AlphaBase, BetaBase})
+   - _compose_mro: Concrete is issubclass of AlphaBase (virtual), so AlphaBase is included
+   - MRO: [Concrete, AlphaBase, object] (roughly)
+   - In _find_impl: Concrete not in registry, AlphaBase in registry → match = AlphaBase, object in registry but match is not None and object IS in cls.__mro__ → break
+   - returns registry[AlphaBase] = union_handler
+7. `BetaBase.register(Concrete)` → Concrete becomes virtual subclass of both AlphaBase and BetaBase
+8. `handler(c)` → dispatch(Concrete) → not in registry → _find_impl(Concrete, {object, AlphaBase, BetaBase})
+   - _compose_mro: Concrete is issubclass of both AlphaBase and BetaBase
+   - MRO includes both AlphaBase and BetaBase
+   - In _find_impl: depends on MRO ordering
+   - If MRO is [Concrete, AlphaBase, BetaBase, object]:
+     - Concrete not in registry
+     - AlphaBase in registry → match = AlphaBase
+     - BetaBase in registry, match is not None:
+       - BetaBase in registry: yes
+       - BetaBase not in Concrete.__mro__: yes (virtual)
+       - match (AlphaBase) not in Concrete.__mro__: yes (virtual)
+       - not issubclass(AlphaBase, BetaBase): yes (unrelated)
+       → RuntimeError("Ambiguous dispatch: <class AlphaBase> or <class BetaBase>")
+
+Good, so the exception message would be `Ambiguous dispatch: <class '...AlphaBase'> or <class '...BetaBase'>`.
+
+Wait, the format is `"Ambiguous dispatch: {} or {}".format(match, t)` where match and t are the classes themselves (type objects). So the str/repr would be like `<class '__main__.AlphaBase'>` or similar.
+
+Actually in the test, the classes are local to the method, so their `__name__` would be `AlphaBase` and `BetaBase` but `__module__` would be `__main__` or the test module. Let me think...
+
+In unittest, local classes defined inside a method have `__module__` set to the module they're defined in (the test module), and `__qualname__` would include the enclosing scope. Actually, for classes defined inside methods, `__qualname__` would be like `test_method.<locals>.AlphaBase`.
+
+The `str()` of a class is `<class '__main__.AlphaBase'>` format. Wait no, it's `repr(cls)` which gives `<class 'module.ClassName'>`. For a locally-defined class in a test, the module would be the test module name.
+
+Actually, I should just assert the exception type and use `assertIn` or check the message contains the key parts. But the task says "assert the exact exception class and diagnostic text". Let me think about what the exact text would be.
+
+For a class defined inside a method:
+```python
+class AlphaBase(ABC):
+    pass
+```
+`str(AlphaBase)` or `repr(AlphaBase)` would be `<class 'test_virtual_registration.AlphaBase'>` (if the module is `test_virtual_registration`).
+
+Wait, actually for classes defined in a method, the `__module__` is still the module they're in, but `__qualname__` includes the method. Let me think...
+
+Actually in Python, `repr(cls)` for a class gives `<class 'module.ClassName'>`. The `__module__` is set at class creation time to the `__name__` of the current module. For a locally defined class in a test method, `__module__` would be the test module's name (e.g., `test_virtual_registration`), and `__qualname__` would be something like `LateVirtualRegistration.test_overlapping.<locals>.AlphaBase`.
+
+But `repr(cls)` uses `cls.__module__ + '.' + cls.__qualname__`... wait no, it uses `cls.__name__` for the simple case. Let me check: `repr(type)` in CPython uses `PyType_Ready` and the repr is `<class 'module.name'>` where module is `__module__` and name is... actually it's the fully qualified name.
+
+Hmm, this is getting complicated. Let me just use `assertRaises` with the RuntimeError and then check that the message contains the key parts, or I can use a more specific assertion.
+
+Actually, the task says "assert the exact exception class and diagnostic text". So I need to know the exact text. The format is:
+```python
+raise RuntimeError("Ambiguous dispatch: {} or {}".format(match, t))
+```
+
+Where `match` and `t` are type objects. The `{}` uses `str()` which for a type is the same as `repr()`: `<class 'module.qualname'>`.
+
+For locally-defined classes in a unittest method, the `__module__` would be the test module. If the test file is `tests/test_virtual_registration.py` and it's run as a module, the module name would be `test_virtual_registration`.
+
+Actually, I realize I should be more careful. Let me look at how Python represents local classes.
+
+When you define:
+```python
+def test_foo(self):
+    class AlphaBase(ABC):
+        pass
+```
+
+`AlphaBase.__module__` is `'__main__'` if run directly, or the actual module name.
+`AlphaBase.__qualname__` is `'test_foo.<locals>.AlphaBase'`.
+`repr(AlphaBase)` is `"<class '__main__.test_foo.<locals>.AlphaBase'>"` ... 
+
+Hmm wait, actually I think `repr(cls)` for a type uses `cls.__module__` and `cls.__qualname__`. Let me verify my understanding.
+
+In CPython, `type_repr` (which is used for `repr(type)`) produces:
+```
+<class 'module.qualname'>
+```
+
+So for a locally defined class in a test method in module `test_virtual_registration`:
+`repr(AlphaBase)` = `"<class 'test_virtual_registration.LateVirtualRegistration.test_overlapping.<locals>.AlphaBase'>"`
+
+That's very long and fragile. Maybe I should just check the exception type and use a substring check on the message. But the task says "exact diagnostic text". 
+
+Hmm, but the task also says "Establish the existing library's actual outcomes rather than assuming them". So maybe I should write the test to capture the actual behavior and then assert against it. Since I can't run code, I need to reason about what the exact message would be.
+
+Actually, let me reconsider. The task says to "assert the exact exception class and diagnostic text". I think the practical approach is:
+1. Assert `RuntimeError` is raised (exact class)
+2. Assert the message starts with "Ambiguous dispatch: " and contains the class names
+
+Or I could use `assertRaisesRegex` or capture the exception and check `str(exc)` matches a pattern.
+
+Actually, looking at this more carefully, I think the safest approach for "exact" is to check:
+- The exception is a RuntimeError
+- The message matches `"Ambiguous dispatch: {} or {}".format(cls1, cls2)` where cls1 and cls2 are the actual classes
+
+In the test, I can do:
+```python
+with self.assertRaises(RuntimeError) as ctx:
+    handler(c)
+self.assertEqual(
+    str(ctx.exception),
+    f"Ambiguous dispatch: {AlphaBase} or {BetaBase}"
+)
+```
+
+Wait, but `{AlphaBase}` in an f-string would use `str(AlphaBase)` which is the same as `repr(AlphaBase)` for types. And the format in the library uses `"{}"` which also uses `str()`. So this should work!
+
+Actually wait - `"{}"` uses `str()`, and for a type object, `str(cls)` == `repr(cls)`. So `f"Ambiguous dispatch: {AlphaBase} or {BetaBase}"` should match exactly.
+
+But I need to be careful about the ORDER. The MRO ordering determines which is `match` and which is `t`. Let me think about what `_compose_mro` would produce.
+
+`_compose_mro(Concrete, registry.keys())` where registry has `object`, `AlphaBase`, `BetaBase`.
+
+In `_compose_mro`:
+- `bases = set(Concrete.__mro__)` → `{Concrete, object}`
+- Filter types: keep those where `typ not in bases` and `hasattr(typ, '__mro__')` and `issubclass(Concrete, typ)`
+  - `object`: in bases → excluded
+  - `AlphaBase`: not in bases, has __mro__, issubclass(Concrete, AlphaBase) → True (virtual) → kept
+  - `BetaBase`: not in bases, has __mro__, issubclass(Concrete, BetaBase) → True (virtual) → kept
+- Remove strict bases: neither is a strict base of the other (unrelated) → both kept
+- Subclass stabilization: for each type, look at its subclasses... this gets complex
+
+The ordering of AlphaBase vs BetaBase in the MRO depends on the C3 linearization. Since they're unrelated ABCs both virtually registered, their relative order in the MRO depends on the iteration order of the `types` set (which is `registry.keys()` - a set/dict).
+
+Actually, `registry` is a regular dict in Python 3.7+, so `registry.keys()` has insertion order. The insertion order would be:
+1. `object` (from `registry[object] = func` in singledispatch)
+2. `AlphaBase` (from union registration)
+3. `BetaBase` (from union registration)
+
+Wait, in the union registration:
+```python
+for type_ in cls.__args__:
+    registry[type_] = func
+```
+
+For `AlphaBase | BetaBase`, `cls.__args__` is `(AlphaBase, BetaBase)`, so AlphaBase is inserted first, then BetaBase.
+
+So `registry.keys()` order: `object, AlphaBase, BetaBase`.
+
+In `_compose_mro`, `types` is iterated in this order (after filtering). The final MRO from `_c3_merge` would depend on the specific sequences, but generally AlphaBase would come before BetaBase since it was first in the input.
+
+Actually, let me trace through `_c3_mro` more carefully:
+
+`_c3_mro(Concrete, abcs=[AlphaBase, BetaBase])`:
+- `reversed(Concrete.__bases__)` → `reversed((object,))` → `[object]`
+- `object` doesn't have `__abstractmethods__` → boundary = 0
+- `abcs = [AlphaBase, BetaBase]`
+- `explicit_bases = Concrete.__bases__[:0] = ()`
+- `abstract_bases = []`
+- `other_bases = Concrete.__bases__[0:] = (object,)`
+- For `AlphaBase`: `issubclass(Concrete, AlphaBase)` → True (virtual), `any(issubclass(b, AlphaBase) for b in Concrete.__bases__)` → `issubclass(object, AlphaBase)` → False → so AlphaBase added to abstract_bases
+- For `BetaBase`: similarly → added to abstract_bases
+- `abstract_bases = [AlphaBase, BetaBase]`
+- Remove from abcs: `abcs = []`
+- `explicit_c3_mros = []` (no explicit bases)
+- `abstract_c3_mros = [_c3_mro(AlphaBase, abcs=[]), _c3_mro(BetaBase, abcs=[])]`
+  - `_c3_mro(AlphaBase, abcs=[])`: 
+    - bases of AlphaBase: `(ABC,)` reversed → `[ABC, object]`... wait, AlphaBase(ABC) has bases (ABC,), and ABC has bases (object,)
+    - Actually `AlphaBase.__bases__` = `(ABC,)` if AlphaBase directly subclasses ABC
+    - `reversed((ABC,))` → `[ABC]`
+    - ABC has `__abstractmethods__`? ABC is defined as `class ABC(metaclass=ABCMeta)` with no abstract methods by default. Actually, `ABC` from `abc` module: `class ABC(metaclass=ABCMeta): pass`. It has `__abstractmethods__ = frozenset()`.
+    - So `hasattr(ABC, '__abstractmethods__')` → True
+    - boundary = 1 (len of bases - 0 = 1 - 0 = 1)... wait
+    - `for i, base in enumerate(reversed(cls.__bases__))`: i=0, base=ABC
+    - `hasattr(ABC, '__abstractmethods__')` → True
+    - `boundary = len(cls.__bases__) - i` = 1 - 0 = 1
+    - `explicit_bases = AlphaBase.__bases__[:1] = (ABC,)`
+    - `other_bases = AlphaBase.__bases__[1:] = ()`
+    - No abstract_bases (abcs is empty)
+    - `explicit_c3_mros = [_c3_mro(ABC, abcs=[])]`
+      - `ABC.__bases__` = `(object,)`
+      - reversed → `[object]`
+      - object doesn't have `__abstractmethods__` → boundary = 0
+      - explicit_bases = ()
+      - other_bases = (object,)
+      - No abstract bases
+      - other_c3_mros = [_c3_mro(object, abcs=[])]
+        - object.__bases__ = () → boundary = 0
+        - No bases at all
+        - Returns _c3_merge([[object]]) = [object]
+      - Returns _c3_merge([[ABC], [object], [], [object], [object]]) 
+      - Hmm, this is getting very detailed. Let me simplify.
+    - The point is: _c3_mro(AlphaBase) produces something like [AlphaBase, ABC, object]
+  - Similarly for BetaBase: [BetaBase, ABC, object] (wait, both inherit from ABC)
+  
+  Actually wait - if both AlphaBase and BetaBase inherit from ABC:
+  - AlphaBase.__mro__ = [AlphaBase, ABC, object]
+  - BetaBase.__mro__ = [BetaBase, ABC, object]
+
+Let me just say the final MRO for Concrete with both ABCs would be something like:
+[Concrete, AlphaBase, BetaBase, ABC, object] or [Concrete, BetaBase, AlphaBase, ABC, object]
+
+The exact ordering depends on the C3 merge. Since both AlphaBase and BetaBase are at the same "level" (both directly registered, both virtual), their relative order likely follows input order: AlphaBase before BetaBase.
+
+So in `_find_impl`:
+- Iterating MRO: Concrete (not in registry), AlphaBase (in registry → match = AlphaBase), BetaBase (in registry, match is not None):
+  - BetaBase in registry: yes
+  - BetaBase not in Concrete.__mro__: yes (virtual)  
+  - match (AlphaBase) not in Concrete.__mro__: yes (virtual)
+  - not issubclass(AlphaBase, BetaBase): yes (unrelated)
+  → RuntimeError("Ambiguous dispatch: <AlphaBase> or <BetaBase>")
+
+So the message would be: `Ambiguous dispatch: <class 'module.qualname.AlphaBase'> or <class 'module.qualname.BetaBase'>`
+
+In the test, using f-strings: `f"Ambiguous dispatch: {AlphaBase} or {BetaBase}"` should produce the exact same string.
+
+Now, for the "subclass-related abstract union members" case:
+- If AlphaBase is a subclass of BetaBase (or vice versa), then `issubclass(match, t)` would be True, so no RuntimeError
+- The resolver would just pick the first one in MRO order
+- Actually, let me think: if AlphaBase inherits from BetaBase, and Concrete is virtual subclass of both:
+  - MRO would have AlphaBase before BetaBase (more specific first)
+  - In _find_impl: match = AlphaBase, then BetaBase:
+    - BetaBase in registry: yes
+    - BetaBase not in Concrete.__mro__: yes
+    - AlphaBase not in Concrete.__mro__: yes
+    - not issubclass(AlphaBase, BetaBase): False (AlphaBase IS a subclass of BetaBase)
+    → No exception, break
+  - Returns registry[AlphaBase] = union_handler
+
+So for subclass-related members, no exception is raised.
+
+For the "explicit registration of concrete value type" case:
+- After virtual registrations, do `handler.register(Concrete, concrete_handler)`
+- Now `registry[Concrete] = concrete_handler`
+- `dispatch(Concrete)` → `registry[Concrete]` found directly → returns concrete_handler
+- No _find_impl call needed
+
+Now let me plan the tests:
+
+```python
+class OverlappingVirtualRegistration(unittest.TestCase):
+    """Tests for overlapping virtual membership with union dispatchers."""
+
+    def test_pep604_overlapping_unrelated_abcs(self):
+        """A | B: concrete class becomes virtual subclass of two unrelated ABCs."""
+        class AlphaBase(ABC):
+            pass
+        class BetaBase(ABC):
+            pass
+        class Concrete:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(AlphaBase | BetaBase)
+        def union_handler(x):
+            return "union"
+
+        c = Concrete()
+        # Before any virtual registration, dispatches to default.
+        self.assertEqual(handler(c), "default")
+
+        # Virtual registration for first ABC only.
+        AlphaBase.register(Concrete)
+        self.assertEqual(handler(c), "union")
+
+        # Virtual registration for second unrelated ABC.
+        BetaBase.register(Concrete)
+        # Now Concrete is a virtual subclass of two unrelated ABCs in the
+        # registry; the resolver must refuse to guess.
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertIn("Ambiguous dispatch", str(ctx.exception))
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}"
+        )
+
+    def test_typing_union_overlapping_unrelated_abcs(self):
+        """typing.Union[A, B]: same overlapping scenario."""
+        # ... same but with typing.Union[AlphaBase, BetaBase]
+
+    def test_subclass_related_abcs(self):
+        """When the two ABCs are subclass-related, no ambiguity."""
+        class BaseABC(ABC):
+            pass
+        class SubABC(BaseABC):
+            pass
+        class Concrete:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(SubABC | BaseABC)
+        def union_handler(x):
+            return "union"
+
+        c = Concrete()
+        self.assertEqual(handler(c), "default")
+
+        SubABC.register(Concrete)
+        self.assertEqual(handler(c), "union")
+
+        BaseABC.register(Concrete)
+        # SubABC is a subclass of BaseABC, so no ambiguity.
+        self.assertEqual(handler(c), "union")
+
+    def test_explicit_registration_resolves_ambiguity(self):
+        """Explicit registration of the concrete type overrides ambiguous MRO."""
+        # ... register Concrete directly after virtual registrations
+
+    def test_pep604_subclass_related_abcs(self):
+        """A | B with subclass-related ABCs."""
+
+    def test_typing_union_subclass_related_abcs(self):
+        """typing.Union[A, B] with subclass-related ABCs."""
+```
+
+Wait, I need to think about the "resolver fault" requirement: "New tests must also expose a resolver fault that would silently select a handler in the overlapping unrelated-members case."
+
+This means: the test should be written such that if the RuntimeError check were removed from `_find_impl`, the dispatch would silently select one handler (and the test would fail because it expects an exception). The test IS the exposure of the fault - by asserting the RuntimeError, we prove the guard exists.
+
+Actually, I think the requirement is that the test would FAIL if the guard were absent (i.e., the test catches the bug). By asserting `RuntimeError` is raised, if someone removed the guard, the test would fail because no exception would be raised (it would just return a handler). So the test does expose the potential resolver fault.
+
+Now let me also think about the "earlier dispatch" aspect. The task says "after an earlier dispatch". This means:
+1. First dispatch happens (populating dispatch_cache)
+2. Virtual registration happens (which changes ABC cache token)
+3. Second dispatch (cache invalidation happens)
+
+The "earlier dispatch" is important because it exercises the cache invalidation path. Let me make sure my tests include this.
+
+In my test above:
+1. `handler(c)` → dispatches, caches result (default)
+2. `AlphaBase.register(Concrete)` → changes ABC token
+3. `handler(c)` → token changed, cache cleared, re-dispatches (union)
+4. `BetaBase.register(Concrete)` → changes ABC token again
+5. `handler(c)` → token changed, cache cleared, re-dispatches → RuntimeError
+
+Good, this exercises the cache invalidation.
+
+Now for the "explicit registration" case:
+After the ambiguous state, explicitly register Concrete:
+```python
+handler.register(Concrete, lambda x: "concrete")
+```
+Now `registry[Concrete]` exists, so `dispatch(Concrete)` finds it directly without calling `_find_impl`.
+
+Wait, but there's a subtlety. After `BetaBase.register(Concrete)`, the last dispatch raised RuntimeError. The `dispatch_cache` might or might not have an entry. Let me check:
+
+In `dispatch`:
+```python
+def dispatch(cls):
+    nonlocal cache_token
+    if cache_token is not None:
+        current_token = get_cache_token()
+        if cache_token != current_token:
+            dispatch_cache.clear()
+            cache_token = current_token
+    try:
+        impl = dispatch_cache[cls]
+    except KeyError:
+        try:
+            impl = registry[cls]
+        except KeyError:
+            impl = _find_impl(cls, registry)
+        dispatch_cache[cls] = impl
+    return impl
+```
+
+If `_find_impl` raises RuntimeError, it propagates up. The `dispatch_cache[cls] = impl` line is never reached. So the cache doesn't get the (non-existent) result. Good.
+
+After `handler.register(Concrete, concrete_func)`:
+```python
+def register(cls, func=None):
+    ...
+    registry[cls] = func
+    ...
+    dispatch_cache.clear()
+    return func
+```
+
+So the cache is cleared, and `registry[Concrete] = concrete_func`. Next `dispatch(Concrete)` finds `registry[Concrete]` directly.
+
+Now for the documentation section, I need to append to `Doc/howto/union-dispatch.rst`. The existing doc must remain an exact prefix. I'll add a new section about overlapping virtual membership.
+
+The doctest examples need to:
+- Use `__name__='__main__'` context (they're standalone doctests)
+- Import the candidate library (functools)
+- Show the overlapping virtual membership scenario
+- Show the explicit registration case
+- Distinguish virtual membership, concrete inheritance, and handler selection
+
+Let me draft the doc section:
+
+```rst
+Overlapping virtual membership
+------------------------------
+
+A concrete class can be virtually registered as a subclass of more than one
+abstract union member.  When those members are unrelated (neither is a
+subclass of the other) and both appear in the dispatcher registry, the
+resolver refuses to guess and raises ``RuntimeError``:
+
+>>> import functools
+>>> from abc import ABC
+>>> import typing
+>>
+>>> class AlphaBase(ABC):
+...     pass
+>>
+>>> class BetaBase(ABC):
+...     pass
+>>
+>>> class Concrete:
+...     pass
+>>
+>>> @functools.singledispatch
+... def handler(x):
+...     return "default"
+>>
+>>> @handler.register(AlphaBase | BetaBase)
+... def union_handler(x):
+...     return "union"
+>>
+>>> c = Concrete()
+>>> handler(c)
+'default'
+>>
+>>> AlphaBase.register(Concrete)
+<class '__main__.Concrete'>
+>>
+>>> handler(c)
+'union'
+>>
+>>> BetaBase.register(Concrete)
+<class '__main__.Concrete'>
+>>
+>>> try:
+...     handler(c)
+... except RuntimeError as exc:
+...     print(exc)
+Ambiguous dispatch: <class '__main__.AlphaBase'> or <class '__main__.BetaBase'>
+
+When the two abstract members are related by subclassing, no ambiguity arises;
+the more specific member wins by MRO order:
+
+>>> class Base(ABC):
+...     pass
+>>
+>>> class Sub(Base):
+...     pass
+>>
+>>> @functools.singledispatch
+... def handler2(x):
+...     return "default"
+>>
+>>> @handler2.register(Sub | Base)
+... def union_handler2(x):
+...     return "union"
+>>
+>>> class Concrete2:
+...     pass
+>>
+>>> c2 = Concrete2()
+>>> Sub.register(Concrete2)
+<class '__main__.Concrete2'>
+>>
+>>> Base.register(Concrete2)
+<class '__main__.Concrete2'>
+>>
+>>> handler2(c2)
+'union'
+
+An explicit registration of the concrete type overrides the ambiguous MRO
+lookup entirely:
+
+>>> @functools.singledispatch
+... def handler3(x):
+...     return "default"
+>>
+>>> @handler3.register(AlphaBase | BetaBase)
+... def union_handler3(x):
+...     return "union"
+>>
+>>> class Concrete3:
+...     pass
+>>
+>>> AlphaBase.register(Concrete3)
+<class '__main__.Concrete3'>
+>>
+>>> BetaBase.register(Concrete3)
+<class '__main__.Concrete3'>
+>>
+>>> handler3.register(Concrete3)
+... def concrete_handler(x):
+...     return "concrete"
+'concrete'   # Wait, this isn't right for doctest
+```
+
+Hmm wait, the `register` method returns the function. In a doctest, I need to be careful about what the output looks like.
+
+Actually, looking at the existing doc, the pattern is:
+```
+>>> @handler.register(PluginBase | int)
+... def union_handler(x):
+...     return "union"
+```
+
+This doesn't show any output because the decorator's return value (the function) isn't printed... wait, actually in doctests, the `>>>` prompt shows input and the next line shows output. If there's no output, nothing is shown. But `@handler.register(...)` returns the function, and in a doctest, if it's a bare expression, it WOULD show the repr.
+
+Wait, looking at the existing doc more carefully:
+```
+>>> @handler.register(PluginBase | int)
+... def union_handler(x):
+...     return "union"
+```
+
+There's no output line after this. But `@handler.register(...)` returns the decorated function. In a doctest, a bare expression on the last line of a block would show its repr. But this is a multi-line statement (def with decorator), and the result of the whole statement... actually in Python interactive mode, a function definition with a decorator evaluates to the function, and its repr would be shown.
+
+Hmm, but the existing doc doesn't show output for the registration. Let me look again:
+
+```
+>>> @handler.register(PluginBase | int)
+... def union_handler(x):
+...     return "union"
+>>> handler(42)
+'union'
+```
+
+There's no output between the `return "union"` and `>>> handler(42)`. So either:
+1. The doctest framework suppresses the function repr (unlikely for standard doctest)
+2. The decorator pattern in the doc is just illustrative and wouldn't actually produce output in a real doctest
+
+Actually wait - in Python's interactive interpreter, a function definition statement (even with a decorator) does NOT print the function. It's a statement, not an expression. The `def` keyword makes it a statement. The decorator is part of the statement syntax. So no output is produced.
+
+Actually, I need to verify this. In CPython:
+```python
+>>> @deco
+... def f():
+...     pass
+```
+This does NOT print anything because `def` is a statement, not an expression. The decorator is applied but the result is not displayed.
+
+But wait:
+```python
+>>> f = @deco
+... def g():
+...     pass
+```
+Hmm, that's not valid syntax in older Python. In Python 3.9+, you can't use decorator on a bare expression like that.
+
+OK so in the standard `@decorator` on `def` pattern, no output is produced. Good.
+
+But what about:
+```python
+>>> handler.register(Concrete3, concrete_handler)
+```
+This IS an expression (a method call), so it would print the return value (the function). Its repr would be something like `<function handler3.<locals>.concrete_handler at 0x...>`.
+
+Hmm, that's not stable for doctests. Let me think about how to handle this.
+
+Looking at the existing doc:
+```
+>>> PluginBase.register(Payload)
+<class '__main__.Payload'>
+```
+
+Here `PluginBase.register(Payload)` returns the class being registered (that's how `ABCMeta.register` works - it returns the registered class). So the output is the class repr.
+
+For `handler.register(Concrete, func)`, the register method returns `func`. So the output would be the function's repr, which includes a memory address - not suitable for doctests.
+
+I should avoid calling `handler.register(cls, func)` as a bare expression in doctests. Instead, I can assign it:
+```
+>>> handler.register(Concrete3, concrete_handler)
+```
+Wait, that still prints. Let me use assignment:
+```
+>>> _ = handler.register(Concrete3, concrete_handler)
+```
+No, that's ugly. Or I can use the decorator form:
+```
+>>> @handler3.register(Concrete3)
+... def concrete_handler(x):
+...     return "concrete"
+```
+This is a `def` statement with decorator - no output.
+
+Wait, but `handler3.register(Concrete3)` with a single argument and `func=None` returns a lambda:
+```python
+if func is None:
+    if isinstance(cls, type):
+        return lambda f: register(cls, f)
+```
+
+So `@handler3.register(Concrete3)` works as a decorator - it returns a lambda that takes `f` and calls `register(Concrete3, f)`. And since it's on a `def` statement, no output is printed. 
+
+Now let me also think about the `typing.Union` variant for the doc. The task says to cover both `A | B` and `typing.Union[A, B]`. I'll include both in the doc examples.
+
+Let me also think about what "import the candidate library" means. The doc examples use `import functools` - that's the standard library. But the task says the library is the candidate (the modified `Lib/functools.py`). In the context of this repo, the doctests would import from the local `Lib/functools.py`. But in the doc text, I'll just use `import functools` since that's what the existing doc does.
+
+Now, let me also reconsider the "resolver fault" requirement. The task says: "New tests must also expose a resolver fault that would silently select a handler in the overlapping unrelated-members case."
+
+I interpret this as: the tests must be written such that they would FAIL if the ambiguity check in `_find_impl` were removed. By asserting `RuntimeError`, the test verifies the guard is present. If the guard were absent, `handler(c)` would return a handler (silently selecting one), and the `assertRaises(RuntimeError)` would fail because no exception is raised.
+
+This is already satisfied by my test design.
+
+Now let me also think about whether I need to handle the case where the `dispatch_cache` has a stale entry. After the first dispatch (which cached "default"), the virtual registration changes the ABC token, which triggers cache clearing. So the "earlier dispatch" is handled.
+
+Let me now write the actual test code. I'll add a new test class after the existing one:
+
+```python
+class OverlappingVirtualRegistration(unittest.TestCase):
+    """Coverage for overlapping virtual membership with union dispatchers."""
+
+    def test_pep604_overlapping_unrelated_abcs(self):
+        """A | B: virtual subclass of two unrelated ABCs raises RuntimeError."""
+        class AlphaBase(ABC):
+            pass
+        class BetaBase(ABC):
+            pass
+        class Concrete:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(AlphaBase | BetaBase)
+        def union_handler(x):
+            return "union"
+
+        c = Concrete()
+        self.assertEqual(handler(c), "default")
+
+        # First virtual registration: single ABC match, no ambiguity.
+        AlphaBase.register(Concrete)
+        self.assertEqual(handler(c), "union")
+
+        # Second virtual registration: now two unrelated ABCs match.
+        BetaBase.register(Concrete)
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+
+    def test_typing_union_overlapping_unrelated_abcs(self):
+        """typing.Union[A, B]: same overlapping scenario."""
+        class AlphaBase(ABC):
+            pass
+        class BetaBase(ABC):
+            pass
+        class Concrete:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(typing.Union[AlphaBase, BetaBase])
+        def union_handler(x):
+            return "union"
+
+        c = Concrete()
+        self.assertEqual(handler(c), "default")
+
+        AlphaBase.register(Concrete)
+        self.assertEqual(handler(c), "union")
+
+        BetaBase.register(Concrete)
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+
+    def test_pep604_subclass_related_abcs(self):
+        """A | B: subclass-related ABCs do not raise; more specific wins."""
+        class Base(ABC):
+            pass
+        class Sub(Base):
+            pass
+        class Concrete:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(Sub | Base)
+        def union_handler(x):
+            return "union"
+
+        c = Concrete()
+        self.assertEqual(handler(c), "default")
+
+        Sub.register(Concrete)
+        self.assertEqual(handler(c), "union")
+
+        Base.register(Concrete)
+        # Sub is a subclass of Base, so no ambiguity; Sub handler wins.
+        self.assertEqual(handler(c), "union")
+
+    def test_typing_union_subclass_related_abcs(self):
+        """typing.Union[A, B]: subclass-related ABCs, no ambiguity."""
+        class Base(ABC):
+            pass
+        class Sub(Base):
+            pass
+        class Concrete:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(typing.Union[Sub, Base])
+        def union_handler(x):
+            return "union"
+
+        c = Concrete()
+        self.assertEqual(handler(c), "default")
+
+        Sub.register(Concrete)
+        self.assertEqual(handler(c), "union")
+
+        Base.register(Concrete)
+        self.assertEqual(handler(c), "union")
+
+    def test_pep604_explicit_registration_resolves_ambiguity(self):
+        """Explicit registration of the concrete type overrides ambiguous MRO."""
+        class AlphaBase(ABC):
+            pass
+        class BetaBase(ABC):
+            pass
+        class Concrete:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(AlphaBase | BetaBase)
+        def union_handler(x):
+            return "union"
+
+        c = Concrete()
+        self.assertEqual(handler(c), "default")
+
+        AlphaBase.register(Concrete)
+        BetaBase.register(Concrete)
+
+        # Without explicit registration, dispatch is ambiguous.
+        with self.assertRaises(RuntimeError):
+            handler(c)
+
+        # Explicit registration of the concrete type resolves the lookup.
+        @handler.register(Concrete)
+        def concrete_handler(x):
+            return "concrete"
+
+        self.assertEqual(handler(c), "concrete")
+
+    def test_typing_union_explicit_registration_resolves_ambiguity(self):
+        """typing.Union: explicit registration of concrete type."""
+        class AlphaBase(ABC):
+            pass
+        class BetaBase(ABC):
+            pass
+        class Concrete:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(typing.Union[AlphaBase, BetaBase])
+        def union_handler(x):
+            return "union"
+
+        c = Concrete()
+        self.assertEqual(handler(c), "default")
+
+        AlphaBase.register(Concrete)
+        BetaBase.register(Concrete)
+
+        with self.assertRaises(RuntimeError):
+            handler(c)
+
+        @handler.register(Concrete)
+        def concrete_handler(x):
+            return "concrete"
+
+        self.assertEqual(handler(c), "concrete")
+```
+
+Wait, I need to double-check: after `with self.assertRaises(RuntimeError): handler(c)`, the dispatch_cache state. The RuntimeError propagates from `_find_impl` through `dispatch`. The `dispatch_cache[cls] = impl` line is NOT reached. So the cache doesn't get a bad entry. Then `@handler.register(Concrete)` calls `register` which does `registry[Concrete] = func` and `dispatch_cache.clear()`. Then `handler(c)` → `dispatch(Concrete)` → `registry[Concrete]` found → returns concrete_handler. Good.
+
+Actually wait, I realize there might be an issue. After the RuntimeError, the `dispatch` function raised the exception. But `dispatch_cache.clear()` in `register` clears any stale entries. And `registry[Concrete] = concrete_handler` adds the direct entry. So the next dispatch finds it directly. Good.
+
+Now for the documentation. Let me write the section to append after line 90 of the existing doc.
+
+Actually, I need to be careful. The task says "Append an accurate explanatory section to Doc/howto/union-dispatch.rst". And "The existing document must remain an exact prefix." So I'm appending to the end of the file.
+
+The current file ends at line 90 with:
+```
+Invalid union member list[int]: must be a runtime class
+```
+
+Wait, let me check - does line 90 end with a newline? The file has 90 lines total. Let me look at the last line:
+```
+Invalid union member list[int]: must be a runtime class
+```
+
+This is the output of the doctest `print(exc)`. So the file ends with this line (and presumably a newline at the end).
+
+I'll append a new section after this. Let me draft it:
+
+```rst
+
+Overlapping virtual membership
+-----------------------------
+
+A concrete class can be virtually registered as a subclass of more than one
+abstract union member.  When two such members are unrelated (neither is a
+subclass of the other) and both appear in the dispatcher registry, the
+resolver raises ``RuntimeError`` rather than silently choosing one:
+
+>>> import functools
+>>> from abc import ABC
+>>> import typing
+>>
+>>> class AlphaBase(ABC):
+...     pass
+>>
+>>> class BetaBase(ABC):
+...     pass
+>>
+>>> class Concrete:
+...     pass
+>>
+>>> @functools.singledispatch
+... def handler(x):
+...     return "default"
+>>
+>>> @handler.register(AlphaBase | BetaBase)
+... def union_handler(x):
+...     return "union"
+>>
+>>> c = Concrete()
+>>> handler(c)
+'default'
+>>
+>>> AlphaBase.register(Concrete)
+<class '__main__.Concrete'>
+>>
+>>> handler(c)
+'union'
+>>
+>>> BetaBase.register(Concrete)
+<class '__main__.Concrete'>
+>>
+>>> try:
+...     handler(c)
+... except RuntimeError as exc:
+...     print(exc)
+Ambiguous dispatch: <class '__main__.AlphaBase'> or <class '__main__.BetaBase'>
+
+Virtual membership is a relationship managed by ``ABCMeta.register``; it is
+not the same as concrete inheritance (``class Concrete(AlphaBase)``).  The
+handler selected depends on what the resolver finds in the MRO composed from
+the registry keys.  A single virtual registration yields one implicit ABC in
+the MRO and the corresponding handler is chosen.  Two unrelated implicit
+ABCs make the selection ambiguous and the resolver refuses to guess.
+
+When the two abstract members are related by subclassing, no ambiguity arises;
+the more specific member is preferred by MRO order:
+
+>>> class Base(ABC):
+...     pass
+>>
+>>> class Sub(Base):
+...     pass
+>>
+>>> @functools.singledispatch
+... def handler2(x):
+...     return "default"
+>>
+>>> @handler2.register(Sub | Base)
+... def union_handler2(x):
+...     return "union"
+>>
+>>> class Concrete2:
+...     pass
+>>
+>>> c2 = Concrete2()
+>>> Sub.register(Concrete2)
+<class '__main__.Concrete2'>
+>>
+>>> Base.register(Concrete2)
+<class '__main__.Concrete2'>
+>>
+>>> handler2(c2)
+'union'
+
+An explicit registration of the concrete type bypasses the MRO lookup
+entirely, resolving the ambiguity:
+
+>>> @functools.singledispatch
+... def handler3(x):
+...     return "default"
+>>
+>>> @handler3.register(AlphaBase | BetaBase)
+... def union_handler3(x):
+...     return "union"
+>>
+>>> class Concrete3:
+...     pass
+>>
+>>> AlphaBase.register(Concrete3)
+<class '__main__.Concrete3'>
+>>
+>>> BetaBase.register(Concrete3)
+<class '__main__.Concrete3'>
+>>
+>>> @handler3.register(Concrete3)
+... def concrete_handler(x):
+...     return "concrete"
+>>
+>>> handler3(Concrete3())
+'concrete'
+
+The same behaviour applies with ``typing.Union``:
+
+>>> @functools.singledispatch
+... def handler4(x):
+...     return "default"
+>>
+>>> @handler4.register(typing.Union[AlphaBase, BetaBase])
+... def union_handler4(x):
+...     return "union"
+>>
+>>> class Concrete4:
+...     pass
+>>
+>>> AlphaBase.register(Concrete4)
+<class '__main__.Concrete4'>
+>>
+>>> BetaBase.register(Concrete4)
+<class '__main__.Concrete4'>
+>>
+>>> try:
+...     handler4(Concrete4())
+... except RuntimeError as exc:
+...     print(exc)
+Ambiguous dispatch: <class '__main__.AlphaBase'> or <class '__main__.BetaBase'>
+```
+
+Wait, I need to be careful about the doctest format. In the existing doc, the pattern uses `>>>` and `...` without the double `>>` at the end of blank separator lines. Let me look at the existing doc format again:
+
+```
+>>> import functools
+>>> from abc import ABC
+>>
+>>> class PluginBase(ABC):
+...     pass
+```
+
+OK so blank lines between blocks are `>>` (just two characters). And code continuation uses `...`. Let me match this exactly.
+
+Actually wait, looking more carefully at the existing doc:
+```
+>>> import functools
+>>> from abc import ABC
+>>
+>>> class PluginBase(ABC):
+...     pass
+>>
+```
+
+The `>>` on its own line is a blank separator between doctest paragraphs. The `...` is for continuation lines within a block.
+
+Let me re-examine the existing doc format:
+```
+>>> @functools.singledispatch
+... def handler(x):
+...     return "default"
+>>
+>>> @handler.register(PluginBase | int)
+... def union_handler(x):
+...     return "union"
+>>
+>>> handler(42)
+'union'
+```
+
+So the pattern is:
+- `>>>` for the first line of a statement
+- `...` for continuation lines
+- `>>` for a blank line (separator)
+- Output lines are just the text without any prefix
+
+This is the standard doctest format. Let me make sure my doc follows this.
+
+Now, one concern: the `@handler.register(AlphaBase | BetaBase)` decorator on a `def` statement. In the interactive interpreter, this is a statement (no output). In doctest, it's the same. Good.
+
+But wait - `AlphaBase.register(Concrete)` is an expression that returns the class. In the existing doc:
+```
+>>> PluginBase.register(Payload)
+<class '__main__.Payload'>
+```
+
+So the output IS shown. For my case:
+```
+>>> AlphaBase.register(Concrete)
+<class '__main__.Concrete'>
+```
+
+This should work in a doctest run with `__name__='__main__'`.
+
+Now, let me think about potential issues:
+1. The classes `AlphaBase`, `BetaBase`, etc. are defined in the doctest with `__name__='__main__'`. So their repr would be `<class '__main__.AlphaBase'>`.
+2. The `Concrete` class repr would be `<class '__main__.Concrete'>`.
+
+This all looks consistent.
+
+Now, one more thing: the task says "Examples run as ordinary standalone doctests with __name__='__main__' and import the candidate library." The existing doc already does `import functools` which is the candidate library. My examples continue to use `import functools`. Good.
+
+Let me now plan my edits:
+
+1. Edit `tests/test_virtual_registration.py`: Add new test class after the existing `LateVirtualRegistration` class, before the `if __name__` block.
+
+2. Edit `Doc/howto/union-dispatch.rst`: Append new section after line 90.
+
+Let me think about how to do these edits. I'll use `patch` for both.
+
+For the test file, I need to insert new code between line 69 (`    unittest.main()`) - wait no, the file is:
+- Lines 1-4: imports
+- Lines 6-68: `class LateVirtualRegistration` with two test methods
+- Lines 70-71: `if __name__ == "__main__": unittest.main()`
+
+I need to insert the new class between the end of `LateVirtualRegistration` and the `if __name__` block.
+
+Looking at the file content:
+```
+        self.assertEqual(handler(p), "union")
+        self.assertEqual(handler(1), "union")
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+I'll patch the test file by replacing:
+```
+        self.assertEqual(handler(1), "union")
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+with the same plus the new test class. Wait, but `self.assertEqual(handler(1), "union")` appears twice in the file (once in each test method). I need a unique anchor.
+
+Let me use the last few lines before `if __name__`:
+```
+        self.assertEqual(handler(p), "union")
+        self.assertEqual(handler(1), "union")
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+Is this unique? The first test ends with:
+```
+        self.assertEqual(handler(p), "union")
+        # int still works.
+        self.assertEqual(handler(1), "union")
+```
+
+And the second test ends with:
+```
+        self.assertEqual(handler(p), "union")
+        self.assertEqual(handler(1), "union")
+```
+
+So the second test's ending + the `if __name__` block is unique. Let me use:
+
+old:
+```
+        self.assertEqual(handler(p), "union")
+        self.assertEqual(handler(1), "union")
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+new:
+```
+        self.assertEqual(handler(p), "union")
+        self.assertEqual(handler(1), "union")
+
+
+class OverlappingVirtualRegistration(unittest.TestCase):
+    """Coverage for overlapping virtual membership with union dispatchers."""
+
+    def test_pep604_overlapping_unrelated_abcs(self):
+        """A | B: virtual subclass of two unrelated ABCs raises RuntimeError."""
+        class AlphaBase(ABC):
+            pass
+        class BetaBase(ABC):
+            pass
+        class Concrete:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(AlphaBase | BetaBase)
+        def union_handler(x):
+            return "union"
+
+        c = Concrete()
+        self.assertEqual(handler(c), "default")
+
+        # First virtual registration: single ABC match, no ambiguity.
+        AlphaBase.register(Concrete)
+        self.assertEqual(handler(c), "union")
+
+        # Second virtual registration: two unrelated ABCs match.
+        BetaBase.register(Concrete)
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+
+    def test_typing_union_overlapping_unrelated_abcs(self):
+        """typing.Union[A, B]: same overlapping unrelated scenario."""
+        class AlphaBase(ABC):
+            pass
+        class BetaBase(ABC):
+            pass
+        class Concrete:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(typing.Union[AlphaBase, BetaBase])
+        def union_handler(x):
+            return "union"
+
+        c = Concrete()
+        self.assertEqual(handler(c), "default")
+
+        AlphaBase.register(Concrete)
+        self.assertEqual(handler(c), "union")
+
+        BetaBase.register(Concrete)
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Ambiguous dispatch: {AlphaBase} or {BetaBase}",
+        )
+
+    def test_pep604_subclass_related_abcs(self):
+        """A | B: subclass-related ABCs do not raise; more specific wins."""
+        class Base(ABC):
+            pass
+        class Sub(Base):
+            pass
+        class Concrete:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(Sub | Base)
+        def union_handler(x):
+            return "union"
+
+        c = Concrete()
+        self.assertEqual(handler(c), "default")
+
+        Sub.register(Concrete)
+        self.assertEqual(handler(c), "union")
+
+        Base.register(Concrete)
+        self.assertEqual(handler(c), "union")
+
+    def test_typing_union_subclass_related_abcs(self):
+        """typing.Union[A, B]: subclass-related ABCs, no ambiguity."""
+        class Base(ABC):
+            pass
+        class Sub(Base):
+            pass
+        class Concrete:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(typing.Union[Sub, Base])
+        def union_handler(x):
+            return "union"
+
+        c = Concrete()
+        self.assertEqual(handler(c), "default")
+
+        Sub.register(Concrete)
+        self.assertEqual(handler(c), "union")
+
+        Base.register(Concrete)
+        self.assertEqual(handler(c), "union")
+
+    def test_pep604_explicit_registration_resolves_ambiguity(self):
+        """Explicit registration of the concrete type overrides ambiguous MRO."""
+        class AlphaBase(ABC):
+            pass
+        class BetaBase(ABC):
+            pass
+        class Concrete:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(AlphaBase | BetaBase)
+        def union_handler(x):
+            return "union"
+
+        c = Concrete()
+        self.assertEqual(handler(c), "default")
+
+        AlphaBase.register(Concrete)
+        BetaBase.register(Concrete)
+
+        with self.assertRaises(RuntimeError):
+            handler(c)
+
+        @handler.register(Concrete)
+        def concrete_handler(x):
+            return "concrete"
+
+        self.assertEqual(handler(c), "concrete")
+
+    def test_typing_union_explicit_registration_resolves_ambiguity(self):
+        """typing.Union: explicit registration resolves ambiguity."""
+        class AlphaBase(ABC):
+            pass
+        class BetaBase(ABC):
+            pass
+        class Concrete:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(typing.Union[AlphaBase, BetaBase])
+        def union_handler(x):
+            return "union"
+
+        c = Concrete()
+        self.assertEqual(handler(c), "default")
+
+        AlphaBase.register(Concrete)
+        BetaBase.register(Concrete)
+
+        with self.assertRaises(RuntimeError):
+            handler(c)
+
+        @handler.register(Concrete)
+        def concrete_handler(x):
+            return "concrete"
+
+        self.assertEqual(handler(c), "concrete")
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+Hmm wait, I need to double-check: is `self.assertEqual(handler(p), "union")\n        self.assertEqual(handler(1), "union")\n\n\nif __name__` unique in the file? 
+
+Looking at the file:
+- Test 1 ends with:
+```
+        self.assertEqual(handler(p), "union")
+        # int still works.
+        self.assertEqual(handler(1), "union")
+```
+- Test 2 ends with:
+```
+        self.assertEqual(handler(p), "union")
+        self.assertEqual(handler(1), "union")
+```
+
+So the exact sequence `self.assertEqual(handler(p), "union")\n        self.assertEqual(handler(1), "union")\n\n\nif __name__` only appears once (at the end of test 2 followed by the `if __name__` block). The first test has a comment between the two asserts. So my old text is unique. Good.
+
+Now for the doc file, I'll append after the last line. The file ends at line 90 with:
+```
+Invalid union member list[int]: must be a runtime class
+```
+
+I'll use patch with:
+old: `Invalid union member list[int]: must be a runtime class`
+new: `Invalid union member list[int]: must be a runtime class\n\nOverlapping virtual membership\n...`
+
+Wait, but I need to be careful. Is that last line unique? Let me check - it's the output of a doctest, and the text "Invalid union member list[int]: must be a runtime class" appears only once in the file. Yes, it's unique.
+
+Actually, I should include a bit more context to be safe. Let me use:
+```
+>>> try:
+...     @handler.register(PluginBase | list[int])
+...     def bad(x):
+...         pass
+... except TypeError as exc:
+...     print(exc)
+Invalid union member list[int]: must be a runtime class
+```
+
+This is definitely unique.
+
+Now, let me think about whether the doc content I'm appending is correct. Let me trace through the doctest examples mentally:
+
+1. `import functools`, `from abc import ABC`, `import typing`
+2. Define `AlphaBase(ABC)`, `BetaBase(ABC)`, `Concrete`
+3. Create `handler` with default "default"
+4. Register `AlphaBase | BetaBase` with `union_handler` returning "union"
+   - registry: {object: default, AlphaBase: union_handler, BetaBase: union_handler}
+5. `c = Concrete()`
+6. `handler(c)` → dispatch(Concrete) → not in registry → _find_impl:
+   - _compose_mro(Concrete, {object, AlphaBase, BetaBase})
+   - Concrete is not a subclass of AlphaBase or BetaBase yet
+   - MRO: [Concrete, object]
+   - object in registry → match = object
+   - returns default ✓
+7. `AlphaBase.register(Concrete)` → returns Concrete class → prints `<class '__main__.Concrete'>` ✓
+8. `handler(c)` → dispatch(Concrete) → not in registry → _find_impl:
+   - _compose_mro: Concrete is now virtual subclass of AlphaBase
+   - MRO: [Concrete, AlphaBase, object] (approximately)
+   - AlphaBase in registry → match = AlphaBase
+   - object in registry, but object IS in Concrete.__mro__ → break
+   - returns union_handler → "union" ✓
+9. `BetaBase.register(Concrete)` → prints `<class '__main__.Concrete'>` ✓
+10. `handler(c)` → dispatch(Concrete) → not in registry → _find_impl:
+    - _compose_mro: Concrete is virtual subclass of both AlphaBase and BetaBase
+    - MRO includes both
+    - Both in registry, both not in Concrete.__mro__, unrelated → RuntimeError ✓
+
+For the subclass-related case:
+- `Sub.register(Concrete2)` then `Base.register(Concrete2)`
+- MRO: [Concrete2, Sub, Base, object] (approximately)
+- Sub in registry → match = Sub
+- Base in registry: match is not None, Base not in Concrete2.__mro__ (virtual), Sub not in Concrete2.__mro__ (virtual), issubclass(Sub, Base) → True → `not issubclass(Sub, Base)` is False → no exception
+- break → returns union_handler → "union" ✓
+
+For the explicit registration case:
+- After both virtual registrations, `handler3.register(Concrete3, concrete_handler)`
+- registry[Concrete3] = concrete_handler
+- dispatch(Concrete3) → registry[Concrete3] found → returns concrete_handler → "concrete" ✓
+
+Everything checks out.
+
+Now, one thing I'm slightly uncertain about: the exact repr of the classes in the doctest. When running as a doctest with `__name__='__main__'`, locally-defined classes would have `__module__ = '__main__'`. So:
+- `repr(Concrete)` = `<class '__main__.Concrete'>`
+- `repr(AlphaBase)` = `<class '__main__.AlphaBase'>`
+
+And the RuntimeError message: `"Ambiguous dispatch: {} or {}".format(AlphaBase, BetaBase)` where `{}` uses `str()` which for a type is the same as `repr()`. So the message would be:
+`Ambiguous dispatch: <class '__main__.AlphaBase'> or <class '__main__.BetaBase'>`
+
+This matches what I have in the doc. ✓
+
+For the test file, the classes are local to the method, so their `__module__` would be the test module name (e.g., `test_virtual_registration` or `__main__` depending on how it's run). But I'm using f-strings: `f"Ambiguous dispatch: {AlphaBase} or {BetaBase}"` which will produce the correct string regardless of the module name. ✓
+
+Now let me also consider: do I need `import typing` in the test file? Looking at the existing imports:
+```python
+import functools
+import typing
+import unittest
+from abc import ABC
+```
+
+Yes, `typing` is already imported. ✓
+
+And `ABC` is already imported. ✓
+
+Let me finalize my plan:
+1. Patch `tests/test_virtual_registration.py` - add new test class
+2. Patch `Doc/howto/union-dispatch.rst` - append new section
+3. Run `check public`
+4. Submit
+
+Let me now write the actual patch commands. I need the file SHA256 values:
+- tests/test_virtual_registration.py: `c1da1cb344494a7afe89ccb4af58da84f9d4133b1ffd6c8b6de6e385ac5d701e`
+- Doc/howto/union-dispatch.rst: `1e7c5fcc72d45faad3cc0313e4f5109bb30bea1bb09711f9e17202edcf9b18c6`
+
+And the current candidate: `6112bdcf5215b62896c5690b1cc443db36325a8e078a511832316afc25c0d8f3`
+
+Let me start with the test file patch.
+
+Actually, I realize I should double-check one thing. In the `_find_impl` function, the check is:
+```python
+if (t in registry and t not in cls.__mro__
+                          and match not in cls.__mro__
+                          and not issubclass(match, t)):
+    raise RuntimeError("Ambiguous dispatch: {} or {}".format(
+        match, t))
+```
+
+Note: it's `issubclass(match, t)` - is `match` a subclass of `t`? If match IS a subclass of t, then no exception (the more specific one is already found). If t is a subclass of match, then... `issubclass(match, t)` is False, so the exception WOULD be raised even though t is more specific.
+
+Wait, that seems like it could be an issue for the subclass-related case. Let me think:
+
+If `Sub` is a subclass of `Base`:
+- If MRO is [Concrete, Sub, Base, object]: match = Sub, then t = Base
+  - issubclass(Sub, Base) → True → `not issubclass(Sub, Base)` → False → no exception ✓
+  
+- If MRO were [Concrete, Base, Sub, object] (Base before Sub): match = Base, then t = Sub
+  - issubclass(Base, Sub) → False → `not issubclass(Base, Sub)` → True → exception!
+  
+Hmm, so the order matters! If Base comes before Sub in the MRO, we'd get a false exception. But in C3 linearization, more specific classes come first. So Sub would come before Base. Let me verify.
+
+In `_c3_mro(Concrete, abcs=[Sub, Base])`:
+- Sub and Base are both virtual ABCs for Concrete
+- Sub is a subclass of Base
+- In the C3 merge, Sub should come before Base (more specific first)
+
+Actually, in `_compose_mro`, there's a step that removes strict bases:
+```python
+def is_strict_base(typ):
+    for other in types:
+        if typ != other and typ in other.__mro__:
+            return True
+    return False
+types = [n for n in types if not is_strict_base(n)]
+```
+
+Wait! `is_strict_base(Base)`: for other in types (Sub, Base): is Base != Sub and Base in Sub.__mro__? Sub.__mro__ = [Sub, Base, object]. Is Base in Sub.__mro__? Yes! So `is_strict_base(Base)` returns True, and Base is REMOVED from the types list!
+
+So only Sub remains in the types for the MRO computation. This means Base won't even appear in the MRO as a separate entry - it's subsumed by Sub.
+
+Wait, but Base IS in the registry. Let me re-read `_compose_mro`:
+
+```python
+def _compose_mro(cls, types):
+    bases = set(cls.__mro__)
+    def is_related(typ):
+        return (typ not in bases and hasattr(typ, '__mro__')
+                                 and issubclass(cls, typ))
+    types = [n for n in types if is_related(n)]
+    def is_strict_base(typ):
+        for other in types:
+            if typ != other and typ in other.__mro__:
+                return True
+        return False
+    types = [n for n in types if not is_strict_base(n)]
+    ...
+```
+
+So after filtering, `types` = [Sub] (Base removed as strict base of Sub).
+
+Then the MRO is computed with only Sub as the external ABC. The final MRO would be something like [Concrete, Sub, Base, object] (Base appears because it's in Sub's MRO, not as a separate insertion).
+
+Now in `_find_impl`:
+- Iterate MRO: Concrete (not in registry), Sub (in registry → match = Sub), Base (in registry):
+  - t = Base, in registry: yes
+  - t not in cls.__mro__: Base not in Concrete.__mro__ → yes (it's virtual through Sub)
+  - match (Sub) not in cls.__mro__: Sub not in Concrete.__mro__ → yes
+  - not issubclass(Sub, Base): Sub IS a subclass of Base → False
+  → No exception ✓
+
+Great, so the subclass-related case works correctly regardless of MRO ordering, because:
+1. If the more specific (Sub) is found first: `issubclass(Sub, Base)` → True → no exception
+2. Base might even not appear separately in the MRO (subsumed by Sub)
+
+And even if Base did appear before Sub (which it won't due to C3), the `is_strict_base` filter would have removed it.
+
+OK so my test for subclass-related ABCs is correct.
+
+Now let me also think about whether there's a case where the "earlier dispatch" matters for the subclass case. The task says "after an earlier dispatch" for the overlapping case. For the subclass case, I'll still include the initial dispatch to exercise the cache.
+
+Alright, I'm confident in my design. Let me write the patches.
+
+One more consideration: the `f"Ambiguous dispatch: {AlphaBase} or {BetaBase}"` in the test. In Python, `f"{AlphaBase}"` calls `str(AlphaBase)`. For a type object, `str(type_obj)` returns the same as `repr(type_obj)`. And the library uses `"{}".format(match, t)` which also calls `str()`. So they match. ✓
+
+But wait - there's a subtlety. The `{AlphaBase}` in an f-string - does it call `str()` or `repr()`? It calls `str()`. And for types, `str(cls)` == `repr(cls)`. Let me verify:
+- `str(int)` → `"<class 'int'>"`
+- `repr(int)` → `"<class 'int'>"`
+Yes, they're the same for type objects. ✓
+
+OK, I'm ready to make the edits. Let me do the test file first, then the doc.
+
+Actually, let me reconsider the doc section. I want to make sure the examples are accurate and the prose is correct. Let me also make sure I'm not "generalizing beyond the inspected behavior."
+
+The key distinctions to make:
+1. Virtual membership: `AlphaBase.register(Concrete)` - makes Concrete a virtual subclass of AlphaBase via ABC mechanism
+2. Concrete inheritance: `class Concrete(AlphaBase)` - would make Concrete a real subclass (not shown, just distinguished)
+3. Handler selection: the resolver picks a handler based on MRO; ambiguous when two unrelated implicit ABCs match
+
+Let me write clear, accurate prose.
+
+Also, I want to make sure the doc examples actually work. One concern: in the doctest, after defining `AlphaBase` and `BetaBase`, if I then use them in multiple handler examples, the ABC registrations from one example might leak into another. But since each handler is a fresh `singledispatch` instance, and the Concrete classes are different, this should be fine. The ABC registrations (`AlphaBase.register(Concrete3)`) affect the ABC's `__subclasses__` and virtual registration, but since each Concrete class is different, there's no cross-contamination.
+
+Wait, actually there IS a potential issue. `AlphaBase.register(Concrete3)` registers Concrete3 as a virtual subclass of AlphaBase. If I then have another example where I create a new class and register it with AlphaBase, that's fine - they're different classes. The virtual registrations don't conflict.
+
+But what about the dispatch cache? Each handler is a separate `singledispatch` instance with its own cache. So no cross-contamination there either. ✓
+
+One more thing: in the doc, I reuse `AlphaBase` and `BetaBase` across multiple examples (handler, handler2, handler3, handler4). The ABC registrations accumulate:
+- `AlphaBase.register(Concrete)` - for handler example
+- `Sub.register(Concrete2)` - for handler2 example (different ABCs)
+- `AlphaBase.register(Concrete3)` - for handler3 example
+- `AlphaBase.register(Concrete4)` - for handler4 example
+
+These are all different Concrete classes being registered with the same ABCs. This is fine - each Concrete class independently becomes a virtual subclass. No conflict.
+
+But wait - for handler2, I use `Sub` and `Base` (different from AlphaBase/BetaBase). And for handler4, I use `AlphaBase` and `BetaBase` again but with `Concrete4`. The ABC cache token changes with each registration, but since each handler has its own dispatch cache and checks the token on each call, this is handled correctly.
+
+Actually, there's a subtle issue. The `get_cache_token()` is global. When `AlphaBase.register(Concrete3)` happens, the token changes. If handler (from the first example) were called after this, its cache would be invalidated. But in the doctest, we don't call handler again after the later registrations. Each handler is used in its own section. So this is fine.
+
+Hmm, but actually in the doctest flow:
+1. handler example: AlphaBase.register(Concrete), BetaBase.register(Concrete) → token changes twice
+2. handler2 example: Sub.register(Concrete2), Base.register(Concrete2) → token changes twice
+3. handler3 example: AlphaBase.register(Concrete3), BetaBase.register(Concrete3) → token changes twice
+4. handler4 example: AlphaBase.register(Concrete4), BetaBase.register(Concrete4) → token changes twice
+
+Between steps, if handler from step 1 were called, its cache would be cleared (token changed). But we don't call it again. Each handler is self-contained in its example. ✓
+
+OK I'm confident. Let me write the patches now.
+
+For the doc, I need to be careful about the exact text. Let me write it out fully:
+
+```
+Overlapping virtual membership
+------------------------------
+
+A concrete class can be virtually registered as a subclass of more than one
+abstract union member.  Virtual membership (managed by ``ABCMeta.register``)
+is distinct from concrete inheritance (``class C(Base)``): it adds an
+implicit ABC relationship to the dispatch MRO without changing the class's
+actual base classes.  Handler selection depends on which registry keys appear
+in the composed MRO.
+
+When two unrelated implicit ABCs both match, the resolver raises
+``RuntimeError`` rather than silently choosing one:
+
+>>> import functools
+>>> from abc import ABC
+>>> import typing
+>>
+>>> class AlphaBase(ABC):
+...     pass
+>>
+>>> class BetaBase(ABC):
+...     pass
+>>
+>>> class Concrete:
+...     pass
+>>
+>>> @functools.singledispatch
+... def handler(x):
+...     return "default"
+>>
+>>> @handler.register(AlphaBase | BetaBase)
+... def union_handler(x):
+...     return "union"
+>>
+>>> c = Concrete()
+>>> handler(c)
+'default'
+>>
+>>> AlphaBase.register(Concrete)
+<class '__main__.Concrete'>
+>>
+>>> handler(c)
+'union'
+>>
+>>> BetaBase.register(Concrete)
+<class '__main__.Concrete'>
+>>
+>>> try:
+...     handler(c)
+... except RuntimeError as exc:
+...     print(exc)
+Ambiguous dispatch: <class '__main__.AlphaBase'> or <class '__main__.BetaBase'>
+
+When the two abstract members are related by subclassing, the more specific
+member is preferred and no exception is raised:
+
+>>> class Base(ABC):
+...     pass
+>>
+>>> class Sub(Base):
+...     pass
+>>
+>>> @functools.singledispatch
+... def handler2(x):
+...     return "default"
+>>
+>>> @handler2.register(Sub | Base)
+... def union_handler2(x):
+...     return "union"
+>>
+>>> class Concrete2:
+...     pass
+>>
+>>> c2 = Concrete2()
+>>> Sub.register(Concrete2)
+<class '__main__.Concrete2'>
+>>
+>>> Base.register(Concrete2)
+<class '__main__.Concrete2'>
+>>
+>>> handler2(c2)
+'union'
+
+An explicit registration of the concrete type bypasses the MRO lookup
+entirely, resolving the ambiguity:
+
+>>> @functools.singledispatch
+... def handler3(x):
+...     return "default"
+>>
+>>> @handler3.register(AlphaBase | BetaBase)
+... def union_handler3(x):
+...     return "union"
+>>
+>>> class Concrete3:
+...     pass
+>>
+>>> AlphaBase.register(Concrete3)
+<class '__main__.Concrete3'>
+>>
+>>> BetaBase.register(Concrete3)
+<class '__main__.Concrete3'>
+>>
+>>> @handler3.register(Concrete3)
+... def concrete_handler(x):
+...     return "concrete"
+>>
+>>> handler3(Concrete3())
+'concrete'
+
+The same behaviour applies with ``typing.Union``:
+
+>>> @functools.singledispatch
+... def handler4(x):
+...     return "default"
+>>
+>>> @handler4.register(typing.Union[AlphaBase, BetaBase])
+... def union_handler4(x):
+...     return "union"
+>>
+>>> class Concrete4:
+...     pass
+>>
+>>> AlphaBase.register(Concrete4)
+<class '__main__.Concrete4'>
+>>
+>>> BetaBase.register(Concrete4)
+<class '__main__.Concrete4'>
+>>
+>>> try:
+...     handler4(Concrete4())
+... except RuntimeError as exc:
+...     print(exc)
+Ambiguous dispatch: <class '__main__.AlphaBase'> or <class '__main__.BetaBase'>
+```
+
+Wait, I need to double-check: in the "explicit registration" example, after `handler3.register(Concrete3, concrete_handler)`, does the dispatch cache get cleared? Yes, `register` calls `dispatch_cache.clear()`. And `registry[Concrete3] = concrete_handler`. So `handler3(Concrete3())` → `dispatch(Concrete3)` → `registry[Concrete3]` found → returns `concrete_handler` → "concrete". ✓
+
+But wait - there's a subtlety. Before the explicit registration, `handler3` has already been used (or not?). Let me trace:
+- `handler3` is created
+- `union_handler3` is registered for `AlphaBase | BetaBase`
+- `AlphaBase.register(Concrete3)` - ABC token changes
+- `BetaBase.register(Concrete3)` - ABC token changes again
+- `handler3.register(Concrete3, concrete_handler)` - registry updated, cache cleared
+- `handler3(Concrete3())` - dispatch(Concrete3) → not in dispatch_cache (was cleared) → registry[Concrete3] found → concrete_handler
+
+Wait, actually we never called `handler3` before the explicit registration in this example. Let me check my doc... 
+
+In the handler3 example, I don't call `handler3(Concrete3())` before the explicit registration. I just do the ABC registrations and then the explicit registration. That's fine - the point is to show that explicit registration resolves the ambiguity.
+
+Actually, let me add a call to show the ambiguous state first, then the resolution. But wait, if I call `handler3(Concrete3())` and it raises RuntimeError, I'd need to catch it in the doctest. Let me add that:
+
+```
+>>> try:
+...     handler3(Concrete3())
+... except RuntimeError as exc:
+...     print(exc)
+Ambiguous dispatch: <class '__main__.AlphaBase'> or <class '__main__.BetaBase'>
+>>
+>>> @handler3.register(Concrete3)
+... def concrete_handler(x):
+...     return "concrete"
+>>
+>>> handler3(Concrete3())
+'concrete'
+```
+
+This shows both the problem and the solution. Better for documentation.
+
+Let me finalize the doc section with this addition.
+
+Actually, I realize I should be careful about the `>>` lines. Looking at the existing doc:
+
+```
+>>> try:
+...     @handler.register(PluginBase | list[int])
+...     def bad(x):
+...         pass
+... except TypeError as exc:
+...     print(exc)
+Invalid union member list[int]: must be a runtime class
+```
+
+There's no `>>` after the last output line before the end of file. And between examples, there's a `>>` separator. Let me make sure my format is consistent.
+
+In the existing doc, the structure is:
+- Paragraph of text
+- `>>` (blank line)
+- Doctest block
+- `>>` (blank line)  
+- Next paragraph or section
+
+Wait, actually looking more carefully:
+```
+A union handler does not override a handler registered for a concrete
+subclass that is more specific than any member of the union:
+
+>>> @handler.register(bool)
+... def bool_handler(x):
+...     return "bool"
+>>
+>>> handler(True)
+'bool'
+>>> handler(42)
+'union'
+```
+
+Hmm, there's no `>>` between the paragraph and the first `>>>`. The `>>` appears between separate doctest blocks. And the last block in a section doesn't have a trailing `>>`.
+
+Let me look at the section boundaries:
+```
+More-specific dispatch still applies
+------------------------------------
+
+A union handler does not override a handler registered for a concrete
+subclass that is more specific than any member of the union:
+
+>>> @handler.register(bool)
+... def bool_handler(x):
+...     return "bool"
+>>
+>>> handler(True)
+'bool'
+>>> handler(42)
+'union'
+
+Late virtual registration
+-------------------------
+```
+
+So between sections, there's just a blank line (no `>>`). The `>>` is only between doctest blocks within a section.
+
+And at the start of a section, after the heading and intro text, the first doctest block starts with `>>>` directly (no `>>` before it).
+
+Let me match this pattern.
+
+OK, I think I have enough understanding. Let me write the patches. I'll do them one at a time to be safe.
+
+Let me start with the test file since it's more critical.

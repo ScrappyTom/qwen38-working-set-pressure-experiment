@@ -1,0 +1,1482 @@
+Let me analyze the current state:
+
+1. I have the full source of `Lib/functools.py` (1004 lines) and `tests/test_virtual_registration.py` (71 lines) visible.
+2. I need to understand the task: Add overlapping virtual-membership tests and documentation.
+
+Key requirements from the task:
+- Add new unittest coverage in `tests/test_virtual_registration.py` for:
+  - A value that becomes a virtual subclass of two unrelated abstract union members after an earlier dispatch
+  - For subclass-related abstract union members
+  - For a subsequent explicit registration of the concrete value type
+  - Cover both `A | B` and `typing.Union[A, B]`
+- Establish actual outcomes (where execution raises, assert exact exception class and diagnostic text)
+- Use fresh local classes so membership doesn't leak between tests
+- Preserve old tests and assertions
+- Don't weaken or change library behavior
+- New tests must expose a resolver fault that would silently select a handler in the overlapping unrelated-members case
+- Append an accurate explanatory section to `Doc/howto/union-dispatch.rst` with runnable `>>>` examples
+- Distinguish virtual membership, concrete inheritance, and handler selection
+- Examples run as ordinary standalone doctests with `__name__='__main__'` and import the candidate library
+- Existing document must remain an exact prefix
+- Other six files remain byte-identical
+
+First, I need to understand the actual library behavior for overlapping virtual membership. Let me look at the `_find_impl` function more carefully:
+
+```python
+def _find_impl(cls, registry):
+    mro = _compose_mro(cls, registry.keys())
+    match = None
+    for t in mro:
+        if match is not None:
+            # If *match* is an implicit ABC but there is another unrelated,
+            # equally matching implicit ABC, refuse the temptation to guess.
+            if (t in registry and t not in cls.__mro__
+                              and match not in cls.__mro__
+                              and not issubclass(match, t)):
+                raise RuntimeError("Ambiguous dispatch: {} or {}".format(
+                    match, t))
+            break
+        if t in registry:
+            match = t
+    return registry.get(match)
+```
+
+So the key logic: when `_find_impl` is called, it computes the MRO using `_compose_mro` which includes abstract base classes from the registry. It iterates through the MRO and finds the first match in the registry. If it finds a second match that is:
+- In the registry
+- NOT in `cls.__mro__` (so it's an implicit/ABC relationship, not concrete inheritance)
+- AND the first match is also NOT in `cls.__mro__`
+- AND the first match is not a subclass of the second
+
+Then it raises `RuntimeError("Ambiguous dispatch: {} or {}".format(match, t))`.
+
+This is the "resolver fault" - when two unrelated ABCs both match, instead of silently picking one, it raises an error.
+
+Now let me think about what happens in the overlapping case:
+- We have `A` and `B` as two unrelated ABCs
+- We register a handler for `A | B` (or `Union[A, B]`)
+- Initially, some value `x` of type `X` doesn't match either (dispatches to default)
+- Then we register `X` as a virtual subclass of both `A` and `B` (or register `X` as virtual subclass of `A`, and `X` is already a virtual subclass of `B` through some other mechanism)
+
+Wait, actually the scenario is:
+- `A` and `B` are two unrelated ABCs
+- A union handler is registered for `A | B`
+- After an earlier dispatch, a value's type becomes a virtual subclass of BOTH `A` and `B`
+
+When dispatch happens for such a type:
+- `_compose_mro` will include both `A` and `B` in the MRO
+- `_find_impl` will find both in the registry
+- Since both are implicit (not in `cls.__mro__`) and unrelated, it should raise `RuntimeError("Ambiguous dispatch: ...")`
+
+Wait, but in the union case, the registry has both `A` and `B` mapped to the same handler function. Let me re-read the register code:
+
+```python
+if _is_union(cls):
+    for type_ in cls.__args__:
+        if not isinstance(type_, type):
+            raise TypeError(...)
+    for type_ in cls.__args__:
+        registry[type_] = func
+```
+
+So for `A | B`, both `registry[A]` and `registry[B]` point to the same `union_handler` function.
+
+Now in `_find_impl`:
+- `mro = _compose_mro(cls, registry.keys())` - this will include both A and B in the MRO since cls is a virtual subclass of both
+- Iterating through mro:
+  - First match found (say A): `match = A`
+  - Second match found (say B): Check if it's ambiguous:
+    - `t in registry` → True (B is in registry)
+    - `t not in cls.__mro__` → True (B is ABC, not in concrete MRO)
+    - `match not in cls.__mro__` → True (A is also ABC, not in concrete MRO)
+    - `not issubclass(match, t)` → True (A is not a subclass of B, they're unrelated)
+    - → Raises `RuntimeError("Ambiguous dispatch: A or B")`
+
+So the actual outcome is a `RuntimeError` with message `"Ambiguous dispatch: A or B"` (where A and B are the actual class names).
+
+Wait, but the format string uses the class objects themselves. Let me think about what the message would look like. The format is:
+```python
+raise RuntimeError("Ambiguous dispatch: {} or {}".format(match, t))
+```
+
+This will use `repr()` of the classes. For locally defined classes, the repr would be something like `<class '__main__.ClassName'>` or similar.
+
+Actually, in unittest context, the module would be the test module. Let me think... when running as `__main__`, the classes would be in `__main__`. The repr of a class is typically `<class 'module.ClassName'>`.
+
+For the tests, I need to figure out what the actual error message would be. Let me think about this more carefully.
+
+Actually, I should write the tests to use `assertRaises` and check the message pattern, or I should run the code to see what actually happens.
+
+Let me think about what I need to do:
+
+1. First, I need to read `Doc/howto/union-dispatch.rst` to see the current content
+2. Then I need to write the new tests
+3. Then write the doc section
+4. Run the public check
+5. Submit
+
+Let me first read the doc file. I also need to understand the test structure better.
+
+For the "resolver fault" requirement: "New tests must also expose a resolver fault that would silently select a handler in the overlapping unrelated-members case." This means the test should verify that the RuntimeError IS raised (i.e., the library correctly detects the ambiguity rather than silently picking one). This is the "fault" - without the RuntimeError check in `_find_impl`, it would silently select one handler.
+
+Let me plan the tests:
+
+```python
+class OverlappingVirtualMembership(unittest.TestCase):
+    """Tests for a type that is a virtual subclass of two unrelated ABCs
+    registered in a union, after an earlier dispatch has occurred."""
+
+    def test_pep604_overlapping_virtual_subclass(self):
+        """PEP 604 union: type virtually belongs to two unrelated ABCs."""
+        class BaseA(ABC):
+            pass
+        class BaseB(ABC):
+            pass
+        class Value:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(BaseA | BaseB)
+        def union_handler(x):
+            return "union"
+
+        v = Value()
+        # Before any virtual registration, dispatches to default.
+        self.assertEqual(handler(v), "default")
+
+        # Now register Value as virtual subclass of BOTH A and B.
+        BaseA.register(Value)
+        BaseB.register(Value)
+
+        # The overlapping case: Value is virtually a subclass of two
+        # unrelated ABCs both in the union registry. The library must
+        # detect the ambiguity rather than silently selecting one.
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(v)
+        # Verify the message mentions both classes.
+        self.assertIn("Ambiguous dispatch", str(ctx.exception))
+
+    def test_typing_union_overlapping_virtual_subclass(self):
+        """typing.Union: type virtually belongs to two unrelated ABCs."""
+        # Same structure but using typing.Union
+        ...
+```
+
+Wait, but I need to be more careful. The task says "for a subsequent explicit registration of the concrete value type". So there's a three-stage test:
+1. Initial dispatch (before virtual registration) → default
+2. After virtual registration of two unrelated ABCs → RuntimeError
+3. After explicit registration of the concrete type → works (no ambiguity because concrete type is directly in registry)
+
+Let me re-read the task: "Add new unittest coverage in tests/test_virtual_registration.py for a value that becomes a virtual subclass of two unrelated abstract union members after an earlier dispatch, for subclass-related abstract union members, and for a subsequent explicit registration of the concrete value type."
+
+So the scenarios are:
+1. A value becomes a virtual subclass of two unrelated abstract union members after an earlier dispatch → should raise RuntimeError
+2. For subclass-related abstract union members (one ABC is a subclass of the other?) → might not raise (no ambiguity)
+3. A subsequent explicit registration of the concrete value type → resolves the ambiguity
+
+Wait, "subclass-related abstract union members" - this might mean the two ABCs are related by subclassing (one is a subclass of the other). In that case, the ambiguity check would NOT fire because `not issubclass(match, t)` would be False.
+
+Let me re-read the ambiguity check:
+```python
+if (t in registry and t not in cls.__mro__
+              and match not in cls.__mro__
+              and not issubclass(match, t)):
+    raise RuntimeError(...)
+```
+
+If `match` (the first found) IS a subclass of `t` (the second found), then `not issubclass(match, t)` is False, and no error is raised. The second match would then be... wait, let me re-read the loop:
+
+```python
+for t in mro:
+    if match is not None:
+        if (t in registry and t not in cls.__mro__
+                          and match not in cls.__mro__
+                          and not issubclass(match, t)):
+            raise RuntimeError(...)
+        break
+    if t in registry:
+        match = t
+return registry.get(match)
+```
+
+After `match` is set (first registry hit), the loop continues. On the next iteration where `t` is also in registry, it checks the ambiguity condition. If the condition is met, it raises. Otherwise, it `break`s. Then returns `registry.get(match)` - which is the FIRST match.
+
+So for subclass-related ABCs:
+- If `A` is a subclass of `B`, and both are in the registry
+- If `match = A` (found first in MRO) and then `t = B` is found:
+  - `not issubclass(A, B)` → `not True` → `False` → no error
+  - It breaks and returns `registry.get(A)` → the handler for A
+- This is correct: the more specific (subclass) handler wins
+
+Now for the "subsequent explicit registration":
+- After the RuntimeError for overlapping unrelated ABCs, if you then explicitly register the concrete type:
+  - `registry[Value] = concrete_handler`
+  - Now `_find_impl` is called, `_compose_mro` computes MRO
+  - The first match in MRO that's in registry... wait, would it be `Value` itself?
+  
+  Actually, `_compose_mro(cls, registry.keys())` - the registry now has `BaseA`, `BaseB`, and `Value`. The MRO would include `Value` itself (since it's the class being dispatched). Actually wait, let me think again.
+
+  `_compose_mro(cls, types)` where `cls` is `Value` and `types` includes `BaseA`, `BaseB`, and `Value` (among others from registry).
+
+  In `_compose_mro`:
+  ```python
+  def is_related(typ):
+      return (typ not in bases and hasattr(typ, '__mro__')
+                               and issubclass(cls, typ))
+  ```
+  `Value` is in `bases` (since `bases = set(cls.__mro__)` and `Value` is in its own MRO), so `Value` would be filtered out.
+
+  Actually wait, `bases = set(cls.__mro__)` for `Value` would be `{Value, object}`. So `Value in bases` is True, and `is_related(Value)` returns False. So `Value` is filtered out of the types list.
+
+  Then the MRO is computed with just the ABCs. The MRO would be something like `[Value, BaseA, BaseB, object]` (or some ordering).
+
+  In `_find_impl`:
+  ```python
+  mro = _compose_mro(cls, registry.keys())
+  match = None
+  for t in mro:
+      if match is not None:
+          ...check ambiguity...
+          break
+      if t in registry:
+          match = t
+  return registry.get(match)
+  ```
+
+  Wait, `Value` itself might be in the MRO. Let me think... `_compose_mro(Value, registry.keys())`:
+  
+  The function starts with `bases = set(cls.__mro__)` = `{Value, object}`.
+  
+  Then it filters types: `is_related(typ)` checks `typ not in bases and hasattr(typ, '__mro__') and issubclass(cls, typ)`.
+  
+  - `BaseA`: not in `{Value, object}`, has `__mro__`, `issubclass(Value, BaseA)` → True (virtual). So included.
+  - `BaseB`: same, included.
+  - `Value`: in `bases`, excluded.
+  - `object`: in `bases`, excluded.
+  - Other registry keys (like the default `object`): in `bases`, excluded.
+
+  So types = [BaseA, BaseB] (approximately).
+
+  Then `_c3_mro(Value, abcs=mro)` is called where mro is the ordered list of these ABCs.
+
+  In `_c3_mro`:
+  ```python
+  for i, base in enumerate(reversed(cls.__bases__)):
+      if hasattr(base, '__abstractmethods__'):
+          boundary = len(cls.__bases__) - i
+          break
+  else:
+      boundary = 0
+  ```
+  `Value.__bases__` = `(object,)`. `reversed` gives `[object]`. `object` doesn't have `__abstractmethods__` (or does it? Actually `object` doesn't have `__abstractmethods__`). So `boundary = 0`.
+
+  ```python
+  explicit_bases = list(cls.__bases__[:boundary])  # empty
+  abstract_bases = []
+  other_bases = list(cls.__bases__[boundary:])  # [object]
+  ```
+
+  Then for each ABC in `abcs` (which are BaseA and BaseB):
+  ```python
+  for base in abcs:
+      if issubclass(cls, base) and not any(
+              issubclass(b, base) for b in cls.__bases__
+          ):
+      abstract_bases.append(base)
+  ```
+  Both BaseA and BaseB satisfy this (Value is virtually a subclass of both, and neither is in Value.__bases__).
+
+  So `abstract_bases = [BaseA, BaseB]`.
+
+  The C3 merge would produce something like `[Value, BaseA, BaseB, object]` (the exact order of BaseA and BaseB depends on the input order).
+
+  Back in `_find_impl`:
+  - `t = Value`: `Value in registry`? Yes! (we just explicitly registered it). So `match = Value`.
+  - `t = BaseA`: `match is not None`, check: `BaseA in registry` True, `BaseA not in Value.__mro__` True, `match not in Value.__mro__` → `Value not in Value.__mro__` → False! (Value IS in its own MRO)
+  
+  Wait, `match not in cls.__mro__` where `cls` is `Value` and `match` is `Value`. `Value in Value.__mro__` is True. So `match not in cls.__mro__` is False. The condition fails, so no RuntimeError. It breaks.
+
+  Returns `registry.get(Value)` → the concrete handler.
+
+  So after explicit registration of the concrete type, dispatch works correctly without ambiguity.
+
+Now let me think about what the test should look like more carefully. I need to:
+1. Establish that initial dispatch goes to default
+2. After virtual registration of two unrelated ABCs → RuntimeError with specific message
+3. After explicit registration of concrete type → works correctly
+
+For the "subclass-related" case:
+- If `BaseB` is a subclass of `BaseA` (both ABCs), and a type is virtually registered as a subclass of both:
+  - The ambiguity check: `not issubclass(match, t)` - if match is BaseB (subclass) and t is BaseA (superclass), then `not issubclass(BaseB, BaseA)` is `not True` = False. No error.
+  - The handler for the more specific (subclass) one is used.
+
+Wait, but the order in the MRO matters. Let me think... if BaseB is a subclass of BaseA, and the MRO is `[Value, BaseB, BaseA, object]`:
+- First match: BaseB → `match = BaseB`
+- Second: BaseA → check: `BaseA in registry` True, `BaseA not in Value.__mro__` True, `match not in cls.__mro__` → `BaseB not in Value.__mro__` True, `not issubclass(BaseB, BaseA)` → `not True` → False
+- No error. Returns `registry.get(BaseB)`.
+
+If MRO is `[Value, BaseA, BaseB, object]`:
+- First match: BaseA → `match = BaseA`
+- Second: BaseB → check: `BaseB in registry` True, `BaseB not in Value.__mro__` True, `match not in cls.__mro__` → `BaseA not in Value.__mro__` True, `not issubclass(BaseA, BaseB)` → `not False` → True
+- RuntimeError!
+
+Hmm, so the outcome depends on MRO ordering. The C3 algorithm would put the subclass (BaseB) before the superclass (BaseA) in the MRO, I think. Let me trace through `_c3_mro` more carefully.
+
+Actually, in `_c3_mro(Value, abcs=[BaseA, BaseB])` where `BaseB` is a subclass of `BaseA`:
+- `abstract_bases = [BaseA, BaseB]` (order from the abcs list)
+- Wait, actually the order depends on how they're passed. Let me re-check.
+
+In `_compose_mro`:
+```python
+types = [n for n in types if is_related(n)]
+```
+This preserves the order from `registry.keys()`. The registry is a dict, and for a union `A | B`, the registration does:
+```python
+for type_ in cls.__args__:
+    registry[type_] = func
+```
+So if the union is `BaseA | BaseB`, then `BaseA` is registered first, then `BaseB`.
+
+Then in `_compose_mro`, `types` would be in registration order. Then:
+```python
+for typ in types:
+    found = []
+    for sub in typ.__subclasses__():
+        if sub not in bases and issubclass(cls, sub):
+            found.append(...)
+    if not found:
+        mro.append(typ)
+        continue
+    ...
+```
+
+For unrelated ABCs, neither would have the other as a subclass in their `__subclasses__()`, so they'd be appended in order: `[BaseA, BaseB]`.
+
+For subclass-related (BaseB subclass of BaseA):
+- `BaseA.__subclasses__()` would include `BaseB` (if BaseB was defined as `class BaseB(BaseA)`).
+- `issubclass(Value, BaseB)` is True (virtually).
+- So `found` for BaseA would include `[BaseB, ...]` (BaseB's MRO entries that are in type_set).
+- Actually this gets complicated. Let me not over-think this and just focus on writing tests that verify the actual behavior.
+
+The key insight from the task: "Establish the existing library's actual outcomes rather than assuming them." I need to actually run the code to see what happens. But I can reason from the code.
+
+Let me focus on what I'm confident about:
+1. Two UNRELATED ABCs, both virtually matching → RuntimeError("Ambiguous dispatch: ...")
+2. After explicit registration of the concrete type → the concrete handler is used (no error)
+3. For the "subclass-related" case, I need to be more careful about MRO ordering.
+
+Actually, let me reconsider. The task says "for subclass-related abstract union members". This might mean: the two ABCs in the union are related by subclassing. Let me write a test where one ABC is a subclass of another, and see what happens.
+
+If `class Sub(ABC)` and `class Super(ABC)` and `Sub` inherits from `Super`... wait, can an ABC subclass another ABC? Yes, if it implements the abstract methods or if they have no abstract methods.
+
+Let me simplify: 
+```python
+class Super(ABC):
+    pass
+class Sub(ABC):
+    # Sub is a subclass of Super
+    pass  # But this doesn't make Sub inherit from Super
+```
+
+No wait, to make Sub a subclass of Super:
+```python
+class Super(ABC):
+    pass
+class Sub(Super):
+    pass
+```
+
+But then Sub would inherit Super's `__abstractmethods__` (which is empty since Super has no abstract methods). So both can be used as ABCs for virtual registration.
+
+Now if I register a handler for `Super | Sub`:
+- `registry[Super] = handler`, `registry[Sub] = handler`
+- A value type `Value` is virtually registered as subclass of both
+
+In `_find_impl`, the MRO would have both. Since `Sub` is a subclass of `Super`:
+- If MRO order is `[Value, Sub, Super, object]`: first match Sub, then Super. Check: `not issubclass(Sub, Super)` → `not True` → False. No error. Returns handler for Sub.
+- If MRO order is `[Value, Super, Sub, object]`: first match Super, then Sub. Check: `not issubclass(Super, Sub)` → `not False` → True. RuntimeError!
+
+The C3 MRO should put Sub before Super (more specific first). Let me verify with `_c3_mro`:
+
+In `_c3_mro(Value, abcs=[Super, Sub])`:
+- `abstract_bases = [Super, Sub]` (both match)
+- Then: `abstract_c3_mros = [_c3_mro(Super, abcs=...) for ...]` and same for Sub
+- `_c3_mro(Super, ...)` returns `[Super, object]` (roughly)
+- `_c3_mro(Sub, ...)` returns `[Sub, Super, object]` (Sub's MRO includes Super)
+
+The C3 merge:
+- Sequences: `[[Value], [Super, object], [Sub, Super, object], [object], [Super], [Sub], [object]]`
+  Wait, I'm confusing myself. Let me be more careful.
+
+Actually, the call is:
+```python
+return _c3_merge(
+    [[cls]] +
+    explicit_c3_mros + abstract_c3_mros + other_c3_mros +
+    [explicit_bases] + [abstract_bases] + [other_bases]
+)
+```
+
+Where:
+- `cls` = Value
+- `explicit_c3_mros` = [] (no explicit bases with ABCs)
+- `abstract_c3_mros` = [_c3_mro(Super, abcs=...), _c3_mro(Sub, abcs=...)]
+- `other_c3_mros` = [_c3_mro(object, abcs=...)]
+- `explicit_bases` = []
+- `abstract_bases` = [Super, Sub]
+- `other_bases` = [object]
+
+Let me compute `_c3_mro(Super, abcs=[])`:
+- `Super.__bases__` = (object,)
+- boundary = 0 (no ABC bases)
+- explicit_bases = [], other_bases = [object]
+- abstract_bases = [] (no ABCs to check)
+- Returns `_c3_merge([[Super], [object], [object]])` = `[Super, object]`
+
+`_c3_mro(Sub, abcs=[])`:
+- `Sub.__bases__` = (Super,)  (since `class Sub(Super)`)
+- Wait, but does Sub have `__abstractmethods__`? If Sub inherits from Super which is an ABC with no abstract methods, then `Sub.__abstractmethods__` would be `frozenset()`.
+- boundary: `reversed(Sub.__bases__)` = `[Super]`. `hasattr(Super, '__abstractmethods__')` → True. So `boundary = 1`.
+- explicit_bases = [Super], other_bases = []
+- abstract_bases = [] (no ABCs to add)
+- `_c3_mro(Super, abcs=[])` = [Super, object]
+- Returns `_c3_merge([[Sub], [Super, object], [], [Super]])`
+  - Sequences: [[Sub], [Super, object], [Super]]
+  - Step 1: candidates = Sub, Super. Sub not in rest of any seq. Pick Sub.
+  - Step 2: candidates = Super. Pick Super.
+  - Step 3: candidates = object. Pick object.
+  - Result: [Sub, Super, object]
+
+Back to the main `_c3_mro(Value, abcs=[Super, Sub])`:
+- `_c3_merge([[Value], [Super, object], [Sub, Super, object], [object], [Super, Sub], [object]])`
+
+Wait, I need to be more careful. Let me re-read `_c3_mro`:
+
+```python
+def _c3_mro(cls, abcs=None):
+    for i, base in enumerate(reversed(cls.__bases__)):
+        if hasattr(base, '__abstractmethods__'):
+            boundary = len(cls.__bases__) - i
+            break
+    else:
+        boundary = 0
+    abcs = list(abcs) if abcs else []
+    explicit_bases = list(cls.__bases__[:boundary])
+    abstract_bases = []
+    other_bases = list(cls.__bases__[boundary:])
+    for base in abcs:
+        if issubclass(cls, base) and not any(
+                issubclass(b, base) for b in cls.__bases__
+            ):
+            abstract_bases.append(base)
+    for base in abstract_bases:
+        abcs.remove(base)
+    explicit_c3_mros = [_c3_mro(base, abcs=abcs) for base in explicit_bases]
+    abstract_c3_mros = [_c3_mro(base, abcs=abcs) for base in abstract_bases]
+    other_c3_mros = [_c3_mro(base, abcs=abcs) for base in other_bases]
+    return _c3_merge(
+        [[cls]] +
+        explicit_c3_mros + abstract_c3_mros + other_c3_mros +
+        [explicit_bases] + [abstract_bases] + [other_bases]
+    )
+```
+
+For `Value` with `abcs=[Super, Sub]`:
+- `Value.__bases__` = (object,)
+- boundary = 0 (object doesn't have `__abstractmethods__`... wait, does it? Let me check. Actually in CPython, `object` does NOT have `__abstractmethods__`. Only ABCs do.)
+- explicit_bases = []
+- other_bases = [object]
+- abstract_bases: check `issubclass(Value, Super)` → True (virtual), `not any(issubclass(b, Super) for b in (object,))` → `not False` → True. So Super is added. Similarly for Sub.
+- abstract_bases = [Super, Sub]
+- abcs after removal: [] (both removed)
+
+Now:
+- explicit_c3_mros = []
+- abstract_c3_mros = [_c3_mro(Super, abcs=[]), _c3_mro(Sub, abcs=[])]
+  - _c3_mro(Super, abcs=[]) = [Super, object] (as computed above)
+  - _c3_mro(Sub, abcs=[]):
+    - Sub.__bases__ = (Super,)
+    - reversed: [Super]. hasattr(Super, '__abstractmethods__') → True. boundary = 1.
+    - explicit_bases = [Super], other_bases = []
+    - abstract_bases = [] (no abcs to check)
+    - explicit_c3_mros = [_c3_mro(Super, abcs=[]) = [Super, object]]
+    - Returns _c3_merge([[Sub], [Super, object], [Super]])
+      = [Sub, Super, object]
+- other_c3_mros = [_c3_mro(object, abcs=[])]
+  - object.__bases__ = ()
+  - boundary = 0
+  - explicit_bases = [], other_bases = []
+  - abstract_bases = []
+  - Returns _c3_merge([[object]]) = [object]
+
+Final merge:
+```
+_c3_merge([
+    [Value],
+    [Super, object],       # _c3_mro(Super)
+    [Sub, Super, object],  # _c3_mro(Sub)
+    [object],              # _c3_mro(object)
+    [],                    # explicit_bases
+    [Super, Sub],          # abstract_bases
+    [object]               # other_bases
+])
+```
+
+Let me trace the C3 merge:
+Sequences: [[Value], [Super, object], [Sub, Super, object], [object], [Super, Sub], [object]]
+
+Step 1: 
+- Candidates: Value (head of seq 0), Super (head of seq 1), Sub (head of seq 2), object (head of seq 3), Super (head of seq 4), object (head of seq 5)
+- Check Value: in rest of any seq? No. Pick Value.
+Result so far: [Value]
+Remaining: [[], [Super, object], [Sub, Super, object], [object], [Super, Sub], [object]]
+
+Step 2:
+- Candidates: Super (seq1), Sub (seq2), object (seq3), Super (seq4), object (seq5)
+- Check Super: in rest of seq2 (Super, object)? Yes! Reject.
+- Check Sub: in rest of seq1 (object)? No. In rest of seq4 (Sub)? seq4 is [Super, Sub], rest is [Sub]. Is Sub in [Sub]? Yes! Reject.
+- Check object: in rest of seq1? No (rest is []). In rest of seq2 (object)? seq2 rest after removing head Sub is [Super, object], is object in there? Yes! Reject.
+- Check Super (seq4): in rest of seq1 (object)? No. In rest of seq2 (Super, object)? Yes! Reject.
+- Check object (seq5): in rest of seq1 (object)? seq1 is [Super, object], rest is [object]. Is object in [object]? Yes! Reject.
+- All rejected! This would cause "Inconsistent hierarchy" error!
+
+Wait, that can't be right. Let me re-check.
+
+Actually wait, I think I made an error. Let me re-check the C3 merge algorithm. The sequences should be:
+
+```
+_c3_merge(
+    [[cls]] +
+    explicit_c3_mros + abstract_c3_mros + other_c3_mros +
+    [explicit_bases] + [abstract_bases] + [other_bases]
+)
+```
+
+Wait, `explicit_bases` is a LIST (not a list containing a list). Let me re-read:
+
+```python
+return _c3_merge(
+    [[cls]] +
+    explicit_c3_mros + abstract_c3_mros + other_c3_mros +
+    [explicit_bases] + [abstract_bases] + [other_bases]
+)
+```
+
+So the sequences are:
+1. `[Value]`
+2. `[Super, object]` (from _c3_mro(Super))
+3. `[Sub, Super, object]` (from _c3_mro(Sub))
+4. `[object]` (from _c3_mro(object))
+5. `[]` (explicit_bases is empty)
+6. `[Super, Sub]` (abstract_bases)
+7. `[object]` (other_bases)
+
+Now C3 merge:
+Start: [[Value], [Super, object], [Sub, Super, object], [object], [], [Super, Sub], [object]]
+
+Step 1: 
+- Seq heads: Value, Super, Sub, object, (empty), Super, object
+- Value: not in any other seq's tail. Pick Value.
+Remove Value.
+Remaining: [[], [Super, object], [Sub, Super, object], [object], [], [Super, Sub], [object]]
+Purge empty: [[Super, object], [Sub, Super, object], [object], [Super, Sub], [object]]
+
+Step 2:
+- Seq heads: Super, Sub, object, Super, object
+- Super: in [Sub, object] (tail of seq2 [Sub, Super, object])? Is Super in [Super, object]? Yes! Reject.
+- Sub: in [object] (tail of seq1)? No. In [Super, object] (tail of seq2)? No. In [] (tail of seq3)? No. In [Sub] (tail of seq4 [Super, Sub])? Yes! Reject.
+- object: in [Super, object] (tail of seq2)? Yes! Reject.
+- Super (seq4): in [object] (tail of seq1)? No. In [Super, object] (tail of seq2)? Yes! Reject.
+- object (seq5): in [object] (tail of seq1)? seq1 tail after removing head is [object]. Is object in [object]? Yes! Reject.
+
+All rejected → "Inconsistent hierarchy"!
+
+Hmm, that's a problem. But wait, this is for the case where Sub is a concrete subclass of Super. If both are in the registry and both are virtual-ABCs for Value, the C3 merge might fail.
+
+Actually wait, I think I'm making an error. Let me reconsider. The issue is that `abstract_bases` contains `[Super, Sub]` as a separate sequence, but `Sub` appears after `Super` in `_c3_mro(Sub)` as `[Sub, Super, object]`. The sequence `[Super, Sub]` says Super before Sub, but `[Sub, Super, object]` says Sub before Super. These are contradictory!
+
+This would indeed cause an "Inconsistent hierarchy" error in `_c3_merge`. But wait, that would mean the code can't handle this case at all. That seems like a bug...
+
+Actually, let me reconsider. Maybe I'm wrong about the order of `abstract_bases`. Let me re-check:
+
+```python
+for base in abcs:
+    if issubclass(cls, base) and not any(
+            issubclass(b, base) for b in cls.__bases__
+        ):
+        abstract_bases.append(base)
+```
+
+`abcs` is the parameter passed to `_c3_mro`, which comes from `_compose_mro`:
+
+```python
+def _compose_mro(cls, types):
+    ...
+    types = [n for n in types if is_related(n)]
+    ...
+    type_set = set(types)
+    mro = []
+    for typ in types:
+        found = []
+        for sub in typ.__subclasses__():
+            if sub not in bases and issubclass(cls, sub):
+                found.append([s for s in sub.__mro__ if s in type_set])
+        if not found:
+            mro.append(typ)
+            continue
+        found.sort(key=len, reverse=True)
+        for sub in found:
+            for subcls in sub:
+                if subcls not in mro:
+                    mro.append(subcls)
+    return _c3_mro(cls, abcs=mro)
+```
+
+So `mro` is built by iterating through `types` (the registry keys that are related). For each type, it checks if any of its `__subclasses__()` is a virtual subclass of cls. If so, it adds the subclasses' MRO entries (filtered to type_set). If no subclasses found, it just appends the type itself.
+
+For our case: types = [Super, Sub] (in registry order for `Super | Sub`).
+
+For Super:
+- `Super.__subclasses__()` - does it include Sub? If `class Sub(Super)`, then yes! Sub is in Super.__subclasses__().
+- `issubclass(Value, Sub)` → True (virtual).
+- `found = [[s for s in Sub.__mro__ if s in type_set]]` = `[[Sub, Super]]` (Sub.__mro__ = (Sub, Super, object), filtered to {Super, Sub} = [Sub, Super])
+- Since found is non-empty, sort by len desc: just one entry [Sub, Super]
+- Add Sub to mro, then Super (already there? no, it's the first time)
+- mro = [Sub, Super]
+
+For Sub:
+- `Sub.__subclasses__()` - does it include anything relevant? Value is virtually registered, but is Value in Sub.__subclasses__()? Virtual registration via `ABC.register()` does add to `__subclasses__()` in CPython. So `Sub.__subclasses__()` might include Value.
+- `issubclass(Value, Value)` → True, but `Value not in bases` where bases includes Value... wait, `bases = set(cls.__mro__)` = {Value, object}. So Value IS in bases. So the check `sub not in bases` fails. Value is excluded.
+- So found is empty for Sub.
+- mro.append(Sub) → but Sub is already in mro. The code says `if subcls not in mro: mro.append(subcls)`. So Sub is not added again.
+
+Final mro = [Sub, Super].
+
+Then `_c3_mro(Value, abcs=[Sub, Super])`:
+- abstract_bases = [Sub, Super] (both match, in this order)
+- abstract_c3_mros = [_c3_mro(Sub, abcs=[]), _c3_mro(Super, abcs=[])]
+  - _c3_mro(Sub) = [Sub, Super, object] (as before)
+  - _c3_mro(Super) = [Super, object]
+- Merge:
+  ```
+  [[Value], [Sub, Super, object], [Super, object], [object], [], [Sub, Super], [object]]
+  ```
+
+Step 1: Pick Value.
+Remaining: [[Sub, Super, object], [Super, object], [object], [Sub, Super], [object]]
+
+Step 2:
+- Heads: Sub, Super, object, Sub, object
+- Sub: in rest of [Super, object]? No. In rest of [object]? No. In rest of [Super, object] (seq4)? No. In rest of [object]? No. Pick Sub.
+
+Wait, let me be more careful.
+Seqs: [[Sub, Super, object], [Super, object], [object], [Sub, Super], [object]]
+
+- Sub: check if in any other seq's tail:
+  - [Super, object]: tail is [object]. Sub not in [object]. OK.
+  - [object]: tail is []. OK.
+  - [Sub, Super]: tail is [Super]. Sub not in [Super]. OK.
+  - [object]: tail is []. OK.
+  Pick Sub.
+
+Remaining: [[Super, object], [Super, object], [object], [Super], [object]]
+
+Step 3:
+- Heads: Super, Super, object, Super, object
+- Super: 
+  - [object]: Super not in []. OK.
+  - [object]: OK.
+  - [object]: OK.
+  - [object]: OK.
+  Pick Super.
+
+Remaining: [[object], [object], [object], [object]]
+
+Step 4:
+- Heads: object, object, object, object
+- Pick object.
+
+Remaining: [[object], [object], [object]]
+
+Step 5:
+- Pick object (last remaining, all same).
+
+Wait, C3 merge picks one at a time and removes it from all sequences where it appears.
+
+After picking object:
+Remaining: [[], [], []] → all empty → done.
+
+Result: [Value, Sub, Super, object]
+
+So the MRO is `[Value, Sub, Super, object]`. Sub comes before Super.
+
+Back in `_find_impl`:
+- t = Value: `Value in registry`? After explicit registration, yes. `match = Value`.
+- t = Sub: `match is not None`. Check: `Sub in registry` True, `Sub not in Value.__mro__` True, `match not in Value.__mro__` → `Value not in (Value, object)` → False!
+  - Condition fails. break.
+- Returns `registry.get(Value)` → concrete handler.
+
+But what about BEFORE explicit registration (only the union is registered)?
+- Registry: {object: default, Super: union_handler, Sub: union_handler}
+- MRO: [Value, Sub, Super, object]
+- t = Value: `Value in registry`? No.
+- t = Sub: `Sub in registry`? Yes. `match = Sub`.
+- t = Super: `match is not None`. Check: `Super in registry` True, `Super not in Value.__mro__` True, `match not in Value.__mro__` → `Sub not in (Value, object)` True, `not issubclass(Sub, Super)` → `not True` → False.
+  - Condition fails (because Sub IS a subclass of Super). break.
+- Returns `registry.get(Sub)` → union_handler.
+
+So for subclass-related ABCs, there's NO RuntimeError. The handler is selected based on the subclass (more specific) one. This makes sense.
+
+Now for UNRELATED ABCs (the main test case):
+- Registry: {object: default, BaseA: union_handler, BaseB: union_handler}
+- MRO: Let's say [Value, BaseA, BaseB, object] or [Value, BaseB, BaseA, object]
+
+For unrelated ABCs, in `_compose_mro`:
+- types = [BaseA, BaseB] (registry order)
+- For BaseA: `BaseA.__subclasses__()` - does it include anything? Value is virtually registered via `BaseA.register(Value)`, so Value should be in BaseA.__subclasses__(). But `Value in bases` (bases = {Value, object}), so it's excluded. found is empty. mro.append(BaseA).
+- For BaseB: same logic. mro.append(BaseB).
+- mro = [BaseA, BaseB]
+
+Then `_c3_mro(Value, abcs=[BaseA, BaseB])`:
+- abstract_bases = [BaseA, BaseB]
+- abstract_c3_mros = [_c3_mro(BaseA, abcs=[]), _c3_mro(BaseB, abcs=[])]
+  - Both return [BaseX, object]
+- Merge: [[Value], [BaseA, object], [BaseB, object], [object], [BaseA, BaseB], [object]]
+
+Step 1: Pick Value.
+Step 2: 
+- Heads: BaseA, BaseB, object, BaseA, object
+- BaseA: in rest of [BaseB, object]? No. In rest of [object]? No. In rest of [BaseA, BaseB] (tail is [BaseB])? No. In rest of [object]? No. Pick BaseA.
+
+Wait, let me re-check. After removing Value:
+Seqs: [[BaseA, object], [BaseB, object], [object], [BaseA, BaseB], [object]]
+
+- BaseA: check other seq tails:
+  - [object]: BaseA not in [object]. OK.
+  - [BaseB, object]: wait, this is seq2. Its head is BaseB, tail is [object]. BaseA not in [object]. OK.
+  - [object]: OK.
+  - [BaseA, BaseB]: tail is [BaseB]. BaseA not in [BaseB]. OK.
+  - [object]: OK.
+  Pick BaseA.
+
+Remaining: [[object], [BaseB, object], [object], [BaseB], [object]]
+
+Step 3:
+- Heads: object, BaseB, object, BaseB, object
+- object: in rest of [BaseB, object]? Yes (object is in the tail). Reject.
+- BaseB: in rest of [object]? No. In rest of [object]? No. In rest of [object]? No. In rest of [object]? No. Pick BaseB.
+
+Remaining: [[object], [object], [object], [], [object]]
+
+Step 4: Pick object.
+
+Result: [Value, BaseA, BaseB, object]
+
+In `_find_impl`:
+- t = Value: not in registry (before explicit registration).
+- t = BaseA: in registry. `match = BaseA`.
+- t = BaseB: `match is not None`. Check: `BaseB in registry` True, `BaseB not in Value.__mro__` True, `match not in Value.__mro__` → `BaseA not in (Value, object)` True, `not issubclass(BaseA, BaseB)` → True (unrelated).
+  - ALL conditions met → RuntimeError("Ambiguous dispatch: BaseA or BaseB")
+
+The error message uses `repr()` of the classes. For locally-defined classes in a test, the repr would be something like `<class 'tests.test_virtual_registration.OverlappingVirtualMembership.test_pep604_overlapping.<locals>.BaseA'>` or similar.
+
+Actually, in unittest, the test methods define classes locally. The repr of a locally defined class is `<class 'module.ClassName'>` where ClassName is the class name. But for nested/local classes, it might be different.
+
+Actually, in CPython, `repr(SomeClass)` gives `<class '__main__.SomeClass'>` if defined at module level, or for locally defined classes, it gives something like `<class 'module.Outer.<locals>.Inner'>` or just uses the `__qualname__`.
+
+Wait, actually for classes defined inside a function (like inside a test method), the `__qualname__` would be something like `test_pep604_overlapping.<locals>.BaseA`. But the module would be `__main__` when running with `unittest.main()`.
+
+Hmm, this is getting complicated. Let me think about how to write the assertion. The task says "where execution raises, assert the exact exception class and diagnostic text." So I need to know the exact text.
+
+The format is: `"Ambiguous dispatch: {} or {}".format(match, t)`
+
+Where `match` and `t` are class objects. Their `repr()` would be used.
+
+For a class defined locally in a test method:
+```python
+class BaseA(ABC):
+    pass
+```
+The repr would be `<class 'tests.test_virtual_registration.OverlappingVirtualMembership.test_pep604_overlapping_virtual_subclass.<locals>.BaseA'>` or similar.
+
+Actually, I'm not sure about the exact format. Let me think of another approach: I can use `assertRaises` and check that the message contains the class names, or I can use a regex.
+
+Actually, the task says "assert the exact exception class and diagnostic text". So I need the exact text. But the class names depend on the scope. Let me use a simpler approach: use `repr()` of the classes in the assertion.
+
+```python
+with self.assertRaises(RuntimeError) as ctx:
+    handler(v)
+expected_msg = "Ambiguous dispatch: {} or {}".format(
+    repr(BaseA), repr(BaseB)
+)
+self.assertEqual(str(ctx.exception), expected_msg)
+```
+
+Wait, but the format uses `{}` which calls `str()` not `repr()`. Let me check: in Python, `"{}".format(obj)` calls `str(obj)`, not `repr(obj)`. And `str()` of a class is the same as `repr()` (it returns `<class 'module.ClassName'>`).
+
+Actually, `str(SomeClass)` and `repr(SomeClass)` for a class are the same thing in CPython. Both return `<class 'module.ClassName'>`.
+
+So I can write:
+```python
+expected = "Ambiguous dispatch: {} or {}".format(BaseA, BaseB)
+```
+
+This would work because `format` uses `str()` which for classes gives the same as `repr()`.
+
+But wait, the order matters. Which comes first in the MRO? From my analysis, for unrelated ABCs registered as `A | B`, the MRO would be `[Value, BaseA, BaseB, object]`. So `match = BaseA` (first found), `t = BaseB` (second found). The error would be `"Ambiguous dispatch: BaseA or BaseB"`.
+
+But I need to be careful: the order in the MRO depends on the order in `registry.keys()` which depends on the order of registration. For `A | B`, A is registered first, then B.
+
+Actually, I realize I should just write the test and use a flexible assertion. Let me use:
+```python
+with self.assertRaises(RuntimeError) as ctx:
+    handler(v)
+msg = str(ctx.exception)
+self.assertIn("Ambiguous dispatch", msg)
+self.assertIn(repr(BaseA), msg)
+self.assertIn(repr(BaseB), msg)
+```
+
+But the task says "assert the exact exception class and diagnostic text". Hmm. Let me think about this differently.
+
+Actually, you know what, let me just write the code and run it. I'll structure the tests to check:
+1. The exception type is RuntimeError
+2. The message contains "Ambiguous dispatch"
+
+For the exact message, I'll construct it from the class reprs. Let me use:
+```python
+with self.assertRaises(RuntimeError) as ctx:
+    handler(v)
+self.assertEqual(
+    str(ctx.exception),
+    "Ambiguous dispatch: {} or {}".format(BaseA, BaseB)
+)
+```
+
+This should work because the format string in the library uses `"{}"` which is equivalent to using `str()` on the objects, and for classes, `str(cls)` == `repr(cls)`.
+
+But I'm not 100% sure about the order (which class is `match` and which is `t`). Let me think...
+
+From my C3 analysis, for `A | B` (A registered first):
+- mro in `_compose_mro` = [A, B] (in registry order)
+- MRO from `_c3_mro` = [Value, A, B, object]
+- In `_find_impl`: match = A (first in MRO that's in registry after Value), then t = B triggers the check
+- Error: "Ambiguous dispatch: A or B" (where A and B are the class objects)
+
+So the first-registered class comes first in the message.
+
+For `typing.Union[A, B]`, the same logic applies (the registration order is the same).
+
+OK, now let me think about what "expose a resolver fault that would silently select a handler" means. I think it means: the test verifies that the RuntimeError IS raised. Without the ambiguity check in `_find_impl`, the code would just pick the first match (A) and silently use that handler. The test proves the check is there and working.
+
+Now let me plan the full test file. I need to:
+1. Keep the existing `LateVirtualRegistration` class with its two tests
+2. Add a new test class for overlapping virtual membership
+
+Let me also think about the "subclass-related" case. From my analysis:
+- If BaseB is a subclass of BaseA (both ABCs), and Value is virtually registered as a subclass of both:
+  - The MRO would be [Value, BaseB, BaseA, object] (subclass first)
+  - In `_find_impl`: match = BaseB, then BaseA: check `not issubclass(BaseB, BaseA)` → False. No error.
+  - Returns `registry.get(BaseB)` → the union handler.
+  
+  So no error, and the handler works correctly.
+
+For the "subsequent explicit registration":
+- After the RuntimeError case, explicitly register the concrete type:
+  - `handler.register(Value)` with a specific handler
+  - Now dispatch works: MRO includes Value (in registry), match = Value, then for ABCs: `match not in cls.__mro__` → `Value not in Value.__mro__` → False. No error.
+  - Returns the concrete handler.
+
+Now let me write the complete test file. I'll structure it as:
+
+```python
+import functools
+import typing
+import unittest
+from abc import ABC
+
+
+class LateVirtualRegistration(unittest.TestCase):
+    # ... existing tests unchanged ...
+
+
+class OverlappingVirtualMembership(unittest.TestCase):
+    """Tests for a type that is a virtual subclass of two unrelated ABCs
+    in a union, and the resolution of that overlap."""
+
+    def test_pep604_overlapping_unrelated(self):
+        """PEP 604: overlapping virtual membership of two unrelated ABCs."""
+        class BaseA(ABC):
+            pass
+
+        class BaseB(ABC):
+            pass
+
+        class Value:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(BaseA | BaseB)
+        def union_handler(x):
+            return "union"
+
+        v = Value()
+        # Before virtual registration: dispatches to default.
+        self.assertEqual(handler(v), "default")
+
+        # Register Value as a virtual subclass of BOTH unrelated ABCs.
+        BaseA.register(Value)
+        BaseB.register(Value)
+
+        # The overlapping case must raise RuntimeError, not silently
+        # select one handler.
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(v)
+        self.assertEqual(
+            str(ctx.exception),
+            "Ambiguous dispatch: {} or {}".format(BaseA, BaseB),
+        )
+
+    def test_typing_union_overlapping_unrelated(self):
+        """typing.Union: overlapping virtual membership of two unrelated ABCs."""
+        class BaseA(ABC):
+            pass
+
+        class BaseB(ABC):
+            pass
+
+        class Value:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(typing.Union[BaseA, BaseB])
+        def union_handler(x):
+            return "union"
+
+        v = Value()
+        self.assertEqual(handler(v), "default")
+
+        BaseA.register(Value)
+        BaseB.register(Value)
+
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(v)
+        self.assertEqual(
+            str(ctx.exception),
+            "Ambiguous dispatch: {} or {}".format(BaseA, BaseB),
+        )
+
+    def test_pep604_overlapping_subclass_related(self):
+        """PEP 604: overlapping virtual membership where ABCs are
+        subclass-related (one is a subclass of the other)."""
+        class BaseSuper(ABC):
+            pass
+
+        class BaseSub(ABC):
+            # Sub is a concrete subclass of Super (both are ABCs)
+            pass
+
+        # Make BaseSub a subclass of BaseSuper:
+        # Actually, I need to define it properly.
+        ...
+```
+
+Hmm wait, I need to be more careful. If I want `BaseSub` to be a subclass of `BaseSuper`, I need to define it as:
+```python
+class BaseSuper(ABC):
+    pass
+
+class BaseSub(BaseSuper):
+    pass
+```
+
+But then `BaseSub` inherits from `BaseSuper` and also from `ABC` (through `BaseSuper`). Since `BaseSuper` has no abstract methods, `BaseSub` can be instantiated (but we're using it as an ABC for virtual registration, so it doesn't matter).
+
+Actually wait, there's a subtlety. If `BaseSub(BaseSuper)` and `BaseSuper(ABC)`, then `BaseSub` is also an ABC (inherits `__abstractmethods__` from `BaseSuper` which inherits from `ABC`). Since `BaseSuper` has no abstract methods, `BaseSub.__abstractmethods__` is empty. So both can be used for virtual registration.
+
+Let me also think about whether the "earlier dispatch" matters. The task says "after an earlier dispatch". I think this means: there was a dispatch that happened BEFORE the virtual registration (to establish the cache or to show the default behavior). The existing tests do this:
+```python
+p = Payload()
+self.assertEqual(handler(p), "default")  # earlier dispatch
+PluginBase.register(Payload)  # then virtual registration
+self.assertEqual(handler(p), "union")  # re-dispatch
+```
+
+I'll follow the same pattern: first dispatch to default, then register, then re-dispatch.
+
+Now for the explicit registration case, after the RuntimeError, I add:
+```python
+@handler.register(Value)
+def concrete_handler(x):
+    return "concrete"
+
+self.assertEqual(handler(v), "concrete")
+```
+
+This should work because the concrete type in the registry takes priority (it's in `cls.__mro__`).
+
+Let me now write the full test file. I need to be careful to preserve the existing tests exactly.
+
+Actually, let me reconsider the "subclass-related" test. The task says "for subclass-related abstract union members". This is a separate scenario from the unrelated one. In this case:
+- Two ABCs where one is a subclass of the other
+- A value is virtually registered as a subclass of both
+- The outcome should NOT be an error (the subclass handler is selected)
+
+Let me verify: if `BaseSub(BaseSuper)` and both are in the registry:
+- MRO: [Value, BaseSub, BaseSuper, object]
+- _find_impl: match = BaseSub (first in MRO that's in registry, after Value which isn't)
+  Wait, is Value in the registry? No (before explicit registration). So:
+  - t = Value: not in registry
+  - t = BaseSub: in registry. match = BaseSub
+  - t = BaseSuper: match is not None. Check: BaseSuper in registry True, BaseSuper not in Value.__mro__ True, match not in Value.__mro__ → BaseSub not in (Value, object) True, not issubclass(BaseSub, BaseSuper) → not True → False
+  - Condition fails. break.
+  - Returns registry.get(BaseSub) → union_handler
+
+So the union handler is called, no error. Good.
+
+Now, one more consideration: the task says "for a subsequent explicit registration of the concrete value type". I interpret this as a third phase in the test:
+1. Initial: dispatch to default
+2. After virtual registration of two unrelated ABCs: RuntimeError
+3. After explicit registration of the concrete type: works (concrete handler selected)
+
+And separately:
+4. For subclass-related ABCs: no error, union handler selected
+
+Let me now write the complete new test file.
+
+```python
+import functools
+import typing
+import unittest
+from abc import ABC
+
+
+class LateVirtualRegistration(unittest.TestCase):
+    """Regressions for late virtual subclass registration with union
+    dispatchers."""
+
+    def test_pep604_union_late_virtual_registration(self):
+        """PEP 604 union (A | B) with late virtual subclass registration."""
+
+        class PluginBase(ABC):
+            pass
+
+        class Payload:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(PluginBase | int)
+        def union_handler(x):
+            return "union"
+
+        p = Payload()
+        # Before virtual registration, Payload dispatches to the default.
+        self.assertEqual(handler(p), "default")
+        # int member still dispatches to the union handler.
+        self.assertEqual(handler(1), "union")
+
+        # Late virtual registration: Payload becomes a virtual subclass
+        # of PluginBase.  No manual cache-clear is called.
+        PluginBase.register(Payload)
+
+        # The same Payload instance must now reach the union handler.
+        self.assertEqual(handler(p), "union")
+        # int still works.
+        self.assertEqual(handler(1), "union")
+
+    def test_typing_union_late_virtual_registration(self):
+        """typing.Union[A, B] with late virtual subclass registration."""
+
+        class PluginBase(ABC):
+            pass
+
+        class Payload:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(typing.Union[PluginBase, int])
+        def union_handler(x):
+            return "union"
+
+        p = Payload()
+        self.assertEqual(handler(p), "default")
+        self.assertEqual(handler(1), "union")
+
+        PluginBase.register(Payload)
+
+        self.assertEqual(handler(p), "union")
+        self.assertEqual(handler(1), "union")
+
+
+class OverlappingVirtualMembership(unittest.TestCase):
+    """Tests for a type that is a virtual subclass of two union members
+    at once, after an earlier dispatch has occurred."""
+
+    def test_pep604_overlapping_unrelated_abc(self):
+        """PEP 604: two unrelated ABCs both virtually matched."""
+
+        class BaseA(ABC):
+            pass
+
+        class BaseB(ABC):
+            pass
+
+        class Value:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(BaseA | BaseB)
+        def union_handler(x):
+            return "union"
+
+        v = Value()
+        # Earlier dispatch: before virtual registration, default handler.
+        self.assertEqual(handler(v), "default")
+
+        # Value becomes a virtual subclass of BOTH unrelated ABCs.
+        BaseA.register(Value)
+        BaseB.register(Value)
+
+        # Overlapping unrelated members: the library must detect the
+        # ambiguity rather than silently selecting one handler.
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(v)
+        self.assertEqual(
+            str(ctx.exception),
+            "Ambiguous dispatch: {} or {}".format(BaseA, BaseB),
+        )
+
+    def test_pep604_explicit_registration_resolves_overlap(self):
+        """PEP 604: explicit registration of the concrete type resolves
+        the overlapping-ABC ambiguity."""
+
+        class BaseA(ABC):
+            pass
+
+        class BaseB(ABC):
+            pass
+
+        class Value:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(BaseA | BaseB)
+        def union_handler(x):
+            return "union"
+
+        v = Value()
+        self.assertEqual(handler(v), "default")
+
+        BaseA.register(Value)
+        BaseB.register(Value)
+
+        # Overlap raises.
+        with self.assertRaises(RuntimeError):
+            handler(v)
+
+        # Explicit registration of the concrete type resolves the
+        # ambiguity: the concrete handler is selected.
+        @handler.register(Value)
+        def concrete_handler(x):
+            return "concrete"
+
+        self.assertEqual(handler(v), "concrete")
+
+    def test_typing_union_overlapping_unrelated_abc(self):
+        """typing.Union: two unrelated ABCs both virtually matched."""
+
+        class BaseA(ABC):
+            pass
+
+        class BaseB(ABC):
+            pass
+
+        class Value:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(typing.Union[BaseA, BaseB])
+        def union_handler(x):
+            return "union"
+
+        v = Value()
+        self.assertEqual(handler(v), "default")
+
+        BaseA.register(Value)
+        BaseB.register(Value)
+
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(v)
+        self.assertEqual(
+            str(ctx.exception),
+            "Ambiguous dispatch: {} or {}".format(BaseA, BaseB),
+        )
+
+    def test_typing_union_explicit_registration_resolves_overlap(self):
+        """typing.Union: explicit registration resolves overlap."""
+
+        class BaseA(ABC):
+            pass
+
+        class BaseB(ABC):
+            pass
+
+        class Value:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(typing.Union[BaseA, BaseB])
+        def union_handler(x):
+            return "union"
+
+        v = Value()
+        self.assertEqual(handler(v), "default")
+
+        BaseA.register(Value)
+        BaseB.register(Value)
+
+        with self.assertRaises(RuntimeError):
+            handler(v)
+
+        @handler.register(Value)
+        def concrete_handler(x):
+            return "concrete"
+
+        self.assertEqual(handler(v), "concrete")
+
+    def test_pep604_subclass_related_abc(self):
+        """PEP 604: two ABCs related by subclassing; no ambiguity."""
+
+        class BaseSuper(ABC):
+            pass
+
+        class BaseSub(BaseSuper):
+            pass
+
+        class Value:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(BaseSuper | BaseSub)
+        def union_handler(x):
+            return "union"
+
+        v = Value()
+        self.assertEqual(handler(v), "default")
+
+        # Register Value as virtual subclass of both.
+        BaseSuper.register(Value)
+        BaseSub.register(Value)
+
+        # Subclass-related: no ambiguity; the more specific (Sub)
+        # handler is selected.
+        self.assertEqual(handler(v), "union")
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+Wait, I need to double-check the subclass-related case. If `BaseSub(BaseSuper)` and both are registered:
+- For the union `BaseSuper | BaseSub`: `registry[BaseSuper] = union_handler`, `registry[BaseSub] = union_handler`
+- Value is virtually registered as subclass of both
+- MRO: [Value, BaseSub, BaseSuper, object] (Sub before Super because it's more specific)
+- _find_impl: 
+  - t = Value: not in registry
+  - t = BaseSub: in registry. match = BaseSub
+  - t = BaseSuper: check: BaseSuper in registry True, BaseSuper not in Value.__mro__ True, match not in Value.__mro__ → BaseSub not in (Value, object) True, not issubclass(BaseSub, BaseSuper) → not True → False
+  - No error. break.
+  - Returns registry.get(BaseSub) → union_handler ✓
+
+Good, the test should pass.
+
+But wait, I need to think about whether `BaseSub.register(Value)` actually works when `BaseSub` is a subclass of `BaseSuper`. In CPython, `ABC.register()` uses `__subclasshook__`. If `BaseSub` has the default `__subclasshook__` from `ABC`, it checks if the class being registered is a subclass (including virtually). Since `Value` is a plain class (not a subclass of `BaseSub`), the default `__subclasshook__` would return `NotImplemented`, and `register` would just add it to `__subclasshookcache__`.
+
+Actually, let me check how `ABC.register()` works. In CPython:
+```python
+def register(cls):
+    # ABCMeta.register()
+    cls.__subclasshook__ = None  # No, that's not right
+```
+
+Actually, `ABC.register(cls)` just does:
+```python
+def register(cls):
+    """Register a virtual subclass of the ABC."""
+    cls.__subclasshook__  # trigger __subclasshook__ computation? No.
+    ...
+```
+
+Let me recall: `ABCMeta.register(cls)` in CPython does:
+```python
+def register(cls):
+    if not issubclass(cls, self):
+        # Check if it's already virtually registered
+        ...
+    # Add to _abc_registry
+    ...
+```
+
+Actually, the implementation is:
+```python
+class ABCMeta(type):
+    def register(cls, subclass):
+        """Register a virtual subclass of the ABC."""
+        if not issubclass(subclass, cls):
+            cls._abc_registry.add(subclass)  # simplified
+            # Actually it's more nuanced
+```
+
+In CPython 3.12+, `ABC.register(cls)` adds `cls` to the ABC's `_abc_registry`. Then `issubclass(Value, BaseA)` returns True because the metaclass checks the registry.
+
+For `BaseSub.register(Value)` where `BaseSub(BaseSuper)`:
+- This adds `Value` to `BaseSub._abc_registry`
+- `issubclass(Value, BaseSub)` → True
+- `issubclass(Value, BaseSuper)` → also True (because `Value` is in `BaseSub._abc_registry` and `BaseSub` is a subclass of `BaseSuper`, so the check propagates)
+
+Wait, actually that's not quite right. `issubclass(Value, BaseSuper)` checks if Value is a subclass of BaseSuper. The ABC check looks at whether Value is in BaseSuper's registry or any of its sub-ABCs' registries. Since BaseSub is a subclass of BaseSuper, and Value is in BaseSub's registry, does `issubclass(Value, BaseSuper)` return True?
+
+In CPython's ABC implementation, `issubclass(C, B)` where B is an ABC checks:
+1. Is C in B's _abc_registry? No.
+2. Is C in B's _abc_cache? Check and compute.
+3. The `_abc_subclasscheck` looks at C's MRO and checks if any class in C's MRO is in B's registry or is a virtual subclass.
+
+Actually, the check is: `issubclass(C, B)` for ABC B checks if any of C's MRO entries (including C itself) is in B._abc_registry or is a virtual subclass of B. Since Value is registered with BaseSub (not directly with BaseSuper), and Value is NOT a subclass of BaseSub in the concrete sense...
+
+Hmm, I think the ABC virtual registration works like this:
+- `BaseSub.register(Value)` adds Value to BaseSub's virtual subclass set
+- `issubclass(Value, BaseSub)` → True
+- `issubclass(Value, BaseSuper)` → This checks if Value is a virtual subclass of BaseSuper. The implementation looks at whether Value (or any of its MRO) is registered with BaseSuper or any of BaseSuper's virtual sub-ABCs.
+
+Actually, I think in CPython, the ABC virtual subclass check works by looking at the specific ABC's registry. So `issubclass(Value, BaseSuper)` would check if Value is in BaseSuper._abc_registry. If we only did `BaseSub.register(Value)` and `BaseSuper.register(Value)`, both would be true.
+
+But wait, does `BaseSub.register(Value)` also make `issubclass(Value, BaseSuper)` true? I don't think so, because the registration is specific to that ABC. You need to register with each ABC separately.
+
+Actually, let me look at this more carefully. In CPython's `abc.py`:
+```python
+class ABCMeta(type):
+    def __subclasscheck__(cls, subclass):
+        ...
+    def register(cls, subclass):
+        if not issubclass(subclass, cls):
+            # Not a concrete subclass; register virtually
+            ...
+```
+
+The `register` method adds the subclass to `cls._abc_registry` (or similar). The `__subclasscheck__` checks if the class is in the registry of the specific ABC or any of its "related" ABCs.
+
+I think for safety, I should register with both ABCs explicitly:
+```python
+BaseSuper.register(Value)
+BaseSub.register(Value)
+```
+
+This ensures `issubclass(Value, BaseSuper)` and `issubclass(Value, BaseSub)` are both True.
+
+OK, I think my test design is correct. Let me also think about whether the "earlier dispatch" (the `self.assertEqual(handler(v), "default")` before registration) actually matters. I think it's there to:
+1. Establish the baseline behavior
+2. Potentially populate the dispatch cache
+
+The task says "after an earlier dispatch" which suggests the dispatch cache has been populated. The existing tests follow this pattern, so I'll keep it.
+
+Now, one issue: in the "explicit registration resolves overlap" test, after the RuntimeError, I do:
+```python
+@handler.register(Value)
+def concrete_handler(x):
+    return "concrete"
+```
+
+This calls `handler.register(Value, concrete_handler)`. In the register function:
+```python
+def register(cls, func=None):
+    ...
+    if _is_union(cls):
+        ...
+    else:
+        registry[cls] = func
+    ...
+    dispatch_cache.clear()
+    return func
+```
+
+Since `Value` is not a union, it just does `registry[Value] = func` and clears the dispatch cache. Good.
+
+Then `handler(v)` calls `dispatch(Value)`:
+```python
+def dispatch(cls):
+    ...
+    try:
+        impl = dispatch_cache[cls]
+    except KeyError:
+        try:
+            impl = registry[cls]  # Value is in registry!
+        except KeyError:
+            impl = _find_impl(cls, registry)
+        dispatch_cache[cls] = impl
+    return impl
+```
+
+Wait! `dispatch` first checks `dispatch_cache`, then `registry[cls]` directly. Since we just added `Value` to `registry` and cleared `dispatch_cache`, `registry[Value]` would succeed! It wouldn't even call `_find_impl`. So the concrete handler is returned directly.
+
+Actually wait, that's even simpler than my earlier analysis. The dispatch function checks `registry[cls]` before calling `_find_impl`. So if the concrete type is in the registry, it's used directly without the MRO walk.
+
+But hold on, in the "overlapping" case (before explicit registration), `Value` is NOT in the registry (only BaseA and BaseB are). So `registry[Value]` raises KeyError, and `_find_impl` is called, which finds the ambiguity.
+
+After explicit registration, `registry[Value]` succeeds, and the concrete handler is returned. No need for `_find_impl` at all.
+
+This is cleaner and confirms my test design.
+
+Now let me also think about the `int` member in the original tests. In the original tests, the union is `PluginBase | int`. The `int` is a concrete type, not an ABC. So:
+- `registry[PluginBase] = union_handler`, `registry[int] = union_handler`
+- `Payload` is virtually registered with `PluginBase`
+- `dispatch(Payload)`: `registry[Payload]` → KeyError → `_find_impl(Payload, registry)`
+- `_compose_mro(Payload, registry.keys())`: registry has `object`, `PluginBase`, `int`
+  - `is_related(int)`: `int not in {Payload, object}` True, `hasattr(int, '__mro__')` True, `issubclass(Payload, int)` False. So `int` is filtered out.
+  - `is_related(PluginBase)`: `PluginBase not in {Payload, object}` True, `hasattr(PluginBase, '__mro__')` True, `issubclass(Payload, PluginBase)` True (virtual). Included.
+- MRO: [Payload, PluginBase, object]
+- `_find_impl`: match = PluginBase (first in MRO that's in registry, after Payload which isn't). No second match. Returns `registry.get(PluginBase)` → union_handler.
+
+Good, no ambiguity because `int` is filtered out (not related to Payload).
+
+OK, I'm now confident in my test design. Let me write the final test file.
+
+One more thing: the task says "Use fresh local classes so membership does not leak between tests." My tests define all classes locally within each test method, so they're fresh each time. Good.
+
+Also: "New tests must also expose a resolver fault that would silently select a handler in the overlapping unrelated-members case." I interpret this as: the test verifies that the RuntimeError IS raised (which proves the resolver fault detection is working). Without the RuntimeError check, the code would silently pick the first match. My `assertRaises(RuntimeError)` with the exact message check does this.
+
+Now let me also plan the documentation. I need to read `Doc/howto/union-dispatch.rst` first to see what's there, then append a section.
+
+Let me read the doc file.
+
+Actually, I've already spent a lot of thinking time. Let me just proceed with reading the doc file, then write the tests, then write the doc, then check and submit.
+
+Let me read the doc file first.

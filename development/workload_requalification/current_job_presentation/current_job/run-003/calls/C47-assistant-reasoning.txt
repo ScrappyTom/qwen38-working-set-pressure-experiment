@@ -1,0 +1,1142 @@
+Let me analyze the current state:
+
+1. The test file has been patched with 6 new tests for overlapping virtual membership. The patch was accepted successfully (candidate 10a63235...).
+2. The documentation file (Doc/howto/union-dispatch.rst) still needs a new section appended with runnable `>>>` examples showing overlapping virtual membership and the explicit-registration case.
+3. After both edits, I need to run `check public` and then submit.
+
+Let me look at what's been done:
+- Tests: DONE (6 new tests added for overlapping virtual membership)
+- Documentation: NOT YET DONE - need to append a section to Doc/howto/union-dispatch.rst
+
+The task requires:
+- "Append an accurate explanatory section to Doc/howto/union-dispatch.rst with runnable >>> examples showing overlapping virtual membership and the explicit-registration case. Distinguish virtual membership, concrete inheritance, and handler selection; do not generalize beyond the inspected behavior. The existing document must remain an exact prefix."
+
+So I need to append to the end of the file (line 90 is the last line). The existing content ends with:
+```
+>>> try:
+...     @handler.register(PluginBase | list[int])
+...     def bad(x):
+...         pass
+... except TypeError as exc:
+...     print(exc)
+Invalid union member list[int]: must be a runtime class
+```
+
+I need to add a new section after this. Let me think about what to write based on the library behavior I've inspected:
+
+From `_find_impl`:
+- When iterating the MRO, if `match` is found (an implicit ABC not in `cls.__mro__`), and then another type `t` is also in the registry, also not in `cls.__mro__`, and `match` is not a subclass of `t`, it raises `RuntimeError("Ambiguous dispatch: {} or {}".format(match, t))`.
+- If `match` IS a subclass of `t` (or vice versa - i.e., they're related in the subclass hierarchy), no error is raised.
+
+Wait, let me re-read the condition:
+```python
+if (t in registry and t not in cls.__mro__
+              and match not in cls.__mro__
+              and not issubclass(match, t)):
+    raise RuntimeError("Ambiguous dispatch: {} or {}".format(
+        match, t))
+```
+
+So the error is raised when:
+- `t` is in registry
+- `t` is NOT in `cls.__mro__` (so it's an implicit/virtual membership, not concrete inheritance)
+- `match` is NOT in `cls.__mro__` (the previously found match is also virtual)
+- `match` is NOT a subclass of `t` (they're unrelated OR `match` is a superclass of `t`)
+
+Wait, if `match` is a subclass of `t`, then `issubclass(match, t)` is True, so `not issubclass(match, t)` is False, and no error. This means if the first found match is a subclass of the current candidate, no error.
+
+But what about the reverse? If `t` is a subclass of `match`? Then `issubclass(match, t)` is False, so `not issubclass(match, t)` is True, and it WOULD raise. But wait - in the MRO ordering, subclasses come before superclasses. So if `t` is a subclass of `match`, `t` would appear earlier in the MRO than `match`, meaning `match` would have been found first (as `t` is earlier), and then when we hit `match`, the condition would be checking `issubclass(t, match)` which... wait no.
+
+Let me re-think. The MRO from `_compose_mro` is ordered with more specific types first. So if Base and Derived are both in the registry, and Derived is a subclass of Base, then Derived appears before Base in the MRO. When iterating:
+- First we find Derived (match = Derived)
+- Then we get to Base: `t = Base`, `t in registry` = True, `t not in cls.__mro__` = True (it's virtual), `match not in cls.__mro__` = True (Derived is also virtual), `not issubclass(match, t)` = `not issubclass(Derived, Base)` = `not True` = False. So NO error.
+
+If Base appears first in the MRO (which it shouldn't since Derived is more specific), then:
+- match = Base
+- t = Derived: `not issubclass(Base, Derived)` = `not False` = True → WOULD raise
+
+But this scenario shouldn't happen because Derived (subclass) should come before Base (superclass) in the MRO.
+
+Actually wait - the MRO from `_compose_mro` is not simply the subclass ordering. It's a C3 merge that includes the ABCs. Let me think about this more carefully.
+
+In the subclass-related test:
+- `Base(ABC)` and `Derived(Base)` are both ABCs
+- `Widget` is a regular class
+- `Base.register(Widget)` and `Derived.register(Widget)` make Widget a virtual subclass of both
+- The union is `Base | Derived`, so both Base and Derived are in the registry
+
+When dispatching Widget:
+- `_compose_mro(Widget, [Base, Derived, ...])` is called
+- Widget's actual `__mro__` is just `[Widget, object]`
+- The C3 merge will include Base and Derived where appropriate
+
+The key question: in the composed MRO, does Derived come before Base? Since Derived is a subclass of Base, in a proper C3 MRO, Derived should come before Base. So:
+- match = Derived (found first)
+- Then t = Base: `not issubclass(Derived, Base)` = False → no error
+
+This matches the test expectation that subclass-related ABCs don't raise.
+
+For unrelated ABCs (Shape and Style):
+- Neither is a subclass of the other
+- In the MRO, whichever comes second triggers the check
+- `not issubclass(Shape, Style)` = True (they're unrelated) → raises RuntimeError
+
+Now for the documentation, I need to write runnable `>>>` examples. The examples need to:
+1. Show overlapping virtual membership (unrelated ABCs → RuntimeError)
+2. Show the explicit-registration case (registering the concrete type resolves it)
+3. Distinguish virtual membership, concrete inheritance, and handler selection
+4. Be runnable as standalone doctests with `__name__='__main__'`
+5. Import the candidate library
+
+Wait - "Examples run as ordinary standalone doctests with __name__='__main__' and import the candidate library." This means the doctest examples should be self-contained and import functools. Since the library IS the standard functools module (it's in Lib/functools.py), the examples just need `import functools` and `from abc import ABC`.
+
+Let me look at the existing doc format. The existing sections use:
+```
+>>> import functools
+>>> from abc import ABC
+```
+
+And then define classes and handlers. Let me write a section that follows the same style.
+
+Let me draft the documentation section:
+
+```rst
+Overlapping virtual membership
+-----------------------------
+
+A class that is virtually registered as a subclass of two *unrelated*
+abstract base classes in a union becomes ambiguous for the dispatcher.
+The MRO produced by ``_compose_mro`` contains both ABCs as implicit
+(virtual) entries that are not part of the class's concrete inheritance
+chain.  When the dispatch loop reaches the second such entry it cannot
+prefer one over the other and raises ``RuntimeError``:
+
+>>> import functools
+>>> from abc import ABC
+>>>
+>>> class Shape(ABC):
+...     pass
+>>>
+>>> class Style(ABC):
+...     pass
+>>>
+>>> class Document:
+...     pass
+>>>
+>>> @functools.singledispatch
+... def handler(x):
+...     return "default"
+>>>
+>>> @handler.register(Shape | Style)
+... def union_handler(x):
+...     return "union"
+>>>
+>>> doc = Document()
+>>> handler(doc)
+'default'
+>>>
+>>> Shape.register(Document)
+<class '__main__.Document'>
+>>>
+>>> Style.register(Document)
+<class '__main__.Document'>
+>>>
+>>> try:
+...     handler(doc)
+... except RuntimeError as exc:
+...     print(exc)
+Ambiguous dispatch: <class '__main__.Shape'> or <class '__main__.Style'>
+
+Here ``Document`` is a *virtual* subclass of both ``Shape`` and
+``Style``: the relationship exists only in the ``abc`` cache and is
+not reflected in ``Document.__mro__``.  The dispatcher sees two
+implicit ABC entries (``Shape`` and ``Style``) that are both in the
+registry and both absent from the concrete MRO, and because neither
+is a subclass of the other it cannot choose one.
+
+By contrast, when the two ABCs are *related* by subclassing, the
+more specific one appears earlier in the composed MRO and the
+``issubclass`` guard suppresses the error:
+
+>>> class Base(ABC):
+...     pass
+>>>
+>>> class Derived(Base):
+...     pass
+>>>
+>>> @functools.singledispatch
+... def handler2(x):
+...     return "default"
+>>>
+>>> @handler2.register(Base | Derived)
+... def union_handler2(x):
+...     return "union"
+>>>
+>>> class Widget:
+...     pass
+>>>
+>>> w = Widget()
+>>> handler2(w)
+'default'
+>>>
+>>> Base.register(Widget)
+<class '__main__.Widget'>
+>>>
+>>> Derived.register(Widget)
+<class '__main__.Widget'>
+>>>
+>>> handler2(w)
+'union'
+
+In this case ``Derived`` is a concrete subclass of ``Base``, so the
+composed MRO places ``Derived`` before ``Base``.  When the loop
+reaches ``Base`` it sees that ``issubclass(Derived, Base)`` is true
+and simply breaks, selecting the ``union_handler2`` registered for
+the union.
+
+Resolving ambiguity with explicit registration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Registering a handler for the concrete type itself puts an entry in
+the ``registry`` dictionary keyed by that type.  The dispatch fast
+path (``registry[cls]``) finds it before ``_find_impl`` is ever
+called, so the ambiguous MRO walk is bypassed entirely:
+
+>>> @handler.register(Document)
+... def doc_handler(x):
+...     return "concrete"
+>>>
+>>> handler(doc)
+'concrete'
+
+Note the distinction among three mechanisms:
+
+* **Virtual membership** -- ``ABC.register(C)`` adds ``C`` to the
+  ABC's internal ``_abc_cache`` without modifying ``C.__mro__``.
+  The composed MRO picks this up through ``issubclass`` checks, but
+  the entry is *implicit* (not in ``C.__mro__``).
+
+* **Concrete inheritance** -- ``class Child(Parent)`` makes
+  ``Parent`` appear in ``Child.__mro__``.  A registry entry for
+  ``Parent`` is found through the normal MRO walk and is *explicit*
+  (in ``C.__mro__``).
+
+* **Handler selection** -- ``dispatch(cls)`` first tries
+  ``dispatch_cache[cls]``, then ``registry[cls]``.  Only if both
+  miss does it call ``_find_impl`` which walks the composed MRO.
+  An explicit ``registry[Document]`` entry short-circuits the walk
+  and its ambiguity check.
+```
+
+Wait, I need to be careful about the doctest output. Let me think about what `Shape.register(Document)` actually returns. Looking at the abc module, `register` is a method of ABCMeta that returns... let me check. In CPython, `ABCMeta.register` typically doesn't return anything meaningful (or returns the class). Actually, looking at the existing doc:
+
+```
+>>> PluginBase.register(Payload)
+<class '__main__.Payload'>
+```
+
+So it does return the class. Let me verify what the repr would look like. In the doctest context with `__name__ == '__main__'`, the class repr would be `<class '__main__.Document'>`.
+
+Actually wait - in the existing doc, the classes are defined in the doctest, so they're in `__main__`. The repr of a class is `<class 'module.ClassName'>`. So `Shape.register(Document)` would print `<class '__main__.Document'>`.
+
+Hmm, but actually in CPython's abc module, `register` is:
+```python
+def register(cls, other=...):
+    if other is cls:
+        return
+    ...
+```
+
+It doesn't explicitly return the class. Let me check... Actually in Python 3.9+, `ABCMeta.register` returns None. But in the existing doc it shows:
+```
+>>> PluginBase.register(Payload)
+<class '__main__.Payload'>
+```
+
+Wait, that's odd. Let me re-read the existing doc more carefully. Yes, it shows that output. So either the Python version being tested has a different implementation, or... Actually, looking at the abc.py source in CPython, `register` is a method that doesn't have an explicit return statement, so it returns None. But the doc shows `<class '__main__.Payload'>`.
+
+Hmm, wait. Let me look again at the existing doc content:
+
+```
+>>> PluginBase.register(Payload)
+<class '__main__.Payload'>
+```
+
+This is the actual existing content of the document. If the checker runs these as doctests and they pass, then this must be the actual output. So in this Python version, `ABCMeta.register` does return the class. Let me just follow the same pattern.
+
+Actually, I just realized - I should check what Python version this is. Looking at the functools.py, it uses `types.UnionType` which is Python 3.10+. In Python 3.10's abc.py, `register` method... let me think. Actually in all recent CPython versions, `ABCMeta.register` does NOT return the class - it returns None. But the doc shows it returning the class.
+
+Wait, I'm overthinking this. The existing document already has this pattern and presumably the checker validates it. I should follow the same pattern. If `PluginBase.register(Payload)` shows `<class '__main__.Payload'>`, then `Shape.register(Document)` should show `<class '__main__.Document'>`.
+
+Actually, let me reconsider. Maybe I should just not show the return value of register calls, to be safe. Or I can follow exactly what the existing doc does.
+
+Looking at the existing doc:
+```
+>>> PluginBase.register(Payload)
+<class '__main__.Payload'>
+```
+
+This IS in the existing document and it's supposed to be a working doctest. So I'll follow the same pattern.
+
+Now, one important thing: the task says "The existing document must remain an exact prefix." This means I can only APPEND to the file. I need to add content after line 90.
+
+Let me also think about whether my examples are correct. The key behaviors:
+
+1. Two unrelated ABCs (Shape, Style) → RuntimeError with "Ambiguous dispatch: Shape or Style"
+2. Subclass-related ABCs (Base, Derived) → no error, dispatches to union handler
+3. Explicit registration of concrete type → bypasses _find_impl, no error
+
+For the "Resolver fault" requirement: "New tests must also expose a resolver fault that would silently select a handler in the overlapping unrelated-members case." This means the tests should catch if someone removed the RuntimeError and instead silently picked one. My tests already do this - they assert the exact RuntimeError is raised, which would fail if the resolver silently selected a handler instead.
+
+Wait, actually I need to think about this more carefully. The task says "New tests must also expose a resolver fault that would silently select a handler in the overlapping unrelated-members case." This means: if the library had a bug where it silently selected one of the two handlers instead of raising, the tests should catch that. My tests do assert RuntimeError, so if the library silently returned "union" instead of raising, the `assertRaises` would fail. Good.
+
+Now let me write the doc patch. I need to append after line 90. The current last line is:
+```
+Invalid union member list[int]: must be a runtime class
+```
+
+I'll use the patch action to append. The old text will be the last few lines, and new will be those lines plus my new content.
+
+Actually, let me use `old` as just the last line and `new` as the last line plus my new section. But I need to be careful about uniqueness. Let me use a larger unique anchor.
+
+Let me use:
+```
+old: "Invalid union member list[int]: must be a runtime class"
+new: "Invalid union member list[int]: must be a runtime class\n\nOverlapping virtual membership\n..."
+```
+
+Wait, I need to check if "Invalid union member list[int]: must be a runtime class" is unique in the file. Looking at the file content, it appears only once (line 90). Good.
+
+But actually, I should be more careful. Let me use a multi-line anchor to be safe.
+
+Let me craft the patch:
+
+old:
+```
+Invalid union member list[int]: must be a runtime class
+```
+
+new:
+```
+Invalid union member list[int]: must be a runtime class
+
+Overlapping virtual membership
+-----------------------------
+
+... (my new content)
+```
+
+Now let me think about the doctest examples carefully. They need to be runnable as standalone doctests. The existing examples in the doc are sequential - they build on each other (the `handler` defined in the first section is used in later sections). My new section should follow the same pattern or define its own handler.
+
+Looking at the existing doc structure:
+- Section 1: Defines `handler` with `PluginBase | int`
+- Section 2: Adds a `bool` handler to the same `handler`
+- Section 3: Uses the same `handler` for late virtual registration
+- Section 4: Shows the TypeError for invalid union members
+
+My new section should be self-contained or continue from where the previous left off. Since the task says "The existing document must remain an exact prefix," I'll append after the last line. I can either:
+1. Continue using the same `handler` (but it already has PluginBase, int, and bool registered)
+2. Define new handlers
+
+I think defining new handlers is cleaner and avoids confusion. Let me define a fresh handler in my section.
+
+Actually, re-reading the existing doc more carefully - the sections do build on each other. The `handler` from section 1 is used in sections 2 and 3. Section 4 also uses `handler`. So it's all one continuous doctest session.
+
+For my new section, I'll define new classes and handlers to keep it clean and focused on the overlapping membership topic. This also aligns with the test file which uses fresh local classes.
+
+Let me finalize my documentation text. I need to be careful about:
+1. The exact error message format: `"Ambiguous dispatch: {} or {}".format(match, t)` where match and t are classes. The repr of a class defined in `__main__` would be `<class '__main__.ClassName'>`.
+
+Wait, actually in a doctest, when you print a class, it shows its repr. For a class defined in `__main__`:
+- `repr(Shape)` → `<class '__main__.Shape'>`
+
+So the error message would be: `Ambiguous dispatch: <class '__main__.Shape'> or <class '__main__.Style'>`
+
+Let me verify this is what the test expects. In the test:
+```python
+self.assertEqual(
+    str(ctx.exception),
+    f"Ambiguous dispatch: {Shape} or {Style}"
+)
+```
+
+And `f"{Shape}"` for a class gives `<class '__main__.Shape'>`. Yes, that matches.
+
+Now for the doctest, when I do:
+```
+>>> try:
+...     handler(doc)
+... except RuntimeError as exc:
+...     print(exc)
+Ambiguous dispatch: <class '__main__.Shape'> or <class '__main__.Style'>
+```
+
+This should work.
+
+Let me also think about the order in which Shape and Style appear in the error. Looking at `_find_impl`:
+- It iterates the MRO
+- First match found becomes `match`
+- When it finds a second matching type `t`, it checks and raises with `match` first, then `t`
+
+The order depends on the composed MRO. For unrelated ABCs, the order is determined by the C3 merge algorithm and the order they appear in the registry/`types` list. The `types` list comes from `registry.keys()`. When we register `Shape | Style`, the `register` function iterates `cls.__args__` which for `Shape | Style` would be `(Shape, Style)` in order. So `registry[Shape]` is set first, then `registry[Style]`.
+
+In `_compose_mro`, the `types` parameter is `registry.keys()`. The order of dict keys in Python is insertion order, so Shape comes before Style. In the C3 merge, for unrelated ABCs that are both virtual (not in the concrete MRO), their relative order in the composed MRO depends on the algorithm. Looking at `_compose_mro`:
+
+```python
+def _compose_mro(cls, types):
+    bases = set(cls.__mro__)
+    def is_related(typ):
+        return (typ not in bases and hasattr(typ, '__mro__')
+                             and issubclass(cls, typ))
+    types = [n for n in types if is_related(n)]
+    def is_strict_base(typ):
+        for other in types:
+            if typ != other and typ in other.__mro__:
+                return True
+        return False
+    types = [n for n in types if not is_strict_base(n)]
+    type_set = set(types)
+    mro = []
+    for typ in types:
+        found = []
+        for sub in typ.__subclasses__():
+            if sub not in bases and issubclass(cls, sub):
+                found.append([s for s in sub.__mro__ if s in type_set])
+        if not found:
+            mro.append(typ)
+            continue
+        found.sort(key=len, reverse=True)
+        for sub in found:
+            for subcls in sub:
+                if subcls not in mro:
+                    mro.append(subcls)
+    return _c3_mro(cls, abcs=mro)
+```
+
+For unrelated Shape and Style, neither has subclasses that are also in type_set (assuming only Document is registered as virtual subclass of each, and Document is not in type_set). So `found` would be empty for both, and they'd be appended to `mro` in the order they appear in `types`: Shape first, then Style.
+
+Then `_c3_mro(cls, abcs=[Shape, Style])` is called. In this function:
+- `abcs = [Shape, Style]`
+- For Document (which has no explicit ABC bases), `boundary = 0`
+- `explicit_bases = []`
+- `abstract_bases`: checks `issubclass(Document, Shape)` (True after virtual registration) and `issubclass(Document, Style)` (True). Neither Shape nor Style is in `Document.__bases__` (which is just `(object,)`). So both are added to `abstract_bases`.
+- `other_bases = [object]` (from `Document.__bases__[0:]` since boundary=0)
+
+Wait, `cls.__bases__` for Document is `(object,)`. With `boundary = 0`, `explicit_bases = []` and `other_bases = [object]`.
+
+For `abstract_bases`:
+- `issubclass(Document, Shape)` → True (virtual)
+- `not any(issubclass(b, Shape) for b in Document.__bases__)` → `not any(issubclass(object, Shape))` → `not False` → True
+- So Shape is added.
+- Similarly Style is added.
+
+Then:
+- `for base in abstract_bases: abcs.remove(base)` → abcs becomes empty
+- `explicit_c3_mros = []`
+- `abstract_c3_mros = [_c3_mro(Shape, abcs=[]), _c3_mro(Style, abcs=[])]`
+  - `_c3_mro(Shape, abcs=[])` → Shape has `__bases__ = (ABC,)`. boundary: ABC has `__abstractmethods__`? ABC is a subclass of `ABCMeta`... wait, ABC is defined as `class ABC(metaclass=ABCMeta): pass`. It has `__abstractmethods__` as a frozenset (empty). So `hasattr(ABC, '__abstractmethods__')` is True. boundary = 1.
+  - Actually wait, Shape's bases are `(ABC,)`. ABC has `__abstractmethods__` (it's an ABC). So boundary = 1.
+  - `explicit_bases = [ABC]`
+  - `abstract_bases = []` (no external abcs to check)
+  - `other_bases = []`
+  - Result: `_c3_merge([[Shape], _c3_mro(ABC, abcs=[]), [], [ABC]])`
+  - `_c3_mro(ABC, abcs=[])`: ABC's bases are `(object,)`. boundary: object doesn't have `__abstractmethods__`. boundary = 0. explicit_bases = [], other_bases = [object]. Result: `_c3_merge([[ABC], [], [object]])` = [ABC, object] (roughly)
+  - So `_c3_mro(Shape)` = [Shape, ABC, object] (roughly)
+  - Similarly `_c3_mro(Style)` = [Style, ABC, object]
+
+- `other_c3_mros = [_c3_mro(object, abcs=[])]`
+  - object's bases are `()`. boundary = 0. Result: [object]
+
+Final merge:
+```
+_c3_merge(
+    [[Document]] +
+    [[Shape, ABC, object], [Style, ABC, object]] +  # abstract_c3_mros
+    [[object]] +  # other_c3_mros
+    [[ABC], [ABC]] +  # explicit_bases (empty for Document, so just from the recursive calls?)
+    [[Shape, Style]] +  # abstract_bases
+    [[object]]  # other_bases
+)
+```
+
+Wait, I'm getting confused. Let me just trust the test results. The tests pass (they were written based on observed behavior), and the error message format is `f"Ambiguous dispatch: {Shape} or {Style}"`. So Shape appears first in the message, which means Shape was found first in the MRO walk (as `match`), and Style was the second (`t`).
+
+So in my doctest, the output would be:
+```
+Ambiguous dispatch: <class '__main__.Shape'> or <class '__main__.Style'>
+```
+
+Great, this matches what I had.
+
+Now let me also think about whether my doc examples will actually work. The key question is: in a doctest, when I define classes and do the virtual registration, will the behavior be exactly as in the tests?
+
+The answer is yes, because:
+1. Same Python version
+2. Same library code
+3. Same abc module behavior
+4. The doctest runs in `__main__` namespace (as stated in the task)
+
+One concern: in the existing doc, the `handler` from section 1 is still in scope when my new section runs. I'll define a new handler to avoid conflicts.
+
+Actually wait - re-reading the task: "Examples run as ordinary standalone doctests with __name__='__main__' and import the candidate library." This means the ENTIRE document is one doctest session. So my new section's code runs after all the previous sections. The `handler` from earlier sections still exists. I should use a different name for my new handler.
+
+Let me also double-check: in the existing doc's section 3 (Late virtual registration), after `PluginBase.register(Payload)`, calling `handler(p)` returns 'union'. This works because the dispatch cache is cleared (the token changes). In my new section, I'm using a different handler, so there's no interference.
+
+Let me write the final doc text now. I'll keep it focused and accurate:
+
+```rst
+Overlapping virtual membership
+-----------------------------
+
+When a concrete class is virtually registered as a subclass of two
+*unrelated* abstract base classes that are both members of a union,
+the dispatcher cannot determine a unique handler and raises
+``RuntimeError``:
+
+>>> import functools
+>>> from abc import ABC
+>>>
+>>> class Shape(ABC):
+...     pass
+>>>
+>>> class Style(ABC):
+...     pass
+>>>
+>>> class Document:
+...     pass
+>>>
+>>> @functools.singledispatch
+... def overlap_handler(x):
+...     return "default"
+>>>
+>>> @overlap_handler.register(Shape | Style)
+... def union_handler(x):
+...     return "union"
+>>>
+>>> doc = Document()
+>>> overlap_handler(doc)
+'default'
+>>>
+>>> Shape.register(Document)
+<class '__main__.Document'>
+>>>
+>>> Style.register(Document)
+<class '__main__.Document'>
+>>>
+>>> try:
+...     overlap_handler(doc)
+... except RuntimeError as exc:
+...     print(exc)
+Ambiguous dispatch: <class '__main__.Shape'> or <class '__main__.Style'>
+
+Here ``Document`` is a *virtual* subclass of both ``Shape`` and
+``Style``.  The relationship lives only in each ABC's internal cache;
+``Document.__mro__`` remains ``(Document, object)``.  The composed
+MRO contains both ``Shape`` and ``Style`` as implicit entries (absent
+from the concrete MRO).  Because neither is a subclass of the other,
+the dispatch loop cannot select one and reports the ambiguity.
+
+When the two ABCs are *related* by inheritance, the more specific
+one precedes the other in the composed MRO and the ``issubclass``
+guard allows the loop to continue without error:
+
+>>> class Base(ABC):
+...     pass
+>>>
+>>> class Derived(Base):
+...     pass
+>>>
+>>> @functools.singledispatch
+... def related_handler(x):
+...     return "default"
+>>>
+>>> @related_handler.register(Base | Derived)
+... def related_union(x):
+...     return "union"
+>>>
+>>> class Widget:
+...     pass
+>>>
+>>> w = Widget()
+>>> related_handler(w)
+'default'
+>>>
+>>> Base.register(Widget)
+<class '__main__.Widget'>
+>>>
+>>> Derived.register(Widget)
+<class '__main__.Widget'>
+>>>
+>>> related_handler(w)
+'union'
+
+In this case ``Derived`` is a concrete subclass of ``Base``.  The
+composed MRO orders ``Derived`` before ``Base``; when the loop
+reaches ``Base`` it sees that ``Derived`` (the current match) *is*
+a subclass of ``Base`` and simply breaks, returning the union
+handler.
+
+Explicit registration resolves the ambiguity
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Registering a handler directly for the concrete type inserts an
+entry into the ``registry`` dictionary.  The dispatch fast path
+checks ``registry[cls]`` before calling ``_find_impl``, so the
+ambiguous MRO walk is never reached:
+
+>>> @overlap_handler.register(Document)
+... def doc_handler(x):
+...     return "concrete"
+>>>
+>>> overlap_handler(doc)
+'concrete'
+
+Distinguishing the three mechanisms
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* **Virtual membership** -- ``ABC.register(C)`` adds ``C`` to the
+  ABC's ``_abc_cache``.  It does *not* modify ``C.__mro__``.  The
+  composed MRO picks the relationship up through ``issubclass``
+  checks, producing an *implicit* entry.
+
+* **Concrete inheritance** -- ``class Child(Parent)`` places
+  ``Parent`` in ``Child.__mro__``.  A registry entry for ``Parent``
+  is found during the MRO walk as an *explicit* entry (it appears
+  in ``Child.__mro__``).
+
+* **Handler selection** -- ``dispatch(cls)`` tries
+  ``dispatch_cache[cls]``, then ``registry[cls]``, and only then
+  falls through to ``_find_impl(cls, registry)``.  An explicit
+  ``registry[Document]`` entry short-circuits the walk entirely,
+  bypassing the ambiguity check.
+```
+
+Wait, I need to double-check one thing. In the "Explicit registration resolves" subsection, I'm using `overlap_handler` which was defined earlier in the same doctest session. After the RuntimeError was raised, `overlap_handler` still exists and its registry still has Shape and Style entries. Now I register Document directly. When I call `overlap_handler(doc)`:
+- `dispatch(Document)` is called
+- First check `dispatch_cache[Document]` - was it cached? The previous call raised RuntimeError, so it was NOT cached (the exception propagated out of `_find_impl` before `dispatch_cache[cls] = impl` was reached).
+
+Wait, let me look at the dispatch code:
+```python
+def dispatch(cls):
+    nonlocal cache_token
+    if cache_token is not None:
+        current_token = get_cache_token()
+        if cache_token != current_token:
+            dispatch_cache.clear()
+            cache_token = current_token
+    try:
+        impl = dispatch_cache[cls]
+    except KeyError:
+        try:
+            impl = registry[cls]
+        except KeyError:
+            impl = _find_impl(cls, registry)
+        dispatch_cache[cls] = impl
+    return impl
+```
+
+When `_find_impl` raises RuntimeError, it propagates out of `dispatch`. The `dispatch_cache[cls] = impl` line is never reached. So `dispatch_cache` does NOT have an entry for Document. Good.
+
+But wait - when I do `@overlap_handler.register(Document)`, the `register` function does:
+```python
+registry[cls] = func
+...
+dispatch_cache.clear()
+```
+
+So it clears the dispatch cache AND adds `Document` to the registry. Next time `dispatch(Document)` is called:
+- `dispatch_cache[Document]` → KeyError (cache was cleared)
+- `registry[Document]` → found! Returns the doc_handler.
+- `dispatch_cache[Document] = doc_handler`
+
+So `overlap_handler(doc)` returns "concrete". 
+
+Now let me also verify: does the `register` function's `dispatch_cache.clear()` happen after `registry[cls] = func`? Let me re-read:
+
+```python
+def register(cls, func=None):
+    nonlocal cache_token
+    if func is None:
+        ...
+    if _is_union(cls):
+        ...
+    else:
+        registry[cls] = func
+    if cache_token is None:
+        if _is_union(cls):
+            ...
+        elif hasattr(cls, '__abstractmethods__'):
+            cache_token = get_cache_token()
+    dispatch_cache.clear()
+    return func
+```
+
+Yes, `registry[cls] = func` happens, then `dispatch_cache.clear()`. So the next dispatch will find `registry[Document]`.
+
+But wait - there's a subtlety. When `Shape.register(Document)` was called (the virtual registration via ABCMeta), that's a DIFFERENT register - it's `ABCMeta.register`, not `singledispatch.register`. It modifies the ABC's `__subclasshook__` cache, not the singledispatch registry. So the singledispatch `dispatch_cache` might or might not be affected.
+
+Actually, `ABCMeta.register` calls `cls._abc_register(other)` which increments the `_abc_impl` counter and updates `cls.__subclasshook__` cache. This changes the `get_cache_token()` value. But in our dispatch function:
+
+```python
+if cache_token is not None:
+    current_token = get_cache_token()
+    if cache_token != current_token:
+        dispatch_cache.clear()
+        cache_token = current_token
+```
+
+The `cache_token` is set when an ABC is registered via `singledispatch.register`. Let me trace through:
+
+1. `@overlap_handler.register(Shape | Style)` - This calls `register(Shape | Style, union_handler)`. Since it's a union:
+   - `registry[Shape] = union_handler`
+   - `registry[Style] = union_handler`
+   - `cache_token is None` → check if any union member has `__abstractmethods__` → Shape does → `cache_token = get_cache_token()`
+   - `dispatch_cache.clear()`
+
+2. `overlap_handler(doc)` first call:
+   - `cache_token` is set, check `get_cache_token()` - if unchanged, no clear
+   - `dispatch_cache[Document]` → KeyError
+   - `registry[Document]` → KeyError
+   - `_find_impl(Document, registry)` → computes MRO, finds no match (Document not related to Shape/Style yet) → returns `registry.get(None)` = None
+   
+   Wait, if `_find_impl` returns None, then `dispatch_cache[Document] = None`. And `wrapper` calls `dispatch(args[0].__class__)(*args, **kw)`. If dispatch returns None... that would fail.
+
+   Actually wait, looking at the wrapper:
+   ```python
+   def wrapper(*args, **kw):
+       if not args:
+           raise TypeError(...)
+       return dispatch(args[0].__class__)(*args, **kw)
+   ```
+   
+   If dispatch returns None, then `None(*args, **kw)` would raise TypeError. But the test shows `handler(doc)` returns "default" before virtual registration. How?
+
+   Oh wait - `registry[object] = func` is set in `singledispatch`. So `_find_impl(Document, registry)` will find `object` in the registry (since `object` is in Document's MRO). Let me re-trace:
+   
+   - MRO includes Document, object
+   - Iterating: Document not in registry, object IS in registry → match = object
+   - `registry.get(object)` = the default handler function
+   - Returns the default handler
+   
+   So `dispatch_cache[Document] = default_handler`. Good.
+
+3. `overlap_handler(doc)` returns "default" (the default handler).
+
+4. `Shape.register(Document)` - this is `ABCMeta.register`, changes the ABC cache. `get_cache_token()` changes.
+
+5. `Style.register(Document)` - same. `get_cache_token()` changes again.
+
+6. `overlap_handler(doc)` second call:
+   - `cache_token` was set in step 1. `get_cache_token()` has changed (due to steps 4 and 5).
+   - `dispatch_cache.clear()` is called. `cache_token` updated.
+   - `dispatch_cache[Document]` → KeyError (just cleared)
+   - `registry[Document]` → KeyError
+   - `_find_impl(Document, registry)`:
+     - `_compose_mro(Document, registry.keys())` - now Document IS virtually a subclass of Shape and Style
+     - MRO includes Shape and Style as implicit entries
+     - Iterating MRO: finds Shape (or Style) first → match = Shape
+     - Then finds Style → `t in registry` (yes), `t not in cls.__mro__` (yes, Style not in Document.__mro__), `match not in cls.__mro__` (yes, Shape not in Document.__mro__), `not issubclass(Shape, Style)` (yes, they're unrelated) → raises RuntimeError!
+   
+   The RuntimeError propagates out of `dispatch`, out of `wrapper`, to the caller. `dispatch_cache[Document]` is NOT set (the exception happened before that line).
+
+7. My `try/except` catches the RuntimeError.
+
+8. `@overlap_handler.register(Document)` - calls `register(Document, doc_handler)`:
+   - `registry[Document] = doc_handler`
+   - `cache_token is not None` (set in step 1), so the `if cache_token is None` block is skipped
+   - `dispatch_cache.clear()`
+   
+9. `overlap_handler(doc)` third call:
+   - `cache_token` check: token may or may not have changed since last check. If changed, clear cache (already empty or has stale entries).
+   - `dispatch_cache[Document]` → KeyError
+   - `registry[Document]` → FOUND! Returns `doc_handler`
+   - `dispatch_cache[Document] = doc_handler`
+   
+10. Returns "concrete".
+
+This all checks out. My doc examples are correct.
+
+Now, one more thing: the task says the doc examples should be "runnable >>> examples". Let me make sure my examples are properly formatted for doctest.
+
+Also, I realize I should double-check: does `Shape.register(Document)` actually print `<class '__main__.Document'>`? In CPython's abc.py:
+
+```python
+class ABCMeta(type):
+    ...
+    def register(cls, other):
+        ...
+        cls._abc_register(other)
+        return other  # ← Does it return other?
+```
+
+Hmm, actually I'm not sure. Let me check the existing doc again:
+```
+>>> PluginBase.register(Payload)
+<class '__main__.Payload'>
+```
+
+This is in the EXISTING document that presumably passes the checker. So in this Python version, `ABCMeta.register` DOES return the class. I'll trust the existing doc and follow the same pattern.
+
+Actually, looking at CPython source for 3.12:
+```python
+def register(cls, other=...):
+    ...
+```
+
+It doesn't explicitly return. But the doc shows it returning the class. Let me just follow the existing pattern since it's in the document that the checker validates.
+
+Hmm, actually wait. Let me re-examine. In Python 3.12's abc.py:
+
+```python
+class ABCMeta(type):
+    ...
+    def register(cls, other):
+        ...
+```
+
+The method body ends without a return statement, so it returns None. But the existing doc shows:
+```
+>>> PluginBase.register(Payload)
+<class '__main__.Payload'>
+```
+
+This is contradictory. Unless... the Python version used by this project has a modified abc.py? Or maybe I'm misremembering.
+
+Actually, you know what, let me just check: does the existing doc actually PASS the checker? The historical check passed (RES-0056, passed: true). And the doc is part of that candidate. So yes, the doctest with `<class '__main__.Payload'>` output PASSES. This means in whatever environment the checker runs, `PluginBase.register(Payload)` does print that.
+
+Wait, but maybe the doctest runner in the checker doesn't actually execute the code? No, the task says "Examples run as ordinary standalone doctests." So they DO run.
+
+Let me just follow the existing pattern. If `PluginBase.register(Payload)` shows `<class '__main__.Payload'>`, then `Shape.register(Document)` should show `<class '__main__.Document'>`.
+
+Actually, I just realized something. Let me look at the Python 3.12 abc.py more carefully. In some versions:
+
+```python
+def register(cls, other):
+    """Register a virtual subclass of an ABC.
+    ...
+    """
+    if other is cls:
+        return
+    ...
+    cls._abc_register(other)
+    return other
+```
+
+Wait, does it return `other`? Let me think... Actually in CPython 3.10+, I believe `register` does NOT return the class. But maybe in this project's specific Python version it does.
+
+You know what, I'll just follow the existing document's pattern exactly. The existing doc has:
+```
+>>> PluginBase.register(Payload)
+<class '__main__.Payload'>
+```
+
+And it passes the checker. So I'll write:
+```
+>>> Shape.register(Document)
+<class '__main__.Document'>
+```
+
+If the checker environment makes this work for the existing doc, it'll work for mine too.
+
+Now let me finalize the patch. I need to be careful about the exact text. Let me construct the old and new strings for the patch.
+
+The last line of the file is:
+```
+Invalid union member list[int]: must be a runtime class
+```
+
+I'll use this as my anchor (it's unique - appears only once). My new text will be this line followed by my new section.
+
+Let me write out the complete new content to append. I need to be very careful with RST formatting and doctest formatting.
+
+Actually, let me reconsider the structure. Looking at the existing doc:
+
+```
+Union registration
+------------------
+...
+
+More-specific dispatch still applies
+------------------------------------
+...
+
+Late virtual registration
+-------------------------
+...
+
+Limitation: parameterized generics
+----------------------------------
+...
+```
+
+Each section has a title, underline of dashes (same length as title), and content. I'll follow this pattern.
+
+Section titles:
+- "Overlapping virtual membership" (30 chars) → underline: 30 dashes
+- "Subclass-related ABCs" (23 chars) → underline: 23 dashes  
+- "Explicit registration resolves the ambiguity" (42 chars) → underline: 42 dashes
+- "Distinguishing the mechanisms" (29 chars) → underline: 29 dashes
+
+Wait, let me count characters:
+- "Overlapping virtual membership" = 30 chars
+- "Subclass-related ABCs" = 23 chars
+- "Explicit registration resolves the ambiguity" = 42 chars
+- "Distinguishing the mechanisms" = 29 chars
+
+Let me structure it as one main section with subsections, or as separate sections like the existing doc. Looking at the existing doc, all sections are at the same level (all use `---` underline). I'll do the same.
+
+Actually, let me simplify. The task says "Append an accurate explanatory section" (singular). So maybe one section is better. Let me use:
+
+"Overlapping virtual membership" as the main section title, with the content covering all the cases.
+
+Let me draft this carefully:
+
+```
+Overlapping virtual membership
+-----------------------------
+
+```
+
+Wait, the underline must be exactly as long as the title. "Overlapping virtual membership" is 30 characters. Let me count: O-v-e-r-l-a-p-p-i-n-g (11) + space (1) + v-i-r-t-u-a-l (7) + space (1) + m-e-m-b-e-r-s-h-i-p (10) = 30. Underline: 30 dashes.
+
+Actually, I want to keep it simple and follow the existing doc's flat structure. Let me just have one section:
+
+```
+Overlapping virtual membership
+-----------------------------
+
+[content]
+```
+
+Where the content includes the examples and explanations.
+
+Let me write the full patch now. The `old` text is the last line of the file, and `new` is that line plus my appended content.
+
+Actually, I need to be more careful. Let me use a slightly longer anchor to ensure uniqueness. The last two lines are:
+```
+...     print(exc)
+Invalid union member list[int]: must be a runtime class
+```
+
+Let me use:
+```
+old: "...     print(exc)\nInvalid union member list[int]: must be a runtime class"
+```
+
+Hmm, but I need to make sure this is exactly what's in the file. Looking at the file content, line 89 is `...     print(exc)` and line 90 is `Invalid union member list[int]: must be a runtime class`. There's no trailing newline after line 90 (it's the last line).
+
+Actually, for the patch, I should use text that I know is unique. Let me just use:
+```
+old: "Invalid union member list[int]: must be a runtime class"
+```
+
+This appears exactly once in the file (line 90). The patch will replace it with the same text plus my new content.
+
+Wait, but I need to think about what "replacing" means here. The patch replaces the old text with the new text. So if old is just the last line, and new is that line + "\n\n" + my section, the file will end with my section. That's correct - I'm appending.
+
+But I need to be careful: is there a trailing newline after "Invalid union member list[int]: must be a runtime class"? Looking at the file, it has 90 lines total. The content shown ends with that text. In the file, line 90 is the last line. Whether there's a trailing newline depends on the file. Since the patch operates on exact text, I'll just use the line content without assuming a trailing newline.
+
+Let me construct my patch. The new text will be:
+
+```
+Invalid union member list[int]: must be a runtime class
+
+Overlapping virtual membership
+-----------------------------
+
+When a concrete class is virtually registered as a subclass of two
+*unrelated* abstract base classes that are both members of a union,
+the dispatcher cannot determine a unique handler and raises
+``RuntimeError``::
+
+>>> import functools
+>>> from abc import ABC
+...
+```
+
+Wait, the existing doc doesn't use `::` before doctest blocks - it just puts them directly. Let me look at the existing format:
+
+```
+Union registration
+------------------
+
+>>> import functools
+>>> from abc import ABC
+>>>
+```
+
+No `::`. The doctest blocks are just inline. OK, I'll follow that.
+
+Let me write the final text. I'll be very careful about the doctest format (>>> and ... prompts).
+
+One more thought: in the existing doc, `>>>` lines that span multiple lines use `...` for continuation:
+```
+>>> @functools.singledispatch
+... def handler(x):
+...     return "default"
+```
+
+This is standard doctest format. Good.
+
+Let me now write the actual patch. I'll use a reasonable anchor and construct the new text carefully.
+
+For the "Subclass-related" example, I need to make sure the handler name doesn't conflict. I'll use `related_handler`. For the overlapping case, I'll use `overlap_handler`.
+
+Actually, wait. Let me reconsider the structure. The task says to show:
+1. Overlapping virtual membership (the ambiguous case)
+2. The explicit-registration case
+3. Distinguish virtual membership, concrete inheritance, and handler selection
+
+And "do not generalize beyond the inspected behavior."
+
+I think I should keep it focused. Let me write it as one coherent section.
+
+Here's my final plan for the doc text to append:
+
+```
+Overlapping virtual membership
+-----------------------------
+
+When a class is virtually registered as a subclass of two *unrelated*
+abstract base classes in the same union, the dispatcher raises
+``RuntimeError`` because it cannot select between two implicit ABC
+entries that are both absent from the concrete MRO:
+
+>>> import functools
+>>> from abc import ABC
+>>>
+>>> class Shape(ABC):
+...     pass
+>>>
+>>> class Style(ABC):
+...     pass
+>>>
+>>> class Document:
+...     pass
+>>>
+>>> @functools.singledispatch
+... def overlap_handler(x):
+...     return "default"
+>>>
+>>> @overlap_handler.register(Shape | Style)
+... def union_handler(x):
+...     return "union"
+>>>
+>>> doc = Document()
+>>> overlap_handler(doc)
+'default'
+>>>
+>>> Shape.register(Document)
+<class '__main__.Document'>
+>>>
+>>> Style.register(Document)
+<class '__main__.Document'>
+>>>
+>>> try:
+...     overlap_handler(doc)
+... except RuntimeError as exc:
+...     print(exc)
+Ambiguous dispatch: <class '__main__.Shape'> or <class '__main__.Style'>
+
+``Document`` is a *virtual* subclass of both ``Shape`` and ``Style``:
+the relationship lives in each ABC's internal cache, not in
+``Document.__mro__``.  The composed MRO contains both as implicit
+entries; because neither is a subclass of the other the dispatch
+loop cannot choose and reports the ambiguity.
+
+If the two ABCs are *related* by inheritance the more specific one
+precedes the other in the composed MRO and no error is raised:
+
+>>> class Base(ABC):
+...     pass
+>>>
+>>> class Derived(Base):
+...     pass
+>>>
+>>> @functools.singledispatch
+... def related_handler(x):
+...     return "default"
+>>>
+>>> @related_handler.register(Base | Derived)
+... def related_union(x):
+...     return "union"
+>>>
+>>> class Widget:
+...     pass
+>>>
+>>> w = Widget()
+>>> related_handler(w)
+'default'
+>>>
+>>> Base.register(Widget)
+<class '__main__.Widget'>
+>>>
+>>> Derived.register(Widget)
+<class '__main__.Widget'>
+>>>
+>>> related_handler(w)
+'union'
+
+Here ``Derived`` is a concrete subclass of ``Base``.  The composed
+MRO places ``Derived`` before ``Base``; when the loop reaches
+``Base`` it sees ``issubclass(Derived, Base)`` is true and breaks,
+selecting the union handler.
+
+Registering a handler for the concrete type itself bypasses the
+ambiguous MRO walk entirely, because ``dispatch`` checks
+``registry[cls]`` before calling ``_find_impl``:
+
+>>> @overlap_handler.register(Document)
+... def doc_handler(x):
+...     return "concrete"
+>>>
+>>> overlap_handler(doc)
+'concrete'
+
+Three mechanisms are at work:
+
+* **Virtual membership** -- ``ABC.register(C)`` adds ``C`` to the
+  ABC's internal cache without modifying ``C.__mro__``.  The
+  composed MRO picks it up through ``issubclass`` checks, producing
+  an *implicit* entry.
+
+* **Concrete inheritance** -- ``class Child(Parent)`` puts
+  ``Parent`` in ``Child.__mro__``.  A registry entry for ``Parent``
+  is found as an *explicit* entry during the MRO walk.
+
+* **Handler selection** -- ``dispatch(cls)`` tries
+  ``dispatch_cache[cls]``, then ``registry[cls]``, and only then
+  falls through to ``_find_impl``.  An explicit ``registry`` entry
+  for the concrete type short-circuits the walk and its ambiguity
+  check.
+```
+
+This looks good. Let me count the title length: "Overlapping virtual membership" = 30 chars. Underline should be 30 dashes: "-----------------------------" Let me count: 30 dashes.
+
+Now let me prepare the patch. I'll use the last line as my anchor.
+
+Actually, I realize I should double-check one thing about the doctest. In the existing doc, the examples are all in one continuous session. My new section adds `import functools` and `from abc import ABC` again. In a doctest, re-importing is fine (it's a no-op if already imported). But defining classes with the same names could shadow. I'm using different names (Shape, Style, Document, Base, Derived, Widget) than the existing ones (PluginBase, Payload), so no conflict.
+
+Wait, actually I should check: does the existing doc already define `Base` or `Derived`? Looking at the existing doc content... No, it only defines `PluginBase` and `Payload`. My names are safe.
+
+Also, `overlap_handler` and `related_handler` don't conflict with the existing `handler` and `bool_handler`.
+
+One more thing: in the existing doc, after section 4 (parameterized generics), the `handler` object has:
+- registry[PluginBase] = union_handler
+- registry[int] = union_handler  
+- registry[bool] = bool_handler
+- registry[object] = default handler (set by singledispatch)
+
+My new handlers are independent, so no issue.
+
+Let me finalize and write the patch. I'll use:
+- path: "Doc/howto/union-dispatch.rst"
+- old: "Invalid union member list[int]: must be a runtime class"
+- new: "Invalid union member list[int]: must be a runtime class\n\nOverlapping virtual membership\n-----------------------------\n\n..."
+
+I need to make sure the old text is unique. Let me verify: searching for "Invalid union member" in the file - it appears only once (line 90). Good.
+
+The file sha256 is: 1e7c5fcc72d45faad3cc0313e4f5109bb30bea1bb09711f9e17202edcf9b18c6
+The candidate id is: 10a6323582043b810128b43da925adc05842efd8e82e50c9a2e784fc5d5b3f8c
+
+Let me write the patch now.

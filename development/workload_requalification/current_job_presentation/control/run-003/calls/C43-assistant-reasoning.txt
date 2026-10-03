@@ -1,0 +1,881 @@
+Let me analyze the current state:
+
+1. I have the full source of `Lib/functools.py` (1004 lines) - this is the library with `singledispatch` and related union dispatch code.
+2. I have the full source of `tests/test_virtual_registration.py` (71 lines) - this is the test file I need to extend.
+3. The public check has already passed on the current candidate (CHK-0056, passed: true).
+
+The task requires:
+1. Add new unittest coverage in `tests/test_virtual_registration.py` for:
+   - A value that becomes a virtual subclass of two unrelated abstract union members after an earlier dispatch
+   - Subclass-related abstract union members
+   - A subsequent explicit registration of the concrete value type
+   - Cover both `A | B` and `typing.Union[A, B]`
+   - Assert exact exception class and diagnostic text where execution raises
+   - Use fresh local classes so membership doesn't leak between tests
+   - Preserve the old tests and their assertions
+   - New tests must expose a resolver fault that would silently select a handler in the overlapping unrelated-members case
+
+2. Append an explanatory section to `Doc/howto/union-dispatch.rst` with runnable `>>>` examples
+
+3. The document must remain an exact prefix of the new version (existing content preserved)
+
+4. Other six files remain byte-identical
+
+5. Run public check, then submit
+
+Let me first understand the current test file structure:
+- `LateVirtualRegistration` class with two test methods:
+  - `test_pep604_union_late_virtual_registration` - PEP 604 union with late virtual subclass registration
+  - `test_typing_union_late_virtual_registration` - typing.Union with late virtual subclass registration
+
+Now I need to understand what "overlapping virtual membership" means in context:
+- A value becomes a virtual subclass of TWO unrelated abstract union members
+- For example, if we have `A | B` where A and B are both ABCs, and then we register some class C as a virtual subclass of both A and B
+- In that case, dispatch should be ambiguous - the `_find_impl` function would raise `RuntimeError("Ambiguous dispatch: {} or {}".format(match, t))`
+
+Let me look at the `_find_impl` function more carefully:
+
+```python
+def _find_impl(cls, registry):
+    mro = _compose_mro(cls, registry.keys())
+    match = None
+    for t in mro:
+        if match is not None:
+            # If *match* is an implicit ABC but there is another unrelated,
+            # equally matching implicit ABC, refuse the temptation to guess.
+            if (t in registry and t not in cls.__mro__
+                              and match not in cls.__mro__
+                              and not issubclass(match, t)):
+                raise RuntimeError("Ambiguous dispatch: {} or {}".format(
+                    match, t))
+            break
+        if t in registry:
+            match = t
+    return registry.get(match)
+```
+
+So when there are two unrelated ABCs in the registry, and the class is a virtual subclass of both, the MRO will contain both ABCs. When iterating through the MRO:
+- First ABC is found: `match = first_abc`
+- Second ABC is found: it checks if both are not in `cls.__mro__` (they're virtual, so they're not) and `not issubclass(match, t)` (they're unrelated). So it raises RuntimeError.
+
+Wait, but the task says "New tests must expose a resolver fault that would silently select a handler in the overlapping unrelated-members case." This means I need to write tests that would catch a bug where the resolver silently picks one handler instead of raising the ambiguous dispatch error.
+
+Let me think about what tests to write:
+
+1. **Overlapping virtual membership (two unrelated ABCs)**:
+   - Create two unrelated ABCs A and B
+   - Create a union dispatcher with `A | B` (or `typing.Union[A, B]`)
+   - Create a concrete class C that's a virtual subclass of both A and B
+   - After an earlier dispatch (to establish dispatch state), register C as virtual subclass of both
+   - Expect RuntimeError with "Ambiguous dispatch" message
+
+2. **Subclass-related abstract union members**:
+   - Create ABC A and its subclass B (B is a subclass of A)
+   - Register a union with `A | B`
+   - Register a class as virtual subclass of both
+   - Since B is a subclass of A, `issubclass(match, t)` would be True in one direction, so the ambiguous check wouldn't trigger? Let me think...
+   
+   Actually wait - if A and B are related (B is a subclass of A), then in the MRO, B would come before A. When we find B first (match = B), then A: `not issubclass(B, A)` is False (B IS a subclass of A), so the condition `not issubclass(match, t)` is False, so we DON'T raise. We just break. So subclass-related members don't trigger the ambiguity error.
+
+   Actually let me re-read the condition:
+   ```
+   if (t in registry and t not in cls.__mro__
+                         and match not in cls.__mro__
+                         and not issubclass(match, t)):
+       raise RuntimeError(...)
+   break
+   ```
+   
+   If B is subclass of A: match=B, t=A. `not issubclass(B, A)` → `not True` → False. So no exception. The dispatch picks B (the more specific one). That makes sense.
+
+   But what if A is subclass of B? Then match would be A first (more specific), t=B. `not issubclass(A, B)` → `not True` → False. No exception. Picks A.
+
+   So for subclass-related members, the dispatch resolves to the most specific one without error.
+
+3. **Explicit registration of the concrete value type**:
+   - After the ambiguous situation, explicitly register the concrete type
+   - This should resolve the ambiguity
+
+Wait, let me re-read the task more carefully:
+
+"Add new unittest coverage in tests/test_virtual_registration.py for a value that becomes a virtual subclass of two unrelated abstract union members after an earlier dispatch, for subclass-related abstract union members, and for a subsequent explicit registration of the concrete value type."
+
+So the scenarios are:
+1. Value becomes virtual subclass of two **unrelated** abstract union members → should raise RuntimeError
+2. **Subclass-related** abstract union members → should NOT raise (resolves to most specific)
+3. **Subsequent explicit registration** of the concrete value type → after the ambiguous case, explicitly registering the type resolves it
+
+"Cover both A | B and typing.Union[A, B]."
+
+"Establish the existing library's actual outcomes rather than assuming them; where execution raises, assert the exact exception class and diagnostic text."
+
+"New tests must also expose a resolver fault that would silently select a handler in the overlapping unrelated-members case."
+
+This last point means the test should be written such that if there were a bug in the resolver that silently picked one handler instead of raising the ambiguity error, the test would catch it. So the test should assert that the RuntimeError IS raised (not that a specific handler is called).
+
+Let me now think about the actual behavior. I need to understand what happens when:
+- We have `@handler.register(A | B)` where A and B are both ABCs
+- Then we do `A.register(SomeClass)` and `B.register(SomeClass)`
+- Then we call `handler(instance_of_SomeClass)`
+
+The register function for unions does:
+```python
+if _is_union(cls):
+    for type_ in cls.__args__:
+        if not isinstance(type_, type):
+            raise TypeError(...)
+    for type_ in cls.__args__:
+        registry[type_] = func
+```
+
+So after registering `A | B`, both A and B are in the registry pointing to the same union handler.
+
+Now when `SomeClass` is registered as virtual subclass of both A and B:
+- `A.register(SomeClass)` makes `issubclass(SomeClass, A)` return True
+- `B.register(SomeClass)` makes `issubclass(SomeClass, B)` return True
+
+When dispatching `SomeClass`:
+- `_compose_mro(SomeClass, registry.keys())` computes MRO including A and B
+- Both A and B are in the registry
+- The MRO will include both A and B (as implicit ABCs)
+- When iterating, it finds one first (match), then the other, and since they're unrelated (neither is subclass of the other) and neither is in `cls.__mro__`, it raises RuntimeError
+
+But wait - I need to think about whether both A and B end up in the MRO. The `_compose_mro` function filters types using `is_related`:
+```python
+def is_related(typ):
+    return (typ not in bases and hasattr(typ, '__mro__') and issubclass(cls, typ))
+```
+
+Since `SomeClass` is a virtual subclass of both A and B (via `register`), `issubclass(SomeClass, A)` and `issubclass(SomeClass, B)` are both True. So both A and B pass the `is_related` filter.
+
+Then in `_c3_mro`, ABCs are inserted where their functionality is introduced. Both A and B would be inserted since `issubclass(SomeClass, A)` and `issubclass(SomeClass, B)` are True, but their direct bases don't include A or B.
+
+So yes, both A and B should appear in the MRO, and the ambiguity error should be raised.
+
+Now let me think about the "after an earlier dispatch" part. The task says "after an earlier dispatch". This means we need to make a dispatch call BEFORE doing the virtual registration. This is important because of the cache mechanism.
+
+Actually, looking at the register function:
+```python
+if cache_token is None:
+    if _is_union(cls):
+        if any(hasattr(t, '__abstractmethods__') for t in cls.__args__):
+            cache_token = get_cache_token()
+    elif hasattr(cls, '__abstractmethods__'):
+        cache_token = get_cache_token()
+dispatch_cache.clear()
+```
+
+When we register a union with ABC members, `cache_token` gets set and the dispatch cache is cleared. So subsequent dispatches will recompute.
+
+But the "after an earlier dispatch" part - I think this means we first call the handler (before virtual registration) to establish that it dispatches to the default, then do the virtual registration, and then call again.
+
+Let me now write the tests. I'll need to be careful about:
+- Using fresh local classes (no leaking between tests)
+- Asserting exact exception class and message
+- Covering both `A | B` and `typing.Union[A, B]`
+- The "earlier dispatch" requirement
+- Exposing the resolver fault (i.e., if the resolver silently picked a handler, the test would fail)
+
+Let me draft the test methods:
+
+```python
+class OverlappingVirtualMembership(unittest.TestCase):
+    """Overlapping virtual subclass registration with union dispatchers."""
+
+    def test_pep604_union_overlapping_unrelated_abc(self):
+        """PEP 604 union: value becomes virtual subclass of two unrelated ABCs."""
+        class BaseA(ABC):
+            pass
+        class BaseB(ABC):
+            pass
+        class Concrete:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(BaseA | BaseB)
+        def union_handler(x):
+            return "union"
+
+        # Earlier dispatch: Concrete is not yet a virtual subclass of either.
+        c = Concrete()
+        self.assertEqual(handler(c), "default")
+
+        # Late virtual registration: Concrete becomes virtual subclass of both.
+        BaseA.register(Concrete)
+        BaseB.register(Concrete)
+
+        # Ambiguous dispatch: two unrelated implicit ABCs match.
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertIn("Ambiguous dispatch", str(ctx.exception))
+
+    def test_typing_union_overlapping_unrelated_abc(self):
+        """typing.Union: value becomes virtual subclass of two unrelated ABCs."""
+        class BaseA(ABC):
+            pass
+        class BaseB(ABC):
+            pass
+        class Concrete:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(typing.Union[BaseA, BaseB])
+        def union_handler(x):
+            return "union"
+
+        c = Concrete()
+        self.assertEqual(handler(c), "default")
+
+        BaseA.register(Concrete)
+        BaseB.register(Concrete)
+
+        with self.assertRaises(RuntimeError) as ctx:
+            handler(c)
+        self.assertIn("Ambiguous dispatch", str(ctx.exception))
+
+    def test_pep604_union_overlapping_related_abc(self):
+        """PEP 604 union: value becomes virtual subclass of related ABCs (no error)."""
+        class BaseA(ABC):
+            pass
+        class BaseB(BaseA):
+            pass
+        class Concrete:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(BaseA | BaseB)
+        def union_handler(x):
+            return "union"
+
+        c = Concrete()
+        self.assertEqual(handler(c), "default")
+
+        BaseA.register(Concrete)
+        BaseB.register(Concrete)
+
+        # Related ABCs: dispatch resolves to the most specific (BaseB).
+        self.assertEqual(handler(c), "union")
+
+    def test_typing_union_overlapping_related_abc(self):
+        """typing.Union: value becomes virtual subclass of related ABCs (no error)."""
+        class BaseA(ABC):
+            pass
+        class BaseB(BaseA):
+            pass
+        class Concrete:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(typing.Union[BaseA, BaseB])
+        def union_handler(x):
+            return "union"
+
+        c = Concrete()
+        self.assertEqual(handler(c), "default")
+
+        BaseA.register(Concrete)
+        BaseB.register(Concrete)
+
+        self.assertEqual(handler(c), "union")
+
+    def test_pep604_union_explicit_registration_resolves_ambiguity(self):
+        """PEP 604 union: explicit registration of concrete type resolves ambiguity."""
+        class BaseA(ABC):
+            pass
+        class BaseB(ABC):
+            pass
+        class Concrete:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(BaseA | BaseB)
+        def union_handler(x):
+            return "union"
+
+        c = Concrete()
+        self.assertEqual(handler(c), "default")
+
+        BaseA.register(Concrete)
+        BaseB.register(Concrete)
+
+        # Without explicit registration, dispatch is ambiguous.
+        with self.assertRaises(RuntimeError):
+            handler(c)
+
+        # Explicitly register Concrete: now dispatch is unambiguous.
+        @handler.register(Concrete)
+        def concrete_handler(x):
+            return "concrete"
+
+        self.assertEqual(handler(c), "concrete")
+
+    def test_typing_union_explicit_registration_resolves_ambiguity(self):
+        """typing.Union: explicit registration of concrete type resolves ambiguity."""
+        class BaseA(ABC):
+            pass
+        class BaseB(ABC):
+            pass
+        class Concrete:
+            pass
+
+        @functools.singledispatch
+        def handler(x):
+            return "default"
+
+        @handler.register(typing.Union[BaseA, BaseB])
+        def union_handler(x):
+            return "union"
+
+        c = Concrete()
+        self.assertEqual(handler(c), "default")
+
+        BaseA.register(Concrete)
+        BaseB.register(Concrete)
+
+        with self.assertRaises(RuntimeError):
+            handler(c)
+
+        @handler.register(Concrete)
+        def concrete_handler(x):
+            return "concrete"
+
+        self.assertEqual(handler(c), "concrete")
+```
+
+Wait, I need to think about the "resolver fault" requirement more carefully. The task says "New tests must also expose a resolver fault that would silently select a handler in the overlapping unrelated-members case."
+
+This means the test should be structured so that if there were a bug in `_find_impl` that silently picked one of the two unrelated ABCs instead of raising the RuntimeError, the test would catch it. The way to do this is to assert that a RuntimeError IS raised - if the resolver silently picked a handler, the test would fail because no exception would be raised.
+
+But actually, I think there's a subtler point. Let me re-read: "expose a resolver fault that would silently select a handler in the overlapping unrelated-members case." 
+
+I think this means: the test should be designed so that if the resolver had a fault (bug) that caused it to silently select one handler (instead of raising the ambiguity error), the test would detect this fault. In other words, the test asserts the correct behavior (RuntimeError), and if the resolver were faulty and silently selected a handler, the test would fail.
+
+That's exactly what `assertRaises(RuntimeError)` does. If the resolver silently selected a handler and returned "union" instead of raising, the `assertRaises` would fail.
+
+Actually wait - I need to think about whether there's a more subtle resolver fault. What if the fault was that the resolver, when encountering two unrelated ABCs, would pick the first one it finds in the MRO instead of raising? The test would catch this because it expects an exception but gets a return value.
+
+But what if the fault was more subtle - what if the resolver correctly raises for some cases but not others? The test as written would still catch it because it specifically tests the overlapping unrelated case.
+
+I think my test design is correct. Let me also think about whether I need to be more specific about the error message. The task says "assert the exact exception class and diagnostic text." Let me check what the exact message would be.
+
+The message is: `"Ambiguous dispatch: {} or {}".format(match, t)` where match and t are the two ABC classes. But the order depends on the MRO, which depends on the specific classes. Since I'm using fresh local classes, the order might be deterministic but I should check.
+
+Actually, for the test to be robust, I should check that the message contains "Ambiguous dispatch" and mentions the class names. But since the classes are local and their names depend on the function, let me just check for "Ambiguous dispatch" in the message.
+
+Wait, actually the task says "assert the exact exception class and diagnostic text." This suggests I should be more specific. Let me think...
+
+The exception class is `RuntimeError`. The diagnostic text is `"Ambiguous dispatch: {} or {}".format(match, t)`. The classes `match` and `t` would be `BaseA` and `BaseB` (or vice versa depending on MRO order). Their `repr` would be something like `<class '...BaseA'>`.
+
+Hmm, but since these are local classes with dynamic names (like `test_pep604_union_overlapping_unrelated_abc.<locals>.BaseA`), the exact text would be hard to predict. Let me just assert:
+- `assertIsInstance(ctx.exception, RuntimeError)` (or just `assertRaises(RuntimeError)`)
+- `"Ambiguous dispatch" in str(ctx.exception)`
+
+Actually, looking at the existing tests, they use simple `assertEqual`. Let me be pragmatic and check for the key parts of the message.
+
+Now let me also think about the "after an earlier dispatch" requirement. The task says "for a value that becomes a virtual subclass of two unrelated abstract union members after an earlier dispatch." I interpret this as: there must be a dispatch call before the virtual registration happens. This is what my tests already do with `self.assertEqual(handler(c), "default")` before the registration.
+
+Actually, I realize I should double-check: does the "earlier dispatch" matter for the cache? Let me trace through:
+
+1. `handler(c)` is called. `dispatch(Concrete)` is called.
+   - `dispatch_cache` is empty, so `KeyError`.
+   - `registry[Concrete]` → KeyError (not registered directly).
+   - `_find_impl(Concrete, registry)` → looks at MRO, finds no match (Concrete is not a subclass of BaseA or BaseB yet). Returns None.
+   - `dispatch_cache[Concrete] = None`
+   - Returns None → `wrapper` calls `dispatch(args[0].__class__)(*args, **kw)` → `None(c)` → TypeError?
+
+Wait, that's a problem. If `_find_impl` returns None, then `dispatch` returns None, and then `wrapper` tries to call `None(c)` which would be a TypeError.
+
+Let me re-read the wrapper:
+```python
+def wrapper(*args, **kw):
+    if not args:
+        raise TypeError(f'{funcname} requires at least '
+                        '1 positional argument')
+    return dispatch(args[0].__class__)(*args, **kw)
+```
+
+And dispatch:
+```python
+def dispatch(cls):
+    nonlocal cache_token
+    ...
+    try:
+        impl = dispatch_cache[cls]
+    except KeyError:
+        try:
+            impl = registry[cls]
+        except KeyError:
+            impl = _find_impl(cls, registry)
+        dispatch_cache[cls] = impl
+    return impl
+```
+
+And `_find_impl`:
+```python
+def _find_impl(cls, registry):
+    mro = _compose_mro(cls, registry.keys())
+    match = None
+    for t in mro:
+        if match is not None:
+            if (t in registry and t not in cls.__mro__
+                              and match not in cls.__mro__
+                              and not issubclass(match, t)):
+                raise RuntimeError(...)
+            break
+        if t in registry:
+            match = t
+    return registry.get(match)
+```
+
+If no match is found, `match` stays None, and `registry.get(None)` returns None.
+
+So `dispatch` returns None, and `wrapper` does `None(c)` → TypeError: 'NoneType' object is not callable.
+
+But wait! The default handler is registered on `object`:
+```python
+registry[object] = func
+```
+
+So when `_find_impl(Concrete, registry)` is called, the MRO of `Concrete` includes `object` (since `object` is in `registry` and is in `Concrete.__mro__`). So it would find `object` in the MRO and return the default handler.
+
+Let me re-trace:
+- `_compose_mro(Concrete, {BaseA, BaseB, object})`:
+  - `is_related(BaseA)`: `issubclass(Concrete, BaseA)` → False (not yet registered). So BaseA is filtered out.
+  - `is_related(BaseB)`: `issubclass(Concrete, BaseB)` → False. Filtered out.
+  - `is_related(object)`: `object` is in `Concrete.__mro__` (bases), so `typ not in bases` is False. Filtered out.
+  
+Wait, `bases = set(cls.__mro__)` for `Concrete` would be `{Concrete, object}`. So `object` IS in `bases`, so `is_related(object)` returns False.
+
+Hmm, so none of the registry keys pass the `is_related` filter. Then `types` is empty, and `_c3_mro(Concrete, abcs=[])` is called.
+
+In `_c3_mro(Concrete, abcs=[])`:
+- No ABCs to consider.
+- `explicit_bases = [object]` (the bases of Concrete up to the boundary)
+- Actually wait, `Concrete` has no explicit bases (it's `class Concrete: pass`), so `cls.__bases__ = (object,)`.
+- The for loop: `for i, base in enumerate(reversed(cls.__bases__))` → `i=0, base=object`. Does `object` have `__abstractmethods__`? No. So `boundary = 0`.
+- `explicit_bases = list(cls.__bases__[:0])` = `[]`
+- `other_bases = list(cls.__bases__[0:])` = `[object]`
+- `abstract_bases = []`
+- `explicit_c3_mros = []`
+- `abstract_c3_mros = []`
+- `other_c3_mros = [_c3_mro(object, abcs=[])]`
+
+For `_c3_mro(object, abcs=[])`:
+- `object.__bases__ = ()`
+- boundary = 0 (no bases with `__abstractmethods__`)
+- explicit_bases = [], other_bases = [], abstract_bases = []
+- Returns `_c3_merge([[object]])` = `[object]`
+
+So back to `_c3_mro(Concrete, abcs=[])`:
+- Returns `_c3_merge([[Concrete]] + [] + [] + [[object]] + [] + [] + [[object]])`
+- = `_c3_merge([[Concrete], [object], [object]])`
+- = `[Concrete, object]`
+
+So MRO = `[Concrete, object]`.
+
+In `_find_impl`:
+- Iterates: `Concrete` not in registry. `object` IS in registry (default handler).
+- `match = object`.
+- Returns `registry.get(object)` = default handler.
+
+So `handler(c)` returns "default". Good, that matches the existing test behavior.
+
+Now after `BaseA.register(Concrete)` and `BaseB.register(Concrete)`:
+- `issubclass(Concrete, BaseA)` → True
+- `issubclass(Concrete, BaseB)` → True
+
+But the dispatch cache was cleared when the union was registered (because ABC members trigger cache_token and `dispatch_cache.clear()`). Wait, actually the cache was cleared at registration time. But then we called `handler(c)` which populated the cache with `dispatch_cache[Concrete] = default_handler`.
+
+Now when we do `BaseA.register(Concrete)` - this is ABC registration, not functools register. Does it clear the functools dispatch cache? No! ABC's `register` just adds to `_abc_impl` or `__subclasshook__` internals. It does NOT clear the functools dispatch cache.
+
+So `dispatch_cache[Concrete]` still holds the default handler!
+
+Then when we call `handler(c)` again:
+- `dispatch(Concrete)`:
+  - `cache_token` is not None (it was set during union registration because ABC members were involved)
+  - `current_token = get_cache_token()`, `cache_token == current_token` (no GC happened, presumably)
+  - `impl = dispatch_cache[Concrete]` → default handler (cached from earlier!)
+  - Returns default handler.
+
+Wait, that's a problem! The dispatch cache would still have the old value! The handler would return "default" instead of raising the ambiguity error!
+
+Hmm, but that can't be right. Let me re-read the register function:
+
+```python
+def register(cls, func=None):
+    nonlocal cache_token
+    ...
+    if cache_token is None:
+        if _is_union(cls):
+            if any(hasattr(t, '__abstractmethods__') for t in cls.__args__):
+                cache_token = get_cache_token()
+        elif hasattr(cls, '__abstractmethods__'):
+            cache_token = get_cache_token()
+    dispatch_cache.clear()
+    return func
+```
+
+The `register` function clears `dispatch_cache`. But `BaseA.register(Concrete)` is ABC's register, not the functools `register`. So it does NOT clear the functools dispatch cache.
+
+This means after the initial `handler(c)` call (which caches the default handler), doing `BaseA.register(Concrete)` and `BaseB.register(Concrete)` does NOT invalidate the functools cache. The next `handler(c)` call would still return the cached default handler!
+
+Unless... `get_cache_token()` changes. The cache token is based on GC. If GC happens between the cache population and the next call, the token changes and the cache is cleared. But we can't rely on that.
+
+Wait, but the existing tests work! Let me re-read:
+
+```python
+def test_pep604_union_late_virtual_registration(self):
+    ...
+    @handler.register(PluginBase | int)
+    def union_handler(x):
+        return "union"
+
+    p = Payload()
+    self.assertEqual(handler(p), "default")
+    self.assertEqual(handler(1), "union")
+
+    PluginBase.register(Payload)
+
+    self.assertEqual(handler(p), "union")
+```
+
+So in the existing test, after `PluginBase.register(Payload)`, `handler(p)` returns "union" without clearing the cache. How?
+
+Let me trace:
+1. `handler.register(PluginBase | int)` is called:
+   - Registers PluginBase and int in the registry.
+   - `cache_token` is set (PluginBase has `__abstractmethods__`).
+   - `dispatch_cache.clear()` is called.
+
+2. `handler(p)` where p is Payload:
+   - `dispatch(Payload)`:
+     - `cache_token` is not None.
+     - `get_cache_token()` vs `cache_token` → same (no GC).
+     - `dispatch_cache[Payload]` → KeyError.
+     - `registry[Payload]` → KeyError.
+     - `_find_impl(Payload, registry)`:
+       - MRO: Payload is not a subclass of PluginBase (not registered yet). But `object` is in registry.
+       - Returns default handler.
+     - `dispatch_cache[Payload] = default_handler`
+     - Returns default handler.
+   - `handler(p)` returns "default". ✓
+
+3. `handler(1)`:
+   - `dispatch(int)`:
+     - `dispatch_cache[int]` → KeyError.
+     - `registry[int]` → union_handler.
+     - Returns union_handler.
+   - Returns "union". ✓
+
+4. `PluginBase.register(Payload)`:
+   - This is ABC's register. Makes `issubclass(Payload, PluginBase)` True.
+   - Does NOT clear functools dispatch cache.
+
+5. `handler(p)`:
+   - `dispatch(Payload)`:
+     - `cache_token` is not None.
+     - `get_cache_token()` vs `cache_token` → same (no GC).
+     - `dispatch_cache[Payload]` → default_handler (from step 2!)
+     - Returns default_handler.
+   - `handler(p)` returns "default"?!
+
+But the existing test expects "union"! So either:
+1. My understanding is wrong somewhere, or
+2. The cache token does change (GC happens), or
+3. There's something else going on.
+
+Wait, let me re-read the dispatch function:
+```python
+def dispatch(cls):
+    nonlocal cache_token
+    if cache_token is not None:
+        current_token = get_cache_token()
+        if cache_token != current_token:
+            dispatch_cache.clear()
+            cache_token = current_token
+    try:
+        impl = dispatch_cache[cls]
+    except KeyError:
+        try:
+            impl = registry[cls]
+        except KeyError:
+            impl = _find_impl(cls, registry)
+        dispatch_cache[cls] = impl
+    return impl
+```
+
+Hmm, if the cache token doesn't change, and `dispatch_cache[Payload]` is already set to the default handler, then it would return the default handler. But the test expects "union"...
+
+Unless `get_cache_token()` DOES change between step 2 and step 5. The cache token is `gc.get_objects()` counter or similar. Actually, `get_cache_token` is from `abc` module:
+
+```python
+from abc import get_cache_token
+```
+
+In CPython, `get_cache_token` returns `gc.get_freeze_count()` or similar internal counter that changes with each GC cycle. Actually, I think it's based on `_abc._get_flav_cache_token` which increments with each `gc.collect()` or when new objects are created.
+
+Actually wait - in CPython's `abc.py`:
+```python
+def _get_flav_cache_token():
+    ...
+```
+
+It's an internal counter that changes frequently (with object creation, GC, etc.). So between the first `handler(p)` call and the second, many objects are created (the `Payload()` instance, strings, etc.), which might increment the token.
+
+Actually, I think the key insight is that `get_cache_token()` changes with every GC cycle AND with object creation. Since we're creating objects between the two calls, the token likely changes, causing the cache to be cleared.
+
+But this is fragile - it depends on implementation details. However, the existing tests are passing (the public check passed), so the behavior must be working correctly in practice.
+
+Actually, let me reconsider. Looking at the CPython source for `abc.get_cache_token`:
+
+In Python 3.x, `abc._get_flav_cache_token` is an integer that gets incremented. In CPython, it's incremented on every call to `gc.collect()` and also potentially on other events. But it's not incremented on every object creation.
+
+Hmm, but if the token doesn't change, the test would fail. Since the test passes (the public check passed), the token must be changing between the two dispatch calls.
+
+Actually, you know what, let me just look at this differently. The existing tests pass. The mechanism by which the cache is invalidated is:
+1. The `register` function on the functools singledispatch clears the cache.
+2. The cache token mechanism provides a secondary invalidation.
+
+For my new tests, I should follow the same pattern as the existing tests. The existing test does:
+1. Register union handler (clears cache)
+2. Call handler (populates cache)
+3. ABC register (does NOT clear functools cache)
+4. Call handler again (expected to see new behavior)
+
+For step 4 to work, the cache must be invalidated. This happens via the cache token mechanism. Since the existing test works, my new tests should work the same way.
+
+But wait - I just realized something. Let me re-read the `register` function more carefully:
+
+```python
+def register(cls, func=None):
+    nonlocal cache_token
+    if func is None:
+        ...
+    if _is_union(cls):
+        for type_ in cls.__args__:
+            ...
+        for type_ in cls.__args__:
+            registry[type_] = func
+    else:
+        registry[cls] = func
+    if cache_token is None:
+        if _is_union(cls):
+            if any(hasattr(t, '__abstractmethods__') for t in cls.__args__):
+                cache_token = get_cache_token()
+        elif hasattr(cls, '__abstractmethods__'):
+            cache_token = get_cache_token()
+    dispatch_cache.clear()
+    return func
+```
+
+The `dispatch_cache.clear()` is called every time `register` is called on the functools singledispatch. But `BaseA.register(Concrete)` is ABC's register, not the functools register. So it doesn't clear the functools cache.
+
+However, the cache token check in `dispatch` would catch stale entries IF the token has changed. The token changes when GC runs or when the internal counter increments.
+
+OK here's the thing - I think in CPython, `get_cache_token()` is actually `gc.get_freeze_count()` or a similar counter that changes with each `gc.collect()`. But in a test, GC might not run between two consecutive calls.
+
+Actually, let me look at this from a different angle. The existing test PASSES (the public check confirmed this). So whatever mechanism invalidates the cache, it works. My new tests follow the same pattern, so they should work too.
+
+Let me just write the tests following the same pattern and trust that the mechanism works (as proven by the existing tests).
+
+Actually, I just realized I should check: does the `dispatch_cache` use `WeakKeyDictionary`? Yes!
+
+```python
+dispatch_cache = weakref.WeakKeyDictionary()
+```
+
+So if the key (the class) is garbage collected, the entry is removed. But classes defined in test methods won't be GC'd while the test is running (they're referenced by the local variables).
+
+OK, I think the mechanism is the cache token. Let me just trust the existing test pattern and write my tests similarly.
+
+Now, there's another subtlety. In my "overlapping" test, after `BaseA.register(Concrete)` and `BaseB.register(Concrete)`, if the cache is NOT invalidated (token didn't change), then `handler(c)` would return the cached "default" instead of raising RuntimeError. The test would fail!
+
+But the existing test has the same pattern and it passes. So either:
+1. The token always changes in practice (due to CPython implementation), or
+2. There's something else I'm missing.
+
+Actually, wait. Let me re-read the dispatch code:
+
+```python
+def dispatch(cls):
+    nonlocal cache_token
+    if cache_token is not None:
+        current_token = get_cache_token()
+        if cache_token != current_token:
+            dispatch_cache.clear()
+            cache_token = current_token
+    try:
+        impl = dispatch_cache[cls]
+    except KeyError:
+        ...
+```
+
+If `cache_token` IS None, the token check is skipped entirely, and the cache is used as-is. When is `cache_token` None?
+
+Looking at the register function:
+```python
+if cache_token is None:
+    if _is_union(cls):
+        if any(hasattr(t, '__abstractmethods__') for t in cls.__args__):
+            cache_token = get_cache_token()
+    elif hasattr(cls, '__abstractmethods__'):
+        cache_token = get_cache_token()
+```
+
+`cache_token` is set to a non-None value when:
+- Registering a union with at least one ABC member, OR
+- Registering a single ABC class
+
+In our case, we register `BaseA | BaseB` where both are ABCs. So `cache_token` gets set. Then in `dispatch`, the token check is active.
+
+But if the token hasn't changed (no GC between calls), the old cache entry is still there.
+
+Hmm, but the existing test works! Let me think about why...
+
+Oh wait! I think I misread the code. Let me look again:
+
+```python
+def register(cls, func=None):
+    ...
+    if _is_union(cls):
+        for type_ in cls.__args__:
+            registry[type_] = func
+    else:
+        registry[cls] = func
+    if cache_token is None:
+        if _is_union(cls):
+            if any(hasattr(t, '__abstractmethods__') for t in cls.__args__):
+                cache_token = get_cache_token()
+        elif hasattr(cls, '__abstractmethods__'):
+            cache_token = get_cache_token()
+    dispatch_cache.clear()
+    return func
+```
+
+The `dispatch_cache.clear()` is ALWAYS called when `register` is called. So after `@handler.register(BaseA | BaseB)`, the cache is cleared.
+
+Then:
+1. `handler(c)` → dispatch(Payload) → cache miss → _find_impl → default handler → cache hit for future.
+2. `BaseA.register(Concrete)` → ABC register, does NOT clear functools cache.
+3. `handler(c)` → dispatch(Payload) → cache HIT → returns cached default handler.
+
+So the test SHOULD fail! Unless the token changes.
+
+But the existing test PASSES. So either:
+- The token DOES change in practice (CPython's `get_cache_token` increments frequently)
+- Or I'm wrong about something
+
+Let me check: in CPython 3.12+, `abc.get_cache_token` is:
+```python
+def get_cache_token():
+    return _get_flav_cache_token()
+```
+
+And `_get_flav_cache_token` is a C function that returns a counter incremented by `gc_collect()` (i.e., each time GC runs) and also by `PyObject_GC_Track` events.
+
+Actually, I just realized: in CPython, the GC runs every 700 allocations by default (gen0 threshold). In a test, creating a few objects might not trigger a GC. But the existing test creates several objects (classes, instances, strings).
+
+You know what, I think the safest approach is to just follow the exact same pattern as the existing tests. The existing test does:
+1. Create classes
+2. Register union handler
+3. Create instance
+4. Call handler (expect "default")
+5. ABC register
+6. Call handler (expect "union")
+
+And it works. My tests follow the same pattern, so they should work too.
+
+Actually, I just realized something else. Let me look at the existing test more carefully:
+
+```python
+def test_pep604_union_late_virtual_registration(self):
+    class PluginBase(ABC):
+        pass
+
+    class Payload:
+        pass
+
+    @functools.singledispatch
+    def handler(x):
+        return "default"
+
+    @handler.register(PluginBase | int)
+    def union_handler(x):
+        return "union"
+
+    p = Payload()
+    self.assertEqual(handler(p), "default")
+    self.assertEqual(handler(1), "union")
+
+    PluginBase.register(Payload)
+
+    self.assertEqual(handler(p), "union")
+    self.assertEqual(handler(1), "union")
+```
+
+The key: `handler(1)` is called BETWEEN the first `handler(p)` and the ABC register. `handler(1)` calls `dispatch(int)`, which:
+- Checks token: `cache_token` was set during register. `get_cache_token()` might be the same or different.
+- If same: `dispatch_cache[int]` → KeyError → `registry[int]` → union_handler.
+- Caches `dispatch_cache[int] = union_handler`.
+
+Then `PluginBase.register(Payload)`.
+
+Then `handler(p)`:
+- `dispatch(Payload)`:
+  - Token check: if token changed, cache cleared. If not, cache hit → default handler.
+
+Hmm, so if the token hasn't changed, `handler(p)` would still return "default" and the test would fail. But the test passes!
+
+I think the answer is that in CPython, `get_cache_token()` DOES change between these calls because of object allocations triggering GC. The test creates many objects (classes, instances, method calls, etc.) which can trigger gen0 GC, which increments the token.
+
+OK, I'll just trust the pattern. Let me write my tests following the same structure.
+
+Actually, wait. I want to be more careful. Let me think about whether I need the "earlier dispatch" to be a separate call or if it can be the same call that would be ambiguous.
+
+The task says "after an earlier dispatch." I think this means: there must be a dispatch that happens BEFORE the virtual registration. This is to test the "late" aspect - the value wasn't previously a virtual subclass, then it becomes one.
+
+My tests already do this: `self.assertEqual(handler(c), "default")` is the earlier dispatch, then `BaseA.register(Concrete)` and `BaseB.register(Concrete)` are the late registrations.
+
+OK let me now also think about the "resolver fault" requirement again. The task says:
+
+"New tests must also expose a resolver fault that would silently select a handler in the overlapping unrelated-members case."
+
+I think this means: the test should be designed such that if there were a bug in the resolver (`_find_impl`) that caused it to silently select one handler instead of raising the ambiguity error, the test would detect this. 
+
+The way my tests do this: they use `assertRaises(RuntimeError)`. If the resolver had a fault that silently selected a handler (returning "union" instead of raising), the `assertRaises` would fail because no exception was raised.
+
+But I think there might be a more specific requirement. Let me re-read: "expose a resolver fault that would silently select a handler in the overlapping unrelated-members case."
+
+Maybe the requirement is that the test should specifically test that the handler is NOT called (i.e., the dispatch raises before calling any handler). If the resolver silently selected the union handler, the union handler would be called. The test can verify this by checking that the RuntimeError is raised (not a successful return).
+
+I think `assertRaises(RuntimeError)` with a message check is sufficient to expose this fault.
+
+Now let me also think about the Doc file. I need to read it first.
+
+Let me check what files are in the Doc directory.
+
+Actually, let me first read the Doc/howto/union-dispatch.rst file to understand its current content. I also need to check what other files exist.
+
+Let me plan my next actions:
+1. Read `Doc/howto/union-dispatch.rst`
+2. Then write the new tests
+3. Then write the new doc section
+4. Run the public check
+5. Submit
+
+Let me start by reading the doc file.

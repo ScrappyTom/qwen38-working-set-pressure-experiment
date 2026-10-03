@@ -15,7 +15,7 @@ SOURCE-RECONCILIATION-003.json qualifies both new manifests against the unchange
 native/routes. It checks exact initial wire equality, exact starting state, every
 qualified artifact, current source hashes and identical inventories between arms.
 Only two administrative helper bodies changed; removed bindings are output logs.
-Both1630? counts are recorded exactly in the JSON rather than inferred here.
+Each corrected inventory binds1628 inputs, excluding four generated output logs.
 No new runtime, native or completion requests occur. The44 native forms and eleven
 scripted decisions per arm are reused evidence, not new repetitions or model results.
 

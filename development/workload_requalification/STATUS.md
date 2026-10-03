@@ -1,3 +1,23 @@
+# Current-job comparison closed; authored coverage remains incomplete
+
+Both uncoached003 arms reach registered checked submission and preserve prior
+code/tests/docs. Control11requests20ops/55.377modelminutes; revised13/20/74.427,
+with36.6%moregeneration. This one pair does not establish a general slowdown or
+an efficiency gain. Both saved suites permit RuntimeError subclasses and omit
+full messages in two exception cases. Independent actual-artifact probes confirm
+those gaps and a checker mismatch that excludes valid new methods in the old
+class. Revised added prose also incorrectly attributes registration to an ABC
+cache. All38nonterminal feedback receipts arrive; no pressure/failed currentcheck/
+capacity rejection. Original scores, seals and bound sources remain unchanged.
+Read current_job_presentation/review/RESULTS-003.md and POST_PAIR_REPAIR_PLAN.md.
+
+Next: task-scoped checker/report/accounting repairs with meaningful actual weak
+artifact and information-path qualification; then one separately declared
+review-directed test-only completion on actual control3f726b6d,12newrequests36ops.
+Keep its other seven files exact, mediumuncapped/host/forms/account policy fixed,
+and no live coaching/retry/extension. Publish qualified entry before inference.
+This is not an extra comparison seed or a full-corpus completion claim.
+
 # Qualified prospective current-job presentation comparison
 
 current_job_presentation/PREPARATION_REVIEW-002.md qualifies one matched pair on a

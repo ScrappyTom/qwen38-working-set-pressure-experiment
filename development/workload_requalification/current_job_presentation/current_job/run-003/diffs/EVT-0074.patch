@@ -1,0 +1,123 @@
+--- a/Doc/howto/union-dispatch.rst
++++ b/Doc/howto/union-dispatch.rst
+@@ -87,4 +87,120 @@
+ ...         pass
+ ... except TypeError as exc:
+ ...     print(exc)
+-Invalid union member list[int]: must be a runtime class+Invalid union member list[int]: must be a runtime class
++
++Overlapping virtual membership
++-----------------------------
++
++When a class is virtually registered as a subclass of two *unrelated*
++abstract base classes in the same union, the dispatcher raises
++``RuntimeError`` because it cannot select between two implicit ABC
++entries that are both absent from the concrete MRO:
++
++>>> import functools
++>>> from abc import ABC
++>>>
++>>> class Shape(ABC):
++...     pass
++>>>
++>>> class Style(ABC):
++...     pass
++>>>
++>>> class Document:
++...     pass
++>>>
++>>> @functools.singledispatch
++... def overlap_handler(x):
++...     return "default"
++>>>
++>>> @overlap_handler.register(Shape | Style)
++... def union_handler(x):
++...     return "union"
++>>>
++>>> doc = Document()
++>>> overlap_handler(doc)
++'default'
++>>>
++>>> Shape.register(Document)
++<class '__main__.Document'>
++>>>
++>>> Style.register(Document)
++<class '__main__.Document'>
++>>>
++>>> try:
++...     overlap_handler(doc)
++... except RuntimeError as exc:
++...     print(exc)
++Ambiguous dispatch: <class '__main__.Shape'> or <class '__main__.Style'>
++
++``Document`` is a *virtual* subclass of both ``Shape`` and ``Style``:
++the relationship lives in each ABC's internal cache, not in
++``Document.__mro__``.  The composed MRO contains both as implicit
++entries; because neither is a subclass of the other the dispatch
++loop cannot choose and reports the ambiguity.
++
++If the two ABCs are *related* by inheritance the more specific one
++precedes the other in the composed MRO and no error is raised:
++
++>>> class Base(ABC):
++...     pass
++>>>
++>>> class Derived(Base):
++...     pass
++>>>
++>>> @functools.singledispatch
++... def related_handler(x):
++...     return "default"
++>>>
++>>> @related_handler.register(Base | Derived)
++... def related_union(x):
++...     return "union"
++>>>
++>>> class Widget:
++...     pass
++>>>
++>>> w = Widget()
++>>> related_handler(w)
++'default'
++>>>
++>>> Base.register(Widget)
++<class '__main__.Widget'>
++>>>
++>>> Derived.register(Widget)
++<class '__main__.Widget'>
++>>>
++>>> related_handler(w)
++'union'
++
++Here ``Derived`` is a concrete subclass of ``Base``.  The composed
++MRO places ``Derived`` before ``Base``; when the loop reaches
++``Base`` it sees ``issubclass(Derived, Base)`` is true and breaks,
++selecting the union handler.
++
++Registering a handler for the concrete type itself bypasses the
++ambiguous MRO walk entirely, because ``dispatch`` checks
++``registry[cls]`` before calling ``_find_impl``:
++
++>>> @overlap_handler.register(Document)
++... def doc_handler(x):
++...     return "concrete"
++>>>
++>>> overlap_handler(doc)
++'concrete'
++
++Three mechanisms are at work:
++
++* **Virtual membership** -- ``ABC.register(C)`` adds ``C`` to the
++  ABC's internal cache without modifying ``C.__mro__``.  The
++  composed MRO picks it up through ``issubclass`` checks, producing
++  an *implicit* entry.
++
++* **Concrete inheritance** -- ``class Child(Parent)`` puts
++  ``Parent`` in ``Child.__mro__``.  A registry entry for ``Parent``
++  is found as an *explicit* entry during the MRO walk.
++
++* **Handler selection** -- ``dispatch(cls)`` tries
++  ``dispatch_cache[cls]``, then ``registry[cls]``, and only then
++  falls through to ``_find_impl``.  An explicit ``registry`` entry
++  for the concrete type short-circuits the walk and its ambiguity
++  check.

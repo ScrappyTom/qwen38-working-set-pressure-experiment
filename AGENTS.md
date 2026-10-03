@@ -1,3 +1,30 @@
+# Closed status comparison; prospective coverage-boundary repair
+
+Read current_job_presentation/review/RESULTS-003.md, READING_NOTES.md and
+POST_PAIR_REPAIR_PLAN.md. Both uncoached003 arms save meaningful overlap tests/docs,
+consume current registered passes and submit: control11requests20ops/55.377model
+minutes; revised13/20/74.427. Revised adds18,125generatedtokens; no efficiency win.
+All38nonterminal receipts arrive, prior work remains exact, no pressure/rejection/
+failed current check occurs. Seals/replay verify361/373artifacts and1,628bindings
+each. Original observations/scores remain exact, including false inherited
+no-injected-fault scope and erroneous derived opportunity counts; supplements
+correct only the latter. Both authored suites permit RuntimeError subclasses;
+two exception sites omit diagnostic checks. Post-seal probes establish those
+gaps and zero counted new tests when valid methods are put in the old class.
+Revised prose also confuses ABC registration registry with a derived cache.
+
+Implement the narrow prospective task-scoped scope/method-preservation/per-site
+class-and-text sensitivity/accounting repairs. Preserve sealed ancestors.
+Qualify ordinary pass/meaningful failure, actual weak artifacts, valid old-class
+additions, changed old assertions and complete next-input diagnostics. Then
+publish before one review-directed test-only contract-completion job on control's
+actual3f726b6d candidate,12newrequests36ops. Keep seven other files exact; supply
+verified gaps but no patch/sourcegroup/live coaching/retry/extension/private-draft
+execution. Keep mediumuncapped/runtime/forms/account policy; no automatic check.
+Actual full inputs/thinking/replies/receipts/artifacts/custody precede assessment.
+This is saved-work contract completion after review, not another matched seed,
+fresh autonomous success or a rewrite of this pair's scores. Wider ledger open.
+
 # Qualified current-job presentation comparison on new coverage
 
 Read development/workload_requalification/current_job_presentation/PLAN.md and
