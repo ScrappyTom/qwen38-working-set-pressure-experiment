@@ -1,0 +1,253 @@
+Let me analyze the current state:
+
+1. I have the full `Lib/functools.py` (lines 1-1000) visible in the working set.
+2. The public check (CHK-0022) is passing on the current candidate.
+3. The task requires me to:
+   - Support long-lived dispatchers whose classes become virtual subclasses after their instances have already been dispatched
+   - Add at least two meaningful regressions to `tests/test_virtual_registration.py`
+   - Add a concise standalone explanation in `Doc/howto/union-dispatch.rst`
+   - Modify `Lib/functools.py` if needed
+   - Not change saved first-job tests, upstream tests, upstream reference docs or other files
+
+Let me understand the problem:
+
+The scenario is:
+1. Register a handler for a union containing an abstract plugin base and `int`
+2. Dispatch an unrelated `Payload` instance (which goes to the default/fallback handler)
+3. Register `Payload` as a virtual subclass of the abstract plugin base (e.g., via `register_virtual_base` or ABC registration)
+4. A later dispatch of the same `Payload` class must use the union handler (not the default fallback)
+
+The key issue: When a dispatch happens, the result is cached in `dispatch_cache`. If later we register a class as a virtual subclass of a class that's in a union, the cache might still have the old (default/fallback) result for that class. The fix needs to ensure that after virtual registration, the dispatch cache is properly invalidated or the dispatch logic correctly picks up the new relationship.
+
+Looking at the current `register` function:
+```python
+def register(cls, func=None):
+    nonlocal cache_token
+    if func is None:
+        # ... handling for no func case
+    if _is_union(cls):
+        for type_ in cls.__args__:
+            if not isinstance(type_, type):
+                raise TypeError(...)
+            for type_ in cls.__args__:
+                registry[type_] = func
+    else:
+        registry[cls] = func
+    if cache_token is None and hasattr(cls, '__abstractmethods__'):
+        cache_token = get_cache_token()
+    dispatch_cache.clear()
+    return func
+```
+
+The `dispatch` function:
+```python
+def dispatch(cls):
+    nonlocal cache_token
+    if cache_token is not None:
+        current_token = get_cache_token()
+        if cache_token != current_token:
+            dispatch_cache.clear()
+            cache_token = current_token
+    try:
+        impl = dispatch_cache[cls]
+    except KeyError:
+        try:
+            impl = registry[cls]
+        except KeyError:
+            impl = _find_impl(cls, registry)
+        dispatch_cache[cls] = impl
+    return impl
+```
+
+So the problem is:
+1. We register a union handler: `registry[PluginBase] = union_handler` and `registry[int] = union_handler`
+2. We dispatch `Payload` - it's not in registry, `_find_impl(Payload, registry)` is called, it doesn't find a match, so it returns `None` (or the default `object` handler). This gets cached: `dispatch_cache[Payload] = default_handler`
+3. We register `Payload` as a virtual subclass of `PluginBase` (e.g., `PluginBase.register(Payload)`)
+4. We dispatch `Payload` again - but `dispatch_cache[Payload]` still has the old value!
+
+The fix: The `cache_token` mechanism using `get_cache_token()` from `abc` module should handle this. When `abc` module registers a virtual subclass, it increments the cache token. The `dispatch` function checks if the token has changed and clears the cache.
+
+Wait, looking more carefully:
+```python
+if cache_token is not None:
+    current_token = get_cache_token()
+    if cache_token != current_token:
+        dispatch_cache.clear()
+        cache_token = current_token
+```
+
+This only works if `cache_token is not None`. It's set to `get_cache_token()` in `register` only when `cls` has `__abstractmethods__`:
+```python
+if cache_token is None and hasattr(cls, '__abstractmethods__'):
+    cache_token = get_cache_token()
+```
+
+So if we register a union containing `PluginBase` (which is an ABC with `__abstractmethods__`), the `cache_token` gets set. Then when `PluginBase.register(Payload)` is called (virtual registration via ABC), the cache token increments, and on next dispatch, the cache is cleared.
+
+Wait, but the issue is more subtle. Let me think again:
+
+Actually, `get_cache_token()` from `abc` returns a token that changes whenever any ABC has a virtual registration. So if `PluginBase` is an ABC and we do `PluginBase.register(Payload)`, the token changes.
+
+But the problem is: `cache_token` is only initialized when `register` is called with a class that has `__abstractmethods__`. If the union registration includes `PluginBase` (an ABC), then `cache_token` gets set.
+
+Let me re-read the register code:
+```python
+if _is_union(cls):
+    for type_ in cls.__args__:
+        if not isinstance(type_, type):
+            raise TypeError(...)
+    for type_ in cls.__args__:
+        registry[type_] = func
+else:
+    registry[cls] = func
+if cache_token is None and hasattr(cls, '__abstractmethods__'):
+    cache_token = get_cache_token()
+dispatch_cache.clear()
+return func
+```
+
+For a union, `hasattr(cls, '__abstractmethods__')` - does a union type have `__abstractmethods__`? Probably not. So `cache_token` might not get set during union registration.
+
+Hmm, that's the bug! When we register a union containing an ABC, the `cache_token` doesn't get initialized because the union type itself doesn't have `__abstractmethods__`. So later, when the ABC gets a virtual registration, the dispatch cache never gets invalidated.
+
+The fix should be: when registering a union (or any registration), check if any of the registered types (for union, the member types) have `__abstractmethods__`, and if so, set the `cache_token`.
+
+Let me look at this more carefully. The condition is:
+```python
+if cache_token is None and hasattr(cls, '__abstractmethods__'):
+    cache_token = get_cache_token()
+```
+
+For a union like `PluginBase | int`, `cls` is the union type itself. `hasattr(PluginBase | int, '__abstractmethods__')` would be `False` because union types don't have `__abstractmethods__`.
+
+So the fix is to also check the members of a union:
+
+```python
+if cache_token is None:
+    if _is_union(cls):
+        for type_ in cls.__args__:
+            if hasattr(type_, '__abstractmethods__'):
+                cache_token = get_cache_token()
+                break
+    elif hasattr(cls, '__abstractmethods__'):
+        cache_token = get_cache_token()
+```
+
+Wait, but there's another subtlety. Even if we fix the token initialization, the `dispatch` function checks:
+```python
+if cache_token is not None:
+    current_token = get_cache_token()
+    if cache_token != current_token:
+        dispatch_cache.clear()
+        cache_token = current_token
+```
+
+This should work: if `cache_token` is set (because we detected an ABC in the union), and then a virtual registration happens (which increments the abc cache token), the next dispatch will clear the cache.
+
+But wait, there's another issue. Even without the cache being stale, let's trace through:
+
+1. Register union `PluginBase | int` with handler H:
+   - `registry[PluginBase] = H`
+   - `registry[int] = H`
+   - `dispatch_cache.clear()`
+
+2. Dispatch `Payload()`:
+   - `dispatch(Payload)` is called
+   - `Payload` not in `dispatch_cache`
+   - `Payload` not in `registry`
+   - `_find_impl(Payload, registry)` is called
+   - In `_find_impl`, it computes MRO of `Payload` and checks if any class in the MRO is in registry
+   - `PluginBase` is NOT in `Payload.__mro__` (it's a virtual subclass relationship, not real inheritance)
+   - Actually wait - at this point, `Payload` has NOT been registered as a virtual subclass of `PluginBase` yet
+   - So `_find_impl` returns `None` (or the `object` handler)
+   - `dispatch_cache[Payload] = object_handler` (or None)
+
+3. Register `Payload` as virtual subclass of `PluginBase`:
+   - `PluginBase.register(Payload)` - this is the ABC virtual registration
+   - This increments the abc cache token
+
+4. Dispatch `Payload()` again:
+   - `dispatch(Payload)` is called
+   - If `cache_token` is not None and the token changed, `dispatch_cache` is cleared
+   - Then `Payload` not in `dispatch_cache`
+   - `Payload` not in `registry`
+   - `_find_impl(Payload, registry)` is called
+   - Now, does `issubclass(Payload, PluginBase)` return True? YES, because of the virtual registration!
+   - So `_find_impl` should find `PluginBase` in the registry
+   - Returns `H`
+
+So the fix is indeed to ensure `cache_token` gets initialized when a union containing an ABC is registered.
+
+Let me also think about whether `_find_impl` correctly handles virtual subclasses. Looking at `_find_impl`:
+
+```python
+def _find_impl(cls, registry):
+    mro = _compose_mro(cls, registry.keys())
+    match = None
+    for t in mro:
+        if match is not None:
+            if (t in registry and t not in cls.__mro__
+                          and match not in cls.__mro__
+                          and not issubclass(match, t)):
+                raise RuntimeError(...)
+            break
+        if t in registry:
+            match = t
+    return registry.get(match)
+```
+
+And `_compose_mro`:
+```python
+def _compose_mro(cls, types):
+    bases = set(cls.__mro__)
+    def is_related(typ):
+        return (typ not in bases and hasattr(typ, '__mro__')
+                                 and issubclass(cls, typ))
+    types = [n for n in types if is_related(n)]
+    ...
+```
+
+The key is `issubclass(cls, typ)` - after `PluginBase.register(Payload)`, `issubclass(Payload, PluginBase)` returns `True`. So `PluginBase` would be considered "related" to `Payload`.
+
+But wait, `PluginBase` IS already in `registry` (from step 1). And after the virtual registration, `issubclass(Payload, PluginBase)` is True. So `_compose_mro(Payload, registry.keys())` would include `PluginBase` in the MRO, and `_find_impl` would find it.
+
+Actually, let me be more careful. `PluginBase` is in `bases = set(cls.__mro__)` only if it's a real base class. Since it's a virtual registration, `PluginBase` is NOT in `Payload.__mro__`. So `is_related(PluginBase)` checks:
+- `PluginBase not in bases` → True (it's not in the real MRO)
+- `hasattr(PluginBase, '__mro__')` → True
+- `issubclass(Payload, PluginBase)` → True (after virtual registration)
+
+So yes, `PluginBase` would be included, and since it's in `registry`, `_find_impl` would return the union handler.
+
+So the only fix needed is to ensure `cache_token` gets set when a union containing an ABC is registered. Let me also think about whether there are other edge cases.
+
+Actually, wait. Let me re-read the current code more carefully:
+
+```python
+if cache_token is None and hasattr(cls, '__abstractmethods__'):
+    cache_token = get_cache_token()
+dispatch_cache.clear()
+```
+
+For a union type like `PluginBase | int`, what does `hasattr(cls, '__abstractmethods__')` return? Let me think... A `types.UnionType` instance (or `typing.Union[...]`) doesn't have `__abstractmethods__`. So `cache_token` stays `None`.
+
+Then in `dispatch`:
+```python
+if cache_token is not None:
+    current_token = get_cache_token()
+    if cache_token != current_token:
+        dispatch_cache.clear()
+        cache_token = current_token
+```
+
+Since `cache_token` is `None`, the cache is never invalidated based on ABC token changes. The only cache invalidation happens via `dispatch_cache.clear()` in `register`.
+
+So the fix is clear. Let me now look at what tests and docs I need to create.
+
+Let me look at what's in the tests directory and Doc directory.
+
+I need to:
+1. Fix `Lib/functools.py` - the `register` function to properly initialize `cache_token` when a union contains an ABC
+2. Add tests to `tests/test_virtual_registration.py`
+3. Add `Doc/howto/union-dispatch.rst`
+
+Let me first check what's in the tests and Doc directories.

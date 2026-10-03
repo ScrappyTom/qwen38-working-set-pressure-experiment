@@ -1,5 +1,17 @@
 # Workload requalification ledger
 
+Fresh dispatch work adds a real saved-work lineage. Union002 closes15requests/
+23ops with meaningful tests, failed-check correction and currentpass. Dynamic001
+continues actual work after explicit source release in17newrequests/28ops: correct
+cache-token repair, two meaningful regressions, documentation feedback/correction
+and checkedsubmission. Total32/51 and148.908modelminutes. Exact replay/delivery and
+prior-work preservation pass. Direct review nevertheless finds a checker namespace
+bug (unset/builtins rather than normal__main__) and an overbroad prose rule.
+Documentation is not complete despite its preserved public pass. See
+ dispatch_continuity/review/dynamic-001/RESULTS.md and the separately declared
+ documentation_continuation/PLAN.md. No account-benefit/pressure/speed claim.
+
+
 The controlled C16 information transition is closed under a8d3d85d. Both arms
 preserve earlier work, repair embedded/zero boundaries, consume their own actual
 fullpublicpass and submit the same correct candidate. Unchanged5newrequests/9ops;

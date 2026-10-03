@@ -1,3 +1,22 @@
+# Closed dispatch loop; scoped documentation correction required
+
+Read dispatch_continuity/review/dynamic-001/RESULTS.md and documentation-probe.
+Uncoached dynamic001 under1c942cab closes17newrequests/28ops, targeted correct
+library/two real regressions, actual example failure -> correction -> currentpass
+-> submission. Preserve63.811model/67.388loopminutes,56,212generatedtokens,
+482artifacts/930sources/419custody/30checkpoints and26deliveredreceipts. Lineage
+32requests/51ops; prior work exact. Account distinction is used alongside source;
+terminal note loses explanation/overstates prose completion. No isolated benefit,
+pressure, speed or generalreliability claim. Long next-decision completion remains.
+Postseal direct probes establish an apparatus bug: omitted __name__ makes docs
+usebuiltins; normaldoctest.testfile uses__main__, where savedexample fails1/14.
+Prose also overpromises union selection despite more-specific bool precedence.
+Keep original pass/sealedroots unchanged. Follow documentation_continuation/PLAN.md:
+publish before one derived namespace checker/protected-seven-file, review-directed
+doc-only job;12newrequests36ops, mediumuncapped/fixedruntime/no live coaching,
+retry/extension/sourcegroup/reference text. Qualify actual failure/correction/path
+and native input before inference. Wider ledger and deferred findings stay open.
+
 # Qualified actual saved-work dispatch continuation
 
 Read dispatch_continuity/dynamic/ENTRY_PLAN.md and PREPARATION_REVIEW-001.md.

@@ -1,0 +1,248 @@
+Let me analyze the current situation:
+
+1. The public check failed because of one issue in `Doc/howto/union-dispatch.rst`:
+   - Line 47: `PluginBase.register(Payload)` - Expected nothing, Got `<class 'Payload'>`
+
+The problem is that `PluginBase.register(Payload)` returns `Payload` (the class), but the doctest expects no output. In Python, `ABCMeta.register` returns the class being registered. So the doctest needs to account for this return value.
+
+Looking at the doc file, line 47 is:
+```
+>>> PluginBase.register(Payload)
+```
+
+And the expected output is nothing (blank line). But `ABCMeta.register()` returns the registered class, so in a doctest context, the return value would be displayed.
+
+Wait, actually in doctest, if an expression has a return value, it's displayed. But `ABCMeta.register` returns the class. So the doctest would show `<class 'Payload'>` as output.
+
+The fix is either:
+1. Add a `= <class 'Payload'>` after the line (but that's ugly and not portable)
+2. Use `_` to capture the result: `>>> _ = PluginBase.register(Payload)` - but that changes the meaning
+3. Actually, wait. Let me think about this more carefully.
+
+In CPython, `ABCMeta.register(cls)` is implemented as:
+```python
+def register(cls, subclass):
+    _register_external_abstract_class(cls, subclass)
+    return cls
+```
+
+Wait, no. Let me check. Actually `ABCMeta.register` is:
+```python
+def register(abc, cls):
+    _register_abstract_class(abc, cls)
+    return cls
+```
+
+Hmm, actually I need to check what it actually returns. Let me think...
+
+In CPython's `abc.py`:
+```python
+class ABCMeta(type):
+    def register(cls, subclass):
+        """Register a virtual subclass of an ABC.
+        
+        Use as a decorator:
+        
+            @Integer.register
+            class Integer:
+                ...
+        """
+        _register(cls, subclass)
+        return subclass
+```
+
+So `PluginBase.register(Payload)` returns `Payload` (the class). In a doctest, when you evaluate an expression, the repr of the result is shown. So `<class 'Payload'>` would be displayed.
+
+Wait, actually in doctest, the behavior depends on the context. In the `>>>` prompt, if you type an expression, its repr is shown. So `>>> PluginBase.register(Payload)` would show `<class 'Payload'>`.
+
+The fix options:
+1. Change the doctest to expect the output: `>>> PluginBase.register(Payload)` followed by `<class 'Payload'>`
+2. Or assign it: `>>> _ = PluginBase.register(Payload)` - but this changes the example
+3. Or use a different form
+
+Actually, the cleanest fix for documentation is to either:
+- Show the return value explicitly
+- Or use a form that doesn't show it
+
+Let me look at the doc file more carefully. The current content at line 47:
+
+```
+>>> PluginBase.register(Payload)
+```
+
+followed by a blank line (which the doctest interprets as "expecting nothing").
+
+The simplest fix is to make it not print. We can do:
+```
+>>> _ = PluginBase.register(Payload)
+```
+
+But that's a bit unusual for documentation. Alternatively, we could show the return value:
+```
+>>> PluginBase.register(Payload)
+<class 'Payload'>
+```
+
+Actually wait - in doctest, if you have `>>> expr` and the next line is blank (or `>>>`), it means "expect no output". If there's text on the next line before the next `>>>`, that's the expected output.
+
+Looking at the current doc:
+```
+>>> PluginBase.register(Payload)
+
+>>> handler(p)
+```
+
+So there's a blank line between the command and the next `>>>`. In doctest, a blank line after a `>>>` command with no expected output means the expression should produce no output. But since `PluginBase.register(Payload)` returns `Payload`, its repr `<class 'Payload'>` is displayed.
+
+The fix: I should either:
+1. Expect the output `<class 'Payload'>`
+2. Or use a form that doesn't display
+
+Option 1 is more transparent. Let me go with:
+```
+>>> PluginBase.register(Payload)
+<class 'Payload'>
+```
+
+Wait, but that's a bit odd for documentation. Let me think about what makes sense as documentation...
+
+Actually, for a "howto" doc, it's fine to show the return value. Or we could suppress it with:
+```
+>>> _ = PluginBase.register(Payload)
+```
+
+Hmm, but that's less clean. Let me just expect the output. Actually, let me reconsider - the `ABCMeta.register` method returns the subclass. In a doctest, this would be displayed. So the correct fix is to expect `<class 'Payload'>`.
+
+Let me look at the exact lines in the doc file to make the patch. The file is `Doc/howto/union-dispatch.rst`, 71 lines total.
+
+Looking at the content:
+```
+>>> p = Payload()
+>>> handler(p)
+'default'
+>>>
+>>> PluginBase.register(Payload)
+>>>
+>>> handler(p)
+'union'
+>>> handler(42)
+'union'
+```
+
+Wait, let me re-read the file content more carefully:
+
+```
+Late virtual registration
+-------------------------
+
+When a class is registered as a *virtual* subclass of a union member after
+instances of that class have already been dispatched, the next dispatcher
+call transparently picks up the new relationship.  No manual cache clear is
+required:
+
+>>> p = Payload()
+>>> handler(p)
+'default'
+>>>
+>>> PluginBase.register(Payload)
+>>>
+>>> handler(p)
+'union'
+>>> handler(42)
+'union'
+```
+
+So the structure is:
+- Line: `>>> PluginBase.register(Payload)`
+- Next line: `>>>` (blank prompt)
+- Next line: `>>> handler(p)`
+
+The doctest runner sees `>>> PluginBase.register(Payload)` followed by `>>>` on the next line. Since there's no expected output line between them, it expects nothing. But the expression returns `Payload`, so `<class 'Payload'>` is printed.
+
+The fix: I need to add `<class 'Payload'>` as the expected output after `>>> PluginBase.register(Payload)`.
+
+Let me find the exact text to patch. The old text would be:
+```
+>>> PluginBase.register(Payload)
+>>>
+```
+
+And the new text would be:
+```
+>>> PluginBase.register(Payload)
+<class 'Payload'>
+>>>
+```
+
+Wait, but in doctest format, the expected output follows immediately after the `>>>` line. Let me look at how other examples in this file handle it:
+
+```
+>>> handler(42)
+'union'
+```
+
+So the pattern is:
+```
+>>> expression
+expected output
+```
+
+So the fix is:
+```
+>>> PluginBase.register(Payload)
+<class 'Payload'>
+```
+
+And then the next line is `>>>` (blank prompt) or the next example.
+
+Let me look at the exact content again. From the file:
+
+```
+>>> p = Payload()
+>>> handler(p)
+'default'
+>>>
+>>> PluginBase.register(Payload)
+>>>
+>>> handler(p)
+'union'
+>>> handler(42)
+'union'
+```
+
+So I need to change:
+```
+>>> PluginBase.register(Payload)
+>>>
+```
+to:
+```
+>>> PluginBase.register(Payload)
+<class 'Payload'>
+>>>
+```
+
+Let me verify: in the file, the line after `>>> PluginBase.register(Payload)` is `>>>` (a standalone prompt indicating a blank statement/line). So the old text is:
+```
+>>> PluginBase.register(Payload)
+>>>
+```
+
+And the new text is:
+```
+>>> PluginBase.register(Payload)
+<class 'Payload'>
+>>>
+```
+
+This should fix the doctest. Let me make the patch.
+
+The file is `Doc/howto/union-dispatch.rst` with sha256 `7224eb38ec49a263b718eea0fd1cea6b313184551827e83dc9bd380f98e876b3` and candidate `f98f85e3d02ccbb2a6a3b3a98747831d9b4afbf42d4fed32473f382a17224563`.
+
+I need to be careful about uniqueness. Let me check if `>>> PluginBase.register(Payload)\n>>>` appears only once in the file. Looking at the file content, I see `PluginBase.register(Payload)` appears only once, so this should be unique.
+
+Let me craft the patch:
+- old: `>>> PluginBase.register(Payload)\n>>>`
+- new: `>>> PluginBase.register(Payload)\n<class 'Payload'>\n>>>`
+
+This adds the expected output line between the command and the next prompt.

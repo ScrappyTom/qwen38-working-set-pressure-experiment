@@ -1,0 +1,95 @@
+Let me analyze the current state:
+
+1. I have the full `Lib/functools.py` visible (1000 lines) - this is the current source
+2. The working account identifies the bug: in `register()`, when registering a union type, `hasattr(cls, '__abstractmethods__')` is False for union types (since `cls` is the union, not a member class), so `cache_token` stays None. This means later virtual subclass registrations won't trigger cache invalidation.
+
+3. I need to:
+   - Fix `Lib/functools.py` so union registration properly tracks abc cache tokens
+   - Add at least two meaningful regressions to `tests/test_virtual_registration.py`
+   - Add a doc file `Doc/howto/union-dispatch.rst`
+   - Not change saved first-job tests, upstream tests, etc.
+
+Let me first look at the existing test files and Doc directory to understand what's there.
+
+Let me check what's in the tests directory and Doc directory. I already saw the tests directory has:
+- tests/test_union_registration.py
+- tests/test_virtual_registration.py
+
+Let me read the test files and Doc directory to understand what already exists.
+
+Looking at the register function in the current source:
+
+```python
+def register(cls, func=None):
+    nonlocal cache_token
+    if func is None:
+        if isinstance(cls, type):
+            return lambda f: register(cls, f)
+        if _is_union(cls):
+            return lambda f: register(cls, f)
+        ann = getattr(cls, '__annotations__', {})
+        if not ann:
+            raise TypeError(...)
+        func = cls
+        ...
+    if _is_union(cls):
+        for type_ in cls.__args__:
+            if not isinstance(type_, type):
+                raise TypeError(...)
+        for type_ in cls.__args__:
+            registry[type_] = func
+    else:
+        registry[cls] = func
+    if cache_token is None and hasattr(cls, '__abstractmethods__'):
+        cache_token = get_cache_token()
+    dispatch_cache.clear()
+    return func
+```
+
+The bug: when `cls` is a union type (e.g., `PluginBase | int`), `hasattr(cls, '__abstractmethods__')` checks the union type itself, not its members. A union type like `PluginBase | int` doesn't have `__abstractmethods__` - only `PluginBase` does. So `cache_token` never gets set for union registrations that include ABCs.
+
+The fix: when registering a union, check each member type for `__abstractmethods__`:
+
+```python
+if _is_union(cls):
+    for type_ in cls.__args__:
+        registry[type_] = func
+    # Check union members for abstract methods to enable cache invalidation
+    if any(hasattr(type_, '__abstractmethods__') for type_ in cls.__args__):
+        if cache_token is None:
+            cache_token = get_cache_token()
+else:
+    registry[cls] = func
+    if cache_token is None and hasattr(cls, '__abstractmethods__'):
+        cache_token = get_cache_token()
+dispatch_cache.clear()
+```
+
+Wait, let me re-read the code more carefully. The current logic is:
+
+```python
+    if _is_union(cls):
+        for type_ in cls.__args__:
+            if not isinstance(type_, type):
+                raise TypeError(...)
+        for type_ in cls.__args__:
+            registry[type_] = func
+    else:
+        registry[cls] = func
+    if cache_token is None and hasattr(cls, '__abstractmethods__'):
+        cache_token = get_cache_token()
+    dispatch_cache.clear()
+    return func
+```
+
+So after registering (either union or non-union), it checks `hasattr(cls, '__abstractmethods__')`. For a union, `cls` is the union type itself (e.g., `types.UnionType` instance), which won't have `__abstractmethods__`. So cache_token never gets set.
+
+The fix should be:
+- For union case: check if any member has `__abstractmethods__`
+- For non-union case: keep existing check
+
+Let me now look at the tests. I need to read `tests/test_virtual_registration.py` and `tests/test_union_registration.py` to see what's already there.
+
+Also need to check `Doc/howto/` for existing files.
+
+Let me start by reading the test files and Doc directory.

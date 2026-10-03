@@ -1,0 +1,550 @@
+Let me analyze the current state:
+
+1. The patch to Lib/functools.py was successfully applied (EVT-0038), changing candidate from 5c20075d to ff91f22e. The patch modified the `register` function to handle union types with ABC members by iterating union members to check for `__abstractmethods__`.
+
+2. Current candidate: ff91f22e0d341047fc2196937eb5f980432655542b53c64f0da47247137d2ebe
+
+3. The test file `tests/test_virtual_registration.py` is still a stub (5 lines). I need to add at least two meaningful regressions covering both union forms and late registration.
+
+4. I need to create `Doc/howto/union-dispatch.rst` with executable `>>>` examples.
+
+5. The public check CHK-0022 was on the old candidate (5c20075d) and passed, but it's historical - I need a new pass on the current candidate.
+
+Let me think about what the test file needs:
+
+The task says:
+- Support long-lived dispatchers whose classes become virtual subclasses after their instances have already been dispatched
+- Register a handler for a union containing an abstract plugin base and int
+- Dispatch an unrelated Payload instance
+- Then register Payload as a virtual subclass of that base
+- A later dispatch of the same Payload class must use the union handler without an unrelated dispatcher registration or a manual cache-clear call
+
+So the test needs:
+1. Test for union type with ABC member - late virtual registration
+2. Test for another union form - maybe typing.Union vs types.UnionType
+
+Let me think about what tests to write:
+
+Test 1: Union with types.UnionType (PEP 604 syntax, e.g., `int | ABC`)
+- Create an ABC base class
+- Create a singledispatch function
+- Register a handler for `int | ABC` (union of a concrete type and an ABC)
+- Create a class that's unrelated to the ABC
+- Dispatch an instance of that unrelated class (should use the default/fallback)
+- Then register the unrelated class as a virtual subclass of the ABC (using ABC.register or cls.__subclasshook__)
+- Dispatch an instance of that class again - should now use the union handler
+
+Test 2: Union with typing.Union (e.g., `typing.Union[int, ABC]`)
+- Same pattern but using typing.Union syntax
+
+Wait, let me re-read the requirement more carefully:
+
+"Support long-lived dispatchers whose classes become virtual subclasses after their instances have already been dispatched. For example, register a handler for a union containing an abstract plugin base and int, dispatch an unrelated Payload instance, then register Payload as a virtual subclass of that base. A later dispatch of the same Payload class must use the union handler without an unrelated dispatcher registration or a manual cache-clear call."
+
+So the key scenario is:
+1. Have an ABC `Base`
+2. Create a singledispatch function `f`
+3. Register a handler for `Base | int` (union containing an ABC)
+4. Have a `Payload` class that's unrelated to `Base`
+5. Call `f(payload_instance)` - this uses the default handler (since Payload isn't registered and isn't a subclass of Base or int)
+6. Now register Payload as a virtual subclass of Base: `Base.register(Payload)`
+7. Call `f(payload_instance)` again - this should now use the union handler (because Payload is now a virtual subclass of Base, which is in the union)
+
+The bug was: when registering the union handler, if a member has `__abstractmethods__`, the cache_token gets set. But the dispatch_cache was already populated with the old result for `Payload.__class__`. After the ABC registration changes the MRO, the cache needs to be invalidated.
+
+Wait, let me look at the fix more carefully:
+
+```python
+if cache_token is None:
+    if _is_union(cls):
+        if any(hasattr(t, '__abstractmethods__') for t in cls.__args__):
+            cache_token = get_cache_token()
+    elif hasattr(cls, '__abstractmethods__'):
+        cache_token = get_cache_token()
+dispatch_cache.clear()
+```
+
+So the fix is:
+- For union types: check if any member has `__abstractmethods__`, and if so, set cache_token
+- For regular classes: check if the class has `__abstractmethods__`
+- Always clear the dispatch_cache after registration
+
+The `dispatch()` function then checks:
+```python
+if cache_token is not None:
+    current_token = get_cache_token()
+    if cache_token != current_token:
+        dispatch_cache.clear()
+        cache_token = current_token
+```
+
+So when the ABC registry changes (because a virtual subclass was registered), `get_cache_token()` returns a different value, and the dispatch_cache gets cleared. On the next dispatch, `_find_impl` will recompute the MRO, which will now include the ABC, and find the union handler.
+
+Now let me write the tests. I need to be careful about the structure. The existing file is:
+```python
+import functools
+import unittest
+
+
+# Add regression TestCase classes here.
+```
+
+I need to add test cases. Let me think about what "both union forms" means - it likely means `types.UnionType` (the `X | Y` syntax) and `typing.Union[X, Y]`.
+
+Let me write the test file:
+
+```python
+import functools
+import types
+import typing
+import unittest
+from abc import ABC, ABCMeta
+
+
+class PluginBase(ABC):
+    """An abstract base class representing a plugin interface."""
+    pass
+
+
+class OtherBase(ABC):
+    """Another abstract base class."""
+    pass
+
+
+def make_plugin_dispatch():
+    @functools.singledispatch
+    def process(obj):
+        return f"default:{type(obj).__name__}"
+    
+    @process.register
+    def _int_handler(n):
+        return f"int:{n}"
+    
+    return process
+
+
+class TestUnionTypeLateRegistration(unittest.TestCase):
+    """Test types.UnionType (PEP 604) union with late virtual registration."""
+
+    def test_union_with_abc_late_virtual_registration(self):
+        # Set up: singledispatch with a union containing an ABC
+        @functools.singledispatch
+        def process(obj):
+            return f"default:{type(obj).__name__}"
+
+        @process.register(PluginBase | int)
+        def _handler(obj):
+            return f"handled:{type(obj).__name__}"
+
+        class Payload:
+            pass
+
+        p = Payload()
+        # First dispatch: Payload is unrelated, uses default
+        self.assertEqual(process(p), "default:Payload")
+
+        # Late virtual registration: Payload becomes a virtual subclass of PluginBase
+        PluginBase.register(Payload)
+
+        # Second dispatch: should now use the union handler
+        # (no manual cache clear, no unrelated registration needed)
+        self.assertEqual(process(p), "handled:Payload")
+
+
+class TestTypingUnionLateRegistration(unittest.TestCase):
+    """Test typing.Union with late virtual registration."""
+
+    def test_typing_union_with_abc_late_virtual_registration(self):
+        @functools.singledispatch
+        def process(obj):
+            return f"default:{type(obj).__name__}"
+
+        @process.register(typing.Union[PluginBase, int])
+        def _handler(obj):
+            return f"handled:{type(obj).__name__}"
+
+        class Payload:
+            pass
+
+        p = Payload()
+        # First dispatch: uses default
+        self.assertEqual(process(p), "default:Payload")
+
+        # Late virtual registration
+        PluginBase.register(Payload)
+
+        # Second dispatch: should use the union handler
+        self.assertEqual(process(p), "handled:Payload")
+```
+
+Wait, I need to be careful. The `@process.register(PluginBase | int)` syntax - does singledispatch support this? Let me look at the register function:
+
+```python
+def register(cls, func=None):
+    nonlocal cache_token
+    if func is None:
+        if isinstance(cls, type):
+            return lambda f: register(cls, f)
+        if _is_union(cls):
+            return lambda f: register(cls, f)
+        ...
+```
+
+So if `cls` is a union and `func` is None, it returns a lambda. So `@process.register(PluginBase | int)` would work - it returns a decorator that registers the decorated function for the union.
+
+Actually wait, let me re-read. `@process.register(PluginBase | int)` - this calls `process.register(PluginBase | int)` which since func is None and it's a union, returns `lambda f: register(cls, f)`. Then the decorator applies that to the function. So yes, this works.
+
+But actually, I realize I should double-check: does `PluginBase | int` work at the module level? `PluginBase` is an ABC (metaclass=ABCMeta), and `int` is a type. `PluginBase | int` creates a `types.UnionType`. Let me verify `_is_union` handles this:
+
+```python
+def _is_union(cls):
+    if isinstance(cls, types.UnionType):
+        return True
+    import typing
+    return getattr(cls, '__origin__', None) is typing.Union
+```
+
+Yes, it checks for `types.UnionType` first.
+
+Now for `typing.Union[PluginBase, int]` - this creates a `typing.Union` type, and `_is_union` checks `getattr(cls, '__origin__', None) is typing.Union`.
+
+Let me also think about whether the tests are meaningful regressions. The key thing is:
+1. They test the specific scenario where a class becomes a virtual subclass AFTER dispatch has already cached a result
+2. Without the fix (cache_token not being set for unions with ABC members), the dispatch_cache would still have the old result and the new registration wouldn't take effect
+
+Let me also think about whether I need to handle the case where the ABC has no abstract methods. An ABC with no abstract methods can still have virtual subclasses registered. Let me check: `PluginBase(ABC)` with no abstract methods - `hasattr(PluginBase, '__abstractmethods__')` would be True (it's an empty frozenset). So the fix would still trigger.
+
+Actually wait - let me reconsider. If `PluginBase` has no abstract methods, then `hasattr(PluginBase, '__abstractmethods__')` is still True because ABCMeta always sets it. So the fix handles this case.
+
+But what about a plain ABC without the ABC metaclass? That wouldn't have `__abstractmethods__`. But that's not the scenario we're testing.
+
+Now let me also think about the `dispatch_cache.clear()` in register. The fix always clears the dispatch_cache after registration. This is important because:
+- If we register a union handler, we clear the cache
+- Later, when virtual registration happens via ABC, the cache_token check in dispatch() will also clear the cache
+
+But wait - the `dispatch_cache.clear()` in register means that after registering the union handler, the cache is clear. So the first dispatch of Payload will compute and cache the result. Then when PluginBase.register(Payload) happens, the cache_token changes, and the next dispatch will clear the cache and recompute.
+
+Actually, I need to think about this more carefully. The `dispatch_cache.clear()` in register is always called. But the issue is:
+1. We register the union handler → cache cleared → cache_token set (because of ABC member)
+2. First dispatch of Payload → cache_token checked (matches), Payload not in cache → _find_impl → not in registry → default handler → cached
+3. PluginBase.register(Payload) → ABC cache token changes
+4. Second dispatch of Payload → cache_token checked → mismatch → cache cleared → _find_impl → now Payload is a subclass of PluginBase → union handler found → returned
+
+Yes, this is the correct flow. Without the fix (cache_token not set for unions), step 4 would skip the token check and find the stale cached result.
+
+Now, for the Doc/howto/union-dispatch.rst, I need:
+- A concise standalone explanation
+- Executable `>>>` examples of union registration and late virtual registration
+- The limitation concerning parameterized generic dispatch members
+
+Let me think about what "parameterized generic dispatch members" limitation means. In singledispatch, you can't use parameterized generics like `List[int]` as dispatch types because they're not classes. The union members must be runtime classes. This is the limitation - you can't dispatch on parameterized generics.
+
+Let me now plan my actions:
+1. Write the test file
+2. Create the Doc/howto/union-dispatch.rst
+3. Run the public check
+
+Let me start with the test file. I'll use patch to replace the content.
+
+Actually, let me look at what I have. The test file is 5 lines:
+```python
+import functools
+import unittest
+
+
+# Add regression TestCase classes here.
+```
+
+I need to replace this with the full test content. Let me use patch.
+
+For the Doc file, I need to check if it exists. From the tree, Doc/howto/ exists as a directory. Let me check if union-dispatch.rst exists there.
+
+Actually, let me first write the test file, then create the doc file.
+
+Let me plan the test file content:
+
+```python
+import functools
+import types
+import typing
+import unittest
+from abc import ABC, ABCMeta
+
+
+class PluginBase(ABC):
+    """Abstract base representing a plugin interface."""
+    pass
+
+
+class TestUnionTypeLateRegistration(unittest.TestCase):
+    """Regression: types.UnionType union with late virtual subclass registration."""
+
+    def test_late_virtual_registration_after_cached_dispatch(self):
+        """A class registered as a virtual subclass after initial dispatch
+        must be handled by the union-registered implementation."""
+        @functools.singledispatch
+        def process(obj):
+            return "default"
+
+        @process.register(PluginBase | int)
+        def _union_handler(obj):
+            return "union"
+
+        class Payload:
+            pass
+
+        p = Payload()
+        # Initial dispatch caches the default handler for Payload
+        self.assertEqual(process(p), "default")
+
+        # Late virtual registration: Payload becomes a virtual subclass of PluginBase
+        PluginBase.register(Payload)
+
+        # Must now resolve to the union handler without manual cache clear
+        self.assertEqual(process(p), "union")
+
+
+class TestTypingUnionLateRegistration(unittest.TestCase):
+    """Regression: typing.Union with late virtual subclass registration."""
+
+    def test_late_virtual_registration_after_cached_dispatch(self):
+        @functools.singledispatch
+        def process(obj):
+            return "default"
+
+        @process.register(typing.Union[PluginBase, int])
+        def _union_handler(obj):
+            return "union"
+
+        class Payload:
+            pass
+
+        p = Payload()
+        self.assertEqual(process(p), "default")
+
+        PluginBase.register(Payload)
+
+        self.assertEqual(process(p), "union")
+```
+
+Wait, I should be more careful. Let me think about whether `@process.register(PluginBase | int)` actually works. 
+
+Looking at register:
+```python
+def register(cls, func=None):
+    if func is None:
+        if isinstance(cls, type):
+            return lambda f: register(cls, f)
+        if _is_union(cls):
+            return lambda f: register(cls, f)
+```
+
+`PluginBase | int` is a `types.UnionType`, not a `type`. So `isinstance(cls, type)` is False. Then `_is_union(cls)` is True. So it returns `lambda f: register(cls, f)`. Good.
+
+Then when we do:
+```python
+@process.register(PluginBase | int)
+def _union_handler(obj):
+    return "union"
+```
+
+This is equivalent to:
+```python
+def _union_handler(obj):
+    return "union"
+_union_handler = process.register(PluginBase | int)(_union_handler)
+```
+
+Which calls `register(PluginBase | int, _union_handler)`. In register, func is not None, cls is the union. So it goes to:
+```python
+if _is_union(cls):
+    for type_ in cls.__args__:
+        if not isinstance(type_, type):
+            raise TypeError(...)
+    for type_ in cls.__args__:
+        registry[type_] = func
+```
+
+So it registers `PluginBase` and `int` as keys in the registry, both mapping to `_union_handler`. Then:
+```python
+if cache_token is None:
+    if _is_union(cls):
+        if any(hasattr(t, '__abstractmethods__') for t in cls.__args__):
+            cache_token = get_cache_token()
+    elif hasattr(cls, '__abstractmethods__'):
+        cache_token = get_cache_token()
+dispatch_cache.clear()
+return func
+```
+
+Since `PluginBase` has `__abstractmethods__` (it's an ABC), cache_token gets set. Good.
+
+Now, one issue: `int` is a type, and `PluginBase` is a type. So `isinstance(type_, type)` passes for both. Good.
+
+Let me also think about whether there's an issue with `PluginBase.register(Payload)`. This is the ABC virtual registration. It calls `ABCMeta.__register__` which adds `Payload` to `PluginBase._abc_registry` and updates the cache token. This is the standard ABC mechanism.
+
+Now let me write the final test file. I want it to be clear and meaningful.
+
+Actually, I realize I should also think about whether the tests would actually FAIL without the fix. Let me trace through:
+
+Without the fix (original code):
+```python
+if cache_token is None and hasattr(cls, '__abstractmethods__'):
+    cache_token = get_cache_token()
+```
+
+When registering `PluginBase | int`:
+- `cls` is the union type
+- `hasattr(union, '__abstractmethods__')` is False (union types don't have this attribute)
+- So cache_token stays None
+
+Then when dispatching after virtual registration:
+- `cache_token is None` → skip the token check
+- Look up `Payload` in dispatch_cache → found (stale "default" result)
+- Return "default" instead of "union"
+
+With the fix:
+- cache_token is set during registration
+- When dispatching after virtual registration:
+- `cache_token is not None` → check token
+- Token has changed (ABC registration changed it)
+- Clear cache
+- Recompute: `_find_impl(Payload, registry)` → MRO now includes PluginBase → found in registry → "union"
+
+So yes, the tests would fail without the fix and pass with it. 
+
+Now let me also think about whether I need to be careful about the `dispatch_cache.clear()` in register. In the original code, `dispatch_cache.clear()` is always called at the end of register. So after registering the union handler, the cache is empty. The first dispatch of Payload will cache the result. Then the virtual registration happens. Then the next dispatch needs to invalidate the cache.
+
+OK, I'm confident the tests are correct. Let me write them.
+
+For the Doc file, let me think about what to include:
+
+```rst
+Union Registration with :func:`~functools.singledispatch`
+============================================================
+
+The :func:`~functools.singledispatch` decorator supports registering
+implementations for union types (PEP 604 ``X | Y`` or
+``typing.Union[X, Y]``). Each member of the union must be a runtime class.
+
+Basic union registration
+-------------------------
+
+>>> import functools
+>>> from abc import ABC
+>>>
+>>> class Base(ABC):
+...     pass
+...
+>>> @functools.singledispatch
+... def process(obj):
+...     return f"default: {type(obj).__name__}"
+...
+>>> @process.register(Base | int)
+... def _handler(obj):
+...     return f"handled: {type(obj).__name__}"
+...
+>>> process(42)
+'handled: int'
+>>> class Unrelated:
+...     pass
+...
+>>> process(Unrelated())
+'default: Unrelated'
+
+Late virtual registration
+--------------------------
+
+A class that becomes a virtual subclass of an ABC member *after* the union
+handler has been registered and after an initial dispatch will correctly
+resolve to the union handler on the next dispatch, without requiring a
+manual cache clear or a separate registration.
+
+>>> Base.register(Unrelated)
+>>> process(Unrelated())
+'handled: Unrelated'
+
+Limitation
+----------
+
+Union members must be concrete runtime classes. Parameterized generic
+aliases (e.g. ``list[int]``, ``typing.List[int]``) are not valid dispatch
+members and will raise ``TypeError`` at registration time.
+```
+
+Wait, I need to make sure the `>>>` examples are actually correct and would produce the shown output. Let me trace through:
+
+1. `process(42)` - dispatch on `int`. `int` is in the registry (registered as part of the union). So it returns `"handled: int"`. ✓
+
+2. `process(Unrelated())` - dispatch on `Unrelated`. `Unrelated` is not in registry. `_find_impl(Unrelated, registry)`:
+   - `_compose_mro(Unrelated, [object, Base, int])` 
+   - `Unrelated`'s MRO is `[Unrelated, object]`
+   - `is_related(Base)`: `Base` not in `{Unrelated, object}`, `hasattr(Base, '__mro__')` True, `issubclass(Unrelated, Base)` False → not related
+   - `is_related(int)`: `int` not in `{Unrelated, object}`, `hasattr(int, '__mro__')` True, `issubclass(Unrelated, int)` False → not related
+   - So types list is empty
+   - `_c3_mro(Unrelated, abcs=[])` → just `[Unrelated, object]`
+   - In `_find_impl`: iterate MRO `[Unrelated, object]`
+   - `Unrelated` not in registry
+   - `object` in registry → match = object
+   - Return `registry[object]` = default func
+   - Returns `"default: Unrelated"` ✓
+
+3. After `Base.register(Unrelated)`:
+   - `Unrelated` is now a virtual subclass of `Base`
+   - `issubclass(Unrelated, Base)` is now True
+   - Next dispatch: cache_token check → mismatch (ABC token changed) → cache cleared
+   - `_find_impl(Unrelated, registry)`:
+   - `_compose_mro(Unrelated, [object, Base, int])`:
+   - `is_related(Base)`: `Base` not in `{Unrelated, object}`, hasattr `__mro__` True, `issubclass(Unrelated, Base)` True → related
+   - `is_related(int)`: not subclass → not related
+   - types = `[Base]`
+   - `_c3_mro(Unrelated, abcs=[Base])`:
+   - `Unrelated.__bases__` = `(object,)`
+   - `hasattr(object, '__abstractmethods__')` → False (object doesn't have it)
+   - boundary = 0
+   - explicit_bases = [], abstract_bases = [Base] (since issubclass(Unrelated, Base) and no base is subclass of Base), other_bases = [object]
+   - MRO composition includes Base
+   - In `_find_impl`: iterate MRO, find `Base` in registry → return union handler
+   - Returns `"handled: Unrelated"` ✓
+
+Great, the doc examples are correct.
+
+Now let me think about how to write these files. I'll:
+1. Patch the test file (replace the stub)
+2. Create the Doc file - but wait, can I create new files? Let me check the candidate_limits: `"existing_files_only":true`. 
+
+Hmm, that's a problem. "existing_files_only" means I can only modify existing files, not create new ones. Let me re-read: `"existing_files_only":true`. 
+
+But the task says "Add a concise standalone explanation in Doc/howto/union-dispatch.rst". If the file doesn't exist, I can't create it with a patch (patch requires an existing file). Let me check if the file already exists.
+
+Let me look at the Doc/howto directory. From the tree earlier, Doc/howto exists as a directory. Let me check if union-dispatch.rst is in there.
+
+Actually, I should first check what's in Doc/howto/. Let me do a tree on Doc/howto/.
+
+Wait, but I have limited actions. Let me think about what's most efficient. I have 15 requests remaining and 57 actions. Let me:
+
+1. First, check Doc/howto/ to see if the file exists
+2. Write the test file
+3. Write/create the doc file
+4. Run the check
+
+Actually, let me be more strategic. Let me first check the Doc/howto directory, then write both files.
+
+Hmm, but actually - the task says "Do not change the saved first-job tests, upstream tests, upstream reference documentation or other files." This implies the doc file might already exist from a previous job? Or maybe it's something I need to create. But if `existing_files_only` is true, I can't create new files.
+
+Wait, let me re-read: "existing_files_only":true. This is in candidate_limits. I think this means the candidate can only contain existing files - I can't add new files. But the task explicitly asks me to create Doc/howto/union-dispatch.rst. Maybe the file already exists as an empty file or stub?
+
+Let me check the Doc/howto directory. Let me do a tree on it.
+
+Actually, I'll do multiple things. Let me first check Doc/howto/ contents, then proceed with the edits.
+
+Let me start by checking Doc/howto/ and then writing the test file in parallel... no, I can only do one operation per reply. Let me prioritize.
+
+Actually, I think the most efficient path is:
+1. Check Doc/howto/ to see if union-dispatch.rst exists
+2. Write the test file
+3. Write/modify the doc file
+4. Run public check
+5. Submit
+
+Let me start with checking Doc/howto/.

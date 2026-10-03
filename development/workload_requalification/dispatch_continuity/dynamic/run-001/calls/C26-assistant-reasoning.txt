@@ -1,0 +1,1113 @@
+Let me analyze the current state:
+
+1. **Task**: I need to continue the saved union-registration contribution. The key requirements are:
+   - Fix `singledispatch` register() so union types containing ABC members properly track abc cache_token
+   - Support long-lived dispatchers whose classes become virtual subclasses after instances have been dispatched
+   - Register a handler for a union containing an abstract plugin base and int, dispatch an unrelated Payload instance, then register Payload as a virtual subclass of that base
+   - A later dispatch of the same Payload class must use the union handler without an unrelated dispatcher registration or manual cache-clear call
+   - Add at least two meaningful regressions to tests/test_virtual_registration.py covering both union forms and late registration
+   - Add a concise standalone explanation in Doc/howto/union-dispatch.rst with executable >>> examples
+   - Modify Lib/functools.py if needed
+   - Pass the public check
+
+2. **Current state**:
+   - `Lib/functools.py` is fully visible (1004 lines) - candidate `ff91f22e...`
+   - `tests/test_virtual_registration.py` is a stub (5 lines)
+   - `Doc/howto/` exists and contains `union-dispatch.rst`
+   - The previous patch (EVT-0038) was already applied to `Lib/functools.py` (changing candidate from `5c20075d...` to `ff91f22e...`)
+   - The historical public check passed on candidate `5c20075d...` but I need a new pass on the current candidate
+
+3. **Looking at the current functools.py**: The patch has already been applied. Let me look at the register function:
+
+```python
+def register(cls, func=None):
+    ...
+    if _is_union(cls):
+        for type_ in cls.__args__:
+            if not isinstance(type_, type):
+                raise TypeError(...)
+        for type_ in cls.__args__:
+            registry[type_] = func
+    else:
+        registry[cls] = func
+    if cache_token is None:
+        if _is_union(cls):
+            if any(hasattr(t, '__abstractmethods__') for t in cls.__args__):
+                cache_token = get_cache_token()
+        elif hasattr(cls, '__abstractmethods__'):
+            cache_token = get_cache_token()
+    dispatch_cache.clear()
+    return func
+```
+
+Wait, I see the fix is already applied. The key fix is in the `cache_token` initialization:
+- For union types: `if any(hasattr(t, '__abstractmethods__') for t in cls.__args__):`
+- For regular types: `elif hasattr(cls, '__abstractmethods__'):`
+
+But there's an issue: `cache_token` is only set when it's `None`. Once set, it stays. But the problem is about *late* registration - when a class is registered as a virtual subclass *after* instances have been dispatched. 
+
+Let me think about the scenario:
+1. Register a handler for `Plugin | int` where `Plugin` is an ABC
+2. Dispatch an unrelated `Payload` instance (goes to default `object` handler since `Payload` isn't a subclass of `Plugin` or `int`)
+3. Register `Payload` as a virtual subclass of `Plugin` (via `Plugin.register(Payload)`)
+4. Later dispatch of `Payload` should use the union handler
+
+The issue is that in step 2, `dispatch(Payload)` is called. Since `Payload` is not in the registry and not a subclass of `Plugin` (not yet), it falls back to `object`. This gets cached in `dispatch_cache`.
+
+In step 3, when we register `Payload` as a virtual subclass, the abc system's cache token changes. The `dispatch()` function checks:
+```python
+if cache_token is not None:
+    current_token = get_cache_token()
+    if cache_token != current_token:
+        dispatch_cache.clear()
+        cache_token = current_token
+```
+
+So the fix ensures that `cache_token` is set to the current token when a union containing an ABC is registered. Then when `Payload` is later registered as a virtual subclass (which changes the abc cache token), the next `dispatch()` call will detect the token change and clear the cache.
+
+Let me verify this is working correctly. The current code in the visible source:
+
+```python
+if cache_token is None:
+    if _is_union(cls):
+        if any(hasattr(t, '__abstractmethods__') for t in cls.__args__):
+            cache_token = get_cache_token()
+    elif hasattr(cls, '__abstractmethods__'):
+        cache_token = get_cache_token()
+dispatch_cache.clear()
+```
+
+This looks correct. When a union with an ABC member is registered, `cache_token` is set. Then when a virtual subclass registration changes the abc cache token, the next dispatch will detect the change and clear the cache.
+
+Wait, but there's a subtlety. The `dispatch_cache.clear()` at the end of `register()` clears the cache every time a registration happens. So even without the cache_token mechanism, the cache would be cleared on the next registration. But the requirement says "without ... a manual cache-clear call" - meaning the dispatch should work correctly without manually clearing.
+
+Actually wait, the `dispatch_cache.clear()` is called inside `register()` itself. So when `Payload` is registered as a virtual subclass via `Plugin.register(Payload)`, that doesn't call the singledispatch's `register()`. It calls the ABC's `register()`, which increments the abc cache token. The next call to `dispatch(Payload)` would then detect the token change (because `cache_token` was set when the union was registered) and clear the dispatch cache.
+
+So the fix is:
+- When registering a union that contains an ABC, set `cache_token = get_cache_token()`
+- This way, when a virtual subclass is later registered (changing the abc token), the next dispatch detects the change
+
+This is exactly what the current code does. The patch has already been applied.
+
+Now I need to:
+1. Write the test file `tests/test_virtual_registration.py` with at least 2 meaningful regression tests
+2. Write `Doc/howto/union-dispatch.rst` with executable >>> examples
+3. Run the public check and verify it passes
+
+Let me think about the test scenarios:
+
+**Test 1: Union with ABC + concrete type, late virtual registration**
+- Define an ABC `Plugin` with `__abstractmethods__`
+- Define `int` as the concrete type
+- Create a singledispatch function, register handler for `Plugin | int`
+- Define `Payload` class (not a subclass of `Plugin`)
+- Dispatch a `Payload` instance → gets default `object` handler
+- Register `Payload` as virtual subclass of `Plugin`: `Plugin.register(Payload)`
+- Dispatch a `Payload` instance → should now get the union handler (not `object`)
+
+**Test 2: Union of two ABCs, late virtual registration**
+- Define two ABCs `Base1`, `Base2`
+- Register handler for `Base1 | Base2`
+- Define `MyClass` (not a subclass of either)
+- Dispatch `MyClass` instance → default
+- Register `MyClass` as virtual subclass of `Base1`
+- Dispatch `MyClass` instance → should get the union handler
+
+Wait, I need to be careful. The task says "covering both union forms". What are the "two union forms"?
+
+Looking at the code:
+```python
+def _is_union(cls):
+    if isinstance(cls, types.UnionType):
+        return True
+    import typing
+    return getattr(cls, '__origin__', None) is typing.Union
+```
+
+So there are two forms: `types.UnionType` (the new `X | Y` syntax) and `typing.Union` (the old `Union[X, Y]` syntax).
+
+So the two tests should cover:
+1. `types.UnionType` (new syntax): `Plugin | int`
+2. `typing.Union` (old syntax): `Union[Plugin, int]`
+
+Both with late virtual registration.
+
+Let me write the tests:
+
+```python
+import functools
+import unittest
+from abc import ABC, abstractmethod
+from typing import Union
+
+
+class TestUnionVirtualRegistration(unittest.TestCase):
+    """Tests for singledispatch register with union types and late ABC registration."""
+
+    def test_union_types_module_late_registration(self):
+        """Union via | (types.UnionType) with ABC member; late virtual subclass."""
+        @functools.singledispatch
+        def handler(obj):
+            return "default"
+
+        class Plugin(ABC):
+            @abstractmethod
+            def run(self):
+                pass
+
+        @handler.register(Plugin | int)
+        def _handle(obj):
+            return "union"
+
+        class Payload:
+            pass
+
+        # Before virtual registration, Payload dispatches to default
+        self.assertEqual(handler(Payload()), "default")
+
+        # Late: register Payload as a virtual subclass of Plugin
+        Plugin.register(Payload)
+
+        # Now Payload should dispatch to the union handler
+        self.assertEqual(handler(Payload()), "union")
+
+    def test_typing_union_late_registration(self):
+        """Union via typing.Union with ABC member; late virtual subclass."""
+        @functools.singledispatch
+        def handler(obj):
+            return "default"
+
+        class Plugin(ABC):
+            @abstractmethod
+            def run(self):
+                pass
+
+        @handler.register(Union[Plugin, int])
+        def _handle(obj):
+            return "union"
+
+        class Payload:
+            pass
+
+        # Before virtual registration, Payload dispatches to default
+        self.assertEqual(handler(Payload()), "default")
+
+        # Late: register Payload as a virtual subclass of Plugin
+        Plugin.register(Payload)
+
+        # Now Payload should dispatch to the union handler
+        self.assertEqual(handler(Payload()), "union")
+```
+
+Wait, there's a problem. When I define `Plugin` inside the test method and use `@abstractmethod`, the class will have `__abstractmethods__` set. But I'm also using `ABC` as a base. Let me make sure this works.
+
+Actually, let me reconsider. The `@abstractmethod` decorator marks methods, and `ABC` metaclass collects them into `__abstractmethods__`. So `Plugin` will have `__abstractmethods__ = frozenset({'run'})`.
+
+But wait - when I do `@handler.register(Plugin | int)`, the `Plugin | int` creates a `types.UnionType`. Then in `register()`, `_is_union(cls)` returns True (it's a `types.UnionType`). Then it iterates `cls.__args__` which gives `(Plugin, int)`. Both are classes, so they pass the check. Then `registry[Plugin] = func` and `registry[int] = func`.
+
+Then `cache_token is None` → True, so it checks `any(hasattr(t, '__abstractmethods__') for t in cls.__args__)` → `hasattr(Plugin, '__abstractmethods__')` → True. So `cache_token = get_cache_token()`.
+
+Then `dispatch_cache.clear()` is called.
+
+Now `handler(Payload())` is called. `dispatch(Payload)`:
+- `cache_token` is not None
+- `get_cache_token()` returns the current token (same as when we set it, since no virtual registrations happened yet)
+- Token matches, so no clear
+- `dispatch_cache[Payload]` → KeyError (not cached)
+- `registry[Payload]` → KeyError (not in registry)
+- `_find_impl(Payload, registry)`:
+  - `_compose_mro(Payload, registry.keys())`:
+    - `registry.keys()` = `{object, Plugin, int}`
+    - `is_related(Plugin)`: `Plugin not in Payload.__mro__` → True, `isinstance(Payload, type)` → True, `issubclass(Payload, Plugin)` → False
+    - So `Plugin` is NOT related
+    - `is_related(int)`: `issubclass(Payload, int)` → False
+    - So only `object` is related
+  - MRO is just `[Payload, object]`
+  - `object` is in registry → match
+- Returns `registry[object]` = the default handler
+- Caches `dispatch_cache[Payload] = default_handler`
+
+Then `Plugin.register(Payload)` → this changes the abc cache token.
+
+Next `handler(Payload())`:
+- `dispatch(Payload)`:
+  - `cache_token` is not None
+  - `get_cache_token()` → different from before (abc token changed)
+  - `cache_token != current_token` → True
+  - `dispatch_cache.clear()` → clears the cached result
+  - `cache_token = current_token`
+  - `dispatch_cache[Payload]` → KeyError (just cleared)
+  - `registry[Payload]` → KeyError (Payload is not directly in registry)
+  - `_find_impl(Payload, registry)`:
+    - `_compose_mro(Payload, registry.keys())`:
+      - `registry.keys()` = `{object, Plugin, int}`
+      - `is_related(Plugin)`: `Plugin not in Payload.__mro__` → True (Payload's MRO is [Payload, object]), `issubclass(Payload, Plugin)` → True (because of virtual registration!)
+      - So `Plugin` IS related
+    - In `_c3_mro`, `Plugin` will be inserted because `issubclass(Payload, Plugin)` is True
+    - MRO will include `Plugin`
+    - `Plugin` is in registry → match!
+  - Returns `registry[Plugin]` = the union handler
+- Caches `dispatch_cache[Payload] = union_handler`
+
+This should work.
+
+Now for `typing.Union`, the `_is_union` check uses `getattr(cls, '__origin__', None) is typing.Union`. And `cls.__args__` should work the same way.
+
+Actually wait, let me double-check. For `typing.Union[Plugin, int]`:
+- `cls.__args__` → `(Plugin, int)`
+- `cls.__origin__` → `typing.Union`
+
+Yes, this should work the same way.
+
+Now let me think about the documentation. The task says:
+- "Add a concise standalone explanation in Doc/howto/union-dispatch.rst with executable >>> examples of union registration and late virtual registration, plus the limitation concerning parameterized generic dispatch members."
+
+The limitation about "parameterized generic dispatch members" - this refers to the fact that you can't use parameterized generics like `List[int]` as union members, because they're not classes. The check in `register()` is:
+```python
+for type_ in cls.__args__:
+    if not isinstance(type_, type):
+        raise TypeError(
+            f"Invalid union member {type_!r}: "
+            f"must be a runtime class"
+        )
+```
+
+So `List[int]` would fail because `isinstance(List[int], type)` is False (it's a `typing._GenericAlias`).
+
+Let me write the documentation:
+
+```rst
+Union Type Registration with singledispatch
+============================================
+
+The :func:`functools.singledispatch` decorator supports registering
+handlers for union types, allowing a single implementation to cover
+multiple dispatch types:
+
+.. doctest::
+
+    >>> import functools
+    >>> from abc import ABC, abstractmethod
+    >>> from typing import Union
+    >>>
+    >>> @functools.singledispatch
+    ... def process(value):
+    ...     return f"default: {value!r}"
+    ...
+    >>> class Plugin(ABC):
+    ...     @abstractmethod
+    ...     def run(self):
+    ...         pass
+    ...
+    >>> @process.register(Plugin | int)
+    ... def _handle(value):
+    ...     return f"union: {value!r}"
+    ...
+    >>> process(42)
+    "union: 42"
+
+Late Virtual Subclass Registration
+----------------------------------
+
+If a class is registered as a virtual subclass of an ABC member *after*
+instances of that class have already been dispatched, subsequent dispatches
+will correctly route to the union handler without manual cache clearing:
+
+.. doctest::
+
+    >>> class Payload:
+    ...     pass
+    ...
+    >>> process(Payload())
+    "default: <Payload object at 0x...>"
+    >>> Plugin.register(Payload)
+    >>> process(Payload())
+    "union: <Payload object at 0x...>"
+
+The same pattern works with :class:`typing.Union`:
+
+.. doctest::
+
+    >>> @functools.singledispatch
+    ... def process2(value):
+    ...     return "default"
+    ...
+    >>> class Widget(ABC):
+    ...     @abstractmethod
+    ...     def render(self):
+    ...         pass
+    ...
+    >>> @process2.register(Union[Widget, float])
+    ... def _handle2(value):
+    ...     return "union"
+    ...
+    >>> class Late:
+    ...     pass
+    ...
+    >>> process2(Late())
+    'default'
+    >>> Widget.register(Late)
+    >>> process2(Late())
+    'union'
+
+Limitation: Parameterized Generics
+---------------------------------
+
+Union members must be runtime classes. Parameterized generic aliases such as
+``list[int]`` or ``dict[str, int]`` are not classes and cannot be used as
+union members:
+
+.. doctest::
+
+    >>> try:
+    ...     @functools.singledispatch
+    ...     def bad(value):
+    ...         return "default"
+    ...     @bad.register(list[int] | str)
+    ...     def _h(value):
+    ...         return "generic"
+    ... except TypeError as exc:
+    ...     print(exc)
+    ...
+    Invalid union member list[int]: must be a runtime class
+```
+
+Hmm, wait. The `.. doctest::` directive - I'm not sure that's the right Sphinx directive. Let me think about what's appropriate for a "howto" doc. Actually, looking at the CPython docs structure, they typically use `.. doctest::` or just literal blocks with ```. Let me use a simpler format.
+
+Actually, looking at the task description again: "Add a concise standalone explanation in Doc/howto/union-dispatch.rst with executable >>> examples". So the examples should use `>>>` prompt format. Let me use `.. doctest::` blocks which is standard in CPython docs.
+
+Wait, but I need to be careful about what the public check expects. Let me think about what format works. The CPython docs typically use:
+
+```rst
+.. doctest::
+
+    >>> import functools
+```
+
+or
+
+```rst
+.. code-block:: python
+
+    >>> import functools
+```
+
+Let me use `.. doctest::` since the task says "executable >>> examples".
+
+Actually, I realize I should be more careful. The `.. doctest::` directive expects specific formatting. Let me look at how CPython docs typically do this.
+
+In CPython docs, they often use:
+
+```rst
+.. doctest::
+
+    >>> from abc import ABC, abstractmethod
+    >>> import functools
+```
+
+Let me keep it simple and use that format. But I also need to make sure the examples actually work correctly.
+
+Wait, there's an issue with my example. After `Plugin.register(Payload)`, the `process(Payload())` should return the union handler result. But the `__repr__` of a `Payload` object will contain a memory address that varies. Let me avoid that by not printing the object.
+
+Let me redesign:
+
+```python
+>>> @functools.singledispatch
+... def process(value):
+...     return "default"
+...
+>>> class Plugin(ABC):
+...     @abstractmethod
+...     def run(self):
+...         pass
+...
+>>> @process.register(Plugin | int)
+... def _handle(value):
+...     return "union"
+...
+>>> process(42)
+'union'
+>>> class Payload:
+...     pass
+...
+>>> process(Payload())
+'default'
+>>> Plugin.register(Payload)
+>>> process(Payload())
+'union'
+```
+
+This is cleaner. The `>>>` examples don't print object reprs.
+
+For the limitation example, I need to check what `list[int] | str` actually does. In Python 3.10+, `list[int]` is a `types.GenericAlias`. And `list[int] | str` would be... let me think. Actually, `list[int]` doesn't support `|` in the same way. Let me check.
+
+Actually, in Python 3.10+:
+- `int | str` → `types.UnionType`
+- `list[int] | str` → this might not work or might raise TypeError
+
+Let me think differently. The limitation is about using parameterized generics as union *members*. So the example should show:
+
+```python
+>>> import typing
+>>> try:
+...     process(typing.List[int])
+... except:
+...     pass
+```
+
+No, that's not right either. The limitation is in `register()`:
+
+```python
+for type_ in cls.__args__:
+    if not isinstance(type_, type):
+        raise TypeError(
+            f"Invalid union member {type_!r}: "
+            f"must be a runtime class"
+        )
+```
+
+So if you try `Union[List[int], str]` or `list[int] | str`, the member `list[int]` (or `List[int]`) is not a `type`, so it raises TypeError.
+
+Let me write:
+```python
+>>> import typing
+>>> try:
+...     process(typing.Union[typing.List[int], str])
+...     def _bad(value):
+...         return "x"
+... except TypeError as e:
+...     print(e)
+```
+
+No, this doesn't make sense. Let me write it properly:
+
+```python
+>>> import typing
+>>> @functools.singledispatch
+... def bad(value):
+...     return "default"
+...
+>>> @bad.register(typing.Union[typing.List[int], str])
+... def _h(value):
+...     return "generic"
+...
+TypeError: Invalid union member typing.List[int]: must be a runtime class
+```
+
+Hmm, but `typing.List[int]` - is `isinstance(typing.List[int], type)` False? Yes, because `typing.List[int]` is a `typing._GenericAlias`, not a type.
+
+Actually wait, in newer Python versions, `typing.List` has been deprecated in favor of `list`. Let me use a form that definitely works.
+
+Actually, let me reconsider. In Python 3.9+, `list[int]` is a valid expression (it creates a `types.GenericAlias`). And `isinstance(list[int], type)` is False. So:
+
+```python
+>>> @bad.register(list[int] | str)
+```
+
+Would this even work? Let me think... `list[int] | str` in Python 3.10+... I think `types.GenericAlias` doesn't support `|`. Let me check.
+
+Actually, I think `list[int] | str` would raise a TypeError because `types.GenericAlias` doesn't implement `__or__`. So the error would happen before reaching our `register()` function.
+
+Let me use `typing.Union` instead:
+```python
+>>> @bad.register(typing.Union[list, str])
+```
+
+Wait, `list` is a type, so that would work. I need a non-type member.
+
+Let me use `typing.List[int]`:
+```python
+>>> @bad.register(typing.Union[typing.List[int], str])
+... def _h(value):
+...     return "generic"
+```
+
+This should raise `TypeError: Invalid union member typing.List[int]: must be a runtime class`.
+
+Actually, I'm not 100% sure about the exact error message format. Let me keep the doc example simple and just show that it raises TypeError. Or better, let me not include the exact error in the doctest to avoid matching issues.
+
+Actually, for the public check, the doctest examples need to actually run. Let me think about what will actually work.
+
+Let me be more conservative with the doc. I'll use simple examples that I'm confident will work:
+
+1. Union registration with `|` syntax
+2. Late virtual registration
+3. Same with `typing.Union`
+4. Limitation: parameterized generics not allowed
+
+For the limitation, I can show:
+```python
+>>> import typing
+>>> @functools.singledispatch
+... def proc(value):
+...     return "default"
+...
+>>> @proc.register(typing.Union[typing.List[int], str])
+... def _h(value):
+...     return "generic"
+...
+Traceback (most recent call last):
+  ...
+TypeError: Invalid union member typing.List[int]: must be a runtime class
+```
+
+Hmm, but the traceback format in doctest is tricky. Let me just show the error:
+
+Actually, I think the safest approach for the doc is to keep it minimal and focus on what definitely works. Let me write the doc and tests now.
+
+Let me also think about what the public check actually tests. The task says:
+"The new public definition runs preserved feature checks, original single-dispatch tests, your new regressions and their sensitivity to the historical union-support implementation, and the documentation examples."
+
+So the public check:
+1. Runs the feature checks (the new tests I write)
+2. Runs original single-dispatch tests
+3. Checks sensitivity to historical implementation (the fix should fail on the old code)
+4. Runs documentation examples (doctest)
+
+For sensitivity, my tests should fail if the `cache_token` fix is not present (i.e., on the historical implementation where `cache_token` stays None for union types).
+
+Let me now write everything. First the test file:
+
+```python
+import functools
+import unittest
+from abc import ABC, abstractmethod
+from typing import Union
+
+
+class TestUnionLateVirtualRegistration(unittest.TestCase):
+    """Regression tests for singledispatch union registration with
+    late ABC virtual subclass registration."""
+
+    def test_union_type_syntax_late_virtual(self):
+        """types.UnionType (| syntax) with ABC; late virtual subclass
+        routes to the union handler after registration."""
+        @functools.singledispatch
+        def handler(obj):
+            return "default"
+
+        class Plugin(ABC):
+            @abstractmethod
+            def run(self):
+                pass
+
+        @handler.register(Plugin | int)
+        def _handle(obj):
+            return "union"
+
+        class Payload:
+            pass
+
+        # Before virtual registration, Payload is unrelated
+        self.assertEqual(handler(Payload()), "default")
+
+        # Late: Payload becomes a virtual subclass of Plugin
+        Plugin.register(Payload)
+
+        # Subsequent dispatch must use the union handler
+        self.assertEqual(handler(Payload()), "union")
+
+    def test_typing_union_late_virtual(self):
+        """typing.Union with ABC member; late virtual subclass
+        routes to the union handler after registration."""
+        @functools.singledispatch
+        def handler(obj):
+            return "default"
+
+        class Plugin(ABC):
+            @abstractmethod
+            def run(self):
+                pass
+
+        @handler.register(Union[Plugin, int])
+        def _handle(obj):
+            return "union"
+
+        class Payload:
+            pass
+
+        # Before virtual registration, Payload is unrelated
+        self.assertEqual(handler(Payload()), "default")
+
+        # Late: Payload becomes a virtual subclass of Plugin
+        Plugin.register(Payload)
+
+        # Subsequent dispatch must use the union handler
+        self.assertEqual(handler(Payload()), "union")
+
+    def test_union_int_still_dispatches(self):
+        """Ensure the concrete int member still dispatches correctly
+        after late virtual registration."""
+        @functools.singledispatch
+        def handler(obj):
+            return "default"
+
+        class Plugin(ABC):
+            @abstractmethod
+            def run(self):
+                pass
+
+        @handler.register(Plugin | int)
+        def _handle(obj):
+            return "union"
+
+        class Payload:
+            pass
+
+        Plugin.register(Payload)
+
+        # int still dispatches to the union handler
+        self.assertEqual(handler(42), "union")
+        # Payload now dispatches to the union handler
+        self.assertEqual(handler(Payload()), "union")
+```
+
+Wait, I should be more careful. Let me re-read the requirement: "Add at least two meaningful regressions to tests/test_virtual_registration.py covering both union forms and late registration."
+
+So I need at least 2 tests, covering:
+- Both union forms (types.UnionType and typing.Union)
+- Late registration
+
+My three tests above cover this well. Let me finalize.
+
+Now for the doc. Let me check what's currently in Doc/howto/union-dispatch.rst. The tree showed it exists but I haven't read it. Let me check if it's empty or has content.
+
+Actually, I should read it first before writing to it. But I'm running low on operations (14 requests remaining, 56 actions remaining... wait, let me re-read the allowance).
+
+"actions_remaining": 56, "requests_remaining": 14, "requests_used": 25
+
+Wait, that's confusing. Let me re-read:
+- "requests_remaining": 14 (model requests)
+- "actions_remaining": 56 (operations)
+
+Actually wait: "actions_remaining": 56 - but "actions_used": 39 and the limit... let me look again.
+
+"allowance":{"actions_remaining":56,"actions_used":39,"request_counting":"...","request_limit":39,"requests_remaining":14,"requests_used":25}
+
+Hmm, request_limit is 39 but requests_used is 25, so requests_remaining is 14. And actions_remaining is 56, actions_used is 39. So I have 56 operations and 14 requests left.
+
+Wait, but the task says "You have 24 additional model requests and 72 additional operations." That was the initial grant. Now I've used some.
+
+Let me be efficient. I need to:
+1. Read Doc/howto/union-dispatch.rst (to see what's there)
+2. Write tests/test_virtual_registration.py
+3. Write Doc/howto/union-dispatch.rst
+4. Run public check
+
+Actually, I can combine operations. Let me:
+1. First, read the doc file to see what's there
+2. Then patch the test file
+3. Then patch the doc file
+4. Then run the check
+
+Actually, for the test file, it's only 5 lines and I have the full content. I can use `replace_region` or `patch` to replace it. Let me use `patch` since I know the exact content.
+
+The current test file content is:
+```
+import functools
+import unittest
+
+
+# Add regression TestCase classes here.
+```
+
+I'll replace this with my test code.
+
+For the doc file, I need to read it first. Let me do that.
+
+Actually, wait. Let me think about whether I can do this more efficiently. I have 14 requests and 56 operations. Each request can contain one operation (or account update + one operation). Let me plan:
+
+1. Read Doc/howto/union-dispatch.rst (1 request)
+2. Patch tests/test_virtual_registration.py (1 request)
+3. Patch Doc/howto/union-dispatch.rst (1 request)
+4. Run public check (1 request)
+5. Submit (1 request)
+
+That's 5 requests minimum. I have 14, so that's fine.
+
+Let me start by reading the doc file and patching the test file in parallel... wait, I can only do one operation per request. Let me prioritize.
+
+Actually, let me just do the test file patch first since I already know its content. Then read the doc. Then patch the doc. Then check.
+
+Let me write the test file patch. The old content is:
+```
+import functools
+import unittest
+
+
+# Add regression TestCase classes here.
+```
+
+And the new content will be my tests. Let me use `patch` with the file path `tests/test_virtual_registration.py`.
+
+Wait, I need `expected_file_sha256`. The visibility shows:
+- tests/test_virtual_registration.py: file_sha256: "22f3844791f8277386f2b089fb6d48c64492faefad70c4a23e00860b3b74f73c"
+- candidate_id: "ff91f22e0d341047fc2196937eb5f980432655542b53c64f0da47247137d2ebe"
+
+Good. Let me write the patch.
+
+Actually, I want to make sure my tests are correct. Let me trace through the logic one more time.
+
+For `test_union_type_syntax_late_virtual`:
+1. `@functools.singledispatch` creates a dispatcher with `registry = {object: default}`
+2. `@handler.register(Plugin | int)` calls `register(Plugin | int, _handle)`:
+   - `_is_union(Plugin | int)` → True (it's a types.UnionType)
+   - `cls.__args__` → `(Plugin, int)`
+   - Both are types → pass
+   - `registry[Plugin] = _handle`, `registry[int] = _handle`
+   - `cache_token is None` → True
+   - `_is_union(cls)` → True
+   - `any(hasattr(t, '__abstractmethods__') for t in (Plugin, int))` → True (Plugin has it)
+   - `cache_token = get_cache_token()` → sets to current abc token
+   - `dispatch_cache.clear()`
+3. `handler(Payload())` → `dispatch(Payload)`:
+   - `cache_token` is not None
+   - `get_cache_token()` == `cache_token` (no virtual registrations since)
+   - No clear needed
+   - `dispatch_cache[Payload]` → KeyError
+   - `registry[Payload]` → KeyError
+   - `_find_impl(Payload, {object, Plugin, int})`:
+     - `_compose_mro(Payload, [object, Plugin, int])`:
+       - `is_related(object)`: `object in bases` → False (bases = {Payload, object})... wait
+       
+       Actually `bases = set(cls.__mro__)` where `cls` is `Payload`. `Payload.__mro__` is `(Payload, object)`. So `bases = {Payload, object}`.
+       
+       `is_related(object)`: `object not in bases` → False (object IS in bases). So not related!
+       
+       Wait, that's wrong. Let me re-read `_compose_mro`:
+       ```python
+       def _compose_mro(cls, types):
+           bases = set(cls.__mro__)
+           def is_related(typ):
+               return (typ not in bases and hasattr(typ, '__mro__') and issubclass(cls, typ))
+           types = [n for n in types if is_related(n)]
+       ```
+       
+       So `is_related(object)`: `object not in {Payload, object}` → False. So `object` is filtered out!
+       
+       Hmm, that's a problem. Let me re-check.
+       
+       Actually wait, `types` here is `registry.keys()` which is `{object, Plugin, int}`. The `is_related` filter removes `object` because it's already in `bases`. Then `Plugin` is checked: `Plugin not in {Payload, object}` → True, `hasattr(Plugin, '__mro__')` → True, `issubclass(Payload, Plugin)` → False (not yet registered). So `Plugin` is filtered out too.
+       
+       `int`: `int not in {Payload, object}` → True, `hasattr(int, '__mro__')` → True, `issubclass(Payload, int)` → False. Filtered out.
+       
+       So `types` becomes `[]`! Then `_c3_mro(Payload, abcs=[])`:
+       - No bases to check for `__abstractmethods__`
+       - Returns just `mro` based on `Payload`'s bases
+       
+       Actually let me trace `_c3_mro(Payload, abcs=[])`:
+       - `cls = Payload`, `cls.__bases__ = (object,)`
+       - Loop: `hasattr(object, '__abstractmethods__')` → False (object doesn't have abstractmethods)
+       - So `boundary = 0`
+       - `explicit_bases = list(cls.__bases__[:0]) = []`
+       - `other_bases = list(cls.__bases__[0:]) = [object]`
+       - `abstract_bases = []` (no ABCs to add since `abcs` is empty)
+       - `explicit_c3_mros = []`
+       - `abstract_c3_mros = []`
+       - `other_c3_mros = [_c3_mro(object, abcs=[])]:
+         - `object.__bases__ = ()` → empty tuple
+         - boundary = 0
+         - explicit_bases = [], other_bases = []
+         - Returns `_c3_merge([[object]])` → `[object]`
+       - Returns `_c3_merge([[Payload]] + [] + [] + [[object]] + [] + [] + [object])`
+       
+       Wait, I'm confusing myself. Let me re-read `_c3_mro`:
+       
+       ```python
+       def _c3_mro(cls, abcs=None):
+           for i, base in enumerate(reversed(cls.__bases__)):
+               if hasattr(base, '__abstractmethods__'):
+                   boundary = len(cls.__bases__) - i
+                   break
+           else:
+               boundary = 0
+           abcs = list(abcs) if abcs else []
+           explicit_bases = list(cls.__bases__[:boundary])
+           abstract_bases = []
+           other_bases = list(cls.__bases__[boundary:])
+           for base in abcs:
+               if issubclass(cls, base) and not any(
+                       issubclass(b, base) for b in cls.__bases__
+                   ):
+                   abstract_bases.append(base)
+           for base in abstract_bases:
+               abcs.remove(base)
+           explicit_c3_mros = [_c3_mro(base, abcs=abcs) for base in explicit_bases]
+           abstract_c3_mros = [_c3_mro(base, abcs=abcs) for base in abstract_bases]
+           other_c3_mros = [_c3_mro(base, abcs=abcs) for base in other_bases]
+           return _c3_merge(
+               [[cls]] +
+               explicit_c3_mros + abstract_c3_mros + other_c3_mros +
+               [explicit_bases] + [abstract_bases] + [other_bases]
+           )
+       ```
+       
+       For `Payload` with `abcs=[]`:
+       - `cls.__bases__ = (object,)`
+       - `reversed((object,))` → iterates `object`
+       - `hasattr(object, '__abstractmethods__')` → False
+       - `boundary = 0`
+       - `explicit_bases = []` (bases[:0] = ())
+       - `other_bases = [object]` (bases[0:] = (object,))
+       - `abstract_bases = []` (abcs is empty)
+       - `explicit_c3_mros = []`
+       - `abstract_c3_mros = []`
+       - `other_c3_mros = [_c3_mro(object, abcs=[])]`:
+         - `object.__bases__ = ()`
+         - boundary = 0
+         - explicit_bases = [], other_bases = []
+         - Returns `_c3_merge([[object]] + [] + [] + [] + [[]] + [[]] + [[]])`
+         - = `_c3_merge([[object], [], [], [], [], [], []])`
+         - = `[object]`
+       - Returns `_c3_merge([[Payload]] + [] + [] + [[object]] + [[]] + [[]] + [[object]])`
+       - = `_c3_merge([[Payload], [object], [object]])`
+       - = `[Payload, object]`
+       
+       Back in `_find_impl`:
+       - `mro = [Payload, object]`
+       - Iterate: `Payload` not in registry, `object` in registry → match = object
+       - Return `registry[object]` = default handler ✓
+       
+       And `dispatch_cache[Payload] = default_handler`
+
+4. `Plugin.register(Payload)`:
+   - This is the ABC's register method
+   - It changes the internal abc registry and increments the cache token
+   - The singledispatch `dispatch_cache` is NOT cleared here (it's a separate mechanism)
+
+5. `handler(Payload())` → `dispatch(Payload)`:
+   - `cache_token` is not None (set in step 2)
+   - `current_token = get_cache_token()` → different from `cache_token` (because of virtual registration in step 4)
+   - `cache_token != current_token` → True
+   - `dispatch_cache.clear()` → removes the cached `Payload → default`
+   - `cache_token = current_token`
+   - `dispatch_cache[Payload]` → KeyError (cleared)
+   - `registry[Payload]` → KeyError
+   - `_find_impl(Payload, {object, Plugin, int})`:
+     - `_compose_mro(Payload, {object, Plugin, int})`:
+       - `bases = {Payload, object}`
+       - `is_related(object)`: `object not in {Payload, object}` → False → filtered
+       - `is_related(Plugin)`: `Plugin not in {Payload, object}` → True, `hasattr(Plugin, '__mro__')` → True, `issubclass(Payload, Plugin)` → True (virtual registration!) → KEPT
+       - `is_related(int)`: `int not in {Payload, object}` → True, `issubclass(Payload, int)` → False → filtered
+       - `types = [Plugin]`
+       - Remove strict bases: `Plugin` is not a strict base of any other in types → kept
+       - Stabilize: `Plugin.__subclasses__()` → includes `Payload` (virtual), `issubclass(Payload, Payload)` → True, but `Payload in bases` → True... 
+       
+       Wait, let me re-check. In `_compose_mro`:
+       ```python
+       type_set = set(types)  # {Plugin}
+       mro = []
+       for typ in types:  # typ = Plugin
+           found = []
+           for sub in typ.__subclasses__():  # includes Payload (virtual subclass)
+               if sub not in bases and issubclass(cls, sub):
+                   # sub = Payload, bases = {Payload, object}
+                   # Payload not in {Payload, object} → False!
+                   # So this condition fails
+                   found.append(...)
+           if not found:
+               mro.append(typ)
+               continue
+           ...
+       ```
+       
+       So `found` is empty (because `Payload in bases`), so `mro.append(Plugin)` → `mro = [Plugin]`.
+       
+       Then `_c3_mro(Payload, abcs=[Plugin])`:
+       - `cls.__bases__ = (object,)`
+       - boundary = 0
+       - `explicit_bases = []`
+       - `other_bases = [object]`
+       - `abcs = [Plugin]`
+       - Check: `issubclass(Payload, Plugin)` → True, and `not any(issubclass(b, Plugin) for b in (object,))` → `not issubclass(object, Plugin)` → True
+       - So `abstract_bases = [Plugin]`
+       - `abcs.remove(Plugin)` → `abcs = []`
+       - `explicit_c3_mros = []`
+       - `abstract_c3_mros = [_c3_mro(Plugin, abcs=[])]:`
+         - `Plugin.__bases__ = (ABC,)` (assuming ABC is the base)
+         
+         Hmm wait, what are `Plugin`'s bases? I defined `class Plugin(ABC)`. So `Plugin.__bases__ = (ABC,)`.
+         
+         Actually, `ABC` here is `abc.ABC`. Let me think... `class Plugin(ABC)` means `Plugin.__bases__ = (ABC,)` where `ABC = abc.ABC`.
+         
+         `_c3_mro(Plugin, abcs=[])`:
+         - `Plugin.__bases__ = (ABC,)`
+         - `hasattr(ABC, '__abstractmethods__')` → ABC has `__abstractmethods__ = frozenset()` (empty, since ABC itself doesn't define abstract methods)
+         
+         Wait, does `abc.ABC` have `__abstractmethods__`? Let me think... `ABC` is defined as:
+         ```python
+         class ABC(metaclass=ABCMeta):
+             pass
+         ```
+         With `ABCMeta`, `__abstractmethods__` is a set of abstract method names. For `ABC` itself, it's `frozenset()` (empty).
+         
+         So `hasattr(ABC, '__abstractmethods__')` → True!
+         
+         So: `boundary = 1` (the loop breaks at `i=0`, `base=ABC`, `hasattr(ABC, '__abstractmethods__')` → True, `boundary = len((ABC,)) - 0 = 1`)
+         
+         `explicit_bases = [ABC]` (bases[:1])
+         `other_bases = []` (bases[1:])
+         `abstract_bases = []` (abcs is empty)
+         
+         `explicit_c3_mros = [_c3_mro(ABC, abcs=[])]:`
+         - `ABC.__bases__ = (object,)`
+         - `hasattr(object, '__abstractmethods__')` → False
+         - boundary = 0
+         - explicit_bases = [], other_bases = [object]
+         - other_c3_mros = [_c3_mro(object, abcs=[])] = [[object]]
+         - Returns `_c3_merge([[ABC]] + [] + [] + [[object]] + [[]] + [[]] + [[object]])`
+         - = `_c3_merge([[ABC], [object], [object]])`
+         - = `[ABC, object]`
+         
+         Back to `_c3_mro(Plugin, abcs=[])`:
+         - Returns `_c3_merge([[Plugin]] + [[ABC, object]] + [] + [] + [[ABC]] + [[]] + [[]])`
+         - = `_c3_merge([[Plugin], [ABC, object], [ABC]])`
+         - = `[Plugin, ABC, object]`
+       
+       Back to `_c3_mro(Payload, abcs=[Plugin])`:
+       - `abstract_c3_mros = [[Plugin, ABC, object]]`
+       - `other_c3_mros = [_c3_mro(object, abcs=[])] = [[object]]`
+       - Returns `_c3_merge([[Payload]] + [] + [[Plugin, ABC, object]] + [[object]] + [[]] + [[Plugin]] + [[object]])`
+       - = `_c3_merge([[Payload], [Plugin, ABC, object], [object], [Plugin], [object]])`
+       - Let me trace C3:
+         - Candidates: Payload (only in first), Plugin (in 2nd and 4th), ABC, object
+         - Result: Payload first
+         - Remove Payload: `[[], [Plugin, ABC, object], [object], [Plugin], [object]]`
+         - Next: Plugin (head of 2nd, also in 4th but as head)
+           - Check: Plugin in [ABC, object]? No. Plugin in [object]? No. Plugin in [] (after removing from 4th)? 
+           
+         Actually, let me be more careful with C3 merge. The sequences are:
+         `[Payload]`, `[Plugin, ABC, object]`, `[object]`, `[Plugin]`, `[object]`
+         
+         Round 1:
+         - Candidates: Payload (pos 0 in seq 1), Plugin (pos 0 in seq 2), object (pos 0 in seq 3), Plugin (pos 0 in seq 4), object (pos 0 in seq 5)
+         - Payload: appears in no other sequence's tail → candidate ✓
+         - Result: [Payload]
+         - Remove Payload: `[], [Plugin, ABC, object], [object], [Plugin], [object]`
+         
+         Round 2:
+         - Candidates: Plugin (seq 2), object (seq 3), Plugin (seq 4), object (seq 5)
+         - Plugin: appears in seq 2's tail? No (it's the head). Appears in seq 4? It's the head of seq 4. Check if Plugin appears in any OTHER sequence's tail: seq 2 tail = [ABC, object] → no. seq 3 tail = [] → no. seq 5 tail = [] → no. So Plugin is a candidate ✓
+         - Result: [Payload, Plugin]
+         - Remove Plugin from seq 2 and seq 4: `[], [ABC, object], [object], [], [object]`
+         
+         Round 3:
+         - Candidates: ABC (seq 2), object (seq 3), object (seq 5)
+         - ABC: appears in any other's tail? Seq 2 tail = [object]. Seq 3 = [object]. No. → candidate ✓
+         - Result: [Payload, Plugin, ABC]
+         - Remove ABC: `[], [object], [object], [], [object]`
+         
+         Round 4:
+         - Candidates: object (all remaining)
+         - object: candidate ✓
+         - Result: [Payload, Plugin, ABC, object]
+         - Remove object from all.
+         
+         Final MRO: `[Payload, Plugin, ABC, object]`
+       
+       Back in `_find_impl`:
+       - `mro = [Payload, Plugin, ABC, object]`
+       - Iterate:
+         - `Payload`: not in registry
+         - `Plugin`: in registry! → match = Plugin
+         - But wait, we need to check the ambiguity condition:
+           ```python
+           if match is not None:
+               if (t in registry and t not in cls.__mro__
+                             and match not in cls.__mro__
+                             and not issubclass(match, t)):
+                   raise RuntimeError(...)
+               break
+           ```
+           This is checked when `match is not None` AND we're looking at another `t`. Since `match = Plugin` and the next `t` would be `ABC`:
+           - `ABC in registry`? No (registry has object, Plugin, int)
+           - So we don't enter the if, we just `break`
+         
+         Actually wait, let me re-read `_find_impl`:
+         ```python
+         def _find_impl(cls, registry):
+             mro = _compose_mro(cls, registry.keys())
+             match = None
+             for t in mro:
+                 if match is not None:
+                     if (t in registry and t not in cls.__mro__
+                               and match not in cls.__mro__
+                               and not issubclass(match, t)):
+                         raise RuntimeError(...)
+                     break
+                 if t in registry:
+                     match = t
+             return registry.get(match)
+         ```
+         
+         - `t = Payload`: match is None, `Payload in registry`? No
+         - `t = Plugin`: match is None, `Plugin in registry`? Yes → match = Plugin
+         - `t = ABC`: match is not None. Check: `ABC in registry`? No. So skip the if. `break`.
+         - Return `registry[Plugin]` = `_handle` ✓
+       
+       `dispatch_cache[Payload] = _handle`
+       Return `_handle`
+   
+   So `handler(Payload())` calls `_handle(Payload_instance)` which returns `"union"` ✓
+
+The logic checks out. The fix in functools.py (already applied) correctly handles this case.
+
+Now let me also think about whether there could be issues with `typing.Union[Plugin, int]`. The `_is_union` function checks:
+```python
+def _is_union(cls):
+    if isinstance(cls, types.UnionType):
+        return True
+    import typing
+    return getattr(cls, '__origin__', None) is typing.Union
+```
+
+For `typing.Union[Plugin, int]`:
+- `isinstance(cls, types.UnionType)` → False
+- `getattr(cls, '__origin__', None)` → `typing.Union` → `is typing.Union` → True
+
+And `cls.__args__` → `(Plugin, int)` (or `(int, Plugin)`? Let me check the order). Actually, `typing.Union[Plugin, int].__args__` → `(Plugin, int)`. Yes, it preserves order.
+
+So both forms work identically.
+
+Now, one concern: in the test, when I do `@handler.register(Union[Plugin, int])`, the decorator form passes `cls=Union[Plugin, int]` and `func=_handle`. In the register function:
+```python
+def register(cls, func=None):
+    ...
+    if func is None:
+        ...
+    # func is not None here (it's _handle)
+    if _is_union(cls):
+        ...
+```
+
+Yes, `func` is `_handle` (not None), so it skips the `if func is None` block and goes straight to the union handling. Good.
+
+Now let me write the documentation. I need to read the current content of Doc/howto/union-dispatch.rst first. Let me check if it's empty or has content.
+
+Actually, I realize I should be efficient. Let me:
+1. This request: read Doc/howto/union-dispatch.rst AND update account
+2. Next: patch test file
+3. Next: patch doc file
+4. Next: run check
+5. Next: submit
+
+That's 5 requests. I have 14, so plenty of room.
+
+Actually, wait. Can I combine the read and the test file patch? No, one operation per request.
+
+Let me just do the read first, since I need to know what's in the doc file before I can patch it.
+
+Hmm, actually, maybe the doc file is empty (just created by the previous job). Let me just read it.
+
+Wait, actually I can be smarter. Let me use `replace_region` for the test file since I have the full source region visible (SRC-ac6ec1c97063f3fc994bfe30ccc9980e1b5b72c5844a390be30e7b39b10bded3). I can replace the entire file content in one operation.
+
+For the doc, I need to read it first.
+
+Let me do this:
+- This request: read Doc/howto/union-dispatch.rst (to see its content)
+- Next: replace_region for tests/test_virtual_registration.py
+- Next: patch/replace for Doc/howto/union-dispatch.rst
+- Next: check public
+- Next: submit
+
+Let me start.

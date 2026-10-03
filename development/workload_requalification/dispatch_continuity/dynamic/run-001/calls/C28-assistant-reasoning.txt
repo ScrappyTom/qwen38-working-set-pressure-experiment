@@ -1,0 +1,534 @@
+Let me analyze the current state:
+
+1. **Task**: Complete the union-registration contribution. The fix in `Lib/functools.py` (cache_token tracking) has been applied. Tests have been written. I still need to:
+   - Add documentation to `Doc/howto/union-dispatch.rst` with executable `>>>` examples of union registration and late virtual registration, plus the limitation concerning parameterized generic dispatch members.
+   - Run the public check.
+   - Submit.
+
+2. **Current state**:
+   - `Lib/functools.py` - Already fixed (cache_token tracking). Current candidate: `f3a7aa6939ca323754dca1df01bd3785efe8a3cf76fffef0e007b64c693471b4`
+   - `tests/test_virtual_registration.py` - Tests written (PEP 604 union and typing.Union late virtual registration tests). 
+   - `Doc/howto/union-dispatch.rst` - Only has the title and a blank line. Needs content.
+
+3. **What I need to do**:
+   - Write the documentation in `Doc/howto/union-dispatch.rst` with:
+     - Executable `>>>` examples of union registration
+     - Late virtual registration example
+     - Limitation concerning parameterized generic dispatch members
+   - Run the public check
+   - Submit
+
+Let me look at the doc file. Currently it's just:
+```
+Union dispatch and virtual registration
+======================================
+
+```
+(3 lines)
+
+I need to add content after line 3. The doc needs:
+1. A concise standalone explanation
+2. Executable `>>>` examples of union registration
+3. Late virtual registration example
+4. Limitation concerning parameterized generic dispatch members
+
+Let me think about what the limitation regarding parameterized generic dispatch members is. Looking at the `register` code in `Lib/functools.py`:
+
+```python
+if _is_union(cls):
+    for type_ in cls.__args__:
+        if not isinstance(type_, type):
+            raise TypeError(
+                f"Invalid union member {type_!r}: "
+                f"must be a runtime class"
+            )
+```
+
+So union members must be runtime classes (instances of `type`). Parameterized generics like `list[int]` are not instances of `type` (they're `types.GenericAlias`), so they can't be union members. This is the limitation.
+
+Now let me write the documentation. I'll use `replace_region` on the existing content (lines 1-3) to replace with the full document.
+
+Actually, looking at the file more carefully - it's 3 lines:
+```
+Union dispatch and virtual registration
+======================================
+
+```
+
+I should add content after the blank line. Let me use a patch to add content after line 3.
+
+Wait, let me think about the structure. The file has:
+- Line 1: `Union dispatch and virtual registration`
+- Line 2: `======================================`
+- Line 3: (blank line)
+
+I'll patch to add content after the blank line. Let me use the old text as lines 2-3 and extend it.
+
+Actually, let me just patch by replacing the end of the file. The file ends with a blank line (line 3). I'll add content after that.
+
+Let me use `patch` with:
+- old: the current file content (or a unique portion)
+- new: the full file with documentation
+
+Actually, the file is only 3 lines. Let me just use `replace_region` on the whole file since it's small and fully visible.
+
+Wait, I need to be careful. The file is:
+```
+Union dispatch and virtual registration
+======================================
+
+```
+
+That's 3 lines with the last being empty (just a newline). Let me use patch to add content. I'll match the last line (the empty one) - actually that might be tricky. Let me match lines 1-3.
+
+Actually, looking at the content more carefully:
+```
+"Union dispatch and virtual registration\n======================================\n\n"
+```
+
+That's the full content - 3 lines where line 3 is empty. Let me use patch:
+
+old: `Union dispatch and virtual registration\n======================================\n`
+new: The full documentation
+
+Wait, I need to be more careful. The file content is:
+```
+Union dispatch and virtual registration
+======================================
+
+```
+
+So the raw bytes are: `Union dispatch and virtual registration\n======================================\n\n`
+
+Let me use a patch that replaces the whole thing. I'll use the header as my anchor since it's unique enough.
+
+Let me write the documentation:
+
+```rst
+Union dispatch and virtual registration
+======================================
+
+The ``functools.singledispatch`` decorator supports registering handlers for
+unions of types.  A union handler is invoked whenever the first argument's
+class matches (or is a subclass of) any member of the union.  Both PEP 604
+syntax (``A | B``) and ``typing.Union[A, B]`` are accepted.
+
+Union registration
+------------------
+
+>>> import functools
+>>> from abc import ABC
+>>>
+>>> class PluginBase(ABC):
+...     pass
+>>>
+>>> @functools.singledispatch
+... def handler(x):
+...     return "default"
+>>>
+>>> @handler.register(PluginBase | int)
+... def union_handler(x):
+...     return "union"
+>>>
+>>> handler(42)
+'union'
+
+The registered implementation is stored once per union member, so the
+dispatcher resolves the match through the normal method-resolution path.
+
+Late virtual registration
+-------------------------
+
+A class that is registered as a *virtual* subclass of a union member after
+instances have already been dispatched will be picked up on the next dispatch
+call, without any explicit cache-clear:
+
+>>> class Payload:
+...     pass
+>>>
+>>> p = Payload()
+>>> handler(p)
+'default'
+>>>
+>>> PluginBase.register(Payload)
+>>>
+>>> handler(p)
+'union'
+
+The dispatcher tracks the ``abc`` cache token internally; when the token
+changes (as it does when ``register()`` mutates the ABC cache), stale
+entries are discarded transparently.
+
+Limitation: parameterized generics
+---------------------------------
+
+Union members must be concrete runtime classes (instances of ``type``).
+Parameterized generic aliases such as ``list[int]`` are *not* valid union
+members and will raise ``TypeError``:
+
+>>> @handler.register(PluginBase | int)
+... def union_handler(x):
+...     return "union"
+Traceback (most recent call last):
+...
+TypeError: Invalid union member ...: must be a runtime class
+
+(Actually, the example above already succeeded. Let me fix the limitation example.)
+
+Let me reconsider. The limitation is that you can't use parameterized generics as union members:
+
+>>> from typing import List
+>>> try:
+...     @handler.register(PluginBase | List)
+...     def h(x):
+...         pass
+... except TypeError as e:
+...     print(e)
+
+Hmm, that's not quite right either. `List` without parameters is actually `typing.List` which is a generic alias. Let me think...
+
+Actually `typing.List` (without subscript) is `typing.List` itself, and `isinstance(typing.List, type)` is... let me think. In Python 3.9+, `typing.List` is `list` (the class). But `typing.List[int]` is a `types.GenericAlias` which is NOT an instance of `type`.
+
+So the limitation is: you can't write `A | list[int]` because `list[int]` is a `types.GenericAlias`, not a class.
+
+Let me write a cleaner example:
+
+```python
+>>> import types
+>>> isinstance(list[int], type)
+False
+>>> try:
+...     @handler.register(PluginBase | list[int])
+...     def bad(x): ...
+... except TypeError as e:
+...     print(type(e).__name__)
+TypeError
+```
+
+Actually wait - `PluginBase | list[int]` - would this even create a valid union? In Python 3.10+, `A | B` calls `A.__or__(B)` which returns a `types.UnionType`. But does it validate members? Let me check... Actually `int | list[int]` in CPython creates `int | list[int]` as a UnionType with args `(int, list[int])`. The validation happens in `register()`, not in the `|` operator.
+
+So:
+```python
+>>> import functools
+>>> @functools.singledispatch
+... def f(x):
+...     return "default"
+>>> @f.register(int | list[int])
+... def bad(x):
+...     return "bad"
+Traceback (most recent call last):
+  File "<stdin>", line 2, in <module>
+  File "Lib/functools.py", line XXX, in register
+    raise TypeError(
+TypeError: Invalid union member list[int]: must be a runtime class
+```
+
+Let me write this up properly. I need to be careful that the `>>>` examples are actually correct and would pass `doctest` if checked.
+
+Actually, the task says "The new public definition runs... and the documentation examples." So the `>>>` examples will be executed. I need to make sure they're correct.
+
+Let me be very careful about what the examples show. Let me think about what would actually happen:
+
+1. `PluginBase | int` - creates a `types.UnionType` with args `(PluginBase, int)` ✓
+2. Registering it works because both are `type` instances ✓
+3. `list[int]` is a `types.GenericAlias`, `isinstance(list[int], type)` is `False`
+4. So `PluginBase | list[int]` creates a union, but `register` will reject it
+
+Let me write the full doc now. I need to be careful about the doctest format.
+
+For the error example, I should show the actual traceback or just the error. In doctest, if I show:
+```
+>>> @handler.register(PluginBase | list[int])
+... def bad(x): ...
+```
+
+This would raise a TypeError. In doctest format, I'd show:
+```
+>>> @handler.register(PluginBase | list[int])
+... def bad(x):
+...     return "bad"
+Traceback (most recent call last):
+  File "<stdin>", line 2, in <module>
+...
+TypeError: Invalid union member list[int]: must be a runtime class
+```
+
+Hmm, but doctests with tracebacks are tricky. The task says "executable >>> examples" - maybe I should show the error in a try/except instead for cleanliness.
+
+Let me draft the doc:
+
+```rst
+Union dispatch and virtual registration
+======================================
+
+The ``functools.singledispatch`` decorator supports registering handler
+implementations for unions of concrete types.  Both PEP 604 syntax
+(``A | B``) and ``typing.Union[A, B]`` are recognised.  A union handler is
+selected whenever the dispatch class is (or is a subclass of) any member of
+the union.
+
+Union registration
+------------------
+
+>>> import functools
+>>> from abc import ABC
+>>>
+>>> class PluginBase(ABC):
+...     pass
+>>>
+>>> class Payload:
+...     pass
+>>>
+>>> @functools.singledispatch
+... def handler(x):
+...     return "default"
+>>>
+>>> @handler.register(PluginBase | int)
+... def union_handler(x):
+...     return "union"
+>>>
+>>> handler(42)
+'union'
+>>> handler("text")
+'default'
+
+Late virtual registration
+-------------------------
+
+When a class is registered as a virtual subclass of a union member *after*
+instances of that class have already been dispatched, the next call to the
+dispatcher transparently picks up the new relationship.  No manual cache
+clear is required:
+
+>>> p = Payload()
+>>> handler(p)          # dispatches to the default handler
+'default'
+>>>
+>>> PluginBase.register(Payload)   # late virtual registration
+>>>
+>>> handler(p)          # now dispatches to the union handler
+'union'
+>>> handler(42)         # int still works
+'union'
+
+The dispatcher tracks the ``abc`` cache token; when the token changes
+(as ``ABCMeta.register`` mutates the ABC cache), stale dispatch entries
+are discarded on the next call.
+
+Limitation: parameterized generics
+---------------------------------
+
+Union members must be concrete runtime classes (instances of ``type``).
+Parameterized generic aliases such as ``list[int]`` are **not** valid
+members and are rejected at registration time:
+
+>>> from typing import Union
+>>> try:
+...     @handler.register(PluginBase | list[int])
+...     def bad(x):
+...         pass
+... except TypeError as exc:
+...     print(exc)
+Invalid union member list[int]: must be a runtime class
+```
+
+Wait, I need to verify: does `PluginBase | list[int]` actually work at the `|` level? In CPython 3.10+:
+- `int | list[int]` → This calls `int.__or__(list[int])`. Since `int` doesn't define `__or__` for this, it falls to... actually `type.__or__` was added in 3.10 for `type.__class_getitem__`. Let me think...
+
+Actually in Python 3.10+, `X | Y` where X is a type uses `type.__or__` which creates a `types.UnionType`. It does NOT validate that Y is a type. So `PluginBase | list[int]` will successfully create a UnionType with args `(PluginBase, list[int])`. The validation happens in `register()`.
+
+But wait - does `list[int]` work as an argument to `|`? Let me think... `int | list[int]` - yes, this works in 3.10+ and creates `int | list[int]` as a UnionType. The `|` operator doesn't validate members.
+
+So my example is correct. The union is created, but `register` rejects it.
+
+Actually, let me double-check: will the doctest checker actually run these? The task says "the documentation examples" are part of the check. So yes, they need to be correct.
+
+Let me also make sure the `typing.Union` form works the same way. Actually, for the doc I'll stick with PEP 604 for simplicity since that's the modern form.
+
+One concern: in the `>>>` examples, after `handler(42)` returns `'union'`, when I do `handler("text")` - "text" is a `str`, which is not a subclass of `PluginBase` or `int`, so it should fall to the default. Good.
+
+Let me also verify: `handler(p)` where `p` is a `Payload` instance. `Payload` is not a subclass of `PluginBase` or `int`, so it goes to default. After `PluginBase.register(Payload)`, `Payload` becomes a virtual subclass of `PluginBase`, so `handler(p)` should now find the union handler. Good.
+
+Now let me format this as a proper patch. The file currently has 3 lines. I'll replace the whole file content.
+
+The current content (exact bytes):
+```
+Union dispatch and virtual registration
+======================================
+
+```
+
+That's: `Union dispatch and virtual registration\n======================================\n\n`
+
+Wait, is line 3 truly empty (just `\n`) or is there no trailing newline? The file has 3 lines and 26682 bytes total for the Doc directory (2 files). Let me check: the file_sha256 is `d52709bbda6d7ec3ebd2b0f6571fba09c7b69734b9210df8768be570cc4f9e2a` and file_total_lines is 3.
+
+Looking at the content field: `"Union dispatch and virtual registration\n======================================\n\n"` - yes, that's the content with a trailing newline after the blank line. Actually wait, the content shown is:
+```
+"Union dispatch and virtual registration\n======================================\n\n"
+```
+
+Hmm, that's 2 newlines at the end - one ending line 2, one ending line 3 (which is empty). So the file is:
+- Line 1: `Union dispatch and virtual registration\n`
+- Line 2: `======================================\n`
+- Line 3: `\n`
+
+Wait, that gives 3 lines. A "line" in most conventions ends with `\n`. So:
+- `Union dispatch and virtual registration\n` (line 1)
+- `======================================\n` (line 2)  
+- `\n` (line 3 - empty)
+
+That's correct for 3 lines.
+
+Now I'll use `replace_region` on the whole file (region `SRC-d586117f0881676b2bad838f887743f11b48348afe5b3a1a2c1977efb316e824`). The region covers lines 1-3, the whole file.
+
+Let me write the replacement. I need to be careful with the RST formatting and doctest examples.
+
+Actually, wait. Let me reconsider whether the doctest examples will actually be checked by the public check. The task says: "The new public definition runs preserved feature checks, original single-dispatch tests, your new regressions and their sensitivity to the historical union-support implementation, and the documentation examples."
+
+So yes, documentation examples are part of the check. They need to be valid and produce the shown output.
+
+Let me be extra careful about the output. In CPython:
+- `handler(42)` where handler is a singledispatch with `PluginBase | int` registered → returns `'union'`
+- In the doctest, the repr of `'union'` is `'union'` (single quotes in Python repr)
+
+Let me write the final version. I'll use `replace_region` since the whole file is small and visible.
+
+Actually, I realize I should double-check one thing: in the limitation example, will the `@handler.register(...)` decorator syntax work in a doctest? The `@` syntax in doctests... Let me think. In a doctest:
+
+```
+>>> try:
+...     @handler.register(PluginBase | list[int])
+...     def bad(x):
+...         pass
+... except TypeError as exc:
+...     print(exc)
+```
+
+This should work - the `@` decorator is just function application, and in a try block it should be fine. The `register` method is called with `cls=PluginBase | list[int]` and `func=None` (since it's used as a bare decorator). Wait no - when used as `@handler.register(PluginBase | list[int])`, `handler.register` is called with `cls=PluginBase | list[int]` and `func=None`. Looking at the code:
+
+```python
+def register(cls, func=None):
+    nonlocal cache_token
+    if func is None:
+        if isinstance(cls, type):
+            return lambda f: register(cls, f)
+        if _is_union(cls):
+            return lambda f: register(cls, f)
+        ...
+```
+
+So when `func is None` and `_is_union(cls)` is True, it returns `lambda f: register(cls, f)`. Then the lambda is called with `bad`. Inside that, `register(cls, bad)` is called with `func=bad`. Then:
+
+```python
+    if _is_union(cls):
+        for type_ in cls.__args__:
+            if not isinstance(type_, type):
+                raise TypeError(
+                    f"Invalid union member {type_!r}: "
+                    f"must be a runtime class"
+                )
+```
+
+So it will raise `TypeError: Invalid union member list[int]: must be a runtime class`.
+
+The repr of `list[int]` is `'list[int]'`. So the error message would be:
+`Invalid union member list[int]: must be a runtime class`
+
+Good, my example is correct.
+
+Now, one more thought: the `>>>` prompt continuation. In doctests:
+```
+>>> try:
+...     @handler.register(PluginBase | list[int])
+...     def bad(x):
+...         pass
+... except TypeError as exc:
+...     print(exc)
+Invalid union member list[int]: must be a runtime class
+```
+
+This should work. Let me finalize the document.
+
+Let me also think about whether I need `import functools` in the doc examples or if it's assumed. Since it's a standalone howto, I should include the import. But I also need to be careful - if the doctest is run in a fresh namespace, I need all imports.
+
+Let me write the complete replacement:
+
+```
+Union dispatch and virtual registration
+======================================
+
+The ``functools.singledispatch`` decorator supports registering handler
+implementations for unions of concrete types.  Both PEP 604 syntax
+(``A | B``) and ``typing.Union[A, B]`` are recognised.  A union handler is
+selected whenever the dispatch class is, or is a subclass of, any member of
+the union.
+
+Union registration
+------------------
+
+>>> import functools
+>>> from abc import ABC
+>>>
+>>> class PluginBase(ABC):
+...     pass
+>>>
+>>> class Payload:
+...     pass
+>>>
+>>> @functools.singledispatch
+... def handler(x):
+...     return "default"
+>>>
+>>> @handler.register(PluginBase | int)
+... def union_handler(x):
+...     return "union"
+>>>
+>>> handler(42)
+'union'
+>>> handler("hello")
+'default'
+
+Late virtual registration
+-------------------------
+
+When a class is registered as a *virtual* subclass of a union member after
+instances of that class have already been dispatched, the next dispatcher
+call transparently picks up the new relationship.  No manual cache clear is
+required:
+
+>>> p = Payload()
+>>> handler(p)
+'default'
+>>>
+>>> PluginBase.register(Payload)
+>>>
+>>> handler(p)
+'union'
+>>> handler(42)
+'union'
+
+The dispatcher tracks the ``abc`` cache token internally.  When the token
+changes (as it does when ``ABCMeta.register`` mutates the ABC cache),
+stale dispatch-cache entries are discarded on the next call.
+
+Limitation: parameterized generics
+----------------------------------
+
+Union members must be concrete runtime classes (instances of ``type``).
+Parameterized generic aliases such as ``list[int]`` are **not** valid union
+members and are rejected at registration time:
+
+>>> try:
+...     @handler.register(PluginBase | list[int])
+...     def bad(x):
+...         pass
+... except TypeError as exc:
+...     print(exc)
+Invalid union member list[int]: must be a runtime class
+```
+
+This looks good. Let me use `replace_region` with the region reference for the whole file.
+
+The region is `SRC-d586117f0881676b2bad838f887743f11b48348afe5b3a1a2c1977efb316e824` and the current candidate is `f3a7aa6939ca323754dca1df01bd3785efe8a3cf76fffef0e007b64c693471b4`.
+
+I'll use the literal SOURCE reply format since the content contains special characters that would be awkward in JSON.

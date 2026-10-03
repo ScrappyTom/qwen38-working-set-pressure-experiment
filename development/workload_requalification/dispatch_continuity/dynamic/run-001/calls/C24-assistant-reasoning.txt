@@ -1,0 +1,305 @@
+Let me analyze the current state:
+
+1. **Task**: I need to fix `singledispatch register()` so that union types containing ABC members properly track `abc cache_token`. The specific bug: `hasattr(cls, '__abstractmethods__')` is False for union types (since a union type itself doesn't have that attribute), so `cache_token` stays None. The fix: iterate union members checking for `__abstractmethods__`.
+
+2. **Current state**:
+   - `Lib/functools.py` is fully visible (1000 lines)
+   - `tests/test_virtual_registration.py` is fully visible (5 lines - just imports and a comment)
+   - `Doc/howto/` directory exists
+   - Public check has passed (CHK-0022) but `check_definition_matches: false` - meaning the check definition doesn't match current expectations (it's from a previous job)
+   - `verification.submission.eligible: false` - I need a passing public check for this job
+
+3. **What I see in the current code** (in the `register` function):
+```python
+if cache_token is None and hasattr(cls, '__abstractmethods__'):
+    cache_token = get_cache_token()
+dispatch_cache.clear()
+```
+
+The bug: when `cls` is a union type, `hasattr(cls, '__abstractmethods__')` will be False (a union type like `int | SomeABC` doesn't have `__abstractmethods__`). So even if one of the union members is an ABC, the cache token won't be set, meaning virtual registrations done later won't be picked up.
+
+The fix should be:
+- When `cls` is a union type, check each member for `__abstractmethods__`
+- When `cls` is not a union type, check `cls` directly
+
+Let me think about what the fix should look like:
+
+```python
+if cache_token is None:
+    if _is_union(cls):
+        if any(hasattr(type_, '__abstractmethods__') for type_ in cls.__args__):
+            cache_token = get_cache_token()
+    elif hasattr(cls, '__abstractmethods__'):
+        cache_token = get_cache_token()
+```
+
+Wait, but I also need to think about the broader scenario. The task says:
+- Register a handler for a union containing an abstract plugin base and int
+- Dispatch an unrelated Payload instance
+- Then register Payload as a virtual subclass of that base
+- A later dispatch of the same Payload class must use the union handler
+
+The issue is: when we register a union type handler, we store it in the registry under each member type. So if we register for `PluginBase | int`, we store `registry[PluginBase] = func` and `registry[int] = func`. When we dispatch `Payload`, `_find_impl` walks the MRO. If `Payload` doesn't inherit from `PluginBase` or `int`, it won't find the union handler directly.
+
+But wait - the scenario is:
+1. Register handler for `PluginBase | int` → `registry[PluginBase] = func`, `registry[int] = func`
+2. Dispatch a `Payload` instance → `Payload` is not a subclass of `PluginBase` or `int`, so it falls through to `object` → uses default
+3. Register `Payload` as virtual subclass of `PluginBase` → this changes the ABC's internal state, so `issubclass(Payload, PluginBase)` is now True
+4. Later dispatch of `Payload` → should now find `PluginBase` in its MRO → uses the union handler
+
+The problem: at step 2, the dispatch result is cached in `dispatch_cache[Payload] = default_impl`. At step 3, the ABC registry changes, but `cache_token` is None (because when we registered the union, `hasattr(union_type, '__abstractmethods__')` was False). So at step 4, the cache isn't invalidated, and we still get the stale cached result.
+
+The fix: when registering a union type that contains ABC members, set `cache_token = get_cache_token()`. This way, when the ABC state changes (virtual registration), the cache will be invalidated on the next dispatch.
+
+Let me look at the dispatch function:
+```python
+def dispatch(cls):
+    nonlocal cache_token
+    if cache_token is not None:
+        current_token = get_cache_token()
+        if cache_token != current_token:
+            dispatch_cache.clear()
+            cache_token = current_token
+```
+
+So if `cache_token` is None, the cache is never invalidated. That's the bug.
+
+Now let me plan my work:
+
+1. **Fix `Lib/functools.py`**: Change the `cache_token` logic in `register()` to handle union types
+2. **Write `tests/test_virtual_registration.py`**: Add at least 2 meaningful regression tests
+3. **Create `Doc/howto/union-dispatch.rst`**: With executable `>>>` examples
+
+Let me first understand the exact code I need to change. The relevant section in `register()`:
+
+```python
+        if cache_token is None and hasattr(cls, '__abstractmethods__'):
+            cache_token = get_cache_token()
+        dispatch_cache.clear()
+```
+
+This should become something like:
+
+```python
+        if cache_token is None:
+            if _is_union(cls):
+                if any(hasattr(type_, '__abstractmethods__') for type_ in cls.__args__):
+                    cache_token = get_cache_token()
+            elif hasattr(cls, '__abstractmethods__'):
+                cache_token = get_cache_token()
+        dispatch_cache.clear()
+```
+
+Now for the tests. I need to create tests that:
+1. Cover union form: register a handler for a union containing an ABC, dispatch an unrelated class, then virtually register that class under the ABC, then re-dispatch and verify the union handler is used.
+2. Cover both union forms (maybe `int | ABC` and `ABC | int`? Or maybe `typing.Union` vs `types.UnionType`?)
+
+Actually re-reading: "covering both union forms and late registration". I think "both union forms" means both `int | ABC` (types.UnionType) and possibly `typing.Union[int, ABC]`. Let me think about what makes sense.
+
+Actually, looking more carefully at the task: "Add at least two meaningful regressions to tests/test_virtual_registration.py covering both union forms and late registration."
+
+I think the two tests should be:
+1. Union with ABC (e.g., `PluginBase | int`) - late virtual registration
+2. Union without ABC (e.g., `int | str`) - to verify that non-ABC unions still work (or maybe another ABC-based scenario)
+
+Actually, "both union forms" might mean:
+- `int | PluginBase` (types.UnionType syntax)
+- Or maybe it means: a union where the ABC is the first member vs. the second member?
+
+Or perhaps "both union forms" refers to:
+- A union containing an ABC and a regular type
+- A union containing two ABCs
+
+Let me just write two meaningful tests:
+1. Test that a union type containing an ABC properly tracks cache tokens when a virtual subclass is registered after initial dispatch
+2. Test that a union type containing multiple types (including an ABC) works correctly with late registration
+
+Let me think about what the tests need:
+
+```python
+import functools
+import unittest
+from abc import ABC, abstractmethod
+
+
+class PluginBase(ABC):
+    @abstractmethod
+    def process(self):
+        pass
+
+
+class Payload:
+    def process(self):
+        return "payload"
+
+
+@functools.singledispatch
+def handle(obj):
+    return f"default: {type(obj).__name__}"
+
+
+@handle.register(PluginBase | int)
+def _handler(obj):
+    return f"union: {type(obj).__name__}"
+
+
+class TestUnionLateVirtualRegistration(unittest.TestCase):
+    def test_virtual_registration_after_union_dispatch(self):
+        # Dispatch Payload before virtual registration - should use default
+        result = handle(Payload())
+        self.assertEqual(result, "default: Payload")
+        
+        # Now virtually register Payload as a subclass of PluginBase
+        PluginBase.register(Payload)
+        
+        # Dispatch again - should now use the union handler
+        result = handle(Payload())
+        self.assertEqual(result, "union: Payload")
+```
+
+Wait, but I need to be careful. The `singledispatch` registry is per-function, so I should create the dispatcher inside the test or use setUp. Let me restructure.
+
+Actually, looking at the existing test file structure:
+```python
+import functools
+import unittest
+
+
+# Add regression TestCase classes here.
+```
+
+I'll add test classes. Let me think about what "both union forms" means. Looking at `_is_union`:
+```python
+def _is_union(cls):
+    if isinstance(cls, types.UnionType):
+        return True
+    import typing
+    return getattr(cls, '__origin__', None) is typing.Union
+```
+
+So it handles both `int | str` (types.UnionType) and `typing.Union[int, str]`. Maybe "both union forms" means testing both syntaxes? Let me write:
+
+1. Test using `int | PluginBase` syntax (types.UnionType)
+2. Test using `typing.Union[int, PluginBase]` syntax
+
+Both with late virtual registration.
+
+Now for the doc file `Doc/howto/union-dispatch.rst`, I need:
+- Executable `>>>` examples of union registration
+- Late virtual registration example
+- The limitation concerning parameterized generic dispatch members
+
+Let me check what's in Doc/howto already.
+
+Let me start by making the fix to functools.py, then write the tests, then the doc.
+
+First, let me identify the exact text to patch in functools.py. The line I need to change:
+
+```python
+        if cache_token is None and hasattr(cls, '__abstractmethods__'):
+            cache_token = get_cache_token()
+```
+
+Should become:
+
+```python
+        if cache_token is None:
+            if _is_union(cls):
+                if any(hasattr(t, '__abstractmethods__') for t in cls.__args__):
+                    cache_token = get_cache_token()
+            elif hasattr(cls, '__abstractmethods__'):
+                cache_token = get_cache_token()
+```
+
+Let me verify this is the only place that needs changing. Looking at the register function:
+
+```python
+    def register(cls, func=None):
+        """generic_func.register(cls, func) -> func
+
+        Registers a new implementation for the given *cls* on a *generic_func*.
+
+        """
+        nonlocal cache_token
+        if func is None:
+            if isinstance(cls, type):
+                return lambda f: register(cls, f)
+            if _is_union(cls):
+                return lambda f: register(cls, f)
+            ann = getattr(cls, '__annotations__', {})
+            if not ann:
+                raise TypeError(
+                    f"Invalid first argument to `register()`: {cls!r}. "
+                    f"Use either `@register(some_class)` or plain `@register` "
+                    f"on an annotated function."
+                )
+            func = cls
+
+            # only import typing if annotation parsing is necessary
+            from typing import get_type_hints
+            argname, cls = next(iter(get_type_hints(func).items()))
+            if not isinstance(cls, type) and not _is_union(cls):
+                raise TypeError(
+                    f"Invalid annotation for {argname!r}. "
+                    f"{cls!r} is not a class."
+                )
+        if _is_union(cls):
+            for type_ in cls.__args__:
+                if not isinstance(type_, type):
+                    raise TypeError(
+                        f"Invalid union member {type_!r}: "
+                        f"must be a runtime class"
+                    )
+            for type_ in cls.__args__:
+                registry[type_] = func
+        else:
+            registry[cls] = func
+        if cache_token is None and hasattr(cls, '__abstractmethods__'):
+            cache_token = get_cache_token()
+        dispatch_cache.clear()
+        return func
+```
+
+Yes, the fix is to change the `cache_token` check to handle unions. Let me use patch for this.
+
+The old text is:
+```
+        if cache_token is None and hasattr(cls, '__abstractmethods__'):
+            cache_token = get_cache_token()
+```
+
+The new text should be:
+```
+        if cache_token is None:
+            if _is_union(cls):
+                if any(hasattr(t, '__abstractmethods__') for t in cls.__args__):
+                    cache_token = get_cache_token()
+            elif hasattr(cls, '__abstractmethods__'):
+                cache_token = get_cache_token()
+```
+
+Now let me plan all my operations:
+1. Patch Lib/functools.py (fix the cache_token logic)
+2. Patch tests/test_virtual_registration.py (add tests)
+3. Create Doc/howto/union-dispatch.rst (but wait - candidate_limits says existing_files_only: true!)
+
+Hmm, `existing_files_only: true` means I can only modify existing files, not create new ones. Let me check if `Doc/howto/` exists and what's in it.
+
+From the tree result: `Doc/howto` is a directory. Let me check if there are files in it.
+
+Actually wait - I need to re-read the constraints. The task says "Do not change the saved first-job tests, upstream tests, upstream reference documentation or other files." But it also says to "Add a concise standalone explanation in Doc/howto/union-dispatch.rst". 
+
+If `existing_files_only: true`, I can't create new files. Let me check if this file already exists in Doc/howto/. Let me list that directory first.
+
+Actually, let me just proceed with the fix first, then figure out the doc situation. Let me patch functools.py.
+
+Wait, I need to be careful about the exact whitespace. Looking at the source:
+
+```
+        if cache_token is None and hasattr(cls, '__abstractmethods__'):
+            cache_token = get_cache_token()
+```
+
+The indentation is 8 spaces for the `if` and 12 spaces for the body. Let me make sure my patch matches exactly.
+
+Let me do the patch now.
