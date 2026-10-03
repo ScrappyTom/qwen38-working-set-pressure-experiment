@@ -52,7 +52,13 @@ def main():
             no_account_policy_change=True,no_reasoning_or_format_change=True)
         module.MANIFEST.write_bytes(canonical_json_bytes(manifest))
     else:
-        assert study.read(study.HERE/f'INITIAL-ISOLATION-{args.version}.json')['status']=='isolated'
+        isolation_version = '002' if args.version == '003' else args.version
+        assert study.read(study.HERE/f'INITIAL-ISOLATION-{isolation_version}.json')['status']=='isolated'
+        if args.version == '003':
+            proof = study.read(study.HERE/'SOURCE-RECONCILIATION-003.json')
+            assert proof['status'] == 'qualified_source_binding_maintenance'
+            assert proof['old_attempt_directory_absent'] and proof['completion_requests'] == 0
+            assert proof['manifests'][args.condition] == sha256_file(module.MANIFEST)
         assert study.read(module.MANIFEST)['condition']==args.condition
         execution.run_once(module)
 

@@ -1,11 +1,14 @@
 # Qualified current-job presentation comparison on new coverage
 
 Read development/workload_requalification/current_job_presentation/PLAN.md and
-PREPARATION_REVIEW-002.md. Five CPU boundary checks,44 native forms per condition,
+PREPARATION_REVIEW-002.md and PREPARATION_REVIEW-003.md. Five CPU boundary checks,44 native forms per condition,
 eleven supported scripted decisions each and ordinary execution pass/failure
 comparisons qualify zero-completion preparations. Initial6326/6330 and peaks12911/
 12652 fit; exact starting states/account/task/checker/opportunity are shared, only
-status composition differs. Publish before one uncoached control002 then current_job002
+status composition differs. The002 launch dispatched no request: immutable-input
+discovery had included growing output logs. SOURCE-RECONCILIATION-003.json qualifies
+correct input bindings with exact002 native/state reuse and no new runtime calls.
+Publish before one uncoached control003 then current_job003
 pair from actual saved6112bdcf/36requests57ops/twelve versions,24newrequests72ops each.
 Keep mediumuncapped/runtime/tool formats/account policy fixed. No reference group,
 expected outputs, coaching, retry, extension, semantic account repair or automatic

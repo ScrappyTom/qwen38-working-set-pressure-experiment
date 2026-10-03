@@ -23,3 +23,11 @@
   and its native/mechanical evidence; do not use its manifest for inference. The
   corrected route first obtains singledispatch, then follows its actual helper
   call. Successor002 qualifies both conditions before the one matched pair.
+- Ordinary execution comparison initially expected two resolver-fault failures;
+  unittest correctly counted four subtest failures in two methods. Preserve
+  environment002 and use corrected environment003; do not change the reference.
+- Published002 launch: package verification failed before any attempt directory,
+  runtime or model dispatch. The source-input *.txt glob included mutable launch
+  logs. Explicitly bind SYSTEM/TASK inputs instead. Separate003 manifests reuse
+  exact002 native/wire/state proofs under the corrected source enumeration. Record
+  reused qualification as reused; no model retry or extra opportunity occurred.

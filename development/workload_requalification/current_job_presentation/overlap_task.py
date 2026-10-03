@@ -58,6 +58,10 @@ class Task(study.Task):
         super().__init__('dynamic', version, INHERITED)
         self.condition, self.phase, self.AREA = condition, 'overlap', HERE
         self.PACKAGE = HERE / condition / f'preparation-{version}'
+        if version == '003':
+            # Source-enumeration maintenance only: exact native/routes from002
+            # remain the qualification, with a separately bound new manifest.
+            self.PACKAGE = HERE / condition / 'preparation-002'
         self.RUN = HERE / condition / f'run-{version}'
         self.MANIFEST = HERE / condition / f'EXECUTION_MANIFEST-{version}.json'
         self.OWNER_DIRECTION = 'Proceed with one matched current-job presentation comparison on new saved-work coverage.'
@@ -85,7 +89,7 @@ class Task(study.Task):
         bound = study.read(INHERITED / 'RESPONSE_SEAL.json')['source_sha256']
         for name, digest in bound.items():
             assert sha256_file(study.ROOT / name) == digest, name
-        paths = [*HERE.glob('*.py'), *HERE.glob('*.txt'), HERE/'PLAN.md', HERE/'SPEC.md',
+        paths = [*HERE.glob('*.py'), HERE/'SYSTEM.txt', HERE/'TASK.txt', HERE/'PLAN.md', HERE/'SPEC.md',
                  *sorted((HERE/'tests').glob('*.py')),
                  study.ROOT/'src/working_set_exp/current_job_view.py',
                  INHERITED/'RESPONSE_SEAL.json']

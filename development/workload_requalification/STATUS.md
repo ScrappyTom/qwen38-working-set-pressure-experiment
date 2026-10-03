@@ -6,7 +6,10 @@ Five CPU checks,44 native forms per condition, eleven supported scripted decisio
 and ordinary unittest/doctest pass/failure comparisons; zero completions. Initial
 6326/6330 tokens and peaks12911/12652 fit. Exact input isolation changes only status
 composition, preserves account wording/history/checker/guards/runtime and gives
-both arms24newrequests72ops. Publish then run control002/current_job002 once each,
+both arms24newrequests72ops. The002 launch stopped before an attempt or dispatch:
+generated output logs had been incorrectly included in immutable source discovery.
+Separate003 binding qualification reuses exact002 native/state evidence without
+new runtime calls; publish then run control003/current_job003 once each,
 uncoached. Preparation establishes feasibility, not model capability or efficiency.
 Preserve superseded001 and environment002's mistaken evaluator count. The prior
 dispatch lineage remains complete and unchanged; wider workloads remain open.
