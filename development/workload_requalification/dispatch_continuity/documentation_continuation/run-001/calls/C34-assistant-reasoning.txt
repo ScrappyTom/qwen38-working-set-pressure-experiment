@@ -1,0 +1,375 @@
+Let me understand the current state:
+
+1. I'm working on `Doc/howto/union-dispatch.rst` (the only file I can modify)
+2. The current candidate is `2d4a20cf122bc0b6bf2a719374879a9c25ce71426bc16976f0042ca83e1650e2`
+3. The file is fully visible (72 lines, whole file shown)
+4. I need to:
+   - Fix the introductory rule that overstates union handler selection (it says "A union handler is selected whenever the dispatch class is, or is a subclass of, any member of the union" — this overstates because a separately-registered more-specific handler should still win)
+   - Add an executable `>>>` example demonstrating more-specific selection
+   - Keep accurate explanations and runnable examples of union registration, late virtual registration, and rejection of parameterized generic members
+   - Make examples faithful under `__name__='__main__'`
+   - Run the new public check and submit on pass
+
+Let me analyze the current file content:
+
+```
+Union dispatch and virtual registration
+======================================
+
+The ``functools.singledispatch`` decorator supports registering handler
+implementations for unions of concrete types.  Both PEP 604 syntax
+(``A | B``) and ``typing.Union[A, B]`` are recognised.  A union handler is
+selected whenever the dispatch class is, or is a subclass of, any member of
+the union.
+
+Union registration
+------------------
+
+>>> import functools
+>>> from abc import ABC
+>>>
+>>> class PluginBase(ABC):
+...     pass
+>>>
+>>> class Payload:
+...     pass
+>>>
+>>> @functools.singledispatch
+... def handler(x):
+...     return "default"
+>>>
+>>> @handler.register(PluginBase | int)
+... def union_handler(x):
+...     return "union"
+>>>
+>>> handler(42)
+'union'
+>>> handler("hello")
+'default'
+
+Late virtual registration
+-------------------------
+
+When a class is registered as a *virtual* subclass of a union member after
+instances of that class have already been dispatched, the next dispatcher
+call transparently picks up the new relationship.  No manual cache clear is
+required:
+
+>>> p = Payload()
+>>> handler(p)
+'default'
+>>>
+>>> PluginBase.register(Payload)
+<class 'Payload'>
+>>>
+>>> handler(p)
+'union'
+>>> handler(42)
+'union'
+
+The dispatcher tracks the ``abc`` cache token internally.  When the token
+changes (as it does when ``ABCMeta.register`` mutates the ABC cache),
+stale dispatch-cache entries are discarded on the next call.
+
+Limitation: parameterized generics
+----------------------------------
+
+Union members must be concrete runtime classes (instances of ``type``).
+Parameterized generic aliases such as ``list[int]`` are **not** valid union
+members and are rejected at registration time:
+
+>>> try:
+...     @handler.register(PluginBase | list[int])
+...     def bad(x):
+...         pass
+... except TypeError as exc:
+...     print(exc)
+Invalid union member list[int]: must be a runtime class
+```
+
+Now, the issues:
+
+1. **Intro rule overstates**: "A union handler is selected whenever the dispatch class is, or is a subclass of, any member of the union." — This is incorrect because if you separately register a handler for `bool` (which is a subclass of `int`), the `bool` handler should take precedence over a union handler that includes `int`. The rule should say something like: a union handler is a candidate, but normal more-specific dispatch still applies — a separately registered handler for a more specific type takes precedence.
+
+2. **Need an executable example**: Show that a separately-registered `bool` handler beats a union handler covering `int`.
+
+3. **`__name__='__main__'` fidelity**: The examples need to work correctly when run with `__name__='__main__'`. Let me think about what that means for the examples...
+
+Actually, looking at the examples, they use `>>>` doctest-style prompts. The `__name__='__main__'` thing is about how the checker runs them. The examples themselves should be self-contained and work correctly regardless of `__name__`. Let me think about what might differ...
+
+Actually, the key issue is: in the "late virtual registration" section, `PluginBase.register(Payload)` returns `<class 'Payload'>`. But in the doctest output, this shows `<class 'Payload'>`. Under `__name__='__main__'`, the class name would still be `Payload` (the `__module__` would be `__main__` but `repr` of a class just shows the class name). Wait, actually for classes defined in `__main__`, `repr(Payload)` would be `<class '__main__.Payload'>` or just `<class 'Payload'>`?
+
+Let me think... In Python, `repr` of a class shows `<class 'module.ClassName'>` or `<class 'ClassName'>` depending on the module. Actually:
+- If a class is defined in `__main__`: `repr(Payload)` → `<class '__main__.Payload'>`
+- If a class is defined in some module: `repr(SomeClass)` → `<class 'module.SomeClass'>`
+
+Wait, actually in CPython, `repr` of a class is typically `<class '__main__.Payload'>` when defined in `__main__`. But in doctest examples in documentation, they often just show `<class 'Payload'>`. 
+
+Hmm, but actually the doctest runner might handle this differently. Let me think about what the checker does. The task says "This job's checker uses `__name__ = '__main__'`." So the examples will be run in an environment where `__name__` is `'__main__'`.
+
+If `Payload` is defined in `__main__`, then `PluginBase.register(Payload)` would return the class, and its repr would be `<class '__main__.Payload'>` instead of `<class 'Payload'>`.
+
+Wait, let me reconsider. Actually in CPython:
+```python
+>>> class Foo: pass
+>>> repr(Foo)
+"<class '__main__.Foo'>"
+```
+
+So if the doctest shows `<class 'Payload'>`, that would fail under `__main__` because the actual output would be `<class '__main__.Payload'>`.
+
+This is likely one of the issues to fix! The output `>>> PluginBase.register(Payload)` showing `<class 'Payload'>` would actually be `<class '__main__.Payload'>` when run under `__name__='__main__'`.
+
+Let me also think about other potential issues:
+- The `try/except` block in the generics section: `print(exc)` shows `Invalid union member list[int]: must be a runtime class`. This should be fine regardless of `__name__`.
+
+So my fixes:
+1. Fix the intro paragraph to accurately describe the dispatch rule (union handler doesn't override more-specific handlers)
+2. Add an example showing that a separately-registered `bool` handler takes precedence over a union handler that includes `int`
+3. Fix the `<class 'Payload'>` output to `<class '__main__.Payload'>` for `__name__='__main__'` fidelity
+
+Wait, actually let me reconsider point 3. In doctest, the checker might be doing something specific. Let me re-read the task: "The previous checker ran the examples without defining __name__, which differs from normal standalone Python documentation tests. This job's checker uses __name__ = '__main__'."
+
+So the previous checker didn't set `__name__`, and this one does. The difference is that under `__name__='__main__'`, the class repr includes the module name.
+
+Actually wait - if the previous checker didn't define `__name__` at all (or defined it differently), then maybe `__name__` was something else. But the key point is: under this checker's environment (`__name__='__main__'`), the repr of a class defined in that namespace would be `<class '__main__.Payload'>`.
+
+Let me now draft the corrected file:
+
+```rst
+Union dispatch and virtual registration
+======================================
+
+The ``functools.singledispatch`` decorator supports registering handler
+implementations for unions of concrete types.  Both PEP 604 syntax
+(``A | B``) and ``typing.Union[A, B]`` are recognised.  A union handler is
+a candidate whenever the dispatch class is, or is a subclass of, any member
+of the union, but it does not override a separately registered handler for
+a more specific type.  Normal ``singledispatch`` specificity rules still
+apply: a handler registered for a concrete subclass is preferred over a
+union handler that only covers a superclass of that subclass.
+
+Union registration
+------------------
+
+>>> import functools
+>>> from abc import ABC
+>>>
+>>> class PluginBase(ABC):
+...     pass
+>>>
+>>> class Payload:
+...     pass
+>>>
+>>> @functools.singledispatch
+... def handler(x):
+...     return "default"
+>>>
+>>> @handler.register(PluginBase | int)
+... def union_handler(x):
+...     return "union"
+>>>
+>>> handler(42)
+'union'
+>>> handler("hello")
+'default'
+
+More-specific dispatch still applies
+------------------------------------
+
+A separately registered handler for a concrete subclass is selected in
+preference to a union handler that covers a superclass of that subclass:
+
+>>> @handler.register(bool)
+... def bool_handler(x):
+...     return "bool"
+>>>
+>>> handler(True)
+'bool'
+>>> handler(42)
+'union'
+
+Late virtual registration
+-------------------------
+...
+```
+
+Wait, I need to be careful. Let me re-examine the dispatch rules. In `singledispatch`, when you call `handler(True)`:
+- `True` is a `bool`, which is a subclass of `int`
+- We have a union handler for `PluginBase | int`
+- We have a separate handler for `bool`
+- The more specific one (`bool`) should win
+
+Yes, that's correct. The `singledispatch` machinery looks for the most specific registered type that is a parent of the actual type. Since `bool` is more specific than `int`, the `bool` handler wins.
+
+Now let me think about whether the union handler registration actually works this way in CPython's implementation. Looking at the CPython source for `functools.singledispatch`, the `_find_handler` method iterates through `MRO` of the type and finds the most specific registered type. A union handler registers the union object itself as the "type" key in the dispatch table. But wait, actually I need to check how union handlers are stored in the dispatch table.
+
+In CPython's implementation (3.13+), when you register a union handler, it stores the union in `_registry`. Then when looking up, for a given type, it checks if any registered type (including unions) is an instance check target. But the specificity is determined by MRO distance.
+
+Actually, let me think more carefully. In CPython 3.13, `singledispatch` with union support:
+- `register(PluginBase | int)` stores the union as a key
+- When dispatching for `bool`, it needs to find the best match
+- `bool` is a subclass of `int`, so the union `PluginBase | int` matches (because `int` is a member)
+- If `bool` is also separately registered, `bool` is more specific
+
+The MRO of `bool` is `[bool, int, object]`. The dispatch looks for registered types in this MRO order. If `bool` is registered directly, it's found first (at position 0). The union `PluginBase | int` would match at the `int` level (position 1). So `bool` handler wins. Good.
+
+Now for the `__name__='__main__'` issue. Let me think about what `PluginBase.register(Payload)` actually returns and how it's displayed.
+
+`ABC.register(cls)` returns `cls`. So `PluginBase.register(Payload)` returns `Payload` (the class object). The repr of a class in `__main__` is `<class '__main__.Payload'>`.
+
+But wait - in doctest, the expected output after `>>> PluginBase.register(Payload)` would need to be `<class '__main__.Payload'>` under this checker.
+
+Hmm, but actually I should be careful. Let me reconsider whether the doctest checker might suppress the return value display or handle it differently. In standard doctest, `>>> PluginBase.register(Payload)` would show the repr of the return value. If the checker uses doctest, then yes, it would show `<class '__main__.Payload'>`.
+
+Let me now write the full corrected file. I'll use `replace_region` to replace the entire file since I have the region reference for the whole file.
+
+Actually, let me use `patch` to make targeted changes, or `replace_region` for the whole file. Since I have the full file visible as region `SRC-7eff85a42a7c1fdd7412d358408de99cc80cfd0f5b0a469b9941fb0a6392d5fa`, I can use `replace_region` to replace the entire file content.
+
+Let me draft the full new content:
+
+```rst
+Union dispatch and virtual registration
+======================================
+
+The ``functools.singledispatch`` decorator supports registering handler
+implementations for unions of concrete types.  Both PEP 604 syntax
+(``A | B``) and ``typing.Union[A, B]`` are recognised.  A union handler
+matches whenever the dispatch type is, or is a subclass of, any member of
+the union, but it does not displace a separately registered handler for a
+more specific type.  Normal ``singledispatch`` specificity rules still
+apply: a handler registered directly for a subclass is preferred over a
+union handler that only covers a superclass of that subclass.
+
+Union registration
+------------------
+
+>>> import functools
+>>> from abc import ABC
+>>>
+>>> class PluginBase(ABC):
+...     pass
+>>>
+>>> class Payload:
+...     pass
+>>>
+>>> @functools.singledispatch
+... def handler(x):
+...     return "default"
+>>>
+>>> @handler.register(PluginBase | int)
+... def union_handler(x):
+...     return "union"
+>>>
+>>> handler(42)
+'union'
+>>> handler("hello")
+'default'
+
+More-specific dispatch still applies
+------------------------------------
+
+A union handler does not override a handler registered for a concrete
+subclass that is more specific than any member of the union:
+
+>>> @handler.register(bool)
+... def bool_handler(x):
+...     return "bool"
+>>>
+>>> handler(True)
+'bool'
+>>> handler(42)
+'union'
+
+Late virtual registration
+-------------------------
+
+When a class is registered as a *virtual* subclass of a union member after
+instances of that class have already been dispatched, the next dispatcher
+call transparently picks up the new relationship.  No manual cache clear is
+required:
+
+>>> p = Payload()
+>>> handler(p)
+'default'
+>>>
+>>> PluginBase.register(Payload)
+<class '__main__.Payload'>
+>>>
+>>> handler(p)
+'union'
+>>> handler(42)
+'union'
+
+The dispatcher tracks the ``abc`` cache token internally.  When the token
+changes (as it does when ``ABCMeta.register`` mutates the ABC cache),
+stale dispatch-cache entries are discarded on the next call.
+
+Limitation: parameterized generics
+----------------------------------
+
+Union members must be concrete runtime classes (instances of ``type``).
+Parameterized generic aliases such as ``list[int]`` are **not** valid union
+members and are rejected at registration time:
+
+>>> try:
+...     @handler.register(PluginBase | list[int])
+...     def bad(x):
+...         pass
+... except TypeError as exc:
+...     print(exc)
+Invalid union member list[int]: must be a runtime class
+```
+
+Wait, I need to think about whether `handler(42)` after `PluginBase.register(Payload)` would still return `'union'`. Let's trace:
+- `42` is an `int`
+- The union `PluginBase | int` is registered
+- `bool` is also registered but `42` is not a `bool`
+- So `42` matches `int` in the union → `'union'`. Yes, correct.
+
+And `handler(p)` where `p` is a `Payload` instance:
+- `Payload` was virtually registered as a subclass of `PluginBase`
+- So `Payload` matches `PluginBase` in the union → `'union'`. Yes, correct.
+
+Now, one concern: after `PluginBase.register(Payload)`, does the `bool` handler registration interfere? No, because `bool` and `Payload` are unrelated types.
+
+Let me also verify: `handler(True)` → `True` is `bool`. The dispatch looks at MRO: `[bool, int, object]`. `bool` is registered → use `bool_handler`. Returns `'bool'`. Correct.
+
+Now about the `<class '__main__.Payload'>` - I need to make sure this is what actually gets printed. In CPython, `repr(type)` for a class defined in `__main__` gives `<class '__main__.Payload'>`. Yes.
+
+But wait - will the doctest checker show the return value of `PluginBase.register(Payload)`? In standard Python interactive mode / doctest, yes, the return value is displayed. `ABC.register` returns the class that was registered. So `PluginBase.register(Payload)` returns `Payload`, and the display would be `repr(Payload)` = `<class '__main__.Payload'>`.
+
+Actually, let me double-check: does `abc.ABCMeta.register` return the class? Looking at CPython source:
+
+```python
+def register(cls, virtual=True):
+    ...
+    return cls
+```
+
+Yes, it returns `cls`. So the output would be the repr of `Payload`.
+
+Hmm, but actually I want to be extra careful. In some Python versions or doctest configurations, the return value display might differ. But in standard doctest (which is what documentation tests use), the return value IS displayed. And under `__name__='__main__'`, a class defined in `__main__` has repr `<class '__main__.Payload'>`.
+
+Let me also think about whether there are any other `__name__`-sensitive outputs. The `print(exc)` in the try/except block prints a string, which is not affected by `__name__`. The string returns `'union'`, `'default'`, `'bool'` are all literals, not affected. The only `__name__`-sensitive output is the class repr.
+
+I think my plan is solid. Let me use `replace_region` with the full file content.
+
+Actually, I realize I should double-check one thing: the task says "Retain accurate explanations and runnable examples of union registration, late virtual registration, and rejection of parameterized generic members." So I need to keep all three sections with their examples. My draft does keep all three. Good.
+
+Also: "add an executable >>> example demonstrating more-specific selection" — I have the "More-specific dispatch still applies" section with the bool example. Good.
+
+"Explain the actual rule accurately" — I've modified the intro paragraph. Good.
+
+Let me finalize and use `replace_region`. The region is `SRC-7eff85a42a7c1fdd7412d358408de99cc80cfd0f5b0a469b9941fb0a6392d5fa` and the candidate is `2d4a20cf122bc0b6bf2a719374879a9c25ce71426bc16976f0042ca83e1650e2`.
+
+Wait, I should use the literal SOURCE reply form for `replace_region` to avoid JSON-escaping issues with the RST content. Let me format it properly.
+
+The format is:
+- Single-line JSON header with discussion, optional account, and operation
+- Newline
+- The word SOURCE
+- Newline
+- Exact replacement source through end of reply
+
+Let me write this out carefully.

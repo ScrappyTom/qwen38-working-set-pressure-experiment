@@ -1,25 +1,34 @@
-# Documentation correction ready for one declared run
+# Fresh dispatch contribution and continuation closed
 
-The two dispatch jobs are closed and reviewed. Code and regression work is correct;
-the saved standalone document remains incomplete after direct namespace/precedence
-probes. Read dispatch_continuity/documentation_continuation/PREPARATION_REVIEW-001.md.
-The corrected definition and actual saved entry are CPU/native qualified without
-completion requests. One review-directed doc-only run follows publication; prior
-code/tests and original scores remain exact. The wider workload programme stays open.
+The original union-registration code/test job, late virtual-registration code/test
+continuation, and declared review-directed documentation correction are complete.
+Only the document changes in the last job; seven earlier files remain exact. The
+corrected checker and ordinary doctest.testfile pass all 17 examples. Both original
+scores and sealed sources stay unchanged. Read
+ dispatch_continuity/documentation_continuation/review/run-001/RESULTS.md and
+ dispatch_continuity/NEXT_DECISION.md.
+
+Last job: four requests/six operations, 13.083 model/14.140 loop minutes. Combined
+lineage: 36/57 and 161.991 model minutes, not a fresh four-request solution or speed
+trend. Exact replay/delivery and direct prose review pass. The account stays a
+pre-edit plan; no account-benefit or natural-pressure claim is established. Future
+example checks must name their actual namespace. Applicability presentation and
+next-operation cost remain prospective questions. Return to fresh information-
+dependent work under the existing host; the wider workload programme stays open.
 
 # Workload requalification ledger
 
-Fresh dispatch work adds a real saved-work lineage. Union002 closes15requests/
-23ops with meaningful tests, failed-check correction and currentpass. Dynamic001
-continues actual work after explicit source release in17newrequests/28ops: correct
-cache-token repair, two meaningful regressions, documentation feedback/correction
-and checkedsubmission. Total32/51 and148.908modelminutes. Exact replay/delivery and
-prior-work preservation pass. Direct review nevertheless finds a checker namespace
-bug (unset/builtins rather than normal__main__) and an overbroad prose rule.
-Documentation is not complete despite its preserved public pass. See
- dispatch_continuity/review/dynamic-001/RESULTS.md and the separately declared
- documentation_continuation/PLAN.md. No account-benefit/pressure/speed claim.
-
+The fresh dispatch lineage is closed: union002 saves correct union-registration
+code and meaningful tests; dynamic001 preserves it and adds late virtual-registration
+repair and regressions. Both are uncoached. Direct review then exposed the checker
+namespace defect and documentation overstatement. The separately declared,
+review-directed doc001 correction saves accurate examples/prose, consumes the
+namespace-qualified current pass and submits. Ordinary testfile also passes 17/17;
+all seven prior files are exact. Combined 36 requests/57 operations, twelve versions
+and 161.991 model minutes across unlike jobs. Original registered results remain
+unchanged. See dispatch_continuity/documentation_continuation/review/run-001/RESULTS.md
+and NEXT_DECISION.md. This does not establish account benefit, natural pressure,
+speed improvement or a pass for the broader corpus.
 
 The controlled C16 information transition is closed under a8d3d85d. Both arms
 preserve earlier work, repair embedded/zero boundaries, consume their own actual

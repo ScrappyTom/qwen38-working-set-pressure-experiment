@@ -1,3 +1,39 @@
+# Closed fresh dispatch lineage; checker context is part of assurance
+
+Read dispatch_continuity/documentation_continuation/review/run-001/RESULTS.md,
+REVIEW_CHECKLIST.md and documentation_continuation/review/READING_NOTES.md. The f9e58dd6 review-directed doc job
+closes in four requests/six operations: actual full-source read, literal replacement,
+new applicable public pass, unchanged-candidate submission. All seven prior code/
+test/support files remain exact; ordinary doctest.testfile also passes 17 examples.
+145 artifacts/1,470 bindings/107 custody/eight checkpoints and five next-input
+receipts verify. Preserve 13.083 model/14.140 loop minutes and 12,270 generated tokens;
+63 MiB minimum free GPU memory is advisory, with full offload/no CUDA failure or
+truncation/owned closure. No source loss, capacity failure or failed live check here.
+The actual failure/correction path is offline and in the preceding dynamic job.
+
+Keep both original studies and scores exact. Future standalone-example checks must
+explicitly set/report intended namespace; use the corrected derived definition,
+not the frozen original dynamic checker. A preserved observation can answer the
+wrong environment. Check scope and direct prose review remain separate. The final
+account retains its pre-edit plan; no isolated benefit or autonomous maintenance
+claim. Historical-pass/current-ineligibility presentation remains a recorded cost
+question, not a tested remedy or reason for another unchanged run.
+
+Across the three unlike jobs: 36 requests/57 operations/twelve saved versions,
+161.991 model minutes. First two code/test stages are uncoached; final correction
+supplies declared review facts without live coaching/replacement/group/retry or
+extension. Follow dispatch_continuity/NEXT_DECISION.md and the wider open ledger.
+Close this local contribution; no new memory/account/format/effort policy is earned
+by it. Every next scripted decision must be supported by its actual input, and
+full actor inputs/outputs/effects/artifacts must precede diagnosis.
+
+# Earlier development records
+
+The sections below preserve earlier decisions and qualifications. Their planned
+runs, phase budgets and unfinished statuses are historical where the closure
+above supersedes them. Do not rerun a closed attempt. General requirements for
+exact evidence, truthful assistance labels, guards and uncoached execution remain.
+
 # Qualified documentation correction; preserve original dispatch runs
 
 Read dispatch_continuity/documentation_continuation/PLAN.md and
