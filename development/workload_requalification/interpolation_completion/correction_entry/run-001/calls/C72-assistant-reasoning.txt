@@ -1,0 +1,109 @@
+Let me analyze the situation:
+
+1. The last operation was a `tests` check that failed with the criterion `detect.restored_class`.
+2. The failure means: after a passing ordinary control, the added tests must detect a fault where a subclass is returned after one declared mode/transport while keeping constructor state.
+3. The undetected targets shown are:
+   - `{"policy":"BasicInterpolation","transport":"deepcopy"}`
+   - `{"policy":"BasicInterpolation","transport":"pickle:0"}`
+   - And 12 more remaining (14 total undetected out of 16 tested)
+
+The fault is: "Return a subclass after one declared mode/transport while keeping constructor state." This means the mutation makes the copy/deepcopy/pickle return a subclass of `InterpolationMissingOptionError` instead of the exact class. The tests need to detect this by checking `type(e) is configparser.InterpolationMissingOptionError` (exact class check) rather than just `isinstance`.
+
+Looking at my current test code in `_assert_error_transport`:
+- For shallow copy: `self.assertIs(type(e2), configparser.InterpolationMissingOptionError)` ✓ (this checks exact type)
+- For deep copy: `self.assertIsInstance(e3, configparser.InterpolationMissingOptionError)` ✗ (this would pass for a subclass!)
+- For pickle: `self.assertIsInstance(e4, configparser.InterpolationMissingOptionError)` ✗ (same issue)
+
+So the fix is to change `assertIsInstance` to `assertIs(type(...), ...)` for both the deep copy and pickle assertions.
+
+Let me look at the current source more carefully. The visible source shows lines 2200-2364 of the test file. I can see the `_assert_error_transport` method with:
+- Shallow copy: `self.assertIs(type(e2), configparser.InterpolationMissingOptionError)` - already exact
+- Deep copy: `self.assertIsInstance(e3, configparser.InterpolationMissingOptionError)` - needs to be exact
+- Pickle: `self.assertIsInstance(e4, configparser.InterpolationMissingOptionError)` - needs to be exact
+
+I need to change those two `assertIsInstance` calls to `assertIs(type(...), configparser.InterpolationMissingOptionError)`.
+
+Let me construct the patch. I need to find the exact text to replace. Looking at the source:
+
+For deep copy:
+```python
+        e3 = copy.deepcopy(e)
+        self.assertIsInstance(
+            e3, configparser.InterpolationMissingOptionError)
+```
+
+For pickle:
+```python
+                e4 = pickle.loads(data)
+                self.assertIsInstance(
+                    e4, configparser.InterpolationMissingOptionError)
+```
+
+I need to change both to use `assertIs(type(...), configparser.InterpolationMissingOptionError)`.
+
+Let me use a single patch that covers both, or two separate patches. Since `patch` only replaces one occurrence, I'll need two patches. But wait - let me check if the text is unique enough.
+
+For the deep copy one:
+```
+        e3 = copy.deepcopy(e)
+        self.assertIsInstance(
+            e3, configparser.InterpolationMissingOptionError)
+```
+
+For the pickle one:
+```
+                e4 = pickle.loads(data)
+                self.assertIsInstance(
+                    e4, configparser.InterpolationMissingOptionError)
+```
+
+These are different strings so they should be unique. Let me do them one at a time.
+
+Actually, let me think about this more carefully. The undetected targets are 14 out of 16. The shown ones are BasicInterpolation+deepcopy and BasicInterpolation+pickle:0. The remaining 12 would include other combinations. Since the issue is that `assertIsInstance` passes for subclasses, I need to make ALL the type checks exact (using `assertIs(type(...), ...)`).
+
+Looking at the code again:
+- `self.assertIsInstance(e, configparser.InterpolationMissingOptionError)` - this is the initial check on `e` itself, which is the actual exception. This might also need to be exact? Actually no - `e` is the real exception from the `except` clause, it's the actual instance. The fault is about what copy/deepcopy/pickle return. So the initial check is fine.
+
+Wait, but the fault says "Return a subclass after one declared mode/transport while keeping constructor state." So the mutation would make deepcopy or pickle return a subclass. The tests need to detect that.
+
+So I need:
+1. Deep copy: change `assertIsInstance(e3, ...)` to `assertIs(type(e3), configparser.InterpolationMissingOptionError)`
+2. Pickle: change `assertIsInstance(e4, ...)` to `assertIs(type(e4), configparser.InterpolationMissingOptionError)`
+
+Let me do both patches. I'll start with the deep copy one since it appears first.
+
+The current file sha is `c26b26bc9205a7f2bc8b0f89af25ec3f09bc5a019b2298a190005605db4f5367` and candidate is `3719baf20aa8a3f13d1e083d880d7794598d7fd13fada0428bd4655ddb97ee13`.
+
+Let me patch the deep copy assertion first:
+
+Old:
+```
+        e3 = copy.deepcopy(e)
+        self.assertIsInstance(
+            e3, configparser.InterpolationMissingOptionError)
+```
+
+New:
+```
+        e3 = copy.deepcopy(e)
+        self.assertIs(
+            type(e3), configparser.InterpolationMissingOptionError)
+```
+
+Then for pickle:
+
+Old:
+```
+                e4 = pickle.loads(data)
+                self.assertIsInstance(
+                    e4, configparser.InterpolationMissingOptionError)
+```
+
+New:
+```
+                e4 = pickle.loads(data)
+                self.assertIs(
+                    type(e4), configparser.InterpolationMissingOptionError)
+```
+
+Let me do the first patch now.

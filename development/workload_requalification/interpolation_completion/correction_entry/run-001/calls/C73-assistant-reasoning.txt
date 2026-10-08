@@ -1,0 +1,111 @@
+Let me analyze the situation:
+
+1. The last check (CHK-0171) failed because the `detect.restored_class` criterion is not met. The fault detection test requires that the tests detect when a subclass is returned instead of the exact `InterpolationMissingOptionError` class.
+
+2. Looking at the current code in the test file (lines 2200-2364), I can see the `_assert_error_transport` method uses:
+   - `assertIsInstance` for the initial check (line ~2247)
+   - `assertIs` for shallow copy (line ~2263)
+   - `assertIs` for deep copy (line ~2273)
+   - `assertIsInstance` for pickle (line ~2283)
+
+The working account already identified the issue: the pickle section uses `assertIsInstance` instead of `assertIs`. But wait - looking more carefully at the code shown:
+
+- Line ~2247: `self.assertIsInstance(e, configparser.InterpolationMissingOptionError)` - this is the initial check
+- Line ~2263: `self.assertIs(type(e2), configparser.InterpolationMissingOptionError)` - shallow copy uses assertIs ✓
+- Line ~2273: `self.assertIs(type(e3), configparser.InterpolationMissingOptionError)` - deep copy uses assertIs ✓
+- Line ~2283: `self.assertIsInstance(e4, configparser.InterpolationMissingOptionError)` - pickle uses assertIsInstance ✗
+
+Wait, but the working account says "Current code uses assertIsInstance for deep copy and pickle, which accepts subclasses. Fix: change to assertIs(type(...), configparser.InterpolationMissingOptionError) for both."
+
+But looking at the actual source shown, the deep copy already uses `assertIs`. Let me re-read...
+
+Actually, looking at the source more carefully:
+- Shallow copy: `self.assertIs(type(e2), configparser.InterpolationMissingOptionError)` ✓
+- Deep copy: `self.assertIs(type(e3), configparser.InterpolationMissingOptionError)` ✓  
+- Pickle: `self.assertIsInstance(e4, configparser.InterpolationMissingOptionError)` ✗
+
+So the pickle round-trip still uses `assertIsInstance` instead of `assertIs`. That's the issue.
+
+But wait - the undetected targets are:
+- BasicInterpolation/pickle:0
+- BasicInterpolation/pickle:1
+- (10 more remaining)
+
+So all pickle protocols are failing the detection test, plus 10 more targets. The total is 12 undetected targets out of 16 tested.
+
+The 16 targets would be: 2 policies (Basic, Extended) × 8 transports (shallow_copy, deep_copy, pickle:0 through pickle:5? or some combination)
+
+Wait, let me think about what transports exist:
+- shallow_copy
+- deep_copy
+- pickle:0 through pickle:HIGHEST_PROTOCOL
+
+On CPython, HIGHEST_PROTOCOL is typically 5, so protocols 0-5 = 6 protocols. Plus shallow_copy and deep_copy = 8 transports per policy. 2 policies × 8 transports = 16 targets.
+
+The 12 undetected targets (2 shown + 10 remaining) suggest that:
+- Shallow copy and deep copy are detected (2 pass)
+- All 6 pickle protocols are undetected for both policies (12 undetected)
+
+That matches! The pickle section uses `assertIsInstance` instead of `assertIs`, so when a subclass is returned, it still passes the test, failing to detect the fault.
+
+The fix is to change:
+```python
+self.assertIsInstance(
+    e4, configparser.InterpolationMissingOptionError)
+```
+to:
+```python
+self.assertIs(
+    type(e4), configparser.InterpolationMissingOptionError)
+```
+
+This is in the pickle loop within `_assert_error_transport`.
+
+Now I need to make this edit. I have the source visible (lines 2200-2364 of test_configparser.py), and the file sha is `a0a07717d6a3c4b22ccba1ecf12a6916652c7392f2ee065910adc8504a01cbac`. The current candidate is `3abe1fd60f1e62ceccc51fd1df78988c09a79019417541f75e5f22053b6d75db`.
+
+Let me craft the patch. The old text is:
+```
+                self.assertIsInstance(
+                    e4, configparser.InterpolationMissingOptionError)
+```
+
+And the new text should be:
+```
+                self.assertIs(
+                    type(e4), configparser.InterpolationMissingOptionError)
+```
+
+Let me verify this is unique in the file. The initial check at the top of `_assert_error_transport` uses:
+```
+        self.assertIsInstance(
+            e, configparser.InterpolationMissingOptionError)
+```
+
+That's different indentation and variable name (e vs e4), so it should be unique.
+
+Actually, let me look at the exact indentation from the source:
+
+```
+        for protocol in range(pickle.HIGHEST_PROTOCOL + 1):
+            with self.subTest(protocol=protocol):
+                data = pickle.dumps(e, protocol=protocol)
+                e4 = pickle.loads(data)
+                self.assertIsInstance(
+                    e4, configparser.InterpolationMissingOptionError)
+```
+
+So the old text is:
+```
+                self.assertIsInstance(
+                    e4, configparser.InterpolationMissingOptionError)
+```
+
+And new text:
+```
+                self.assertIs(
+                    type(e4), configparser.InterpolationMissingOptionError)
+```
+
+This should be unique since `e4` only appears in the pickle loop.
+
+Let me make the patch.

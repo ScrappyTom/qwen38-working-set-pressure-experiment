@@ -1,4 +1,46 @@
-# Addendum: correction context and source-discovery consultation
+# Addendum: actual correction succeeds; delivery and closure still differ
+
+The finite correction job saves correct, independently reviewed tests/docs and a
+real current public pass, then reaches its request limit. See
+correction_entry/review/RESULTS.md for exact evidence and costs.
+
+- **Do not turn an unseen final pass into actor closure.** The last check ran and
+  its full observation is stored. No following request received it and no submit
+  occurred. A small declared continuation may close that transition; it cannot
+  rewrite the earlier finite outcome or erase its cost.
+- **A useful correction loop can be expensive without a delivery defect.** Every
+  nonterminal result arrived beside the relevant acquired source. Seven small
+  test corrections and two documentation edits nevertheless consumed nine model
+  responses and triggered nine checks. Larger guarded replacements were already
+  possible. Record this choice and complete contribution cost before deciding
+  whether batching, format or decision policy needs a new comparison.
+- **Do not credit an installed mechanism with an unexercised advantage.** The
+  correction-context mixin was active, but existing inspection ranges already
+  contained the edited targets. Renewed opportunity and the final prior read's
+  first delivery also changed the entry. There is no isolated causal result for
+  the new view, accounts, or consultation advice.
+- **Execution setup is part of the checker contract.** C79 assumed the original
+  document import ran; the declared changed-example check did not execute it.
+  Actual NameError feedback led to an explicit import and a passing correction.
+  When qualifying future example checks, identify selected examples, setup and
+  initial bindings as well as module name. Do not silently change that environment
+  inside an active run or equate excerpt execution with an entire Sphinx build.
+- **Review behavior, not just assertion spelling.** The initial error assertion
+  is isinstance, but exact copy assertions detect a subtype from each actual
+  lookup under the preserved implementation. The isolated reviewer probe resolves
+  that concern. Do not demand an artifact change solely to match a preferred
+  syntax; retain the probe's scope and limits.
+- **An accurate endpoint does not validate every premise.** C68 still invents an
+  unseen base implementation. Actual diagnostic evidence supports its final
+  correction, not that speculation. C73 usefully reconciles a stale account with
+  current source; the final account has no opportunity to consume the last check.
+  These are different observations, not one account-quality verdict.
+- **Audit failures may be evaluator defects.** The first supplementary audit
+  wrongly expected host-only rendering options in a model receipt. The actual
+  receipt and frozen initial wire were correct. Preserve the failed source/log,
+  fix the comparison in its proper domain, and never alter the run to satisfy it.
+
+# Earlier addendum: correction context and source-discovery consultation
 
 The correction-context mixin and exact native trials are qualified; the separate
 two-call discovery dialogue is closed. See correction_context/PREPARATION_REVIEW.md

@@ -1,4 +1,43 @@
-# Next: a finite correction contribution on the qualified successor
+# Next: consume the saved final pass and close the contribution
+
+The one correction_entry run001 is closed at request80/operation187. Read
+correction_entry/review/RESULTS.md and its complete reading notes. Qwen saves
+correct tests and documentation at83b7ac8d and the final public CHK-0187 passes.
+All fourteen added examples also pass ordinary standalone execution; prior work
+is preserved. The final three operation outcomes have no next model recipient.
+No submission occurred. Keep that disposition and all44.311 new model minutes;
+known interpolation cost is176.140 minutes plus original C22's unknown cost.
+
+The next local task is closure, not another repair or discovery experiment.
+Prepare a thin saved-result continuation from the exact final candidate, complete
+history, natural pre-edit account and pending account/edit/check receipts. Supply
+neither reviewer explanations nor a preferred next action. The actual passing
+observation must reach the next model input with its unchanged candidate/checker
+binding. Do not replay the last patch or check merely to manufacture fresh history.
+
+Prospectively allow two new requests and four operations (absolute82/191), with
+the existing task, tools, checker, correction view and medium uncapped settings.
+Only the factual continuation boundary and renewed opportunity change. Qualify
+exact restoration, complete first feedback delivery, ordinary applicability and
+guarded submission; a new candidate or changed checker must still invalidate the
+old pass. Preserve the last response's account unchanged, including its now-stale
+proposed fix. No automatic semantic rewrite or private-draft execution.
+
+Publish the finite package before any model call. Review all actual inputs and
+responses and the closure effect. A same-artifact accepted submission after the
+actual pass counts as this lineage's closure with explicit extra opportunity,
+not a success within the preceding16-request budget. No automatic retry or
+extension follows if that small job does not close. Existing standing authority
+covers preparation; do not ask the owner to repeat earlier authorization.
+
+After closure, return to the distinct open workload ledger. Do not replay this
+repair to improve cost/account appearance or infer that the wider corpus passes.
+The next mapped ecological obligation is E20-OBS-VERIFIER-SAFETY; legacy phase,
+historical-recovery and predecessor reconciliation also remain outstanding.
+Their entry contracts require separate preparation, not transplantation of this
+parser result. No new general memory, format, effort or account policy is selected.
+
+# Prior decision: a finite correction contribution on the qualified successor
 
 The two immediate qualifications below are complete. Read
 correction_context/PREPARATION_REVIEW.md and

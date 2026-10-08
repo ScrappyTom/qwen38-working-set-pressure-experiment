@@ -1,0 +1,743 @@
+Let me analyze the current situation:
+
+1. The tests pass (CHK-0174) - good.
+2. The public check fails on two criteria:
+   - `examples.execution`: "No newly added executable examples were run. This does not pass the documentation obligation."
+   - `legacy_public_acceptance`: The original public acceptance remains required.
+
+I need to add runnable doctest examples to `Doc/library/configparser.rst` that:
+- Show missing-reference error under BasicInterpolation
+- Show missing-reference error under ExtendedInterpolation (including cross-section)
+- Show raw=True behavior
+- Show supplying the missing setting
+- Must be executable in document order with `__name__='__main__'` namespace
+
+The examples check says "No newly added executable examples were run." This means I need to add `.. doctest::` blocks (not just `.. code-block::` blocks) to the documentation.
+
+Let me look at what's currently in the doc file. I can see:
+- Lines 1-100: Quick Start section with doctest examples
+- Lines 330-500: Interpolation section with `.. code-block::` examples (not doctest)
+
+The interpolation section at lines 330-500 uses `.. code-block:: ini` for examples, not `.. doctest::`. I need to add `.. doctest::` blocks that demonstrate the missing-reference error scenarios.
+
+I need to find a good place to add these examples. Looking at the structure:
+- The "Interpolation of values" section starts around line 333
+- It has BasicInterpolation and ExtendedInterpolation class descriptions
+- I should add doctest examples after the existing interpolation descriptions
+
+Let me read more of the file to find the right insertion point. I need to see what comes after line 500 to understand the structure better.
+
+Actually, looking at the current visible content:
+- Lines 330-500 show the interpolation section with BasicInterpolation and ExtendedInterpolation descriptions
+- The section ends with the ExtendedInterpolation example showing cross-section references
+- Then "Mapping Protocol Access" starts around line 430+
+
+Wait, let me re-read. The content from lines 330-500 shows:
+- "Interpolation of values" heading
+- BasicInterpolation class with example
+- ExtendedInterpolation class with example
+- Then "Mapping Protocol Access" section starts
+
+I need to add doctest examples within the interpolation section. Let me think about where exactly to insert them.
+
+Looking at the structure more carefully:
+- BasicInterpolation description ends around line 395 (after the "In the example above..." paragraph)
+- Then ExtendedInterpolation starts around line 397
+- ExtendedInterpolation example ends around line 440
+- Then "Mapping Protocol Access" starts
+
+I should add doctest examples after the existing interpolation descriptions but before "Mapping Protocol Access". Let me read the file around lines 440-470 to find the exact insertion point.
+
+Actually, I already have the content of lines 330-500 visible. Let me look at it more carefully:
+
+The ExtendedInterpolation section ends with:
+```
+      python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}
+
+Mapping Protocol Access
+-----------------------
+```
+
+So I need to insert my doctest examples between the end of the ExtendedInterpolation section (after the code-block) and the "Mapping Protocol Access" heading.
+
+Let me look at the exact text. The transition is:
+```
+      python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}
+
+Mapping Protocol Access
+-----------------------
+```
+
+I need to insert doctest examples there. Let me craft them:
+
+```rst
+   If a referenced option does not exist, an
+   :exc:`InterpolationMissingOptionError` is raised.  The following examples
+   demonstrate this under both interpolation modes:
+
+   .. doctest::
+
+      >>> import configparser
+      >>> cf = configparser.ConfigParser(interpolation=configparser.BasicInterpolation())
+      >>> cf.read_string("[section]\nname = %(missing)s\n")
+      >>> try:
+      ...     cf.get("section", "name")
+      ... except configparser.InterpolationMissingOptionError as e:
+      ...     print(e.option, e.section, e.reference)
+      ...
+      name section missing
+      >>> cf.get("section", "name", raw=True)
+      '%(missing)s'
+      >>> cf.set("section", "missing", "resolved")
+      >>> cf.get("section", "name")
+      'resolved'
+
+   With extended interpolation, cross-section references are also possible:
+
+   .. doctest::
+
+      >>> cf = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation(), default_section='common')
+      >>> cf.read_string("[common]\nvalue = ok\n\n[test]\nname = ${other:missing}\n")
+      >>> try:
+      ...     cf.get("test", "name")
+      ... except configparser.InterpolationMissingOptionError as e:
+      ...     print(e.option, e.section, e.reference)
+      ...
+      name test other:missing
+      >>> cf.get("test", "name", raw=True)
+      '${other:missing}'
+      >>> cf.add_section('other')
+      >>> cf.set('other', 'missing', 'cross_value')
+      >>> cf.get("test", "name")
+      'cross_value'
+```
+
+Wait, I need to be careful about the doctest format. The doctests run in a shared namespace. Let me check what variables are already defined. Looking at the Quick Start section, `configparser` is already imported via `.. testsetup::` (line 58: `import configparser`). And `config` is defined as a ConfigParser.
+
+But wait - the examples check says "Changed documentation examples execute together in document order with an explicit standalone `__name__='__main__'` namespace." This means ALL doctests in the file run together. So I need to be careful about variable names not conflicting.
+
+Let me think about what's already defined:
+- `configparser` (imported via testsetup)
+- `config` (from Quick Start)
+- `topsecret` (from Quick Start)
+
+I should use different variable names to avoid conflicts. Let me use `cf_basic` and `cf_ext`.
+
+Actually wait, let me re-read the doctest at the top:
+```
+.. testsetup::
+
+   import configparser
+
+.. testcleanup::
+
+   import os
+   os.remove("example.ini")
+   os.remove("override.ini")
+```
+
+So `configparser` is available. Let me check if `config` is used later in the file...
+
+The Quick Start creates `config` and `topsecret`. I should avoid reusing those names.
+
+Let me craft the doctest examples carefully:
+
+```rst
+   If an interpolation reference points to an option that does not exist,
+   a :exc:`InterpolationMissingOptionError` is raised.  This applies to both
+   interpolation modes.  Using ``raw=True`` returns the unresolved string
+   without attempting interpolation.
+
+   With :class:`BasicInterpolation`, a missing reference within the same
+   section (or in ``DEFAULT``) triggers the error:
+
+   .. doctest::
+
+      >>> cf_basic = configparser.ConfigParser(interpolation=configparser.BasicInterpolation())
+      >>> cf_basic.read_string("[section]\nname = %(missing)s\n")
+      >>> try:
+      ...     cf_basic.get("section", "name")
+      ... except configparser.InterpolationMissingOptionError as e:
+      ...     print(e.option, e.section, e.reference)
+      ...
+      name section missing
+      >>> cf_basic.get("section", "name", raw=True)
+      '%(missing)s'
+      >>> cf_basic.set("section", "missing", "resolved")
+      >>> cf_basic.get("section", "name")
+      'resolved'
+
+   With :class:`ExtendedInterpolation`, the same applies, including for
+   cross-section references using ``${section:option}`` syntax:
+
+   .. doctest::
+
+      >>> cf_ext = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation(), default_section='common')
+      >>> cf_ext.read_string("[common]\nvalue = ok\n\n[test]\nname = ${other:missing}\n")
+      >>> try:
+      ...     cf_ext.get("test", "name")
+      ... except configparser.InterpolationMissingOptionError as e:
+      ...     print(e.option, e.section, e.reference)
+      ...
+      name test other:missing
+      >>> cf_ext.get("test", "name", raw=True)
+      '${other:missing}'
+      >>> cf_ext.add_section('other')
+      >>> cf_ext.set('other', 'missing', 'cross_value')
+      >>> cf_ext.get("test", "name")
+      'cross_value'
+```
+
+Now I need to figure out where to insert this. Let me look at the exact text around the insertion point.
+
+From the visible content (lines 330-500), the ExtendedInterpolation section ends with:
+```
+      python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}
+
+Mapping Protocol Access
+-----------------------
+```
+
+I need to find the exact text to use as `old` for my patch. Let me use the transition between the last line of the ExtendedInterpolation example and the "Mapping Protocol Access" heading.
+
+The text I see is:
+```
+      python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}
+
+Mapping Protocol Access
+```
+
+I'll patch by replacing:
+```
+      python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}
+
+Mapping Protocol Access
+```
+
+with:
+```
+      python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}
+
+   If an interpolation reference points to an option that does not exist,
+   a :exc:`InterpolationMissingOptionError` is raised.  This applies to both
+   interpolation modes.  Using ``raw=True`` returns the unresolved string
+   without attempting interpolation.
+
+   With :class:`BasicInterpolation`, a missing reference within the same
+   section (or in ``DEFAULT``) triggers the error:
+
+   .. doctest::
+
+      >>> cf_basic = configparser.ConfigParser(interpolation=configparser.BasicInterpolation())
+      >>> cf_basic.read_string("[section]\nname = %(missing)s\n")
+      >>> try:
+      ...     cf_basic.get("section", "name")
+      ... except configparser.InterpolationMissingOptionError as e:
+      ...     print(e.option, e.section, e.reference)
+      ...
+      name section missing
+      >>> cf_basic.get("section", "name", raw=True)
+      '%(missing)s'
+      >>> cf_basic.set("section", "missing", "resolved")
+      >>> cf_basic.get("section", "name")
+      'resolved'
+
+   With :class:`ExtendedInterpolation`, the same applies, including for
+   cross-section references using ``${section:option}`` syntax:
+
+   .. doctest::
+
+      >>> cf_ext = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation(), default_section='common')
+      >>> cf_ext.read_string("[common]\nvalue = ok\n\n[test]\nname = ${other:missing}\n")
+      >>> try:
+      ...     cf_ext.get("test", "name")
+      ... except configparser.InterpolationMissingOptionError as e:
+      ...     print(e.option, e.section, e.reference)
+      ...
+      name test other:missing
+      >>> cf_ext.get("test", "name", raw=True)
+      '${other:missing}'
+      >>> cf_ext.add_section('other')
+      >>> cf_ext.set('other', 'missing', 'cross_value')
+      >>> cf_ext.get("test", "name")
+      'cross_value'
+
+
+Mapping Protocol Access
+```
+
+Wait, I need to be careful about the indentation in RST. The doctest blocks inside a `.. class::` directive need to be indented relative to the directive. Let me look at how the existing content is structured.
+
+Looking at the existing content:
+```
+.. class:: BasicInterpolation()
+
+   The default implementation used by :class:`ConfigParser`.  It enables
+   values to contain format strings which refer to other values in the same
+   section, or values in the special default section [1]_.  Additional default
+   values can be provided on initialization.
+
+   For example:
+
+   .. code-block:: ini
+
+      [Paths]
+      home_dir: /Users
+      my_dir: %(home_dir)s/lumberjack
+      my_pictures: %(my_dir)s/Pictures
+```
+
+The `.. code-block::` is indented 3 spaces (relative to the `..` of the directive), and the content inside is indented 6 spaces.
+
+But wait - I want to add the doctest examples at the section level (Interpolation of values), not inside a class directive. Let me look at the structure again.
+
+The "Interpolation of values" section contains:
+1. `.. class:: BasicInterpolation()` with its content
+2. `.. class:: ExtendedInterpolation()` with its content
+
+These are sibling directives at the section level. The doctest examples should go after both class descriptions, still within the "Interpolation of values" section.
+
+Looking at the indentation pattern in the Quick Start section:
+```
+.. doctest::
+
+   >>> import configparser
+   >>> config = configparser.ConfigParser()
+```
+
+The `.. doctest::` is at column 0 (section level), and the doctest content is indented 3 spaces.
+
+But in the interpolation section, the `.. class::` directives are at column 0, and their content is indented 3 spaces. If I add a doctest at the section level (outside the class directives), it should be at column 0 with content indented 3 spaces.
+
+Let me look at the exact text more carefully. The transition is:
+
+```
+      python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}
+
+Mapping Protocol Access
+-----------------------
+```
+
+So there's a blank line between the code-block content and "Mapping Protocol Access". I'll insert my examples in that gap.
+
+Let me write the patch. The `old` text should be:
+```
+      python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}
+
+Mapping Protocol Access
+```
+
+And the `new` text should be:
+```
+      python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}
+
+   If an interpolation reference points to an option that does not exist,
+   a :exc:`InterpolationMissingOptionError` is raised.  This applies to both
+   interpolation modes.  Using ``raw=True`` returns the unresolved string
+   without attempting interpolation.
+
+   With :class:`BasicInterpolation`, a missing reference within the same
+   section (or in ``DEFAULT``) triggers the error:
+
+   .. doctest::
+
+      >>> cf_basic = configparser.ConfigParser(interpolation=configparser.BasicInterpolation())
+      >>> cf_basic.read_string("[section]\nname = %(missing)s\n")
+      >>> try:
+      ...     cf_basic.get("section", "name")
+      ... except configparser.InterpolationMissingOptionError as e:
+      ...     print(e.option, e.section, e.reference)
+      ...
+      name section missing
+      >>> cf_basic.get("section", "name", raw=True)
+      '%(missing)s'
+      >>> cf_basic.set("section", "missing", "resolved")
+      >>> cf_basic.get("section", "name")
+      'resolved'
+
+   With :class:`ExtendedInterpolation`, the same applies, including for
+   cross-section references using ``${section:option}`` syntax:
+
+   .. doctest::
+
+      >>> cf_ext = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation(), default_section='common')
+      >>> cf_ext.read_string("[common]\nvalue = ok\n\n[test]\nname = ${other:missing}\n")
+      >>> try:
+      ...     cf_ext.get("test", "name")
+      ... except configparser.InterpolationMissingOptionError as e:
+      ...     print(e.option, e.section, e.reference)
+      ...
+      name test other:missing
+      >>> cf_ext.get("test", "name", raw=True)
+      '${other:missing}'
+      >>> cf_ext.add_section('other')
+      >>> cf_ext.set('other', 'missing', 'cross_value')
+      >>> cf_ext.get("test", "name")
+      'cross_value'
+
+
+Mapping Protocol Access
+```
+
+Hmm wait, but the `.. doctest::` inside the class directive context... Actually no. Let me re-examine the RST structure.
+
+Looking at the file structure:
+- The "Interpolation of values" section has `.. class:: BasicInterpolation()` and `.. class:: ExtendedInterpolation()` as directives
+- Each class directive contains its own content (indented)
+- After the last class directive's content ends, we're back at the section level
+
+The code-block for ExtendedInterpolation ends with `python_dir: ...` at 6-space indent (inside the class directive's 3-space indent). Then there's a blank line, then "Mapping Protocol Access" at column 0.
+
+So between the end of the ExtendedInterpolation class directive content and the "Mapping Protocol Access" section heading, I'm at the "Interpolation of values" section level. I can add section-level content there.
+
+But wait - is "Mapping Protocol Access" a new section (with its own underline)? Yes:
+```
+Mapping Protocol Access
+-----------------------
+```
+
+So my insertion point is correct - between the end of the ExtendedInterpolation content and the Mapping Protocol Access section.
+
+Now, for the doctest indentation at the section level:
+- Section-level directives use no indent for `..`
+- Content inside section-level directives uses 3-space indent (matching the pattern seen in the Quick Start)
+
+Wait, looking at the Quick Start:
+```
+.. doctest::
+
+   >>> import configparser
+   >>> config = configparser.ConfigParser()
+```
+
+The `.. doctest::` is at column 0, and `>>>` is at column 3.
+
+But in the class directive context:
+```
+.. class:: BasicInterpolation()
+
+   The default implementation...
+
+   .. code-block:: ini
+
+      [Paths]
+```
+
+The class content is at 3-space indent, and the nested `.. code-block::` is also at 3-space indent, with its content at 6-space indent.
+
+For my section-level insertion (after the class directives end), I should use:
+- `.. doctest::` at column 0
+- `>>>` at column 3
+
+But wait, I also have explanatory text. Let me structure it properly:
+
+```
+   If an interpolation reference points to an option that does not exist,
+   a :exc:`InterpolationMissingOptionError` is raised.  This applies to both
+   interpolation modes.  Using ``raw=True`` returns the unresolved string
+   without attempting interpolation.
+
+   With :class:`BasicInterpolation`, a missing reference within the same
+   section (or in ``DEFAULT``) triggers the error:
+
+   .. doctest::
+
+      >>> cf_basic = configparser.ConfigParser(interpolation=configparser.BasicInterpolation())
+```
+
+Hmm, but this has the text at 3-space indent and the doctest at 3-space indent. That's the pattern for content inside a directive. But I'm at section level here.
+
+Actually wait, let me look at how the Quick Start section structures its text and doctests:
+
+From lines 1-100:
+```
+Quick Start
+-----------
+
+Let's take a very basic configuration file that looks like this:
+
+.. code-block:: ini
+
+   [DEFAULT]
+   ...
+
+The structure of INI files is described ...
+
+.. doctest::
+
+   >>> import configparser
+   >>> config = configparser.ConfigParser()
+```
+
+So at section level:
+- Regular text is at column 0
+- `.. doctest::` is at column 0
+- Content inside doctest is at column 3
+
+Let me fix my insertion:
+
+```
+If an interpolation reference points to an option that does not exist,
+a :exc:`InterpolationMissingOptionError` is raised.  This applies to both
+interpolation modes.  Using ``raw=True`` returns the unresolved string
+without attempting interpolation.
+
+With :class:`BasicInterpolation`, a missing reference within the same
+section (or in ``DEFAULT``) triggers the error:
+
+.. doctest::
+
+   >>> cf_basic = configparser.ConfigParser(interpolation=configparser.BasicInterpolation())
+   >>> cf_basic.read_string("[section]\nname = %(missing)s\n")
+   ...
+```
+
+Yes, that's the correct indentation pattern.
+
+Now let me also think about whether the doctest will actually work. The key question is what `configparser` is bound to in the doctest namespace. From the testsetup:
+```
+.. testsetup::
+
+   import configparser
+```
+
+So `configparser` is the module. Good.
+
+Let me verify my doctest logic:
+
+BasicInterpolation:
+- `cf_basic = configparser.ConfigParser(interpolation=configparser.BasicInterpolation())`
+- `cf_basic.read_string("[section]\nname = %(missing)s\n")`
+- `cf_basic.get("section", "name")` should raise InterpolationMissingOptionError
+- The error has: option='name', section='section', rawval='%(missing)s', reference='missing'
+- `print(e.option, e.section, e.reference)` → `name section missing`
+- `cf_basic.get("section", "name", raw=True)` → `'%(missing)s'`
+- `cf_basic.set("section", "missing", "resolved")`
+- `cf_basic.get("section", "name")` → `'resolved'`
+
+ExtendedInterpolation:
+- `cf_ext = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation(), default_section='common')`
+- `cf_ext.read_string("[common]\nvalue = ok\n\n[test]\nname = ${other:missing}\n")`
+- `cf_ext.get("test", "name")` should raise InterpolationMissingOptionError
+- The error has: option='name', section='test', rawval='${other:missing}', reference='other:missing'
+- `print(e.option, e.section, e.reference)` → `name test other:missing`
+- `cf_ext.get("test", "name", raw=True)` → `'${other:missing}'`
+- `cf_ext.add_section('other')`
+- `cf_ext.set('other', 'missing', 'cross_value')`
+- `cf_ext.get("test", "name")` → `'cross_value'`
+
+This looks correct.
+
+Now, one concern: the `read_string` with embedded newlines. In doctest, `\n` in a Python string literal is a backslash-n which Python interprets as a newline. So `"[section]\nname = %(missing)s\n"` is a two-line string. That should work.
+
+Actually wait, let me think about this more carefully. In the doctest, the line is:
+```
+   >>> cf_basic.read_string("[section]\nname = %(missing)s\n")
+```
+
+This is a single line in the doctest. Python will interpret `"\n"` as a newline character. So `read_string` gets:
+```
+[section]
+name = %(missing)s
+```
+
+That's correct.
+
+For the extended one:
+```
+   >>> cf_ext.read_string("[common]\nvalue = ok\n\n[test]\nname = ${other:missing}\n")
+```
+
+This gives:
+```
+[common]
+value = ok
+
+[test]
+name = ${other:missing}
+```
+
+That's correct.
+
+Now let me write the patch. I need to find the exact `old` text that is unique in the file.
+
+The transition I'm targeting:
+```
+      python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}
+
+Mapping Protocol Access
+```
+
+Let me verify this is unique. The string `python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}` appears only once in the file (in the ExtendedInterpolation example). And it's immediately followed by a blank line and "Mapping Protocol Access". So the old text should be unique.
+
+Let me write the full patch now. I need to be very careful with the exact text.
+
+Looking at the visible source for lines 330-500, the relevant portion ends with:
+```
+      python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}
+
+Mapping Protocol Access
+-----------------------
+```
+
+So my old text is:
+```
+      python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}
+
+Mapping Protocol Access
+```
+
+And my new text inserts the doctest examples between them.
+
+Let me also think about whether I need to worry about the `legacy_public_acceptance` criterion. The public check says it's not met. This might be because the examples don't pass, and once they do, the legacy acceptance might also pass. Or it might be a separate issue. Let me focus on getting the examples to work first.
+
+Actually, looking at the criteria more carefully:
+- `examples.execution`: "No newly added executable examples were run." - This will be fixed by adding doctest blocks.
+- `legacy_public_acceptance`: "The original public acceptance remains required, in addition to the declared extra checks." - This might depend on the examples passing, or it might be a separate requirement.
+
+Let me just add the doctest examples and see what happens. The tests check will run after a test edit, and the public check will run after a doc edit. Since I'm editing the doc, the public check will run.
+
+Let me now write the patch carefully.
+
+Actually, I realize I should double-check: does the file use 4-space or 3-space indentation for doctest content? Looking at the Quick Start:
+
+```
+   >>> import configparser
+   >>> config = configparser.ConfigParser()
+   >>> config['DEFAULT'] = {'ServerAliveInterval': '45',
+   ...                      'Compression': 'yes',
+   ...                      'CompressionLevel': '9'}
+```
+
+That's 3 spaces before `>>>`. And for the ellipsis lines:
+```
+   ...                      'Compression': 'yes',
+```
+
+That's 3 spaces + `...` + spaces to align. OK.
+
+Now for my try/except blocks in doctest, the format is:
+```
+   >>> try:
+   ...     cf_basic.get("section", "name")
+   ... except configparser.InterpolationMissingOptionError as e:
+   ...     print(e.option, e.section, e.reference)
+   ...
+```
+
+The `...` lines use 3 spaces + `...` + space + code. Let me make sure this is correct doctest syntax.
+
+In doctest, a try/except block looks like:
+```
+>>> try:
+...     1/0
+... except ZeroDivisionError:
+...     print("error")
+...
+```
+
+The `...` on the last line (before the output) closes the block. So:
+```
+   >>> try:
+   ...     cf_basic.get("section", "name")
+   ... except configparser.InterpolationMissingOptionError as e:
+   ...     print(e.option, e.section, e.reference)
+   ...
+   name section missing
+```
+
+Yes, that's correct.
+
+Let me finalize my patch. I'll use the `patch` action.
+
+Old text (must be exact):
+```
+      python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}
+
+Mapping Protocol Access
+```
+
+New text:
+```
+      python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}
+
+If an interpolation reference points to an option that does not exist,
+a :exc:`InterpolationMissingOptionError` is raised.  This applies to both
+interpolation modes.  Using ``raw=True`` returns the unresolved string
+without attempting interpolation.
+
+With :class:`BasicInterpolation`, a missing reference within the same
+section (or in ``DEFAULT``) triggers the error:
+
+.. doctest::
+
+   >>> cf_basic = configparser.ConfigParser(interpolation=configparser.BasicInterpolation())
+   >>> cf_basic.read_string("[section]\nname = %(missing)s\n")
+   >>> try:
+   ...     cf_basic.get("section", "name")
+   ... except configparser.InterpolationMissingOptionError as e:
+   ...     print(e.option, e.section, e.reference)
+   ...
+   name section missing
+   >>> cf_basic.get("section", "name", raw=True)
+   '%(missing)s'
+   >>> cf_basic.set("section", "missing", "resolved")
+   >>> cf_basic.get("section", "name")
+   'resolved'
+
+With :class:`ExtendedInterpolation`, the same applies, including for
+cross-section references using ``${section:option}`` syntax:
+
+.. doctest::
+
+   >>> cf_ext = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation(), default_section='common')
+   >>> cf_ext.read_string("[common]\nvalue = ok\n\n[test]\nname = ${other:missing}\n")
+   >>> try:
+   ...     cf_ext.get("test", "name")
+   ... except configparser.InterpolationMissingOptionError as e:
+   ...     print(e.option, e.section, e.reference)
+   ...
+   name test other:missing
+   >>> cf_ext.get("test", "name", raw=True)
+   '${other:missing}'
+   >>> cf_ext.add_section('other')
+   >>> cf_ext.set('other', 'missing', 'cross_value')
+   >>> cf_ext.get("test", "name")
+   'cross_value'
+
+
+Mapping Protocol Access
+```
+
+Wait, I need to double-check the indentation of the paragraph text. At the section level (not inside a directive), text is at column 0. Let me look at how other section-level text appears:
+
+From the Quick Start section:
+```
+Let's take a very basic configuration file that looks like this:
+```
+
+That's at column 0. And:
+```
+The structure of INI files is described `in the following section
+<#supported-ini-file-structure>`_.  Essentially, the file
+consists of sections, each of which contains keys with values.
+```
+
+Also at column 0. Good, so my paragraphs should be at column 0.
+
+But wait - I'm inserting after the ExtendedInterpolation `.. class::` directive. The class directive's content is indented 3 spaces. After the class directive ends (when the indentation returns to 0), I'm back at the section level.
+
+The last line of the class directive content is:
+```
+      python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}
+```
+
+That's 6 spaces (3 for the class content + 3 for the code-block content). After this, the class directive ends, and the next non-indented line starts a new section.
+
+So my paragraph text at column 0 is correct - it's at the "Interpolation of values" section level, after both class directives.
+
+Let me write the final patch. One more consideration: the `expected_file_sha256`. From the working set, the file `Doc/library/configparser.rst` has sha256 `6418b0f63a328a50362fb6d171b04d0ee337821b0e7180b62c5a02b3fc616823`.
+
+And the `expected_candidate_id` is `ad1db8dc832f5a10845983703adf758bd1e855051c0c77efb837268ea0915707`.
+
+Let me construct the patch now.

@@ -1,0 +1,175 @@
+Let me analyze the current situation:
+
+1. I have a working candidate `2f9b7cdd874e7e96adecd880581c09a5026a8db9ce9680278ca8a3a1f91845e7`
+2. The public check failed with 13 example execution failures in `Doc/library/configparser.rst`
+3. The failures are all `NameError` - `configparser` is not defined, and `cf_basic` is not defined
+
+Looking at the diagnostics:
+- Line 430: `cf_basic = configparser.ConfigParser(...)` → `NameError: name 'configparser' is not defined`
+- Line 431: `cf_basic.read_string(...)` → `NameError: name 'cf_basic' is not defined`
+- Line 432: `try: cf_basic.get(...)` → `NameError: name 'cf_basic' is not defined`
+- Line 438: `cf_basic.get("section", "name", raw=True)` → `NameError: name 'cf_basic' is not defined`
+
+And 9 more similar failures (total 13).
+
+The problem is clear: the doctest blocks I added use `configparser` and `cf_basic`/`cf_ext` without the module being imported in the doctest namespace. 
+
+Looking at the existing documentation, there's a `.. testsetup::` directive at the top:
+```
+.. testsetup::
+
+   import configparser
+```
+
+This should make `configparser` available in all doctest blocks. But wait - the error says `NameError: name 'configparser' is not defined`. 
+
+Let me re-read the task description: "Changed documentation examples execute together in document order with an explicit standalone `__name__='__main__'` namespace."
+
+So the checker executes the examples in a standalone namespace where `__name__='__main__'`, NOT in the doctest namespace with the testsetup imports. That's why `configparser` is not defined - the testsetup import doesn't apply to how the checker runs them.
+
+Wait, let me re-read: "Changed documentation examples execute together in document order with an explicit standalone `__name__='__main__'` namespace."
+
+This means the checker extracts my new doctest examples and runs them in a fresh namespace. The `.. testsetup::` at the top of the file provides imports for the normal doctest runner, but the checker's "examples.execution" criterion runs them differently.
+
+Looking at the failures more carefully:
+- All 13 failures are `NameError` for `configparser` or `cf_basic`/`cf_ext`
+- The examples I added start with `>>> cf_basic = configparser.ConfigParser(...)` 
+
+The issue is that my doctest blocks reference `configparser` without importing it. In a normal doctest with testsetup, the import at the top would handle this. But the checker apparently runs the examples in a standalone namespace.
+
+Wait, let me re-read the task: "Changed documentation examples execute together in document order with an explicit standalone `__name__='__main__'` namespace."
+
+So the checker takes all the examples I changed/added and runs them together in a namespace where `__name__='__main__'`. This means I need to include `import configparser` at the start of my examples, or at least ensure it's available.
+
+Actually, looking at the existing doctest blocks in the file (lines 1-100), they use `>>> import configparser` explicitly within the doctest block:
+```
+.. doctest::
+
+   >>> import configparser
+   >>> config = configparser.ConfigParser()
+```
+
+So the convention in this file is to import within the doctest block itself. My added examples should also include the import.
+
+Let me look at what I need to fix. My added examples (in the region at lines 330-545, specifically starting around line 418) are:
+
+```
+If an interpolation reference points to an option that does not exist,
+a :exc:`InterpolationMissingOptionError` is raised.  This applies to both
+interpolation modes.  Using ``raw=True`` returns the unresolved string
+without attempting interpolation.
+
+With :class:`BasicInterpolation`, a missing reference within the same
+section (or in ``DEFAULT``) triggers the error:
+
+.. doctest::
+
+   >>> cf_basic = configparser.ConfigParser(interpolation=configparser.BasicInterpolation())
+   >>> cf_basic.read_string("[section]\nname = %(missing)s\n")
+   >>> try:
+   ...     cf_basic.get("section", "name")
+   ... except configparser.InterpolationMissingOptionError as e:
+   ...     print(e.option, e.section, e.reference)
+   ...
+   name section missing
+   >>> cf_basic.get("section", "name", raw=True)
+   '%(missing)s'
+   >>> cf_basic.set("section", "missing", "resolved")
+   >>> cf_basic.get("section", "name")
+   'resolved'
+
+With :class:`ExtendedInterpolation`, the same applies, including for
+cross-section references using ``${section:option}`` syntax:
+
+.. doctest::
+
+   >>> cf_ext = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation(), default_section='common')
+   >>> cf_ext.read_string("[common]\nvalue = ok\n\n[test]\nname = ${other:missing}\n")
+   >>> try:
+   ...     cf_ext.get("test", "name")
+   ... except configparser.InterpolationMissingOptionError as e:
+   ...     print(e.option, e.section, e.reference)
+   ...
+   name test other:missing
+   >>> cf_ext.get("test", "name", raw=True)
+   '${other:missing}'
+   >>> cf_ext.add_section('other')
+   >>> cf_ext.set('other', 'missing', 'cross_value')
+   >>> cf_ext.get("test", "name")
+   'cross_value'
+```
+
+I need to add `>>> import configparser` at the start of my doctest blocks. But wait - there are two separate doctest blocks. If the checker runs all changed examples "together in document order", then I need to make sure the import appears before any usage.
+
+Actually, looking more carefully at the diagnostic: the first failure is at line 430 with `cf_basic = configparser.ConfigParser(...)` and the error is `NameError: name 'configparser' is not defined`. 
+
+The fix is simple: add `>>> import configparser` as the first line of the first doctest block. Since both blocks are in the same file and executed "together in document order", the import in the first block will be available for the second block too.
+
+But wait - I need to be careful. The task says "Changed documentation examples execute together in document order with an explicit standalone `__name__='__main__'` namespace." This means ALL my changed examples run in one namespace. So I just need to add `>>> import configparser` once at the beginning.
+
+Let me look at the current source to understand exactly what lines I need to edit. The region `SRC-76f5192f099a170d2c239bf63ded4481641f80edaa0806f531320589c77263ef` shows lines 330-545 of the file. Looking at the content:
+
+The doctest blocks start at:
+```
+.. doctest::
+
+   >>> cf_basic = configparser.ConfigParser(interpolation=configparser.BasicInterpolation())
+```
+
+I need to change this to:
+```
+.. doctest::
+
+   >>> import configparser
+   >>> cf_basic = configparser.ConfigParser(interpolation=configparser.BasicInterpolation())
+```
+
+Let me figure out the exact line numbers. From the diagnostic, line 430 is where `cf_basic = configparser.ConfigParser(...)` appears. So I need to insert a line before it.
+
+Actually, let me use a patch. I need to find the exact text to replace. Looking at the visible source in the working set (region SRC-76f5192f099a170d2c239bf63ded4481641f80edaa0806f531320589c77263ef), I can see:
+
+```
+With :class:`BasicInterpolation`, a missing reference within the same
+section (or in ``DEFAULT``) triggers the error:
+
+.. doctest::
+
+   >>> cf_basic = configparser.ConfigParser(interpolation=configparser.BasicInterpolation())
+```
+
+I'll patch to add the import line. The old text would be:
+```
+   >>> cf_basic = configparser.ConfigParser(interpolation=configparser.BasicInterpolation())
+```
+
+And the new text:
+```
+   >>> import configparser
+   >>> cf_basic = configparser.ConfigParser(interpolation=configparser.BasicInterpolation())
+```
+
+But wait, I need to be careful about uniqueness. Let me check if this exact string appears only once in the file. Given the file is 1451 lines and this is a specific line in my added documentation, it should be unique.
+
+Actually, I also need to think about what happens with the second doctest block. The `cf_ext` examples also use `configparser`. If the checker runs them in the same namespace, the import from the first block will be available. But if they're separate... let me re-read: "Changed documentation examples execute together in document order with an explicit standalone `__name__='__main__'` namespace."
+
+"together" and "standalone namespace" - this means all my changed examples run in one shared namespace. So one import at the top should suffice.
+
+But actually, I realize there might be another issue. Let me count the failures: 13 total. My examples have:
+- Basic: cf_basic = ..., cf_basic.read_string, cf_basic.get (in try), cf_basic.get(raw=True), cf_basic.set, cf_basic.get = 6 lines
+- Extended: cf_ext = ..., cf_ext.read_string, cf_ext.get (in try), cf_ext.get(raw=True), cf_ext.add_section, cf_ext.set, cf_ext.get = 7 lines
+
+That's 13 executable lines total. All 13 fail because `configparser` is not defined (the first one fails) and then subsequent ones fail because `cf_basic`/`cf_ext` were never defined (because the assignment failed).
+
+So the fix is: add `>>> import configparser` before the first line. This one line addition should fix all 13 failures.
+
+Let me do the patch. I need:
+- path: "Doc/library/configparser.rst"
+- old: the line `   >>> cf_basic = configparser.ConfigParser(interpolation=configparser.BasicInterpolation())`
+- new: `   >>> import configparser\n   >>> cf_basic = configparser.ConfigParser(interpolation=configparser.BasicInterpolation())`
+
+I need the file's sha256: `f23a15b23cf2beb8c2e5a1f93a6b096f62c7fef266ea86894e482a66b772d47a`
+And the current candidate: `2f9b7cdd874e7e96adecd880581c09a5026a8db9ce9680278ca8a3a1f91845e7`
+
+Let me verify uniqueness - this exact line appears only once in the file (it's in my added section). The file has other doctest blocks but they use different variable names.
+
+Let me do this patch.

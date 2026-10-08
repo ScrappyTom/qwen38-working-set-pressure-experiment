@@ -1,0 +1,46 @@
+
+If an interpolation reference points to an option that does not exist,
+a :exc:`InterpolationMissingOptionError` is raised.  This applies to both
+interpolation modes.  Using ``raw=True`` returns the unresolved string
+without attempting interpolation.
+
+With :class:`BasicInterpolation`, a missing reference within the same
+section (or in ``DEFAULT``) triggers the error:
+
+.. doctest::
+
+   >>> import configparser
+   >>> cf_basic = configparser.ConfigParser(interpolation=configparser.BasicInterpolation())
+   >>> cf_basic.read_string("[section]\nname = %(missing)s\n")
+   >>> try:
+   ...     cf_basic.get("section", "name")
+   ... except configparser.InterpolationMissingOptionError as e:
+   ...     print(e.option, e.section, e.reference)
+   ...
+   name section missing
+   >>> cf_basic.get("section", "name", raw=True)
+   '%(missing)s'
+   >>> cf_basic.set("section", "missing", "resolved")
+   >>> cf_basic.get("section", "name")
+   'resolved'
+
+With :class:`ExtendedInterpolation`, the same applies, including for
+cross-section references using ``${section:option}`` syntax:
+
+.. doctest::
+
+   >>> cf_ext = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation(), default_section='common')
+   >>> cf_ext.read_string("[common]\nvalue = ok\n\n[test]\nname = ${other:missing}\n")
+   >>> try:
+   ...     cf_ext.get("test", "name")
+   ... except configparser.InterpolationMissingOptionError as e:
+   ...     print(e.option, e.section, e.reference)
+   ...
+   name test other:missing
+   >>> cf_ext.get("test", "name", raw=True)
+   '${other:missing}'
+   >>> cf_ext.add_section('other')
+   >>> cf_ext.set('other', 'missing', 'cross_value')
+   >>> cf_ext.get("test", "name")
+   'cross_value'
+

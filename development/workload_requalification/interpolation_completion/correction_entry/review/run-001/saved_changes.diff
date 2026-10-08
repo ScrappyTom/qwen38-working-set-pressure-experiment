@@ -1,0 +1,144 @@
+--- before/Doc/library/configparser.rst
++++ after/Doc/library/configparser.rst
+@@ -416,6 +416,52 @@
+       my_dir: ${Common:home_dir}/twosheds
+       my_pictures: ${my_dir}/Pictures
+       python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}
++
++If an interpolation reference points to an option that does not exist,
++a :exc:`InterpolationMissingOptionError` is raised.  This applies to both
++interpolation modes.  Using ``raw=True`` returns the unresolved string
++without attempting interpolation.
++
++With :class:`BasicInterpolation`, a missing reference within the same
++section (or in ``DEFAULT``) triggers the error:
++
++.. doctest::
++
++   >>> import configparser
++   >>> cf_basic = configparser.ConfigParser(interpolation=configparser.BasicInterpolation())
++   >>> cf_basic.read_string("[section]\nname = %(missing)s\n")
++   >>> try:
++   ...     cf_basic.get("section", "name")
++   ... except configparser.InterpolationMissingOptionError as e:
++   ...     print(e.option, e.section, e.reference)
++   ...
++   name section missing
++   >>> cf_basic.get("section", "name", raw=True)
++   '%(missing)s'
++   >>> cf_basic.set("section", "missing", "resolved")
++   >>> cf_basic.get("section", "name")
++   'resolved'
++
++With :class:`ExtendedInterpolation`, the same applies, including for
++cross-section references using ``${section:option}`` syntax:
++
++.. doctest::
++
++   >>> cf_ext = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation(), default_section='common')
++   >>> cf_ext.read_string("[common]\nvalue = ok\n\n[test]\nname = ${other:missing}\n")
++   >>> try:
++   ...     cf_ext.get("test", "name")
++   ... except configparser.InterpolationMissingOptionError as e:
++   ...     print(e.option, e.section, e.reference)
++   ...
++   name test other:missing
++   >>> cf_ext.get("test", "name", raw=True)
++   '${other:missing}'
++   >>> cf_ext.add_section('other')
++   >>> cf_ext.set('other', 'missing', 'cross_value')
++   >>> cf_ext.get("test", "name")
++   'cross_value'
++
+ 
+ Mapping Protocol Access
+ -----------------------
+--- before/Lib/test/test_configparser.py
++++ after/Lib/test/test_configparser.py
+@@ -2251,12 +2251,16 @@
+         self.assertEqual(e.option, expected_args[0])
+         self.assertEqual(e.section, expected_args[1])
+         self.assertEqual(e.reference, expected_args[3])
+-        self.assertEqual(str(e), str(expected_args))
++        _opt, _sec, _raw, _ref = expected_args
++        self.assertEqual(
++            str(e),
++            ("Bad value substitution: option {!r} in section {!r} contains "
++             "an interpolation key {!r} which is not a valid option name. "
++             "Raw value: {!r}").format(_opt, _sec, _ref, _raw))
+ 
+         # Shallow copy preserves all attributes
+         e2 = copy.copy(e)
+-        self.assertIsInstance(
+-            e2, configparser.InterpolationMissingOptionError)
++        self.assertIs(type(e2), configparser.InterpolationMissingOptionError)
+         self.assertEqual(e2.args, e.args)
+         self.assertEqual(e2.option, e.option)
+         self.assertEqual(e2.section, e.section)
+@@ -2265,8 +2269,8 @@
+ 
+         # Deep copy preserves all attributes
+         e3 = copy.deepcopy(e)
+-        self.assertIsInstance(
+-            e3, configparser.InterpolationMissingOptionError)
++        self.assertIs(
++            type(e3), configparser.InterpolationMissingOptionError)
+         self.assertEqual(e3.args, e.args)
+         self.assertEqual(e3.option, e.option)
+         self.assertEqual(e3.section, e.section)
+@@ -2278,8 +2282,8 @@
+             with self.subTest(protocol=protocol):
+                 data = pickle.dumps(e, protocol=protocol)
+                 e4 = pickle.loads(data)
+-                self.assertIsInstance(
+-                    e4, configparser.InterpolationMissingOptionError)
++                self.assertIs(
++                    type(e4), configparser.InterpolationMissingOptionError)
+                 self.assertEqual(e4.args, e.args)
+                 self.assertEqual(e4.option, e.option)
+                 self.assertEqual(e4.section, e.section)
+@@ -2291,12 +2295,12 @@
+         try:
+             cf.get("Interpolation Error", "name")
+         except configparser.InterpolationMissingOptionError as e:
+-            pass
++            err = e
+         else:
+             self.fail("expected InterpolationMissingOptionError")
+ 
+         self._assert_error_transport(
+-            e, ('name', 'Interpolation Error',
++            err, ('name', 'Interpolation Error',
+                 '%(reference)s', 'reference'))
+ 
+         # raw=True returns the unresolved value
+@@ -2314,12 +2318,12 @@
+         try:
+             cf.get("test", "name")
+         except configparser.InterpolationMissingOptionError as e:
+-            pass
++            err = e
+         else:
+             self.fail("expected InterpolationMissingOptionError")
+ 
+         self._assert_error_transport(
+-            e, ('name', 'test', '${missing_ref}', 'missing_ref'))
++            err, ('name', 'test', '${missing_ref}', 'missing_ref'))
+ 
+         # raw=True returns the unresolved value
+         self.assertEqual(
+@@ -2334,12 +2338,12 @@
+         try:
+             cf.get("test", "name")
+         except configparser.InterpolationMissingOptionError as e:
+-            pass
++            err = e
+         else:
+             self.fail("expected InterpolationMissingOptionError")
+ 
+         self._assert_error_transport(
+-            e, ('name', 'test', '${other:missing}', 'other:missing'))
++            err, ('name', 'test', '${other:missing}', 'other:missing'))
+ 
+         # raw=True returns the unresolved value
+         self.assertEqual(

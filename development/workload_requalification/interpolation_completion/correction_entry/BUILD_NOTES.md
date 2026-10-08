@@ -1,5 +1,27 @@
 # Running qualification and review notes
 
+- The one live run used all16 requests and35 operations, saving correct tests and
+  documentation with final public pass CHK-0187 at83b7ac8d. The pass follows the
+  final response and has no model recipient; no submission occurs. Preserve the
+  request-limit disposition. No live coaching, retry, policy change or extension.
+- Full input/output/effect review and independent audit verify597 artifacts,
+  2,232 bindings,490 custody records,37 checkpoints,32 nonterminal receipts and
+  37 source presentations. The initial input exactly matches preparation; C64's
+  final read/pending receipt arrive for the first time. Runtime closes normally.
+- Ordinary standalone execution passes all14 added examples. Eight other files,
+  41 protected test-module AST nodes and old documentation lines remain intact.
+  Isolated wrong-lookup-subclass probes fail all3 saved tests while control passes.
+  The actual edited suite passes362 methods with5skips; independent contract8pass.
+- Preserve verify_run_failed_001.py and VERIFY-001.log. My extra initial-receipt
+  audit compared raw host rendering options with the model projection. The public
+  receipt content was correct. VERIFY-002 passes after correcting that auditor;
+  no sealed record, source or runtime state changes.
+- New model cost44.311minutes,212,549input/39,657generatedtokens; recordedloop52.562
+  minutes. Known interpolation cost176.140minutes across80dispatches/79responses;
+  originalC22 remains unknown. Preparation, consultation and review are separate.
+  The next local step is a separately qualified saved-pass closure, not a repeat
+  of the repair. See review/RESULTS.md and the parent NEXT_DECISION.md.
+
 - Inspected the actual complete C64 thinking/reply, final source/check/account,
   pending receipts and checkpoint. Its final read is a successful161-line read
   that has never reached a task model. No replay of an action or new acquisition

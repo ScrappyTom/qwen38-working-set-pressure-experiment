@@ -1,4 +1,31 @@
-# Finite correction job qualified for one uncoached run
+# Correct interpolation artifact saved; consume the last pass before closure
+
+Read development/workload_requalification/interpolation_completion/correction_entry/
+review/RESULTS.md, complete READING_NOTES.md and the parent NEXT_DECISION.md.
+The one run001 ends at request80/operation187 with correct83b7ac8d tests/docs and
+actual public CHK-0187 pass. The final three outcomes have no following model call;
+no submit occurs. Preserve request-limit disposition.16newrequests/35ops cost
+44.311model/52.562loop minutes. Known interpolation cost176.140minutes across
+80dispatches/79responses; originalC22 remains unknown, not zero.
+
+Actual full input/output/effect/artifact review and audit pass597artifacts,
+2,232bindings,490custody,37checkpoints,32nonterminalreceipts/37sourcepresentations.
+Edited362tests/5skips,8contractmethods, scoped faults and14examples pass; ordinary
+standalone14/14 and the isolated lookup-subclass sensitivity probe confirm useful
+work. Eight other files,41other ASTnodes and old doclines are preserved. The first
+supplementary auditor comparison was wrong; failed source/log remain. Runtime
+closed, fully offloaded, no CUDA error/truncation;286MiB free minimum is advisory.
+
+Next prepare a thin saved-result closure from exact final candidate/history/account
+and pending185/186/187 outcomes, two requests/four operations (absolute82/191).
+Qualify/freeze/publish before inference, same checker/settings/tools. No reviewer
+repair, preferred action, automatic account rewrite, replayed check, live coaching,
+private-draft execution or silent extension. Consume the actual pass before any
+claim of completed submission. This run does not isolate correction-view or account
+benefit. No new memory/format/effort policy or repeat repair is selected. The wider
+workload ledger remains open; after closure return to distinct entries.
+
+# Prior direction: finite correction job qualified for one uncoached run
 
 Read development/workload_requalification/interpolation_completion/correction_entry/
 PREPARATION_REVIEW.md, PLAN.md and SPEC.md. The prospective plan is published at

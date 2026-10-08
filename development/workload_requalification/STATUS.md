@@ -1,4 +1,27 @@
-# Finite correction job qualified; no new task inference yet
+# Correct interpolation work checked; final actor closure remains open
+
+correction_entry/run-001 closes at80requests/187operations with actual public
+CHK-0187 passing on83b7ac8d. Qwen corrects saved test failures and adds/repairs
+documentation without live coaching. All14newexamples pass ordinary standalone
+execution; actual edited suite362/5skips and8independent contract methods pass.
+Eight other files,41protected ASTnodes and old documentation lines remain exact.
+An isolated lookup-subclass fault is detected by all3saved tests.
+
+The16newrequests/35ops cost44.311model/52.562loop minutes. All32nonterminal outcomes
+arrive;597artifacts/2,232bindings/490custody/37checkpoints and37sourcepresentations
+verify. Preserve the failed reviewer receipt-comparison assertion and corrected
+audit. Runtime/GPU released. No new capacity or missing-result defect occurred;
+the correction mixin adds no otherwise absent target on this actual trajectory.
+
+The last account/edit/pass has no following model call. No submission occurred:
+correct artifact plus unseen pass does not close the operating loop. Next prepare
+the small saved-result closure in interpolation_completion/NEXT_DECISION.md,
+with2newrequests/4ops (absolute82/191), unchanged candidate/checker and natural
+account/receipts. No automatic retry, repeat repair or new mechanism. Known
+interpolation cost176.140model minutes across80dispatches/79responses; originalC22
+is unknown. Read correction_entry/review/RESULTS.md. Wider corpus remains open.
+
+# Prior direction: finite correction job qualified; no new task inference yet
 
 interpolation_completion/correction_entry restores the actual failed candidate,
 natural account/history and final C64 acquisition. The new allowance is16 model
@@ -219,7 +242,7 @@ Historical successes remain preserved; the new-host column requires new evidence
 
 | Workload / entry | Historical evidence | New-host status |
 |---|---|---|
-| Configparser missing-interpolation tests and documentation | working_set_continuation, evidence_assembly, pending-contribution: incomplete | Corrected-report continuation at c3d6da70 exhausted its ten remaining requests without edits/checks/submission. Exact replay passes; discovery/selection follow-up remains open. |
+| Configparser missing-interpolation tests and documentation | working_set_continuation, evidence_assembly, pending-contribution: incomplete | correction_entry/run-001 corrects the actual saved failures and saves accurate docs at83b7ac8d; actual public pass, edited362tests/5skips,8contractmethods and14examples. Independent artifact/prose/ordinary-example review and exact replay pass; prior work preserved.16newrequests/35ops and44.311model minutes; known lineage80dispatches/79responses/132interpolationops and176.140model minutes plus unknown originalC22. The last pass has no model recipient and no submit occurs. Artifact obligation is satisfied; separately qualified saved-result closure remains open. Original failed outcomes/costs remain unchanged. |
 | Configparser multiline-continuation backport, original source | configparser_backport: correct library only, no complete contribution | Operational attempt at6b9da26a exhausted40requests/60operations; library/tests/docs saved, no pass, final library edit violates raw-line contract. Exact replay passes. Recovery worked; diagnostic projection omitted useful failures. Diagnostic continuation at9e39f9ce reaches checked submission in9new requests/13operations; combined49/73 and88.668model minutes. Exact replay and preserved-test review pass. Reviewer-directed uncoached prose follow-up at516e1cde completes5new requests/8operations with accurate docs and exact library/test preservation. Combined54/81,107.164model minutes. This closes the original entry with supplied review findings, not autonomous prose diagnosis. |
 | Parser tests/docs from saved library repair | bounded_working_set: failed autonomous selection; assisted completion | Uncoached saved_library_entry at76e0f11a completes17requests/26operations with five new tests, actual public pass and submission. Exact replay and source preservation pass;47.382 model minutes. Reviewer-directed uncoached prose follow-up at98860482 completes3new requests/5operations, fixes the supplied findings and preserves all library/test bytes. Exact replay and direct prose review pass. Combined20requests/31operations,57.193model minutes and70.346loop minutes; this distinct entry is closed with supplied review findings. |
 | Parser-raised exception copying/pickling extension | uncoached_contribution and reasoning_allocation: mixed, including successes | exception_transport at47ad07d7 stopped adaptively after13requests/18operations, no edits/checks/submission. All17 nonterminal receipts delivered; exact replay passes;11.132model minutes/19.680loop minutes. Repeated lost search coordinates earn search_continuity qualification; resident-source rereading and account-only responses remain distinct. search_continuity at520dd799 uses all11 remaining requests/16operations and reaches correct tests plus a current public pass after a real failed-check correction. Cumulative24/34;52.801model minutes/69.013loop minutes. All14nonterminal receipts arrive and exact replay/direct assertion review pass. Original request limit prevents exposure of final pass/submission. Separately qualified transport_closure atf5b7d2ce consumes that actual pass and submits unchanged work in1extra request/2operations. Exact replay/direct review pass; entry closed at25requests/36operations,54.010model minutes/71.205loop minutes,with explicit extra opportunity. |
