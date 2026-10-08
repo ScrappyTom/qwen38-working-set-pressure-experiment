@@ -1,3 +1,21 @@
+# Qualified correction context; one separate consultation pending
+
+Read interpolation_completion/correction_context/PREPARATION_REVIEW.md and
+source_discovery_consultation/current_input/SPEC.md under the workload ledger.
+The opt-in successor adds exact current edited source to recovery focus only
+when the complete input fits without losing the admitted feedback arrangement.
+Eight CPU checks pass; the old C64 reproduces at 12,536 tokens and the revised
+view at 14,160 with lines 2204–2356 and the identical ordinary failure. The large
+synthetic region falls back truthfully. No sealed ancestor or shared host source
+changes. Preserve the reviewer's failed CPU-001 coordinate test and correction.
+
+Five consultation checks and actual native rendering qualify the exact quoted
+C63 input at 22,789 tokens, medium uncapped, seed 42, no executable action channel.
+Publish before the one initial D1 using current_input/consult.py run. Personally
+review all thinking/public output before deciding whether any clarification is
+earned. No automatic follow-up, original-run extension or new task attempt is
+part of this tranche. The interpolation contribution remains unsuccessful/open.
+
 # Closed interpolation attempt; qualify correction context before another run
 
 This current direction supersedes the launch instructions retained below. Read
