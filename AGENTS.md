@@ -1,3 +1,17 @@
+# Active: complete the unfinished interpolation contribution
+
+Read development/workload_requalification/interpolation_completion/PLAN.md and
+BUILD_NOTES.md. The owner approved this next entry. Restore actual closed
+interpolation_revision/run-002 work/history/account, declare the empty new source
+selection, and qualify the current host and complete checker information path.
+Keep all original attempts and costs;32 prior dispatches include unknown C22.
+The new finite job adds32 requests/96 operations to32/101, ceilings64/197.
+Publish preparation before one uncoached run; no retry, extension, supplied group,
+reference patch, semantic account repair or private-draft execution. Keep medium
+uncapped settings and declared path-triggered checks. Full actual input/output,
+artifact and custody review precedes diagnosis. No presentation efficiency benefit
+or new memory policy is claimed; the wider workload ledger remains open.
+
 # Closed assertion completion; preserve the pair's original scores
 
 Read current_job_presentation/contract_completion/review/RESULTS-001.md,
