@@ -1,0 +1,120 @@
+## 1. What the source establishes
+
+**Constructor and attributes (both paths, one class):**
+
+The visible source of `Lib/configparser.py` (lines 260–545) defines:
+
+```python
+class InterpolationMissingOptionError(InterpolationError):
+    def __init__(self, option, section, rawval, reference):
+        msg = ("Bad value substitution: option {!r} in section {!r} contains "
+               "an interpolation key {!r} which is not a valid option name. "
+               "Raw value: {!r}".format(option, section, reference, rawval))
+        InterpolationError.__init__(self, option, section, msg)
+        self.reference = reference
+        self.args = (option, section, rawval, reference)
+```
+
+Established on the instance after construction:
+
+| Attribute | Value |
+|-----------|-------|
+| `e.args` | `(option, section, rawval, reference)` — four elements |
+| `e.option` | `option` |
+| `e.section` | `section` |
+| `e.reference` | `reference` |
+
+The local `msg` is passed to `InterpolationError.__init__` → `Error.__init__(self, msg)` (i.e. `Exception.__init__`), which temporarily sets `args = (msg,)`. That is then overwritten twice. **No named attribute retains the formatted `msg`.** Because `len(e.args) == 4`, `str(e)` returns the 4-tuple repr, not the diagnostic sentence.
+
+**BasicInterpolation raise site** (`_interpolate_some`):
+
+```python
+var = parser.optionxform(m.group(1))   # m from r"%\(([^)]+)\)s"
+...
+raise InterpolationMissingOptionError(option, section, rawval, var) from None
+```
+
+- `option`, `section`: the option/section being resolved (as passed into `_interpolate_some`).
+- `rawval`: `parser.get(section, option, raw=True, fallback=rest)` — the raw stored value of that option.
+- `reference` (= `var`): the referenced option name **after** `optionxform`.
+
+**ExtendedInterpolation raise site** (`_interpolate_some`):
+
+```python
+path = m.group(1).split(':')           # m from r"\$\{([^}]+)\}"
+...
+raise InterpolationMissingOptionError(option, section, rawval, ":".join(path)) from None
+```
+
+- `option`, `section`: as above.
+- `rawval`: same `parser.get(section, option, raw=True, fallback=rest)`.
+- `reference`: the **raw text** between `${` and `}` joined from the split, i.e. `":".join(path)`. The section part is *not* optionxform'd in the reference; only the option part is optionxform'd for the lookup that triggers the `KeyError`/`NoSectionError`/`NoOptionError`.
+
+**Existing tests pin concrete values:**
+
+- `test_interpolation_missing_value` (BasicInterpolation via `_UNSET` default): `e.args == ('name', 'Interpolation Error', '%(reference)s', 'reference')`.
+- `test_strange_options` (ExtendedInterpolation): `cm.exception.reference == 'dollars:${sick'` and `cm.exception.args[2] == '${dollars:${sick}}'` (the rawval).
+- `test_other_errors` (ExtendedInterpolation): asserts the exception class for cross-section case 3 but does not pin `args`/attributes.
+
+**What is NOT established by the visible source:**
+
+- The formatted `msg` string is not stored as an instance attribute. It exists only as a local variable in `__init__`. There is no `e.message`, `e.diagnostic`, or similar.
+- The source does not show a `__str__` override on any class in the chain, so `str(e)` is the default `BaseException.__str__` (tuple repr for multi-element `args`).
+- The visible test file (lines 1191–1400, 2050–2210) does not contain a test that asserts the diagnostic sentence for either interpolation mode. The existing `test_interpolation_missing_value` asserts only `args`, `option`, `section`, `reference` — it never compares against the formatted message.
+
+---
+
+## 2. Sufficiency for diagnostic-text assertions
+
+**The diagnostic text is fully determined and known.** The format string is literal in the source:
+
+```
+"Bad value substitution: option {!r} in section {!r} contains "
+"an interpolation key {!r} which is not a valid option name. "
+"Raw value: {!r}"
+```
+
+applied to `(option, section, reference, rawval)`. Given any concrete `(option, section, rawval, reference)` quadruple, the expected `msg` is a pure computation. There is no runtime nondeterminism.
+
+**However, the diagnostic text is not stored on the exception.** You cannot write:
+
+```python
+assertEqual(e.<any_attribute>, expected_msg)
+```
+
+because no such attribute exists. The only data on the instance is `args`, `option`, `section`, `reference` (and the internal `__traceback__`/`__cause__`/`__suppress_context__` from the `raise ... from None`).
+
+**Is this a consequential uncertainty?** No. The diagnostic text is a deterministic function of `e.args[0]`, `e.args[1]`, `e.args[3]`, `e.args[2]` (note the swap: `args[2]` is `rawval`, `args[3]` is `reference`, while the format template takes `reference` in the 3rd slot and `rawval` in the 4th). Asserting the full `args` tuple *is* asserting every input to the diagnostic template. The format string is stable library source. There is no additional degree of freedom.
+
+Concretely, for the BasicInterpolation `[Interpolation Error]` / `name = %(reference)s` case, the diagnostic text is:
+
+```
+Bad value substitution: option 'name' in section 'Interpolation Error' contains an interpolation key 'reference' which is not a valid option name. Raw value: '%(reference)s'
+```
+
+This is computable from the args alone. No execution is needed to determine it. No operation is required to resolve uncertainty. The support already present in the source (the format string + the constructor logic + the existing `args` assertions in `test_interpolation_missing_value`) is complete.
+
+**One note of caution (not an uncertainty, but a scoping point):** the task says "Check … diagnostic text against the actual failing lookup." Because the text is not a stored attribute, the meaningful assertion is on the `args` tuple (which pins all four inputs) combined with the knowledge that the format string is fixed. A test that asserts `e.args == (…)` and separately verifies the format-string reconstruction is not tautological; it verifies that the library still uses the expected template. But you cannot assert `str(e) == <the nice message>` — `str(e)` will be the tuple repr.
+
+No acquisition operation is needed. The source is sufficient.
+
+---
+
+## 3. What in the interface makes the decision difficult
+
+**Nothing in the interface prevents writing the assertions.** The exception class exposes exactly the four values that determine the diagnostic text, via `args` and the three named attributes. The format string is in the library source and is not parameterised, configurable, or locale-dependent.
+
+The one structural fact that adds a step to the reasoning (but not a blocker): **the diagnostic message is not independently stored.** It is a transient computed from the same four values that are stored in `args`. This means:
+
+- You *can* assert the four values (done via `assertEqual(e.args, …)` or the individual attributes).
+- You *can* compute the expected message from those values and the visible format string.
+- You *cannot* assert the message as a separate piece of state on the exception, because it is not there.
+
+This is not an "unavailable fact" in the sense of "there is a value we cannot see." It is a design characteristic of the exception: the formatted string is ephemeral. The information content is zero beyond what `args` already carries. No operation (`read`, `search`, `check`, `inspect_observation`, etc.) could surface the `msg` as a separate observable because it does not persist.
+
+**Retaining the current interface is the correct conclusion.** The exception class provides:
+- A stable, inspectable `args` tuple with all four inputs.
+- Named attributes (`option`, `section`, `reference`) for the three most commonly checked values.
+- A deterministic, source-visible format template.
+
+This is sufficient to write assertions that verify the diagnostic text without storing it redundantly. A `message` attribute or a `__str__` override would be a different presentation, not a missing fact. The task's requirement to "check the diagnostic text" is met by pinning `args` and confirming the format string has not changed (which is the stable library source under test). No interface change is warranted.

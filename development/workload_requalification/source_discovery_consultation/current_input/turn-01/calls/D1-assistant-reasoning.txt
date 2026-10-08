@@ -1,0 +1,635 @@
+The user is asking me to act as an interface reviewer examining an archived decision input. They want me to answer three specific questions about the evidence in the archived messages. Let me carefully analyze what's actually visible in the source material.
+
+Let me parse through the three questions:
+
+1. What does the actual source establish about the arguments, attributes and diagnostic text of InterpolationMissingOptionError raised by BasicInterpolation and ExtendedInterpolation paths?
+
+2. Is that evidence sufficient to write assertions about the diagnostic text? If a consequential uncertainty remains, name it and give one existing operation with complete arguments that could resolve it.
+
+3. What, if anything, in this actual interface makes that decision difficult?
+
+Let me carefully examine the source code that's visible.
+
+**From Lib/configparser.py (lines 260-545, region SRC-753c126f...):**
+
+The `InterpolationMissingOptionError` class:
+```python
+class InterpolationMissingOptionError(InterpolationError):
+    """A string substitution required a setting which was not available."""
+
+    def __init__(self, option, section, rawval, reference):
+        msg = ("Bad value substitution: option {!r} in section {!r} contains "
+               "an interpolation key {!r} which is not a valid option name. "
+               "Raw value: {!r}".format(option, section, reference, rawval))
+        InterpolationError.__init__(self, option, section, msg)
+        self.reference = reference
+        self.args = (option, section, rawval, reference)
+```
+
+And `InterpolationError`:
+```python
+    def __init__(self, msg):
+        Error.__init__(self, msg)
+        self.option = option
+        self.section = section
+        self.args = (option, section, msg)
+```
+
+Wait, let me re-read. The source shows:
+```
+        Error.__init__(self, msg)
+        self.option = option
+        self.section = section
+        self.args = (option, section, msg)
+```
+
+But this is the `InterpolationError.__init__` which takes `(self, option, section, msg)` based on context. Let me re-read the exact source:
+
+```python
+class InterpolationError(Error):
+    def __init__(self, option, section, msg):
+        Error.__init__(self, msg)
+        self.option = option
+        self.section = section
+        self.args = (option, section, msg)
+```
+
+Wait, actually looking at the source more carefully:
+
+The source shows (starting from what appears to be mid-class):
+```
+        Error.__init__(self, msg)
+        self.option = option
+        self.section = section
+        self.args = (option, section, msg)
+```
+
+This is the tail of `InterpolationError.__init__`. Then:
+
+```python
+class InterpolationMissingOptionError(InterpolationError):
+    """A string substitution required a setting which was not available."""
+
+    def __init__(self, option, section, rawval, reference):
+        msg = ("Bad value substitution: option {!r} in section {!r} contains "
+               "an interpolation key {!r} which is not a valid option name. "
+               "Raw value: {!r}".format(option, section, reference, rawval))
+        InterpolationError.__init__(self, option, section, msg)
+        self.reference = reference
+        self.args = (option, section, rawval, reference)
+```
+
+So the constructor takes `(self, option, section, rawval, reference)`.
+
+The `msg` (diagnostic text) is constructed as:
+```
+"Bad value substitution: option {!r} in section {!r} contains an interpolation key {!r} which is not a valid option name. Raw value: {!r}"
+```
+formatted with `(option, section, reference, rawval)`.
+
+The `args` tuple is `(option, section, rawval, reference)`.
+
+The attributes set:
+- `self.option = option` (from InterpolationError.__init__)
+- `self.section = section` (from InterpolationError.__init__)
+- `self.reference = reference` (set directly)
+- `self.args = (option, section, rawval, reference)` (overrides the InterpolationError's args)
+
+Now, the `InterpolationError.__init__` sets `self.args = (option, section, msg)`, but `InterpolationMissingOptionError.__init__` then overrides `self.args = (option, section, rawval, reference)`.
+
+**BasicInterpolation path** (in `_interpolate_some`):
+```python
+try:
+    v = map[var]
+except KeyError:
+    raise InterpolationMissingOptionError(
+        option, section, rawval, var) from None
+```
+
+Here `var = parser.optionxform(m.group(1))` where `m = self._KEYCRE.match(rest)` and `_KEYCRE = re.compile(r"%\(([^)]+)\)s")`.
+
+So for BasicInterpolation, if `%(reference)s` is in the value and `reference` is not in the map, it raises `InterpolationMissingOptionError(option, section, rawval, var)` where:
+- `option` is the option being resolved
+- `section` is the section
+- `rawval` is the raw value from `parser.get(section, option, raw=True, fallback=rest)`
+- `var` is `parser.optionxform(m.group(1))` — the option name after optionxform
+
+**ExtendedInterpolation path** (in `_interpolate_some`):
+```python
+path = m.group(1).split(':')
+rest = rest[m.end():]
+sect = section
+opt = option
+try:
+    if len(path) == 1:
+        opt = parser.optionxform(path[0])
+        v = map[opt]
+    elif len(path) == 2:
+        sect = path[0]
+        opt = parser.optionxform(path[1])
+        v = parser.get(sect, opt, raw=True)
+    else:
+        raise InterpolationSyntaxError(...)
+except (KeyError, NoSectionError, NoOptionError):
+    raise InterpolationMissingOptionError(
+        option, section, rawval, ":".join(path)) from None
+```
+
+Here `_KEYCRE = re.compile(r"\$\{([^}]+)\}")`.
+
+So for ExtendedInterpolation:
+- If same-section reference `${foo}`: `path = ['foo']`, reference = `'foo'` (just the option name)
+- If cross-section reference `${section:foo}`: `path = ['section', 'foo']`, reference = `'section:foo'` (joined by ':')
+
+The `rawval` is the raw value from `parser.get(section, option, raw=True, fallback=rest)`.
+
+**Now for question 2: Is the evidence sufficient to write assertions about the diagnostic text?**
+
+The diagnostic text (the `msg` that becomes the `str()` of the exception and also `e.args[2]` in InterpolationError but is overridden) is:
+
+```
+"Bad value substitution: option {!r} in section {!r} contains an interpolation key {!r} which is not a valid option name. Raw value: {!r}"
+```
+
+Wait, actually the `args` is overridden to `(option, section, rawval, reference)`. So `str(e)` would use `Error.__init__(self, msg)` which sets the message. Let me think about this more carefully.
+
+`InterpolationError.__init__(self, option, section, msg)` calls `Error.__init__(self, msg)`. In Python, `Exception.__init__` with one argument sets `self.args = (msg,)` and `str(e)` returns `msg`. But then `InterpolationError.__init__` overrides `self.args = (option, section, msg)`.
+
+Then `InterpolationMissingOptionError.__init__` further overrides `self.args = (option, section, rawval, reference)`.
+
+So `str(e)` for `InterpolationMissingOptionError` would return... In Python 3, `Exception.__str__` returns `str(self.args[0])` if `args` has one element, or `str(self.args)` otherwise. Wait, actually:
+
+Looking at CPython source: `BaseException.__str__` returns:
+- If `len(self.args) == 1`: `str(self.args[0])`
+- Otherwise: `str(self.args)`
+
+Since `InterpolationMissingOptionError` has `self.args = (option, section, rawval, reference)` (4 elements), `str(e)` would return the string representation of the 4-tuple, NOT the `msg`.
+
+Wait, but `Error.__init__(self, msg)` is called first. Let me trace:
+
+1. `InterpolationMissingOptionError.__init__(self, option, section, rawval, reference)` is called
+2. It computes `msg = "Bad value substitution: option {!r} in section {!r} contains an interpolation key {!r} which is not a valid option name. Raw value: {!r}".format(option, section, reference, rawval)`
+3. It calls `InterpolationError.__init__(self, option, section, msg)`
+4. Inside that, `Error.__init__(self, msg)` is called — this is likely `Exception.__init__(self, msg)` which sets `self.args = (msg,)`
+5. Then `self.option = option`, `self.section = section`, `self.args = (option, section, msg)` — overrides args
+6. Back in `InterpolationMissingOptionError.__init__`: `self.reference = reference`, `self.args = (option, section, rawval, reference)` — overrides args again
+
+So the final state:
+- `self.args = (option, section, rawval, reference)`
+- `self.option = option`
+- `self.section = section`
+- `self.reference = reference`
+- The `msg` string is computed but NOT stored as an attribute (it was passed to `Error.__init__` which set args, but then args was overridden twice)
+
+Wait, actually `Error.__init__(self, msg)` — what is `Error`? Looking at the source, it's `class Error(Exception)`. So `Error.__init__` would be `Exception.__init__` which does `self.args = (msg,)` if called with one argument. But actually in Python 3, `Exception.__init__` is a bit special. Let me think...
+
+Actually in CPython, `BaseException.__init__` sets `self.args = args` (the arguments passed). If you call `Error.__init__(self, msg)`, that's calling `Exception.__init__(self, msg)` which sets `self.args = (msg,)`. Then `str(e)` would normally return `msg` (since len(args)==1). But then `self.args` gets overridden to `(option, section, msg)` and then `(option, section, rawval, reference)`.
+
+So `str(e)` after all the overrides: `self.args` has 4 elements, so `str(e)` returns `str((option, section, rawval, reference))`.
+
+Hmm wait, but the existing test in `test_interpolation_missing_value` checks:
+```python
+self.assertEqual(e.args, ('name', 'Interpolation Error', '%(reference)s', 'reference'))
+```
+
+This confirms `e.args = (option, section, rawval, reference)`.
+
+And the test in `test_strange_options` checks:
+```python
+self.assertEqual(cm.exception.args[2], '${dollars:${sick}}') #rawval
+```
+
+This confirms `args[2]` is the rawval.
+
+Now, the `msg` (the diagnostic text) — is it accessible? It's NOT stored as a separate attribute. It was passed to `Error.__init__` which would have set `self.args = (msg,)` temporarily, but that got overridden. So the diagnostic text as computed by the `msg` variable is effectively lost unless you reconstruct it from the args.
+
+Wait, actually... let me re-check. In Python 3, `Exception.__init__` behavior:
+
+```python
+class BaseException:
+    def __init__(self, /, *args):
+        self.args = args
+```
+
+So `Error.__init__(self, msg)` → `Exception.__init__(self, msg)` → `self.args = (msg,)`.
+
+Then `InterpolationError.__init__` sets `self.args = (option, section, msg)`.
+Then `InterpolationMissingOptionError.__init__` sets `self.args = (option, section, rawval, reference)`.
+
+So the `msg` string is NOT preserved in any attribute. It's computed locally in `__init__` and passed to `Error.__init__`, which stores it in `self.args`, which is then overwritten twice.
+
+Actually wait — does `str(e)` use `self.args`? Yes:
+- `BaseException.__str__`: if `len(self.args) == 1`, returns `str(self.args[0])`, else returns `str(self.args)`.
+
+Since `self.args = (option, section, rawval, reference)` (4 elements), `str(e)` returns something like `"('name', 'Interpolation Error', '%(reference)s', 'reference')"` — the tuple repr.
+
+So the `msg` (the nicely formatted diagnostic) is NOT accessible from the exception instance at all! It's computed, used to call `Error.__init__` (which sets args to `(msg,)`), and then args is overwritten. The formatted message is effectively discarded.
+
+Wait, but that seems odd. Let me reconsider. Is there maybe a `self.message` or something?
+
+Looking at the source again:
+```python
+class InterpolationError(Error):
+    def __init__(self, option, section, msg):
+        Error.__init__(self, msg)
+        self.option = option
+        self.section = section
+        self.args = (option, section, msg)
+```
+
+No `self.message` attribute. And `InterpolationMissingOptionError` doesn't store `msg` either.
+
+So the diagnostic text (the `msg` variable) is NOT stored anywhere accessible on the exception. The exception's `str()` will show the 4-tuple repr because `args` has 4 elements.
+
+Actually wait, I need to be more careful. Let me look at what `Error` is. In the source visible:
+
+```python
+class Error(Exception):
+    """Common base class for all exceptions raised by this module."""
+```
+
+Actually I don't see that explicitly in the visible source, but it's the standard configparser structure. The visible source starts mid-file at line 260.
+
+OK so the key question: **Is the diagnostic text (the formatted `msg`) accessible?**
+
+From the source: NO. The `msg` is a local variable in `InterpolationMissingOptionError.__init__`. It's passed to `InterpolationError.__init__` which passes it to `Error.__init__` (i.e., `Exception.__init__`). `Exception.__init__` stores it as `self.args = (msg,)`. Then `InterpolationError.__init__` overwrites `self.args = (option, section, msg)`. Then `InterpolationMissingOptionError.__init__` overwrites `self.args = (option, section, rawval, reference)`.
+
+The `msg` string is NOT available as an attribute. It's not in `e.args` (which is the 4-tuple). It's not stored anywhere.
+
+BUT — you CAN reconstruct it from the args:
+```python
+msg = ("Bad value substitution: option {!r} in section {!r} contains "
+       "an interpolation key {!r} which is not a valid option name. "
+       "Raw value: {!r}".format(option, section, reference, rawval))
+```
+
+Which equals:
+```python
+msg = ("Bad value substitution: option {!r} in section {!r} contains "
+       "an interpolation key {!r} which is not a valid option name. "
+       "Raw value: {!r}".format(e.args[0], e.args[1], e.args[3], e.args[2]))
+```
+
+So the diagnostic text IS deterministic given the args, but it's NOT directly stored on the exception. You'd need to either:
+1. Reconstruct it from the format string and args
+2. Or compare against the known format string
+
+Now, for the **BasicInterpolation** path, what are the exact values?
+
+Given the test config in `get_interpolation_config()`:
+```
+[Interpolation Error]
+name = %(reference)s
+```
+
+When you call `cf.get("Interpolation Error", "name")`:
+- `option = "name"` (after optionxform, which by default is `.lower()`, so "name" stays "name")
+- `section = "Interpolation Error"`
+- The value is `%(reference)s`
+- `rawval` = the raw value = `%(reference)s` (this is what `parser.get(section, option, raw=True, fallback=rest)` returns at the start of `_interpolate_some`)
+- `var` = `parser.optionxform("reference")` = `"reference"` (lowercase by default)
+- `reference` attribute = `var` = `"reference"`
+
+So the exception would have:
+- `e.args = ("name", "Interpolation Error", "%(reference)s", "reference")`
+- `e.option = "name"`
+- `e.section = "Interpolation Error"`
+- `e.reference = "reference"`
+
+The diagnostic msg would be:
+```
+"Bad value substitution: option 'name' in section 'Interpolation Error' contains an interpolation key 'reference' which is not a valid option name. Raw value: '%(reference)s'"
+```
+
+For the **ExtendedInterpolation** path:
+
+Same-section reference: `${reference}` where `reference` doesn't exist:
+- `path = ["reference"]`
+- `reference` (the arg) = `"reference"` (i.e., `":".join(["reference"])`)
+- `rawval` = the raw value containing `${reference}`
+- `option` = the option being resolved
+- `section` = the section
+
+Cross-section reference: `${other_section:option_name}` where it doesn't exist:
+- `path = ["other_section", "option_name"]`
+- `reference` (the arg) = `"other_section:option_name"` (i.e., `":".join(["other_section", "option_name"])`)
+- The `rawval` = the raw value containing `${other_section:option_name}`
+
+Now, the existing test `test_strange_options` in `ConfigParserTestCaseExtendedInterpolation` shows:
+```python
+self.assertEqual(cm.exception.reference, 'dollars:${sick')
+self.assertEqual(cm.exception.args[2], '${dollars:${sick}}') #rawval
+```
+
+Wait, `reference = 'dollars:${sick'`? That's the `":".join(path)` where `path = "dollars:${sick".split(':')`. Hmm, but the KEYCRE for Extended is `re.compile(r"\$\{([^}]+)\}")`. The input is `${dollars:${sick}}`. Let me trace:
+
+The rest string contains `${dollars:${sick}}`. Looking for `$` followed by `{`:
+- `$` found, next char is `{`
+- `self._KEYCRE.match(rest)` where rest starts with `${dollars:${sick}}`
+- Pattern: `\$\{([^}]+)\}` — matches `$` then `{` then one or more non-`}` chars then `}`
+- So it matches `${dollars:` — wait no, `[^}]+` matches `dollars:` (everything up to the first `}`).
+- Actually: `\$\{` matches the literal `${`, then `([^}]+)` matches `dollars:` (all chars that aren't `}`), then `\}` matches the first `}`.
+- So `m.group(1)` = `dollars:` — wait that has a trailing colon? No: `dollars:` — the `:` is part of `[^}]+`. Hmm, `dollars:` — yes, the colon is matched by `[^}]+`.
+- Wait, actually `[^}]+` is greedy and matches as many non-`}` chars as possible. So starting from position after `${`, it matches `dollars:` and then hits `}`. So `m.group(1)` = `dollars:`.
+
+Hmm wait, let me re-read the test:
+```python
+$trying = ${dollars:${sick}}
+```
+
+So the value is `${dollars:${sick}}`. The `_KEYCRE` is `re.compile(r"\$\{([^}]+)\}")`.
+
+Matching against `${dollars:${sick}}`:
+- `\$\{` matches `${` at position 0
+- `([^}]+)` matches `dollars:` (positions 2-7, all non-`}` chars)
+- `\}` matches `}` at position 8
+
+So `m.group(1)` = `dollars:` and `m.end()` = 9.
+
+Then `path = m.group(1).split(':')` = `['dollars', '']` — wait, `"dollars:".split(':')` = `['dollars', '']`.
+
+Hmm, but the test says `cm.exception.reference == 'dollars:${sick'`. That doesn't match my analysis.
+
+Wait, let me re-read. The test value is:
+```
+$trying = ${dollars:${sick}}
+```
+
+Hmm, but in the source, the value in the INI string is:
+```python
+"$trying = ${dollars:${sick}}\n"
+```
+
+Wait, I see `${dollars:${sick}}`. Let me count the braces:
+- Position 0: `$`
+- Position 1: `{`
+- Position 2-7: `dollars`
+- Position 8: `:`
+- Position 9: `$`
+- Position 10: `{`
+- Position 11-14: `sick`
+- Position 15: `}`
+- Position 16: `}`
+
+So the string is: `${dollars:${sick}}` (17 chars).
+
+Now `_KEYCRE = re.compile(r"\$\{([^}]+)\}")`.
+
+Matching from position 0:
+- `\$\{` matches positions 0-1 (`${`)
+- `([^}]+)` starts at position 2, matches non-`}` chars greedily: `d`, `o`, `l`, `l`, `a`, `r`, `s`, `:`, `$`, `{`, `s`, `i`, `c` — all non-`}`. Then hits `}` at position 15.
+- So `([^}]+)` matches `dollars:${sick` (positions 2-14, 13 chars)
+- `\}` matches position 15
+
+So `m.group(1)` = `dollars:${sick` and `m.end()` = 16.
+
+Then `path = "dollars:${sick".split(':')` = `['dollars', '${sick']`.
+
+And `reference = ":".join(path)` = `dollars:${sick`.
+
+Yes! That matches the test: `cm.exception.reference == 'dollars:${sick'`.
+
+OK so my analysis was wrong initially because I miscounted. The `[^}]+` matches everything up to the first `}`, not the second.
+
+So for the cross-section case in the ExtendedInterpolation test `test_other_errors`:
+```python
+case3 = ${wrong_section:wrong_value}
+```
+- `m.group(1)` = `wrong_section:wrong_value`
+- `path = ['wrong_section', 'wrong_value']`
+- `reference = "wrong_section:wrong_value"`
+- The `len(path) == 2` branch: `sect = 'wrong_section'`, `opt = parser.optionxform('wrong_value')`
+- `parser.get('wrong_section', opt, raw=True)` raises `NoSectionError` (since the section doesn't exist)
+- Caught, raises `InterpolationMissingOptionError(option, section, rawval, "wrong_section:wrong_value")`
+
+Now back to the questions:
+
+**Question 1: What does the actual source establish?**
+
+Established facts from the visible source:
+
+1. **Constructor signature**: `InterpolationMissingOptionError.__init__(self, option, section, rawval, reference)` — four positional args.
+
+2. **Diagnostic text (msg)**: 
+   ```
+   "Bad value substitution: option {!r} in section {!r} contains an interpolation key {!r} which is not a valid option name. Raw value: {!r}"
+   ```
+   formatted with `(option, section, reference, rawval)`.
+   
+   This is a local variable, passed to `InterpolationError.__init__` → `Error.__init__`, but NOT stored as a named attribute. The `args` tuple overrides it.
+
+3. **Attributes on the instance**:
+   - `self.option = option`
+   - `self.section = section`
+   - `self.reference = reference`
+   - `self.args = (option, section, rawval, reference)`
+
+4. **BasicInterpolation raise site**:
+   ```python
+   raise InterpolationMissingOptionError(option, section, rawval, var) from None
+   ```
+   where `var = parser.optionxform(m.group(1))` and `m = self._KEYCRE.match(rest)` with `_KEYCRE = re.compile(r"%\(([^)]+)\)s")`.
+   - `option` = the option being interpolated (as passed to `_interpolate_some`)
+   - `section` = the section
+   - `rawval` = `parser.get(section, option, raw=True, fallback=rest)` (the raw value of the option in its section)
+   - `reference` = `var` = `parser.optionxform(m.group(1))` — the referenced option name after optionxform
+
+5. **ExtendedInterpolation raise site**:
+   ```python
+   raise InterpolationMissingOptionError(option, section, rawval, ":".join(path)) from None
+   ```
+   where `path = m.group(1).split(':')` and `m = self._KEYCRE.match(rest)` with `_KEYCRE = re.compile(r"\$\{([^}]+)\}")`.
+   - `option` = the option being interpolated
+   - `section` = the section
+   - `rawval` = `parser.get(section, option, raw=True, fallback=rest)`
+   - `reference` = `":".join(path)` — the raw reference text as written (before optionxform on the option part, and the section part is NOT optionxform'd)
+   
+   Wait, let me check: in the ExtendedInterpolation code:
+   ```python
+   if len(path) == 1:
+       opt = parser.optionxform(path[0])
+       v = map[opt]
+   elif len(path) == 2:
+       sect = path[0]
+       opt = parser.optionxform(path[1])
+       v = parser.get(sect, opt, raw=True)
+   ```
+   
+   So for the reference argument to the exception, it's `":".join(path)` where `path = m.group(1).split(':')`. This is the RAW text from the interpolation expression, NOT the optionxform'd version. The section part (`path[0]`) is used as-is for the lookup (no optionxform on section names), and the option part is optionxform'd for the lookup but the reference in the exception is the raw joined text.
+
+6. **The existing test** `test_interpolation_missing_value` in `ConfigParserTestCase` (which uses `interpolation = configparser._UNSET`, i.e., BasicInterpolation by default):
+   - `e.reference == "reference"`
+   - `e.section == "Interpolation Error"`
+   - `e.option == "name"`
+   - `e.args == ('name', 'Interpolation Error', '%(reference)s', 'reference')`
+
+7. **The existing test** `test_strange_options` in `ConfigParserTestCaseExtendedInterpolation`:
+   - `cm.exception.reference == 'dollars:${sick'`
+   - `cm.exception.args[2] == '${dollars:${sick}}'` (the rawval)
+
+8. **The existing test** `test_other_errors` in `ConfigParserTestCaseExtendedInterpolation` checks that `InterpolationMissingOptionError` is raised for cases 2 and 3 but does NOT check the specific args/attributes.
+
+**Assumptions/Unresolved details:**
+
+- The exact `msg` string for a specific call is determined by the format string + the four values. Since the format string is visible in source, the msg is fully determined by the four args. So you CAN compute what the diagnostic text would be without executing.
+
+- However, the msg is NOT stored as an attribute. You'd need to either:
+  - Reconstruct it from the format string and args (which you can do since the format string is in the source)
+  - Or check `str(e)` — but `str(e)` returns the 4-tuple repr since `len(args) == 4`
+
+Wait, actually I should double-check: does `Error` (i.e., `Exception`) do anything special with `str`? In standard Python:
+- `str(Exception('hello'))` → `'hello'` (1-element args)
+- `str(Exception('a', 'b'))` → `"('a', 'b')"` (multi-element args)
+
+So `str(InterpolationMissingOptionError_instance)` would be the string repr of the 4-tuple `(option, section, rawval, reference)`.
+
+The formatted `msg` is NOT accessible from the exception instance. It exists only as a transient local variable in `__init__`.
+
+**Question 2: Is the evidence sufficient to write assertions about the diagnostic text?**
+
+The diagnostic text (the `msg` variable) is:
+```python
+"Bad value substitution: option {!r} in section {!r} contains an interpolation key {!r} which is not a valid option name. Raw value: {!r}".format(option, section, reference, rawval)
+```
+
+Since we know the exact format string (from source) and we know the exact values of `option`, `section`, `reference`, and `rawval` for any given call (from the source logic), we CAN compute the expected diagnostic text.
+
+But: the diagnostic text is NOT stored on the exception. So to assert on it, you'd need to:
+- Either reconstruct it: `expected_msg = "Bad value substitution: option {!r} in section {!r} contains an interpolation key {!r} which is not a valid option name. Raw value: {!r}".format(opt, sect, ref, raw)` and then... but there's no attribute to compare it against.
+- Or you could check that `str(e)` equals the tuple repr (which is trivially true given the args).
+
+Wait, actually — is there a way to get the msg? Let me think...
+
+`e.args` = `(option, section, rawval, reference)`. The msg was `(option, section, msg)` at the `InterpolationError` level, then overridden. There's no `e.message` or `e.msg` attribute.
+
+So you CANNOT directly assert on the diagnostic text from the exception instance. You can only:
+- Assert on `e.args` (the 4-tuple)
+- Assert on `e.option`, `e.section`, `e.reference`
+- Assert that the msg WOULD BE a specific string (by computing it from the format string and args)
+
+But you can't do `assertEqual(e.something, msg)` because no such attribute exists.
+
+Hmm, but wait. Actually, I should reconsider. The task says "Check the exact exception class, arguments, option, section, reference and diagnostic text against the actual failing lookup." 
+
+The "diagnostic text" might refer to what `str(e)` returns, or it might refer to the `msg` that was used in `Error.__init__`. 
+
+Actually, in Python, `Exception.__init__` with the message does store it. Let me trace more carefully:
+
+```python
+class Error(Exception):
+    pass  # (presumably)
+```
+
+`Error.__init__(self, msg)` — this calls `Exception.__init__(self, msg)`. In CPython, `BaseException.__init__` does:
+```python
+def __init__(self, /, *args):
+    self.args = args
+```
+
+So `self.args = (msg,)`.
+
+Then `InterpolationError.__init__` does `self.args = (option, section, msg)` — overwriting.
+Then `InterpolationMissingOptionError.__init__` does `self.args = (option, section, rawval, reference)` — overwriting again.
+
+The `msg` string is lost. There is NO attribute on the exception that contains the formatted diagnostic message.
+
+So: **the diagnostic text as a formatted string is NOT directly accessible from the exception instance.**
+
+However, it IS deterministically computable from the args:
+```python
+msg = "Bad value substitution: option {!r} in section {!r} contains an interpolation key {!r} which is not a valid option name. Raw value: {!r}".format(e.args[0], e.args[1], e.args[3], e.args[2])
+```
+
+So you CAN write an assertion that verifies the diagnostic text would be what you expect, by reconstructing it. But you can't do `assertEqual(some_attribute, expected_msg)` because no such attribute exists.
+
+What you CAN do:
+- `assertEqual(e.args, (option, section, rawval, reference))` — this pins all four values
+- `assertEqual(e.option, option)`
+- `assertEqual(e.section, section)`  
+- `assertEqual(e.reference, reference)`
+- You can compute the expected msg and assert it equals the reconstructed string from args (tautological)
+- OR: you could assert on `str(e)` which would be the tuple repr
+
+Actually wait — I want to reconsider whether the diagnostic text might be accessible through some other mechanism. In Python 3, exceptions can have a `__str__` override. Does `InterpolationError` or `InterpolationMissingOptionError` override `__str__`? Looking at the source: NO, neither class overrides `__str__`.
+
+So `str(e)` = `BaseException.__str__(e)` = since `len(self.args) == 4`, returns `str(self.args)` = `"(option, section, rawval, reference)"` (the tuple repr).
+
+OK so to summarize for the answer:
+
+**Established:**
+- The exact constructor, the exact format string for msg, the exact args tuple, the exact attributes
+- The exact values of the four constructor arguments for both BasicInterpolation and ExtendedInterpolation paths (determined by the source logic)
+- The msg is a local variable, not stored as an attribute
+- `str(e)` returns the 4-tuple repr
+- The existing tests pin `args`, `option`, `section`, `reference`
+
+**Not established / Unresolvable from source alone:**
+- There is NO attribute on the exception that directly contains the formatted diagnostic message
+- You can compute what the message WOULD be, but you can't assert on it as a property of the exception
+
+Actually wait — I should reconsider. The question says "diagnostic text." In the context of the task description: "Check the exact exception class, arguments, option, section, reference and diagnostic text against the actual failing lookup."
+
+The "diagnostic text" in the task description likely refers to the `msg` that's used in the exception. But since it's not stored, the only way to "check" it is to verify the args and confirm the format string produces the expected string.
+
+Actually, I realize I should look at this differently. The `msg` IS effectively determined by the args. If you assert `e.args == (option, section, rawval, reference)`, then the diagnostic text is fully determined. There's no additional information in the diagnostic text beyond what's in the args (since it's just a formatted template applied to those same values, with `reference` and `rawval` swapped in position from the args tuple order).
+
+Wait: the format is `"...option {!r} in section {!r} contains an interpolation key {!r}...Raw value: {!r}".format(option, section, reference, rawval)` but `args = (option, section, rawval, reference)`. So in the msg, the 3rd positional arg is `reference` and 4th is `rawval`, while in args, 3rd is `rawval` and 4th is `reference`. They're in different order!
+
+So: `args[2]` = rawval, `args[3]` = reference. But the msg format uses `reference` in the 3rd slot and `rawval` in the 4th slot.
+
+This means: knowing the args, you can reconstruct the msg (you just need to swap positions 3 and 4 from the args tuple when filling the template). This is a non-trivial mapping.
+
+So the diagnostic text IS fully determined by the args, and the format string is visible in source. An assertion on the diagnostic text would be:
+
+```python
+expected_msg = "Bad value substitution: option {!r} in section {!r} contains an interpolation key {!r} which is not a valid option name. Raw value: {!r}".format(e.args[0], e.args[1], e.args[3], e.args[2])
+# But there's nothing to compare this against on the exception
+```
+
+Unless... you could do something like checking that the exception, when formatted via some standard mechanism, produces the right text. But there's no standard mechanism for this.
+
+I think the answer to question 2 is: **Yes, the evidence is sufficient to know what the diagnostic text is** (it's computable from the format string and args), **but it is NOT stored as an attribute on the exception**, so you cannot write `assertEqual(some_attribute, expected_msg)`. You can only assert on `args`, `option`, `section`, and `reference` — and the diagnostic text is a pure function of those.
+
+Actually, wait. Let me reconsider whether there's a way to access the message. In some Python exception hierarchies, `self.args[0]` IS the message. But here, `self.args` has been overwritten to a 4-tuple. The original message `(msg,)` that was set by `Exception.__init__` is gone.
+
+Could you access it via `Exception.__str__`? No, because `__str__` uses `self.args` which is the 4-tuple.
+
+I think the conclusion is: **the diagnostic text is not independently verifiable from the exception instance**. It's a function of the args, and asserting on the args IS asserting on the diagnostic text (since the mapping is deterministic and the format string is fixed in source).
+
+Now, is there a consequential uncertainty? Let me think...
+
+The one thing I'm not 100% sure about from the visible source: whether `parser.get(section, option, raw=True, fallback=rest)` in `_interpolate_some` returns exactly the raw string value, or could it be affected by other factors? Looking at the code:
+
+```python
+def _interpolate_some(self, parser, option, accum, rest, section, map, depth):
+    rawval = parser.get(section, option, raw=True, fallback=rest)
+```
+
+This calls `parser.get` with `raw=True`, which means no interpolation is applied. The `fallback=rest` means if the option isn't found, it returns `rest` (which at the top level is the original value). Since we're interpolating this option, it must exist (otherwise we'd get a NoOptionError, not InterpolationMissingOptionError). So `rawval` is the raw string value of the option in the section.
+
+Actually wait — could `rawval` differ from the literal string in the INI? In theory, if the option value contains newlines or is a multiline value, `rawval` would be the full multiline value. But for the test case `name = %(reference)s`, the rawval is just `%(reference)s`.
+
+I think the evidence IS sufficient. The format string is in the source, the args are determined by the source logic, and for the specific test cases, the exact values are known.
+
+**Question 3: What makes the decision difficult?**
+
+The main difficulty is: **the diagnostic text (msg) is not stored as an attribute on the exception**. It's a transient local variable. So you can't write `assertEqual(e.<something>, expected_diagnostic_text)`. You can only:
+- Assert on `e.args` (which pins all four values)
+- Assert on `e.option`, `e.section`, `e.reference`
+- Compute the expected msg and verify it matches what the format string would produce from the args (but this is tautological — you're checking your own computation)
+
+This is NOT an interface problem that needs fixing. The interface (the exception class) works as designed. The `args` tuple contains all the information needed to reconstruct the diagnostic text. The format string is stable (it's in the library source). The "difficulty" is just that there's no separate `e.message` or `e.diagnostic` attribute.
+
+Is this an "unavailable fact" or a fact an existing operation can obtain? It's neither — it's a design choice of the exception class. The diagnostic text is deterministically computable from the args. No operation can "obtain" it as a separate value because it doesn't exist as a separate value.
+
+The interface is adequate for writing meaningful assertions:
+- `assertIsInstance(e, configparser.InterpolationMissingOptionError)` — class
+- `assertEqual(e.args, (opt, sect, raw, ref))` — full argument tuple
+- `assertEqual(e.option, opt)` — option attribute
+- `assertEqual(e.section, sect)` — section attribute
+- `assertEqual(e.reference, ref)` — reference attribute
+- The diagnostic text is a pure function of these, determined by the visible format string
+
+No interface change is needed. The current interface provides everything needed.
+
+Let me now structure my answer clearly.

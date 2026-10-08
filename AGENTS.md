@@ -1,4 +1,22 @@
-# Qualified correction context; one separate consultation pending
+# D1 reviewed; one factual clarification qualified
+
+Read source_discovery_consultation/current_input/D1_REVIEW.md and
+clarification/PREPARATION_REVIEW.md under the workload ledger. D1 completed with
+no execution: 22,789 input/11,320 generated tokens,12.307 model minutes. It repeats
+the unsupported claim that the unseen Error base is ordinary Exception and
+that no message survives. The actual same-version Error stores message and
+implements __str__. Preserve the incorrect answer and its full review.
+
+The sole conditional D2 clarification is now earned and qualified: three CPU
+checks, exact 11,322-token native input, six artifacts/1,002 bindings/four custody
+records, zero completions. It contains the original reference/task/library
+excerpt, complete D1 public answer and labeled reviewer definitions/observations.
+Unrelated source pages and private thinking are omitted explicitly. Publish
+before clarification/clarify.py run. This is supplied development evidence,
+not autonomous discovery. Review the whole response and close the dialogue;
+no third call, task run, retries or original-run extension in this tranche.
+
+# Prior qualification: correction context and initial consultation
 
 Read interpolation_completion/correction_context/PREPARATION_REVIEW.md and
 source_discovery_consultation/current_input/SPEC.md under the workload ledger.
