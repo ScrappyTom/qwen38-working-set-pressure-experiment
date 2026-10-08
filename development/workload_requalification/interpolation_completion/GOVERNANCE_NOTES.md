@@ -1,4 +1,33 @@
-# Addendum: actual correction succeeds; delivery and closure still differ
+# Addendum: complete the feedback transition without repeating completed work
+
+The finite closure now supplies the previously unseen pass. Qwen uses it, updates
+its own account and submits the exact saved candidate in one request. See
+closure_entry/review/RESULTS.md for the evidence and scope.
+
+- Carry an actual pending result across a declared boundary without rerunning its
+  producing operation. Candidate/checker applicability, exact receipts and guarded
+  submission make historical execution usable for this unchanged contribution.
+- Preserve opportunity accounting. This closes the lineage with one additional
+  request; it does not change the prior exhausted job or remove its cost. A saved
+  correct artifact and a complete actor feedback/submission loop remain distinct.
+- Judge an account by its use. The stale pre-edit note is superseded by the actor
+  after it reads the actual pass. The resulting note is useful closure status,
+  not evidence that decisive explanations will survive later source release.
+- Reuse exact qualified interfaces. No new schema, decoder experiment, check or
+  memory policy was needed. Reused44-case decoder evidence remains identified as
+  reuse; native sizing still qualifies the actual changed entry input.
+- Audit the auditor's representation. The initial new audit normalized only one
+  saved map before serialization comparison. Preserve that evaluator failure,
+  compare like representations, and avoid changing the host to satisfy a false
+  alarm. The prepared input and saved work never changed in that correction.
+- Include stage and overhead in cost interpretation.371 generated tokens and
+  53.375 model seconds describe closure, not a repair-speed improvement. The
+  measured loop is86.113 seconds; preparation and review are additional costs.
+
+No new host feature is earned by this result. Close this contribution and test the
+next distinct workload rather than requiring cleaner notes on already-correct work.
+
+# Earlier addendum: actual correction succeeds; delivery and closure still differ
 
 The finite correction job saves correct, independently reviewed tests/docs and a
 real current public pass, then reaches its request limit. See

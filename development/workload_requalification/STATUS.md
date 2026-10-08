@@ -1,4 +1,30 @@
-# Correct interpolation work checked; final actor closure remains open
+# Interpolation lineage complete; broader workload ledger remains open
+
+The one closure_entry/run-001 receives the actual saved public pass and closes
+unchanged83b7ac8d in one uncoached request. Qwen updates the stale account and
+submits; the host accepts both. No edit, acquisition or repeated check occurs.
+Model time53.375 seconds; recorded loop86.113 seconds;14,977 input/371 generated
+tokens. Preparation was published at179767e5. All ten files remain byte-identical
+to the independently reviewed correction result, whose checks remain applicable.
+
+The audit verifies111 artifacts,3,008 bindings,45 custody records,four checkpoints,
+four exact source presentations and three private runtime hashes. All final
+pending185/186/187 outcomes reached C81 exactly. Runtime is closed and GPU released.
+The historical account was not repaired by the host; the model records its own
+supported closure status. No account-benefit or presentation-efficiency claim.
+
+The complete interpolation lineage has81 dispatches/80 responses,134 operations
+plus55 earlier-work operations, and177.030 known model minutes. OriginalC22 remains
+unknown; development consultations/preparation/review remain additional. Preserve
+all prior finite failures and the final correction's request-limit disposition.
+This is lineage completion with declared extra opportunity, not a fresh one-call
+repair or success under the earlier allowance.
+
+Next return to E20-OBS-VERIFIER-SAFETY and the distinct remaining entry contracts.
+Do not repeat this parser work or treat its pass as corpus closure. Read
+interpolation_completion/closure_entry/review/RESULTS.md and parent NEXT_DECISION.md.
+
+# Prior direction: correct interpolation work checked; final closure still open
 
 correction_entry/run-001 closes at80requests/187operations with actual public
 CHK-0187 passing on83b7ac8d. Qwen corrects saved test failures and adds/repairs

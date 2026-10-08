@@ -1,4 +1,31 @@
-# Next: consume the saved final pass and close the contribution
+# Closed: return to the next distinct workload
+
+closure_entry/run-001 completes the approved saved-result transition. C81 receives
+actual account185/edit186/pass187, updates its own account and submits unchanged
+83b7ac8d. One request/two operations cost53.375 model seconds; no task check or
+edit is repeated. Exact artifact/history/input audit and full response review pass.
+Read closure_entry/review/RESULTS.md and READING_NOTES.md.
+
+Close this contribution. Keep all earlier unsuccessful outcomes and costs, including
+the previous16-request job's unseen final pass and the original C22 unknown cost.
+The approved two-request closure uses only one. No automatic retry, repeat seed,
+account cleanup or new memory/format/effort mechanism follows.
+
+Return to the wider corpus. The next identified ecological entry is
+E20-OBS-VERIFIER-SAFETY, with its own original candidate, observation identities,
+complete inspection requirements and check contract. Reconcile those exact sources
+and any historical model input/output before diagnosis; qualify useful observation
+delivery, applicable checks and ordinary guarded work before prospective exposure.
+Publish the entry and finite allowance before inference, and keep any recovered
+historical outcomes distinct from a new execution. Do not transfer this parser
+artifact, reviewer answers or successful closure status into that workload.
+
+Legacy phase transitions, historical action recovery and predecessor task mappings
+remain open. Their required temporal/information boundaries need independent
+qualification and appropriate actual work. A single final artifact grade cannot
+substitute for them. No further interpolation run is selected.
+
+# Prior decision: consume the saved final pass and close the contribution
 
 The one correction_entry run001 is closed at request80/operation187. Read
 correction_entry/review/RESULTS.md and its complete reading notes. Qwen saves

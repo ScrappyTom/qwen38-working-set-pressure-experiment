@@ -1,5 +1,23 @@
 # Running engineering and governance notes
 
+## 2026-10-08 — use the saved observation to close unchanged work
+
+The finite interpolation closure receives the preceding job's final pass for the
+first time. Qwen supersedes its stale pre-edit account and submits without another
+read, edit or check. Preserve that actual choice and same-version applicability;
+do not manufacture fresh execution just to make the history look simpler.
+
+The one-request closure does not retrospectively change the preceding exhausted
+job. Report all81 interpolation dispatches,80 saved responses,134 operations and
+177.030 known model minutes, plus the explicitly unknown originalC22 cost. The
+new short reply is stage-specific evidence, not a global efficiency result.
+
+Exact checkpoint and complete first-input review justified reuse of the existing
+host and decoder. A preparation auditor's asymmetric map-key normalization caused
+a false mismatch; preserve its failed source/log and correct the evaluator. No
+host or artifact patch followed. Close the successful contribution and return to
+the next distinct entry rather than add another interface refinement.
+
 ## 2026-10-02 — full task, usable recovery and evidence integration
 
 The E20source actor completes inspection and chooses an actual recovery group,

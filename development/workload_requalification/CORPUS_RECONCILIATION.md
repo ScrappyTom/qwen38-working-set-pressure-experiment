@@ -13,6 +13,12 @@ successor configurations, not additions to the historical workload denominator.
   evidence_assembly and pending-contribution variants change selection/entry or
   continuation policy. New run-002 starts before interpolation work, not from a
   reviewer-selected good test. Prior assisted work remains part of its ancestry.
+  The current completion/correction/closure lineage now ends in checked submission
+  of unchanged83b7ac8d after81 total interpolation dispatches (80 saved responses;
+  originalC22 remains unknown). Tests and documentation receive direct review.
+  Keep original finite outcomes, renewed opportunity and earlier assisted ancestry
+  explicit. This closes the current contribution, not all historic selection or
+  pressure variants. See interpolation_completion/closure_entry/review/RESULTS.md.
 - Configparser: original backport, continuation from a saved library repair, and
   exception-restoration extension are different entries. Assisted regression and
   documentation sub-contributions are historical assistance, not evidence that the

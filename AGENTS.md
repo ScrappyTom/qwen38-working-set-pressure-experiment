@@ -1,4 +1,29 @@
-# Correct interpolation artifact saved; consume the last pass before closure
+# Interpolation lineage closed; return to the distinct workload ledger
+
+Read development/workload_requalification/interpolation_completion/closure_entry/
+review/RESULTS.md and READING_NOTES.md. Published preparation179767e5 preceded
+the one uncoached closure run. C81 consumes the actual saved CHK-0187 pass,
+updates its account and submits unchanged83b7ac8d. One request/two operations:
+53.375 model seconds,86.113 loop seconds,14,977 input/371 generated tokens.
+No acquisition, edit, repeat check, coaching or retry. Runtime/GPU are released.
+
+Audit verifies111 artifacts,3,008 bindings,45 custody records,four checkpoints,
+four source presentations and three private runtime hashes. All ten candidate
+files and prior187 operations remain exact; previous independent artifact review
+still applies. Preserve the earlier request-limit result and costs. Cumulative
+interpolation81 dispatches/80 responses/134 operations,189 with55 earlier-work
+operations; known177.030 model minutes plus original C22's unknown cost.
+
+Close this contribution, not the corpus. Do not rerun it to improve account/cost
+appearance or add a memory/format/effort policy. The next distinct ecological entry
+is E20-OBS-VERIFIER-SAFETY: reconcile its exact task, original evidence and temporal
+inspection requirements, qualify its ordinary/checker information paths, then
+publish before a separately finite uncoached attempt. Do not transplant the parser
+candidate or count its closure as another entry's success. Legacy phase/recovery
+and predecessor mappings remain open. Standing owner direction covers continued
+work; no automatic live-run retry or silent allowance extension.
+
+# Prior direction: correct artifact saved; consume the last pass before closure
 
 Read development/workload_requalification/interpolation_completion/correction_entry/
 review/RESULTS.md, complete READING_NOTES.md and the parent NEXT_DECISION.md.
