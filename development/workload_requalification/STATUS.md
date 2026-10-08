@@ -1,4 +1,31 @@
-# Unfinished interpolation contribution qualified for the current host
+# Interpolation completion attempt closed without a completed contribution
+
+interpolation_completion/run-002 closes at 90a025e9 after 32 new requests and
+51 operations: 81.911 model minutes, 90.819 recorded task-loop minutes and 64,663
+generated tokens. It saves three tests, receives their real ordinary errors,
+and requests current source on its last call. No correction, documentation edit,
+current public pass or submission follows. The final read is admitted but has no
+next model recipient. Original test ASTs and all nine other files remain exact.
+
+The current host supports an actual actor-selected recovery at C44. Later, the
+accepted edit's source is omitted from the C64 recovery input, making another read
+necessary under the source guard. Earlier discovery consumed most of the request
+allowance; the final edit also invents behavior of an unacquired base class. These
+are separate findings, not a new missing-result or context-exhaustion failure.
+
+Direct review and audits verify 1,236 artifacts, 985 bindings, 1,103 custody
+records, 53 checkpoints, all 49 nonterminal receipts and 103 source presentations.
+The owned runtime is closed and the GPU released. Interpolation cumulative known
+cost is 131.829 model minutes across 64 dispatches/63 preserved responses; original
+C22 remains unknown. Prior results stay unchanged and the wider ledger stays open.
+
+Read interpolation_completion/review/RESULTS-002.md, NEXT_DECISION.md and
+GOVERNANCE_NOTES.md. Next qualify diagnostic-and-correction-source co-presence
+using the actual state, and resolve the already-deferred discovery consultation.
+Do not extend or repeat this closed run unchanged, promote reviewer corrections
+into actor work, or infer success from the previously qualified scripted route.
+
+# Prior qualification: unfinished interpolation contribution for the current host
 
 interpolation_completion/preparation002 has zero model completions,44 native
 forms and12 supported scripted decisions; initial8720/peak23610. Six CPU checker

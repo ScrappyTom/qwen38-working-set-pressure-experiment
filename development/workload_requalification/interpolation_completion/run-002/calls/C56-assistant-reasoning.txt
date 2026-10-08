@@ -1,0 +1,170 @@
+Let me analyze the current state:
+
+1. **Task**: Add tests for `InterpolationMissingOptionError` through real `ConfigParser.get` calls under both `BasicInterpolation` and `ExtendedInterpolation`, including cross-section references. Cover shallow copying, deep copying, and pickle protocols. Check exact exception class, arguments, option, section, reference, diagnostic text. Include `raw=True` retrieval and successful lookup once the referenced setting exists. Also extend `Doc/library/configparser.rst` with runnable examples.
+
+2. **Current state**:
+   - I've read lines 580-620, 780-810, 850-1010 (partially visible), and 2050-2210 of `Lib/test/test_configparser.py`
+   - The file is 2210 lines total
+   - I can see `test_interpolation_missing_value` at ~line 928-940 which uses `get_error` helper
+   - `get_interpolation_config` has `[Interpolation Error]` section with `name=%(reference)s` where 'reference' is undefined
+   - Class hierarchy is mapped
+   - I need to see: where to add new tests (after existing test classes, before the `if __name__` block), and the Doc file
+
+3. **What I need to do**:
+   - Add tests for `InterpolationMissingOptionError` specifically for `BasicInterpolation` and `ExtendedInterpolation` (with cross-section ref)
+   - Cover: shallow copy, deep copy, pickle protocols
+   - Check: exact exception class, args, option, section, reference, diagnostic text
+   - Include: `raw=True` retrieval of unresolved value, successful lookup after adding the missing option
+   - Add documentation examples in `Doc/library/configparser.rst`
+
+Let me look at what's currently in the visible source. I see:
+- `test_interpolation_missing_value` exists in `ConfigParserTestCase` (lines ~928-940) - this is a basic test
+- The existing test checks `e.reference`, `e.section`, `e.option`, and `e.args`
+- `get_interpolation_config` defines `[Interpolation Error]` with `name=%(reference)s`
+
+The task says:
+- "Add tests that obtain InterpolationMissingOptionError through real ConfigParser.get calls under both BasicInterpolation and ExtendedInterpolation, including a missing cross-section reference in the latter."
+- "For each mode, cover shallow copying, deep copying and every available pickle protocol."
+- "Check the exact exception class, arguments, option, section, reference and diagnostic text against the actual failing lookup."
+- "Include raw=True retrieval of the unresolved value and a successful lookup once the referenced setting exists."
+
+The existing `test_interpolation_missing_value` is in `ConfigParserTestCase` which uses `ConfigParser` (default is `BasicInterpolation`). The task wants dedicated tests for `BasicInterpolation` and `ExtendedInterpolation` modes.
+
+Wait, let me re-read. The task says "The library behavior is already implemented; this contribution changes tests and documentation only."
+
+Let me look at the existing `test_interpolation_missing_value` more carefully. It's in `ConfigParserTestCase` which uses the default interpolation (which is `BasicInterpolation`). It checks:
+- exception type: `configparser.InterpolationMissingOptionError`
+- `e.reference` == "reference"
+- `e.section` == "Interpolation Error"
+- `e.option` == "name"
+- `e.args` == ('name', 'Interpolation Error', '%(reference)s', 'reference')
+
+But the task requires:
+1. Tests under BOTH `BasicInterpolation` AND `ExtendedInterpolation` (with cross-section ref for the latter)
+2. For each mode: shallow copying, deep copying, every available pickle protocol
+3. Check exact exception class, arguments, option, section, reference, AND diagnostic text
+4. `raw=True` retrieval of the unresolved value
+5. Successful lookup once the referenced setting exists
+
+The existing test only covers the default (BasicInterpolation) case in `ConfigParserTestCase`. I need to add dedicated test methods.
+
+Now, where to add them? The task says "Extend the saved configparser exception coverage to missing interpolation references." The tests should be added to the test file. Looking at the structure:
+- `ConfigParserTestCase` (line 909) - default interpolation (BasicInterpolation)
+- `ConfigParserTestCaseNoInterpolation` (line 1007)
+- `ConfigParserTestCaseLegacyInterpolation` (line 1043)
+- `ConfigParserTestCaseInvalidInterpolationType` (line 1067)
+- `ConfigParserTestCaseNonStandardDelimiters` (line 1075)
+- `ConfigParserTestCaseNonStandardDefaultSection` (line 1081)
+- `MultilineValuesTestCase` (line 1086)
+- ... more classes ...
+- `MiscTestCase` (near end)
+- `if __name__ == '__main__': unittest.main()` (line 2209-2210)
+
+I should add new test methods. The question is where. Since the existing `test_interpolation_missing_value` is in `ConfigParserTestCase`, I could:
+1. Add a new test method in `ConfigParserTestCase` for the specific BasicInterpolation case (but it already has the basic one)
+2. Add a new test class or methods for the ExtendedInterpolation case with cross-section reference
+3. Add the copy/deepcopy/pickle coverage
+
+Actually, re-reading the task more carefully: "Add tests in Lib/test/test_configparser.py that obtain InterpolationMissingOptionError through real ConfigParser.get calls under both BasicInterpolation and ExtendedInterpolation, including a missing cross-section reference in the latter."
+
+So I need:
+- A test for `BasicInterpolation` mode: `ConfigParser(interpolation=configparser.BasicInterpolation())` - get a value with a missing `%(ref)s` reference
+- A test for `ExtendedInterpolation` mode: `ConfigParser(interpolation=configparser.ExtendedInterpolation())` - get a value with a missing `${section:option}` cross-section reference
+
+For each:
+- Shallow copy: `copy.copy(cf)` or just using the same object
+- Deep copy: `copy.deepcopy(cf)`
+- Pickle: `pickle.loads(pickle.dumps(e))` for every available protocol (0 through pickle.HIGHEST_PROTOCOL)
+- Check exception class, args, option, section, reference, diagnostic text (str(e))
+- `raw=True` retrieval
+- Successful lookup after adding the option
+
+Wait, "shallow copying" of what? The exception? Or the config? Let me re-read: "For each mode, cover shallow copying, deep copying and every available pickle protocol."
+
+I think this means: after getting the exception, verify that the exception can be:
+- Shallow copied (`copy.copy(e)`)
+- Deep copied (`copy.deepcopy(e)`)
+- Pickled with every protocol (`pickle.dumps(e, protocol)` then `pickle.loads(...)`)
+
+And the copied/pickled exception should preserve its attributes (args, option, section, reference, etc.)
+
+Actually wait - I need to think about this differently. The exception `InterpolationMissingOptionError` is a subclass of `InterpolationError` which is a subclass of `Error` which is a subclass of `Exception`. These are standard Python exceptions. They should be copyable and pickleable by default.
+
+Let me now think about where to add the tests. I'll need to:
+1. Add a test method for `BasicInterpolation` missing reference
+2. Add a test method for `ExtendedInterpolation` missing cross-section reference
+3. Each should cover copy/deepcopy/pickle, raw=True, and recovery
+
+I think the best approach is to add new test methods to the existing test classes or add new standalone test methods. Since the existing `ConfigParserTestCase` uses the default `ConfigParser` (which defaults to `BasicInterpolation`), I could add a dedicated test there. But for `ExtendedInterpolation`, I'd need a separate setup.
+
+Actually, looking more carefully at the existing code structure:
+- `ConfigParserTestCase` has `config_class = configparser.ConfigParser` (default interpolation = `BasicInterpolation`)
+- There's no existing test class for `ExtendedInterpolation`
+
+I think the cleanest approach is to add new test methods. Let me think about where exactly to insert them.
+
+Looking at the file structure from what I've seen:
+- Line 909: `class ConfigParserTestCase(BasicTestCase, unittest.TestCase):`
+- Line 910: `config_class = configparser.ConfigParser`
+- Line 912: `def test_interpolation(self):`
+- Line 928: `def test_interpolation_missing_value(self):` (the existing basic test)
+- Line 940: `def test_items(self):`
+- ...
+
+I could add my new test methods after `test_interpolation_missing_value` in `ConfigParserTestCase`, and also create a new test class for `ExtendedInterpolation`.
+
+But wait - I need to be careful. The task says "Keep the existing documentation and all saved tests, including the continuation-error regression and copying/serialization coverage." So I must not modify existing tests.
+
+Let me also check what the `interpolation` attribute is in `ConfigParserTestCase`. Looking at the code:
+- `ConfigParserTestCase` has `config_class = configparser.ConfigParser` - no explicit `interpolation` attribute set
+- In `test_interpolation`, it checks `if self.interpolation == configparser._UNSET:` - so `self.interpolation` defaults to `configparser._UNSET` in the base
+- In `ConfigParserTestCaseNoInterpolation`, `interpolation = None`
+- In `ConfigParserTestCaseLegacyInterpolation`, `interpolation = configparser.LegacyInterpolation()`
+
+So `ConfigParserTestCase` doesn't explicitly set `interpolation`, meaning it uses whatever `newconfig()` provides by default.
+
+Let me look at `newconfig()` - I need to find that. Let me check what I know... I haven't read that part yet. Let me look at what's in the visible ranges.
+
+Actually, I need to see more of the file to understand the structure better. Let me read more sections.
+
+But first, let me plan my approach:
+
+1. I need to read more of the file to understand:
+   - Where `newconfig()` is defined and what it does
+   - Where to insert new tests
+   - The exact current content around my insertion points
+
+2. I need to read the Doc file: `Doc/library/configparser.rst`
+
+3. Then I'll write the tests and documentation.
+
+Let me start by reading the parts I need. I'll read:
+- Lines 60-70 (BasicTestCase class definition and newconfig)
+- Lines 1090-1100 (already visible - end of the visible range 850-1100)
+- The Doc file
+
+Actually, looking at my visible source, I already have lines 850-1100 which shows:
+- `ConfigParserTestCase` starts at 909
+- `test_interpolation` at 912
+- `test_interpolation_missing_value` at ~928-939
+- `test_items` at 940
+- Other test methods follow
+- `ConfigParserTestCaseNoInterpolation` at 1007
+- `ConfigParserTestCaseLegacyInterpolation` at 1043
+- etc.
+
+And I have lines 2050-2210 which shows the end of the file.
+
+I need to:
+1. See `newconfig()` and `fromstring()` to understand how configs are created
+2. See the area where I'll insert new tests
+3. Read the Doc file
+
+Let me read lines 60-100 to see BasicTestCase and its methods, and also the Doc file.
+
+Actually, I realize I should be more strategic. Let me:
+1. Read the beginning of the test file (imports, BasicTestCase definition, newconfig, fromstring)
+2. Read the Doc file to see its current structure
+3. Then plan my edits
+
+Let me read lines 1-70 of the test file and the Doc file.

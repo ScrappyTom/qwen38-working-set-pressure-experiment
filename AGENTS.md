@@ -1,4 +1,37 @@
-# Active: complete the unfinished interpolation contribution
+# Closed interpolation attempt; qualify correction context before another run
+
+This current direction supersedes the launch instructions retained below. Read
+development/workload_requalification/interpolation_completion/review/RESULTS-002.md,
+review/READING_NOTES.md, NEXT_DECISION.md and GOVERNANCE_NOTES.md in that package.
+The one authorized uncoached run002 is closed at failing candidate 90a025e9:
+32 new requests, 51 operations, 81.911 model minutes, 90.819 recorded loop minutes
+and 64,663 generated tokens. Three new tests error; no documentation changes,
+correction, current public pass or submission occur. All original test AST nodes
+and nine other files remain intact. Do not extend, retry, repair the sealed
+candidate, execute a private draft or treat reviewer variants as actor work.
+
+C44 demonstrates an actor-selected replacement after a delivered rejection.
+C64 receives the real failed check but no selected source bodies; reading the
+current edited target is legitimate, and its result has no following model call.
+The base Error implementation was never acquired; C63 invents its behavior and
+saves a wrong diagnostic expectation. The earlier source-discovery question was
+already documented and its consultation remains prepared, not completed.
+
+Full actual input/output/effect review and exact audits cover 1,236 artifacts,
+985 source bindings, 1,103 custody records, 53 checkpoints, all 49 nonterminal
+receipts and 103 source presentations. Runtime shuts down with full offload and
+no CUDA failure or truncation; the sampled 284 MiB free margin is advisory.
+Interpolation totals are 64 dispatches/63 preserved responses/97 operations;
+55 earlier-work operations bring the archive to 152. Original C22 cost remains
+unknown, not zero. The broader workload ledger and this contribution remain open.
+
+Next qualify the real failure beside the mechanically identified edited region
+using existing recovery machinery, then finish the deferred nonexecuting discovery
+investigation. Any successor policy and finite contribution must be prospectively
+declared. No unchanged long retry, automatic extension, live coaching, mandatory
+account, archive redesign or global reasoning change follows from this result.
+
+# Prior preparation: unfinished interpolation contribution
 
 Preparation002 is qualified and independently audited; read
 interpolation_completion/PREPARATION_REVIEW-002.md. Six CPU checker cases, four

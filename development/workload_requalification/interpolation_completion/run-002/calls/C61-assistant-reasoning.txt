@@ -1,0 +1,405 @@
+Let me analyze the current state:
+
+1. **Task**: Add tests for `InterpolationMissingOptionError` via real `ConfigParser.get` calls under both `BasicInterpolation` and `ExtendedInterpolation` (including cross-section reference). Cover shallow copying, deep copying, and every available pickle protocol. Check exact exception class, arguments, option, section, reference, and diagnostic text. Include `raw=True` retrieval and successful lookup once the referenced setting exists. Also add doc examples in `configparser.rst`.
+
+2. **Current state**:
+   - I can see the test file structure with existing tests
+   - `test_interpolation_missing_value` already exists at ~line 928-940 in `ConfigParserTestCase`
+   - `get_interpolation_config` has the `[Interpolation Error]` section with `name=%(reference)s`
+   - I need to understand the existing test structure to add new tests
+   - The `get_error` helper catches exceptions and returns them
+   - `fromstring` and `newconfig` helpers are available in `CfgParserTestCaseClass`
+
+3. **What I need to do**:
+   - Add tests in the test file that obtain `InterpolationMissingOptionError` through real `ConfigParser.get` calls under both `BasicInterpolation` and `ExtendedInterpolation`
+   - For ExtendedInterpolation, include a missing cross-section reference (e.g., `${other_section:option}`)
+   - For each mode, cover: shallow copying, deep copying, and every available pickle protocol
+   - Check exact exception class, arguments, option, section, reference, and diagnostic text
+   - Include `raw=True` retrieval of the unresolved value
+   - Include successful lookup once the referenced setting exists
+   - Extend Doc/library/configparser.rst with runnable examples
+
+4. **Key observations from visible source**:
+   - `test_interpolation_missing_value` at lines 928-940 tests `InterpolationMissingOptionError` with `get_error` helper
+   - For BasicInterpolation (default), args are `('name', 'Interpolation Error', '%(reference)s', 'reference')`
+   - For LegacyInterpolation, same args format
+   - `get_interpolation_config` returns a config with `[Interpolation Error]` section containing `name=%(reference)s` (no definition for 'reference')
+   - `ConfigParserTestCase` has `config_class = configparser.ConfigParser` and no explicit interpolation (so `_UNSET` → BasicInterpolation)
+   - `ConfigParserTestCaseExtendedInterpolation` has `interpolation = configparser.ExtendedInterpolation()`
+   - The `fromstring` in ExtendedInterpolation class has an extra `optionxform` param
+
+5. **What I need to read**:
+   - I need to see more of the test file to understand where to insert new tests
+   - I need to understand the ExtendedInterpolation error format (for `${section:option}` syntax)
+   - I need to see the end of the ExtendedInterpolation test class to find where to add tests
+   - I need to see the doc file structure to know where to add documentation
+
+Let me first read more of the test file to understand the full structure. I already have:
+- Lines 1-70 (imports, CfgParserTestCaseClass, BasicTestCase)
+- Lines 580-620 (get_error helper, test_boolean, test_weird_errors start)
+- Lines 780-810 (get_interpolation_config, check_items_config)
+- Lines 850-1100 (ConfigParserTestCase with tests, ConfigParserTestCaseNoInterpolation, LegacyInterpolation, InvalidInterpolationType, NonStandardDelimiters, NonStandardDefaultSection, MultilineValuesTestCase start)
+- Lines 1191-1260 (ConfigParserTestCaseExtendedInterpolation start)
+- Lines 2050-2210 (end of file with converters, MiscTestCase, main)
+
+I need to see:
+- Lines 1260-1400 (rest of ExtendedInterpolation tests)
+- Lines 920-950 area (the existing test_interpolation_missing_value in more detail - actually I can see it in the 850-1100 range)
+
+Wait, looking at the 850-1100 range more carefully, I can see `test_interpolation_missing_value` is there. Let me re-read what I see:
+
+```python
+    def test_interpolation_missing_value(self):
+        cf = self.get_interpolation_config()
+        e = self.get_error(cf, configparser.InterpolationMissingOptionError,
+                           "Interpolation Error", "name")
+        self.assertEqual(e.reference, "reference")
+        self.assertEqual(e.section, "Interpolation Error")
+        self.assertEqual(e.option, "name")
+        if self.interpolation == configparser._UNSET:
+            self.assertEqual(e.args, ('name', 'Interpolation Error',
+                                    '%(reference)s', 'reference'))
+        elif isinstance(self.interpolation, configparser.LegacyInterpolation):
+            self.assertEqual(e.args, ('name', 'Interpolation Error',
+                                    '%(reference)s', 'reference'))
+```
+
+This is in `ConfigParserTestCase`. I need to understand:
+- What `BasicInterpolation` produces (it's the default when `_UNSET`)
+- What `ExtendedInterpolation` produces for a missing cross-section reference
+
+For `ExtendedInterpolation`, the syntax is `${section:option}` or `${option}` (which refers to the same section or common section). A missing cross-section reference would be like `${nonexistent_section:some_option}`.
+
+Let me read more of the ExtendedInterpolation test class to see what's already there and where to add tests. I also need to understand what the error looks like for ExtendedInterpolation.
+
+Let me also check: what does `BasicInterpolation` raise? Looking at the source:
+- Line 418, 491, 533 all raise `InterpolationMissingOptionError`
+
+I need to read the configparser.py source around those lines to understand the exact error construction.
+
+Actually, wait - the task says "The library behavior is already implemented; this contribution changes tests and documentation only." So I need to understand the existing behavior to write correct tests.
+
+Let me plan my reads:
+1. Read configparser.py around lines 400-550 to see how InterpolationMissingOptionError is raised (for both basic and extended)
+2. Read test file lines 1260-1500 to see more of ExtendedInterpolation tests
+3. Read test file lines 920-960 for the existing missing_value test in context
+4. Read Doc file to find where to add documentation
+
+Actually, I already have lines 850-1100 which includes the test_interpolation_missing_value. Let me focus on what I still need:
+
+1. The configparser.py source to understand exact error construction for ExtendedInterpolation
+2. The rest of the ExtendedInterpolation test class (lines 1260+)
+3. The Doc file structure for where to add documentation
+
+Let me also think about what tests I need to write:
+
+For **BasicInterpolation** (default ConfigParser):
+- `ConfigParser()` uses `BasicInterpolation` by default (when interpolation is `_UNSET`)
+- A missing `%(name)s` reference raises `InterpolationMissingOptionError`
+- The error has `.option`, `.section`, `.reference` attributes
+- Args: `(option, section, value_string, reference_name)` - wait, let me check from the test: `('name', 'Interpolation Error', '%(reference)s', 'reference')`
+  - So args are: (option, section, value, reference)
+
+For **ExtendedInterpolation**:
+- Uses `${section:option}` syntax
+- A missing cross-section reference like `${nonexistent:opt}` would raise the same error
+- I need to check what the args look like for this case
+
+For **transport** (shallow copy, deep copy, pickle):
+- Shallow copy: `copy.copy(parser)` or similar
+- Deep copy: `copy.deepcopy(parser)`
+- Pickle: `pickle.loads(pickle.dumps(parser))` for each protocol
+
+Wait, re-reading the task: "cover shallow copying, deep copying and every available pickle protocol" - this is about the *exception*, not the parser. The exception should survive copying and pickling.
+
+Actually, let me re-read: "For each mode, cover shallow copying, deep copying and every available pickle protocol."
+
+I think this means: for each interpolation mode, after obtaining the exception via a real get call, verify that:
+- `copy.copy(exc)` works and preserves attributes
+- `copy.deepcopy(exc)` works and preserves attributes  
+- `pickle.loads(pickle.dumps(exc, protocol))` works for each available protocol
+
+Let me think about what "every available pickle protocol" means - I should use `pickle.HIGHEST_PROTOCOL` and iterate from 0 to that.
+
+Now let me also think about the doc examples. The task says:
+- "runnable examples explaining when the missing-reference error arises"
+- "how raw=True differs from resolving a reference"
+- "how to supply a missing setting"
+- "Cover both interpolation modes accurately"
+- "Keep the existing documentation"
+- "Changed documentation examples execute together in document order with an explicit standalone `__name__='__main__'` namespace"
+
+Wait, that last part about `__name__='__main__'` - the doc examples use doctest format (`>>>`). Let me look at the existing doc structure.
+
+Let me start by reading the parts I still need. I'll read:
+1. configparser.py around lines 260-280 (the exception class definition) and around 400-545 (where it's raised)
+2. Test file lines 1260-1500 (rest of ExtendedInterpolation tests)
+3. Doc file further (I already have lines 1-100)
+
+Actually, I'm running low on requests (4 remaining). Let me be strategic. Each request can include one operation. Let me prioritize:
+
+Request 1: Read configparser.py source to understand error construction (I need lines ~260-280 for class def and ~400-545 for where it's raised)
+Request 2: Read test file lines 1260-1400 (ExtendedInterpolation tests)
+Request 3: Read doc file lines 100-200 (to see structure)
+Request 4: Write the first patch (test file)
+
+Wait, I only have 4 requests remaining but also 53 actions. Let me re-read the allowance:
+- requests_remaining: 4
+- actions_remaining: 53
+
+So I can make 4 more responses (each consuming 1 request), and I have 53 actions total. Each response can have one operation. But wait - "Each response consumes one request; its operations consume the separate action allowance."
+
+So I have 4 more responses I can make, each with one operation. But I need to:
+1. Read source files to understand the error
+2. Write tests (patch)
+3. Write docs (patch)
+4. Run checks
+5. Submit
+
+That's at least 5-6 operations across potentially 4-5+ responses. Wait, but "A rejected account leaves the previous account current and skips the accompanying operation." and "Each account update, requested operation and automatic check consumes one operation; they share one model request when combined."
+
+So one response can have: account update + one operation = 2 actions, consuming 1 request. Or just one operation = 1 action, consuming 1 request.
+
+With 4 requests remaining and 53 actions, I need to be very efficient. Let me think about what I can do:
+
+Actually wait - I need to re-read. The verification section says:
+- `after_accepted_edit`: Doc/library/configparser.rst → "public", Lib/test/test_configparser.py → "tests"
+
+So after I edit the test file, the "tests" check runs automatically. After I edit the doc file, the "public" check runs automatically.
+
+Let me plan:
+- Response 1: Read configparser.py to understand error construction (1 action)
+- Response 2: Read test file ExtendedInterpolation section + Doc file (can only do one operation per response...)
+
+Hmm, I can only do ONE operation per response. Let me be very strategic.
+
+Actually, wait. Let me re-read the constraint: "A reply cannot execute an arbitrary adaptive sequence." So one operation per response.
+
+With 4 responses remaining:
+- Response 1: Read configparser.py (to understand error construction for both modes)
+- Response 2: Patch test file (add tests)
+- Response 3: Patch doc file (add documentation)  
+- Response 4: Submit (if checks pass)
+
+But the checks run automatically after edits. If tests fail after the test patch, I won't have a response left to fix them. This is risky.
+
+Actually, let me reconsider. The "tests" check runs after the test file edit. If it passes, good. If not, I need another edit. With only 4 responses, I should:
+
+- Response 1: Read configparser.py source (to get exact error construction)
+- Response 2: Patch test file
+- Response 3: Patch doc file (only if tests passed)
+- Response 4: Submit
+
+But if tests fail in response 2, I'm stuck. Let me think about whether I can combine the read with something else... No, one operation per response.
+
+Actually, let me look at what I already know from the visible source:
+
+From the test at lines 928-940:
+```python
+def test_interpolation_missing_value(self):
+    cf = self.get_interpolation_config()
+    e = self.get_error(cf, configparser.InterpolationMissingOptionError,
+                       "Interpolation Error", "name")
+    self.assertEqual(e.reference, "reference")
+    self.assertEqual(e.section, "Interpolation Error")
+    self.assertEqual(e.option, "name")
+    if self.interpolation == configparser._UNSET:
+        self.assertEqual(e.args, ('name', 'Interpolation Error',
+                                '%(reference)s', 'reference'))
+    elif isinstance(self.interpolation, configparser.LegacyInterpolation):
+        self.assertEqual(e.args, ('name', 'Interpolation Error',
+                                '%(reference)s', 'reference'))
+```
+
+And from the search of configparser.py:
+- Line 266: `class InterpolationMissingOptionError(InterpolationError):`
+- Lines 418, 491, 533: raise statements
+
+I need to see the exact construction. Let me read the relevant parts of configparser.py.
+
+Actually, I have the search context regions! Let me check:
+- SRC-c2c4e7d06fb45dca5ac10dbfeb5b0679b6f8f220c34119489150db9fd5c9e994: lines 263-278 (class definition)
+- SRC-14a2b416fa51773b114c88b38365ed1a49dd46813f647eb91d01565a7972e827: lines 415-430 (first raise)
+- SRC-03541375da666ab3a7f69d1fa83d0fd75ebc64bd8ccb798c2ae303e6b97c1e93: lines 488-503 (second raise)
+- SRC-4a26a8c757c203b1f22b2fa7ed29eb22210058db047c8531dec65c8aeedd1d74: lines 530-545 (third raise)
+
+But these are just search context regions, not visible source in my working_set.sources. I need to actually read them.
+
+Let me be strategic. I'll read configparser.py lines 260-550 to get the class definition and all raise sites. That's one operation.
+
+Wait, actually I can read a specific range. Let me read lines 263-545 which covers the class definition and all three raise sites. That's 282 lines - should be fine.
+
+Actually, let me think about what I really need:
+1. The class definition of InterpolationMissingOptionError (line 266)
+2. The raise sites to understand exact args
+
+From the existing test, I know:
+- `e.args` = `('name', 'Interpolation Error', '%(reference)s', 'reference')` for BasicInterpolation
+- `e.reference` = `"reference"`
+- `e.section` = `"Interpolation Error"`  
+- `e.option` = `"name"`
+
+For ExtendedInterpolation, I need to know what the args look like. The syntax is `${section:option}`. If I have `[A]` with `x = ${B:missing}`, then:
+- The reference would be to section "B", option "missing"
+- But I'm not sure of the exact args format
+
+Let me just read the source. I'll do one read of configparser.py lines 260-545.
+
+Actually, I realize I should also think about what "BasicInterpolation" means. In the existing test:
+- `self.interpolation == configparser._UNSET` → this is the default for `ConfigParserTestCase`
+- The default interpolation for `ConfigParser` is `BasicInterpolation()`
+
+So `BasicInterpolation` is the default. The test class `ConfigParserTestCase` uses `_UNSET` which means the default `BasicInterpolation`.
+
+For my new tests, I need:
+1. A test in a context where `BasicInterpolation` is active (i.e., `ConfigParserTestCase` or a new class)
+2. A test in `ConfigParserTestCaseExtendedInterpolation` for ExtendedInterpolation
+
+The task says "obtain InterpolationMissingOptionError through real ConfigParser.get calls under both BasicInterpolation and ExtendedInterpolation, including a missing cross-section reference in the latter."
+
+So:
+- BasicInterpolation: `%(name)s` where name is not defined → InterpolationMissingOptionError
+- ExtendedInterpolation: `${section:option}` where section:option is not defined → InterpolationMissingOptionError
+
+"including a missing cross-section reference in the latter" - so for ExtendedInterpolation, I specifically need a cross-section reference (referring to a different section).
+
+Now for the transport tests (copy, deepcopy, pickle):
+- Get the exception
+- `copy.copy(exc)` → check attributes preserved
+- `copy.deepcopy(exc)` → check attributes preserved
+- For each protocol in range(pickle.HIGHEST_PROTOCOL + 1): `pickle.loads(pickle.dumps(exc, protocol))` → check attributes preserved
+
+And:
+- `raw=True` retrieval: `cf.get(section, option, raw=True)` should return the unresolved value (e.g., `%(reference)s` or `${section:option}`)
+- Successful lookup: add the missing option, then `cf.get(section, option)` should succeed
+
+Let me now think about where to insert the tests. Looking at the structure:
+- `ConfigParserTestCase` (line ~883) has `test_interpolation_missing_value`
+- I should add my new tests to `ConfigParserTestCase` for the BasicInterpolation case
+- I should add tests to `ConfigParserTestCaseExtendedInterpolation` for the ExtendedInterpolation case
+
+But wait - the task says "obtain InterpolationMissingOptionError through real ConfigParser.get calls under both BasicInterpolation and ExtendedInterpolation". The existing `test_interpolation_missing_value` already tests BasicInterpolation (via the default). But the task says to add NEW tests that cover more ground (copy, pickle, raw=True, successful lookup after fix).
+
+Let me plan the test structure:
+
+In `ConfigParserTestCase` (or a helper), add:
+```python
+def test_interpolation_missing_option_error_transport(self):
+    """Test that InterpolationMissingOptionError survives copy, deepcopy, pickle."""
+    cf = self.get_interpolation_config()
+    try:
+        cf.get("Interpolation Error", "name")
+    except configparser.InterpolationMissingOptionError as e:
+        exc = e
+    # Check basic attributes
+    self.assertIsInstance(exc, configparser.InterpolationMissingOptionError)
+    self.assertEqual(exc.option, "name")
+    self.assertEqual(exc.section, "Interpolation Error")
+    self.assertEqual(exc.reference, "reference")
+    
+    # Shallow copy
+    import copy
+    exc_copy = copy.copy(exc)
+    self.assertEqual(exc_copy.option, "name")
+    self.assertEqual(exc_copy.section, "Interpolation Error")
+    self.assertEqual(exc_copy.reference, "reference")
+    
+    # Deep copy
+    exc_deep = copy.deepcopy(exc)
+    self.assertEqual(exc_deep.option, "name")
+    self.assertEqual(exc_deep.section, "Interpolation Error")
+    self.assertEqual(exc_deep.reference, "reference")
+    
+    # Pickle
+    import pickle
+    for protocol in range(pickle.HIGHEST_PROTOCOL + 1):
+        data = pickle.dumps(exc, protocol)
+        exc_p = pickle.loads(data)
+        self.assertEqual(exc_p.option, "name")
+        self.assertEqual(exc_p.section, "Interpolation Error")
+        self.assertEqual(exc_p.reference, "reference")
+```
+
+And for raw=True:
+```python
+def test_interpolation_missing_option_raw(self):
+    cf = self.get_interpolation_config()
+    # raw=True should return the unresolved value
+    raw_value = cf.get("Interpolation Error", "name", raw=True)
+    self.assertEqual(raw_value, "%(reference)s")
+```
+
+And successful lookup:
+```python
+def test_interpolation_missing_option_after_fix(self):
+    cf = self.get_interpolation_config()
+    # Add the missing reference
+    cf.set("Interpolation Error", "reference", "the_value")
+    # Now it should resolve
+    self.assertEqual(cf.get("Interpolation Error", "name"), "something the_value interpolation")
+```
+
+Wait, but `get_interpolation_config` creates a config with `name=%(reference)s` in the `[Interpolation Error]` section. If I add `reference=the_value` to that section, then `%(reference)s` should resolve to `the_value`.
+
+For ExtendedInterpolation, I need a cross-section reference. Something like:
+```
+[section_a]
+value = 42
+
+[section_b]
+missing = ${section_a:nonexistent}
+```
+
+Then `cf.get("section_b", "missing")` should raise `InterpolationMissingOptionError`.
+
+And for the ExtendedInterpolation class, the `fromstring` method is overridden. Let me check if `newconfig` works the same way... Yes, it's inherited from `CfgParserTestCaseClass`.
+
+Now, for the ExtendedInterpolation test, I need to figure out what the error args look like. Let me think...
+
+In configparser.py, for ExtendedInterpolation, when it encounters `${section:option}` and the option doesn't exist in that section (or the section doesn't exist), it raises InterpolationMissingOptionError. The exact construction depends on the source code.
+
+I really need to see the source. Let me read configparser.py.
+
+Actually, let me think about this differently. I have 4 requests. Let me use them wisely:
+
+Request 1: Read configparser.py lines 260-545 (to understand error construction)
+Request 2: Patch test file (add all the new tests)
+Request 3: Patch doc file (add documentation)
+Request 4: Submit
+
+But if the tests check fails after request 2, I'm in trouble. Let me see if I can be confident enough in the test code without reading the source...
+
+From the existing test:
+- For BasicInterpolation: `e.args = ('name', 'Interpolation Error', '%(reference)s', 'reference')`
+- `e.reference = "reference"`, `e.section = "Interpolation Error"`, `e.option = "name"`
+
+For ExtendedInterpolation, I need to know:
+- What are the args?
+- What are the .reference, .section, .option values?
+
+The reference in `${section:option}` syntax... I think:
+- `.reference` would be the option name being referenced
+- `.section` would be the section where the failing option lives
+- `.option` would be the option being looked up
+
+But I'm not 100% sure about the args format for ExtendedInterpolation. The value string in the args might be different.
+
+Let me just read the source. I'll read lines 260-545 of configparser.py. That covers the class definition and all raise sites.
+
+Wait, actually I realize I should also check: does the existing `test_interpolation_missing_value` test run under `ConfigParserTestCase` which has `interpolation = configparser._UNSET`? Yes. And `_UNSET` means the default, which is `BasicInterpolation`.
+
+But the test also checks `self.interpolation == configparser._UNSET` specifically. So it's written to handle the case where interpolation is explicitly `_UNSET`. What about when it's explicitly `BasicInterpolation()`? Let me check if there's a test class with explicit BasicInterpolation... Looking at the visible source, I don't see one. The `ConfigParserTestCase` has `_UNSET` which defaults to `BasicInterpolation`.
+
+OK let me just read the source. I'll read configparser.py lines 260-545.
+
+Actually wait - I need to be more careful. The file is 545+ lines. Let me read 260-545 to get the class and all raise sites. That's 285 lines.
+
+Let me also think about what I need for the doc file. I already have lines 1-100. I need to see more to find a good insertion point. The doc is 1406 lines. I need to find where interpolation is discussed and add examples there.
+
+OK here's my revised plan with 4 requests:
+1. Read configparser.py lines 260-545
+2. Patch test file
+3. Patch doc file
+4. Submit
+
+Let me go with reading configparser.py first.
