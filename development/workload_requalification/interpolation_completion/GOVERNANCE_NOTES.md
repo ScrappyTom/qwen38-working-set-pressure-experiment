@@ -1,4 +1,39 @@
-# Lessons to reconcile into project governance
+# Addendum: correction context and source-discovery consultation
+
+The correction-context mixin and exact native trials are qualified; the separate
+two-call discovery dialogue is closed. See correction_context/PREPARATION_REVIEW.md
+and ../source_discovery_consultation/current_input/RESULTS.md. These observations
+extend the earlier notes without changing the unsuccessful task result.
+
+- **Qualify co-presence, not only delivery.** The actual real failure and complete
+  edited region fit together at14,160 tokens. Preserve the host's mechanical
+  record of the changed region and measure the complete input. Do not infer a
+  semantic repair or invent a target for deletion. If the region cannot fit whole,
+  keep a truthful control view; a hash or diff is not current editing authority.
+- **Check advice to retain the interface as carefully as advice to change it.**
+  D1 recommends no acquisition based on an invented unseen base implementation.
+  A conservative-sounding answer can still have a false premise. D2 corrects that
+  premise only after exact evidence is supplied. Neither recommendation alone is
+  an architecture verdict or evidence of subsequent task behavior.
+- **Name the interface under review.** Our shorter question allowed a response
+  about configparser's exception API instead of the host's presentation/acquisition
+  interface. State the object of review clearly; preserve the earlier ambiguous
+  question and response rather than silently rewriting them.
+- **An available route is not reliable discovery.** The11-line read fits in the
+  actual original state at22,692 tokens. D1 nevertheless did not identify a missing
+  fact; D2 already received its exact coordinates. This separates capability to
+  return evidence from choosing to seek it. Do not blame storage or adopt an
+  automatic dependency/summary mechanism without qualifying that next boundary.
+- **Navigation and assertions retain their own scope.** A search address covering
+  Error is not delivery of its body. Args equality does not validate actual rendered
+  diagnostics. A current true message attribute and a working __str__ are separate
+  behaviors under faults even when their values agree on the present code.
+- **Keep development cost and assistance visible.** Two nonexecuting consultations
+  cost17.120 model minutes. D2 is a changed, focused input with supplied source and
+  observations, not a matched performance comparison. No task correction or full
+  contribution was produced. Preserve these limits alongside useful learning.
+
+# Earlier lessons from the closed completion attempt
 
 These notes come from the closed completion002 and its actual inputs, full outputs,
 saved effects and independent artifact probes. They do not rewrite earlier scores

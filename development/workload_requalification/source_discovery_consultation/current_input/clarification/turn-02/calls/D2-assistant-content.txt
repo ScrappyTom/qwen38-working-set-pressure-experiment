@@ -1,0 +1,86 @@
+## 1. Corrections to the D1 claims
+
+**Claim: "Error.__init__(self, msg) (i.e. Exception.__init__), which temporarily sets args = (msg,)."**
+
+This is wrong. The reviewer source shows:
+
+```python
+class Error(Exception):
+    def __init__(self, msg=''):
+        self.message = msg
+        Exception.__init__(self, msg)
+
+    def __repr__(self):
+        return self.message
+
+    __str__ = __repr__
+```
+
+`Error.__init__` is **not** `Exception.__init__`. It stores the formatted string in `self.message` *before* delegating to `Exception.__init__`. The parenthetical "(i.e. `Exception.__init__`)" in D1 was an unfounded identification.
+
+**Claim: "No named attribute retains the formatted msg."**
+
+Wrong. `e.message` is set by `Error.__init__` and is never overwritten by any subclass in the chain. It is available on every `InterpolationMissingOptionError` instance.
+
+**Claim: "str(e) returns the 4-tuple repr, not the diagnostic sentence."**
+
+Wrong. Because `Error` defines `__repr__` to return `self.message` and sets `__str__ = __repr__`, and no subclass in the visible chain overrides either method, `str(e)` returns the diagnostic sentence. The lookup observations confirm this directly: the `"rendered"` field (i.e., `str(e)`) equals the formatted message in all three cases, while `"tuple_rendered"` (the 4-tuple repr) is a separate value.
+
+**Claim: "The source does not show a `__str__` override on any class in the chain, so str(e) is the default BaseException.__str__."**
+
+The first clause ("the source does not show") was true of the *visible* range (lines 260–545). The inference ("so str(e) is the default") was not licensed. Absence of an override in the visible window does not establish absence in the full MRO. The `Error` class at lines 170–180 — outside the displayed excerpt — is where the override lives.
+
+**What the original visible excerpt (lines 260–545) actually established:**
+
+- The complete body of `InterpolationMissingOptionError.__init__`, including the format string, the call to `InterpolationError.__init__`, and the final `self.args = (option, section, rawval, reference)`.
+- The tail of `InterpolationError.__init__` (lines 260–262: `self.option`, `self.section`, `self.args`), but **not** the class header or `def __init__` signature (lines 256–259), and **not** the body of `Error.__init__` (lines 170–180).
+- Both interpolation classes and their raise sites.
+
+**What it left uninspected:**
+
+- The `Error` class body: `self.message = msg`, `Exception.__init__(self, msg)`, `__repr__`, `__str__`.
+- The `InterpolationError` class header and `def __init__` line (the `super()`/`Error.__init__` call target was visible as a call, but the callee's body was not).
+
+The D1 answer treated the invisible `Error.__init__` as if it were a pass-through to `Exception.__init__` with no side effects, and treated the invisible portion of the MRO as if no `__str__`/`__repr__` override existed. Both were inferences, not observations.
+
+---
+
+## 2. Does asserting `args` or reconstructing the sentence test the actual diagnostic output?
+
+With the corrected understanding, there are three distinct things a test can pin:
+
+| Assertion | What it tests |
+|-----------|---------------|
+| `e.args == (option, section, rawval, reference)` | The stored 4-tuple (the four *inputs* to the format template). |
+| `e.message == <expected sentence>` | The formatted diagnostic string as stored on the instance. |
+| `str(e) == <expected sentence>` | The rendered diagnostic text as the user would see it. |
+
+**Asserting `args` alone does not test the diagnostic output.** It pins the four raw inputs. The formatting logic (the `.format(option, section, reference, rawval)` call inside `__init__`) is not exercised by a tuple equality check. A library change that altered the format template while keeping the same four arguments would pass an `args`-only assertion.
+
+**Independently reconstructing the expected sentence** (applying the format string from the source to the known args) and comparing it to `str(e)` **does** test the actual diagnostic output. It verifies that the library's rendered text matches the template the reviewer expects. This is a one-step-more-direct assertion than `args` equality: it exercises the formatting computation that produced `self.message`.
+
+**The most direct assertion** is `str(e) == <expected sentence>` (or equivalently `e.message == <expected sentence>`). It requires no reconstruction; it compares the exception's own rendered output against the expected string. The task's phrase "diagnostic text" maps to this.
+
+So the distinction: `args` pins inputs; the diagnostic-text assertion pins the output of the formatting step. The task asks for both ("arguments" and "diagnostic text" are listed as separate items to check). A test that asserts only `args` satisfies the "arguments" requirement but not the "diagnostic text" requirement.
+
+---
+
+## 3. Could an existing operation have obtained the missing evidence?
+
+Yes. The missing evidence was the `Error` class body at lines 170–180 of the same file. A single `read` operation would have delivered it:
+
+```json
+{"action":"read","path":"Lib/configparser.py","start_line":170,"end_line":180}
+```
+
+**What it would establish:**
+
+- `Error.__init__` sets `self.message = msg` before calling `Exception.__init__(self, msg)`. This confirms the formatted string is a persistent instance attribute, not a transient local.
+- `Error.__repr__` returns `self.message`, and `__str__ = __repr__`. This confirms `str(e)` returns the diagnostic sentence, not a tuple repr.
+- `Exception.__init__(self, msg)` is still called, so `self.args` is initially `(msg,)` before the two overwrites in `InterpolationError.__init__` and `InterpolationMissingOptionError.__init__`. This confirms the final `args` is the 4-tuple, not the 1-tuple.
+
+Alternatively, a `search` for `"class Error"` in `Lib/configparser.py` with a small limit would return the match location and a context region covering the class body. Either route is within the ordinary operation set.
+
+**Is there a concrete remaining host limitation?** No. The file is 1347 lines; lines 170–180 are well within bounds. The `read` schema accepts `start_line` from 1 to 2,000,000 and `end_line` from 0 to 2,000,000. No paging, no capacity pressure, no stale-guard issue applies to an unmodified read of 11 lines. The operation was available and unperformed. The original displayed excerpt simply began at line 260 (a scope chosen for the initial context), and the inference error was treating that scope as the entire relevant MRO.
+
+Retaining the current interface is the correct conclusion. No operation type, no paging bound, and no fingerprint guard in the documented schema prevents reading lines 170–180 of a 1347-line file. The gap was operational (the read was not issued), not structural.

@@ -1,4 +1,26 @@
-# D1 reviewed; one factual clarification qualified
+# Correction context and discovery consultation closed
+
+Read workload_requalification/interpolation_completion/NEXT_DECISION.md and
+source_discovery_consultation/current_input/RESULTS.md under development. The
+opt-in correction view is qualified at14,160 tokens beside the real failure;
+oversized targets fall back without invented visibility. No active task used it.
+
+D1/D2 are complete and fully read. D1 invents an unseen base implementation; D2
+corrects it after exact definitions and reviewer observations. Its proposed read
+fits the original state at22,692 tokens, but those supplied coordinates and the
+offline execution are not autonomous discovery. Total17.120 model minutes,
+34,111 input/16,204 generated tokens. Exact seals/private runtime hashes verify;
+GPU released. No third dialogue, task retry or original-run extension follows.
+
+The next tranche is a separately prepared finite uncoached correction contribution
+from actual90a025e9/history/account/failed check/final C64 acquisition, with the
+prospective correction mixin. Proposed16 new requests/48ops means absolute80/200.
+Qualify/freeze/publish before inference. Do not supply D2 evidence, reviewer fixes,
+preferred groups or silently repair the account. Preserve all original costs and
+the unknown C22 cost. The interpolation contribution and broader ledger remain
+open; available operations and corrected consultation prose are not task success.
+
+# Prior preparation: D1 reviewed and one clarification qualified
 
 Read source_discovery_consultation/current_input/D1_REVIEW.md and
 clarification/PREPARATION_REVIEW.md under the workload ledger. D1 completed with

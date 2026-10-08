@@ -1,4 +1,49 @@
-# Next: qualify the correction context and resolve the deferred discovery question
+# Next: a finite correction contribution on the qualified successor
+
+The two immediate qualifications below are complete. Read
+correction_context/PREPARATION_REVIEW.md and
+../source_discovery_consultation/current_input/RESULTS.md. Retain the opt-in exact
+correction target beside feedback. D1 incorrectly invents an unseen base; D2
+corrects it after supplied evidence. The existing acquisition fits, but reliable
+discovery and useful task behavior remain unproven. The dialogue is closed.
+
+The next entry should complete the existing contribution, not repeat discovery
+from its original empty state or open another design consultation. Prepare a
+separately named successor on the actual final90a025e9 candidate, full closed
+history/account, actual failed check and final C64 source acquisition. Do not
+rewind to C63, discard C64, repair the saved tests/account, or transfer D2's supplied
+Error definition, coordinates or reviewer fixes into the task input. The last
+read has not previously reached a task model; account for its first delivery.
+
+Use the existing correction-context mixin prospectively, keeping ordinary tools,
+checker definitions, declared checks, guards, medium uncapped settings and output
+forms fixed. Initial presentation must truthfully reflect the actual restored
+state and pending results. Preserve source selection/history and qualify any
+required admission change explicitly. No causal efficiency claim follows from a
+successor with renewed opportunity and a changed correction policy.
+
+Propose16 new requests and48 operations (absolute ceilings80 and200 from64/152),
+then freeze the actual allowance in preparation before inference. This supports
+correction, acquisition, documentation and feedback-driven revision on existing
+work without forcing a particular sequence. Unused original operation allowance
+does not retrospectively extend the closed run. No automatic retry or extension.
+
+Qualify restoration and the complete information path: actual failed feedback and
+target source, guarded correction, successor check, meaningful diagnostic failure,
+preserved earlier tests/library, documentation examples under the intended ordinary
+environment, and current checked submission. Scripted choices must cite what the
+actual input establishes; evaluator knowledge must not be counted as supplied
+evidence. No Qwen inference is needed for this engineering qualification.
+
+Then publish before the one uncoached contribution attempt. Let Qwen choose source,
+edits and optional account content. Review its complete inputs/thinking/public
+replies and actual artifacts. Check exact class/args/fields/rendered diagnostics
+through all required lookups/transports and accurate documentation. A passing
+checker does not replace direct artifact review. Count all lineage costs, including
+unknown original C22. This successor preparation/run is the next tranche, not an
+automatic action in the completed consultation tranche.
+
+# Prior decision: correction context and deferred discovery qualification
 
 Close run002 unchanged at the actual failing 90a025e9 candidate. Its 32 new requests
 are consumed. Keep the saved tests, real failed check, final acquisition, account

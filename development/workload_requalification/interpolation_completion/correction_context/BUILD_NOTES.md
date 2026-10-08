@@ -18,3 +18,14 @@
   production derivation was correct; preserve the failed test/log and correct
   the assertion. Add separate coverage that a new target cannot evict an existing
   recovery inspection just to fit.
+- Actual native qualification reproduces the old C64 input at 12,536 tokens and
+  fits the exact replacement beside its real ordinary failure at 14,160. The only
+  view differences are source selection display and visibility. A separate
+  62,328-byte synthetic escaping case does not fit whole; fallback preserves the
+  control view instead of truncating the target. This is an information-path
+  qualification, not evidence that Qwen corrected or completed the contribution.
+- The separate D1 review repeats the unsupported parent-class premise. Preserve
+  that failure rather than accept its recommendation to retain the interface as
+  source-checked advice. One factual D2 is qualified after reading the entire D1
+  response; it supplies exact same-version definitions and explicitly distinguishes
+  the host interface from the library API. No task run is active during dialogue.

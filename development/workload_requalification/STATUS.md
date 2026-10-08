@@ -1,4 +1,26 @@
-# Interpolation completion attempt closed without a completed contribution
+# Correction context qualified; source-discovery consultation closed
+
+The opt-in recovery policy fits the real failed check beside the complete recorded
+edited region at14,160 tokens, compared with the source-less12,536-token C64 view.
+Eight CPU cases and actual native trials qualify the bounded addition and honest
+oversized fallback. Old records, candidate, task/check definitions and shared host
+modules remain unchanged. No Qwen task has used the new policy yet.
+
+The separate D1/D2 dialogue is closed. D1 repeats the unsupported unseen-base
+assumption; D2 corrects it after exact source/lookup evidence. A reviewer-only
+replay proves its proposed read fits the actual earlier state at22,692 tokens.
+No new acquisition mechanism is required for that operation; reliable discovery
+is not established. Both complete responses were directly reviewed and sealed,
+with no task execution. Total17.120 model minutes,34,111 input/16,204 generated
+tokens. Runtime/GPU released. See source_discovery_consultation/current_input/RESULTS.md.
+
+The interpolation contribution and wider ledger remain open. Next prepare a finite
+uncoached successor on actual saved failure/history/C64 acquisition with the
+qualified correction view. Do not import reviewer fixes or consultation evidence,
+extend the sealed run or count this engineering/dialogue tranche as task success.
+See interpolation_completion/NEXT_DECISION.md and GOVERNANCE_NOTES.md.
+
+# Prior closed interpolation completion attempt
 
 interpolation_completion/run-002 closes at 90a025e9 after 32 new requests and
 51 operations: 81.911 model minutes, 90.819 recorded task-loop minutes and 64,663
