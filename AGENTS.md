@@ -1,4 +1,23 @@
-# Correction context and discovery consultation closed
+# Finite correction job qualified for one uncoached run
+
+Read development/workload_requalification/interpolation_completion/correction_entry/
+PREPARATION_REVIEW.md, PLAN.md and SPEC.md. The prospective plan is published at
+fdfd7799. Preparation has zero model completions;3 CPU checks and44 native decoder
+cases pass. Initial11,590/peak20,054 tokens;8 scripted decisions/11ops with actual
+fail/pass/pass checks.359 artifacts/2,232 bindings/101 custody records,8 restored
+checkpoints and21 exact source presentations verify. Ordinary example execution
+agrees with the registered checker on13 passes and one deliberate failure.
+
+Publish the package, then run correction_entry/run_correction.py run --version001
+once. Restore actual90a025e9/history/account/failed check/C64 read and pending
+receipt. The first task input delivers the final read; do not replace it with D2
+evidence, a reference patch or selected group.16 new requests/48ops give absolute
+80/200. Keep settings/checker fixed, no live coaching/retry/extension. Review all
+actual inputs, full responses, effects and artifacts; then audit and publish.
+Preserve originalC22 unknown cost and separate development costs. The contribution
+and broader workload ledger remain open until actual model work is evaluated.
+
+# Prior direction: correction context and discovery consultation closed
 
 Read workload_requalification/interpolation_completion/NEXT_DECISION.md and
 source_discovery_consultation/current_input/RESULTS.md under development. The

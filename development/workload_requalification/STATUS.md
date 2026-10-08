@@ -1,4 +1,20 @@
-# Correction context qualified; source-discovery consultation closed
+# Finite correction job qualified; no new task inference yet
+
+interpolation_completion/correction_entry restores the actual failed candidate,
+natural account/history and final C64 acquisition. The new allowance is16 model
+requests/48 operations, with unchanged model/checker and the prospectively
+qualified correction-context view. Initial11,590/peak20,054 native tokens,44 decoder
+forms,8 scripted decisions/11ops, and actual fail/pass/pass checks qualify the
+engineering route.359 artifacts/2,232 bindings/101 custody records verify; the
+13 reference examples agree with ordinary standalone execution, including a
+meaningful negative case. Zero model completions; runtime released.
+
+Publish this package, then execute the one declared uncoached run. Preparation is
+not task success. No consultation answers, reference correction/group, coaching,
+automatic retry or allowance extension. Preserve the old attempt and unknownC22
+cost. Read correction_entry/PREPARATION_REVIEW.md for the full scope and limits.
+
+# Prior direction: correction context qualified; source-discovery consultation closed
 
 The opt-in recovery policy fits the real failed check beside the complete recorded
 edited region at14,160 tokens, compared with the source-less12,536-token C64 view.
