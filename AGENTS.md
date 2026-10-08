@@ -1,5 +1,13 @@
 # Active: complete the unfinished interpolation contribution
 
+Preparation002 is qualified and independently audited; read
+interpolation_completion/PREPARATION_REVIEW-002.md. Six CPU checker cases, four
+checkpoint cases,44 native forms and12 scripted decisions pass with zero model
+completions. Initial8720/peak23610;390artifacts/985bindings/123custody/40source views.
+Preserve the failed001 restoration audit and its source. Use the prospective
+run_qualified_completion.py launcher for the one run002; typed checkpoint repair
+does not change actor input or task. Publish before inference.
+
 Read development/workload_requalification/interpolation_completion/PLAN.md and
 BUILD_NOTES.md. The owner approved this next entry. Restore actual closed
 interpolation_revision/run-002 work/history/account, declare the empty new source
