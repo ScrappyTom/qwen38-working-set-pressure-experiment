@@ -1,3 +1,14 @@
+# Full-phase package001 qualified; correct scope wording before exposure
+
+Read development/workload_requalification/phase_entries/PREPARATION-001-REVIEW.md.
+10CPU checks,38native forms,25scripted decisions,637artifacts/587bindings exact replay.
+No model completions; runtime closed. Preserve001 unexecuted. Direct input review
+found inherited public_execution labels inside prefork diagnostics. Add a small
+phase-specific assessment/reference correction, keep raw observations unchanged,
+qualify002, publish, then one uncoached32-request/96-operation source task attempt.
+No coaching or reset at fork. E18 original recovery miss and other phase/probe/
+predecessor entries remain open. Continue autonomously unless blocked/major gap.
+
 # Replacement consultation closed; implement the missing full-phase adapter
 
 Owner says keep working unless blocked or a major gap appears. Read

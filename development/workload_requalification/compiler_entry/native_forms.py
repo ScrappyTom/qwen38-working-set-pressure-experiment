@@ -98,7 +98,7 @@ def cases(checks):
         '\nSOURCE\nx=1\n', expected=False)
 
 
-def qualify(module, folder, url, store, log):
+def qualify(module, folder, url, store, log, *, specimens=None, required_forms=None):
     """Qualify exact wire/form compatibility during caller-owned preparation.
 
     module is compiler_task.Task. Required inherited APIs: ROOT, ACTOR,
@@ -129,7 +129,7 @@ def qualify(module, folder, url, store, log):
         assert request['grammar'] == constraints['grammar'] and 'response_format' not in request
         assert 'channel-think-0' in request['grammar'], 'Qualified thinking wrapper is absent'
         assert not any(set(form['properties']) == {'discussion'} for form in schema['oneOf'])
-        checks, imported = set(), []
+        checks, operations = set(), {}
         for form in schema['oneOf']:
             if 'operation' not in form['properties']:
                 continue
@@ -137,11 +137,13 @@ def qualify(module, folder, url, store, log):
                 name = operation['properties']['action']['const']
                 if name == 'check':
                     checks.update(operation['properties']['check_id']['enum'])
-                if name == 'reopen_observation':
-                    imported.append(operation)
-        assert checks and imported, 'Expected check/imported-observation forms are absent'
-        assert all(set(form['properties']) == {'action', 'handle'} for form in imported), \
-            'Imported observation contract changed; update qualification explicitly'
+                operations.setdefault(name, []).append(operation)
+        required_forms = ({'reopen_observation': {'action', 'handle'}}
+                          if required_forms is None else required_forms)
+        assert checks and required_forms, 'Expected check/extension contract is absent'
+        for name, fields in required_forms.items():
+            assert name in operations and all(set(form['properties']) == set(fields)
+                for form in operations[name]), 'Required operation form differs: ' + name
         wire, grammar = completion_request_bytes(request), request['grammar'].encode('utf-8')
         layout_path, pinned_path = root/REVIEW/'native_order_probe_gbnf.py', root/REVIEW/'NATIVE_GBNF_ORDER_PROBE.json'
         for path in (Path(__file__).resolve(), layout_path, pinned_path):
@@ -184,7 +186,7 @@ def qualify(module, folder, url, store, log):
             assert model, 'Vocabulary loading failed'
             try:
                 vocab = vocabulary(model)
-                for case in cases(sorted(checks)):
+                for case in (specimens or cases)(sorted(checks)):
                     name, raw = case['name'], case['text'].encode('utf-8')
                     artifacts = [save(name+'.txt', raw)]
                     matcher = sampler(vocab, grammar, b'root')
