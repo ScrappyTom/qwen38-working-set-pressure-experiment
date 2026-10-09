@@ -51,3 +51,34 @@ content equals the preceding selected prefix plus the actual C08 return, with
 the recorded file fingerprint. Thus later implementation reasoning can be checked
 against supplied code rather than inferred from prior training. No check or edit
 has occurred through C08; no source has been forcibly removed.
+
+## C09 and apparatus stop
+
+The full27,969-character thinking,740-character final, actual edit and initial
+input were read. It correctly connects defaults and named sections to the shared
+writer, resolves match versus fullmatch using the visible reader, and identifies
+whole configured delimiters as the other condition. It repeatedly reconsiders
+the same regex examples, helper placement and patch order before emitting one
+small export-list edit. Several approximate line numbers and one copied exception
+name are wrong in deliberation, but the final exact anchor and guards are correct.
+No private helper/class draft was executed or counted as saved work.
+
+C09 adds InvalidWriteError to __all__, producing
+f8c299f79fa9b605b5b0540de3f16adf67b54b784fcececab94f21744d1d9cc3.
+The class, write guard, regressions and documentation remain unwritten. Its new
+source/receipt were constructed but never delivered to a C10 in this attempt.
+
+Independent checker inspection while C09 was running found the unsupported
+exact-message assertion documented in CHECKER-CORRECTION-PLAN.md. The operator
+stop was queued before that reply became available; its actual effects then ran
+normally and the runtime closed. No live check was executed, so no faulty grading
+feedback reached Qwen. The planned custom exception diagnostic in private thinking
+would conflict with the old assertion, but it was not a requested or saved class;
+do not present that counterfactual as an actual rejection.
+
+All nine actual inputs/full replies/effects are now reviewed. Exact replay passes
+201records/13native inputs/14states/515source bindings. Total model time806.158s,
+10,855generated tokens,85,790input tokens. This is a13.436-minute apparatus-stopped
+partial contribution, not a task-completion or action-budget result. C09 itself
+generated7,266tokens. Prior work remains preserved and the small export edit will
+be inherited by the corrected continuation, with consumed opportunity retained.
