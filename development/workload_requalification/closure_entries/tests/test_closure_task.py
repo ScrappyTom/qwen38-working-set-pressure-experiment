@@ -1,5 +1,6 @@
 """Original closure work, historical authority and check applicability."""
 import copy
+import importlib.util
 from pathlib import Path
 import sys
 import tempfile
@@ -163,6 +164,24 @@ class ClosureTests(unittest.TestCase):
                     result = qualification_route.journey(task, session, lambda view: 0, feedback,
                         variant=variant, record=recorded)
                     self.assertEqual(result['submitted'], variant != 'historical')
+
+    def test_imported_custody_is_compared_to_original_bytes_not_only_its_inventory(self):
+        path = module.AREA / 'review/verify_run.py'
+        spec = importlib.util.spec_from_file_location('closure_custody_verifier', path)
+        verifier = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(verifier)
+        task, session, _ = self.new('E14-CLOSURE-MINT')
+        records = []
+        class Log:
+            path = self.folder / 'records.jsonl'
+            def append(self, kind, payload, artifacts):
+                records.append(dict(record_type=kind, payload=payload, artifacts=artifacts))
+        task.attach_observations(session, self.folder, Log())
+        self.assertEqual(verifier._imported_custody(task, self.folder, records, ['']), 3)
+        body = self.folder / 'imported-captures/OBS-0001.json'
+        body.write_bytes(task.imports()[2]['OBS-0002'])
+        with self.assertRaises(AssertionError):
+            verifier._imported_custody(task, self.folder, records, [''])
 
 
 if __name__ == '__main__':

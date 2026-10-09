@@ -50,6 +50,30 @@ def _inventory(root, seal):
         assert sha256_file(_within(root / 'private-runtime', name)) == digest
 
 
+def _imported_custody(module, root, records, expected_prefixes):
+    original, transport, bodies = module.imports()
+    expected = {'original-rows.json': canonical_json_bytes(original),
+        'transport-inventory.json': canonical_json_bytes(transport),
+        'original-provenance.json': canonical_json_bytes(module.original_observation_state()),
+        **{handle + '.json': raw for handle, raw in bodies.items()}}
+    found = set()
+    for record in records:
+        if record['record_type'] != 'imported_capture_custody':
+            continue
+        paths = [row['path'] for row in record['artifacts']]
+        assert paths and all('/imported-captures/' in '/' + p for p in paths)
+        prefix, = {p.rsplit('imported-captures/', 1)[0] for p in paths}
+        assert prefix not in found
+        found.add(prefix)
+        assert {p.rsplit('/', 1)[-1] for p in paths} == set(expected)
+        for path in paths:
+            assert _within(root, path).read_bytes() == expected[path.rsplit('/', 1)[-1]]
+        assert record['payload'] == dict(records=len(bodies), actor_acquisitions=0,
+            retrieval_only=True, source_edit_authority=False, applicable_check_authority=False)
+    assert found == set(expected_prefixes)
+    return len(found) * len(bodies)
+
+
 def _preparation(module, seal):
     from run_closure import verify_preparation
     manifest = verify_preparation(module)
@@ -166,6 +190,7 @@ def verify(case, version='001'):
             _within(run, artifact['path'])
     records = verify_records(run / 'records.jsonl', run)
     assert len(records) == seal['record_count']
+    imported_captures = _imported_custody(module, run, records, [''])
     replay_module = study.Task(case, version, replay_folder=run)
     session = replay_module.initial_session()
     assert session.observations.replay is True
@@ -336,10 +361,12 @@ def verify(case, version='001'):
         original_constructed_boundary=True, inherited_setup_operations=5, initial_candidate_id=module.STARTING_ID, submitted=session.submitted,
         final_candidate_id=session.candidate.candidate_id, terminal_response=terminal,
         observations=observed, observations_replayed_without_execution=len(observed),
+        original_capture_custody_verified=imported_captures,
         source_closure_and_preparation_verified=True, every_saved_checkpoint_restored=True,
         no_additional_checker_execution=True, no_additional_model_inference=True, no_additional_tokenization=True,
         owned_runtime_closed=True, executed_manifest_sha256=sha256_file(run / 'EXECUTION_MANIFEST.json'),
         preparation_seal_sha256=manifest['preparation_seal_sha256'],
+        response_seal_sha256=sha256_file(run / 'RESPONSE_SEAL.json'), records_sha256=sha256_file(run / 'records.jsonl'),
         verification_source_sha256=sha256_file(Path(__file__)), runner_source_sha256=sha256_file(RUNNER_PATH),
         interpretation_and_artifact_review_required=True)
 

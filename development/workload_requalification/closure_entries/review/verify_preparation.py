@@ -28,6 +28,7 @@ def verify(case, version='001'):
     records = verify_records(folder / 'records.jsonl', folder)
     assert len(records) == seal['record_count']
     assert not any(r['record_type'] == 'invocation_started' for r in records)
+    imported = verify_run._imported_custody(module, folder, records, ['', 'closure/', 'historical/', 'failed-check/'])
     adapter = run_closure.runner.Adapter(module)
     counts = verify_run._native_counts(folder, records, adapter)
 
@@ -60,6 +61,7 @@ def verify(case, version='001'):
         native_inputs=len(counts), native_forms=len(native['cases']),
         scripted_decisions=sum(len(v['trials']) for v in route['variants'].values()),
         submitted=route['submitted'], original_history_preserved=True, no_model_inference=True,
+        original_capture_custody_verified=imported,
         no_additional_tokenization=True, no_additional_checker_execution=True,
         verifier_sha256=sha256_file(Path(__file__)))
 

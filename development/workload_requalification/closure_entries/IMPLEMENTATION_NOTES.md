@@ -46,3 +46,17 @@ The prepared controller reuses the existing one-run lifecycle and the verifier
 adapts the existing historical-prefix replay to five pairs. Native qualification
 and exact replay are still required before exposure; neither CPU success nor a
 syntactically valid controller constitutes that qualification.
+
+Before native preparation, the replay verifier now compares every original
+capture-custody object against the reconciled entry, not merely against its local
+inventory. CPU-TESTS-005 passes ten tests including a swapped-body rejection.
+This is evaluator qualification; no live E18 source or request changed. The
+verifier also binds its output to the response seal and record-chain fingerprints
+for subsequent assessment. Both native packages remain unexposed.
+
+The independent post-run MINT examples preserve its actual wire contract:
+encode_wire uses ASCII. Reading that source during preparation prevented an
+incorrect proposed Unicode-wire expectation from becoming a grading assertion.
+No such failed assertion was executed or attributed to the task. SABLE's name
+examples may include Unicode because its inspected implementation uses casefold
+and has no wire-encoding boundary.
