@@ -1,0 +1,109 @@
+--- a/Lib/test/test_configparser_write_safety.py
++++ b/Lib/test/test_configparser_write_safety.py
+@@ -3,4 +3,105 @@
+ import unittest
+ 
+ 
+-# Add public write() regression tests here.
++class TestInvalidWriteError(unittest.TestCase):
++    """Tests for InvalidWriteError raised during write()."""
++
++    def test_option_name_matching_section_pattern(self):
++        """Option name that looks like a section header raises InvalidWriteError."""
++        cp = configparser.RawConfigParser()
++        cp.add_section('MAIN')
++        cp.set('MAIN', '[section]', 'value')
++        buf = io.StringIO()
++        with self.assertRaises(configparser.InvalidWriteError) as ctx:
++            cp.write(buf)
++        self.assertEqual(ctx.exception.option, '[section]')
++
++    def test_option_name_containing_equals_delimiter(self):
++        """Option name containing '=' raises InvalidWriteError."""
++        cp = configparser.RawConfigParser()
++        cp.add_section('MAIN')
++        cp.set('MAIN', 'a=b', 'value')
++        buf = io.StringIO()
++        with self.assertRaises(configparser.InvalidWriteError) as ctx:
++            cp.write(buf)
++        self.assertIn('a=b', str(ctx.exception))
++
++    def test_option_name_containing_colon_delimiter(self):
++        """Option name containing ':' raises InvalidWriteError."""
++        cp = configparser.RawConfigParser()
++        cp.add_section('MAIN')
++        cp.set('MAIN', 'a:b', 'value')
++        buf = io.StringIO()
++        with self.assertRaises(configparser.InvalidWriteError):
++            cp.write(buf)
++
++    def test_custom_delimiter_not_forbidden(self):
++        """A delimiter not configured for this parser is not forbidden."""
++        cp = configparser.RawConfigParser(delimiters=('|',))
++        cp.add_section('MAIN')
++        # '=' is not a configured delimiter, so writing is safe
++        cp.set('MAIN', 'a=b', 'value')
++        buf = io.StringIO()
++        cp.write(buf)  # should not raise
++
++    def test_custom_multicharacter_delimiter(self):
++        """Multicharacter delimiters are matched as whole strings."""
++        cp = configparser.RawConfigParser(delimiters=('::',))
++        cp.add_section('MAIN')
++        cp.set('MAIN', 'a::b', 'value')
++        buf = io.StringIO()
++        with self.assertRaises(configparser.InvalidWriteError):
++            cp.write(buf)
++
++    def test_defaults_section_invalid_name(self):
++        """Invalid option names in the defaults section also raise."""
++        cp = configparser.RawConfigParser()
++        cp.set('DEFAULT', '[bad]', 'value')
++        buf = io.StringIO()
++        with self.assertRaises(configparser.InvalidWriteError):
++            cp.write(buf)
++
++    def test_valueless_option_invalid_name(self):
++        """Valueless options with ambiguous names also raise."""
++        cp = configparser.RawConfigParser(allow_no_value=True)
++        cp.add_section('MAIN')
++        cp.set('MAIN', '[nope]', None)
++        buf = io.StringIO()
++        with self.assertRaises(configparser.InvalidWriteError):
++            cp.write(buf)
++
++    def test_valid_option_name_no_error(self):
++        """Normal option names write without error."""
++        cp = configparser.RawConfigParser()
++        cp.add_section('MAIN')
++        cp.set('MAIN', 'normal', 'value')
++        buf = io.StringIO()
++        cp.write(buf)
++        self.assertIn('[MAIN]', buf.getvalue())
++        self.assertIn('normal = value', buf.getvalue())
++
++    def test_exception_is_error_subclass(self):
++        """InvalidWriteError is a subclass of configparser.Error."""
++        self.assertTrue(issubclass(configparser.InvalidWriteError, configparser.Error))
++
++    def test_exception_identifies_option(self):
++        """The exception identifies the offending option name."""
++        cp = configparser.RawConfigParser()
++        cp.add_section('MAIN')
++        cp.set('MAIN', 'bad=name', 'value')
++        buf = io.StringIO()
++        try:
++            cp.write(buf)
++            self.fail("Expected InvalidWriteError")
++        except configparser.InvalidWriteError as e:
++            self.assertIn('bad=name', str(e))
++            self.assertEqual(e.option, 'bad=name')
++
++    def test_configparser_also_raises(self):
++        """ConfigParser (with interpolation) also raises InvalidWriteError."""
++        cp = configparser.ConfigParser()
++        cp.add_section('MAIN')
++        cp.set('MAIN', 'bad=name', 'value')
++        buf = io.StringIO()
++        with self.assertRaises(configparser.InvalidWriteError):
++            cp.write(buf)

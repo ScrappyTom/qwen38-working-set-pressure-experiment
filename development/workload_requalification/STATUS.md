@@ -1,3 +1,16 @@
+# Recovery navigation qualified; implement the next real parser feature
+
+Read recovery_navigation/QUALIFICATION.md and configparser_unnamed/PLAN.md under
+development/workload_requalification. Eight CPU cases,44native forms, six actual
+saved inputs plus a real replacement pass; exact304artifacts/539bindings/101records/
+12native inputs/sevenstates replay. No inference. Ordinary view unchanged; exact
+fallback preserved. Publish this correction/next-task plan, then implement and
+qualify unnamed sections on the completed saved parser. Preserve prior code/tests;
+explicit public contract across reading/mapping/writing,40requests/120operations,
+medium, no coaching/reset/retry/extension. Publish qualification before model use.
+The owner directs substantive coding, not papers or synthetic reading tasks.
+Continue unless blocked or a major gap appears.
+
 # Configparser write safety completed; bounded recovery navigation next
 
 The original9-request attempt plus corrected-checker24-request continuation now
