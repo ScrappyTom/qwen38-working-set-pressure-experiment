@@ -1,3 +1,21 @@
+# SABLE full-entry package001 ready: publish, then run once
+
+Read development/workload_requalification/phase_entries/receipt_entries/sable/PREPARATION-001-REVIEW.md.
+38native forms,23scripted decisions; exact replay619artifacts/604bindings/430records/
+48native inputs and actual serialized restores. Complete6,154-token initial input
+read; original fresh158-file entry, empty account/group/archive, no repair supplied.
+Runtime closed. Publish then run receipt_entries/run_receipt.py run --case
+E14-STALE-SABLE --version 001. One uncoached32-request/96-operation opportunity,
+medium policy, no coaching/reset/retry/silent extension or bound-source changes.
+Read every actual input/full reply/effect. At closure replay review/verify_run.py
+with case/version, then review/post_run/assess_sable.py --version001 (CLI spaces).
+Independently review original predecessor-check ordering, normalized-name behavior,
+all required delivery, preservation and successor-pass consumption. Public tests
+only the stable invariant, not name behavior. Publish results, then reconcile the
+remaining original recurrent/predecessor contracts. MINT full entry is complete;
+its chronology/tiny-page costs remain recorded. E18's earlier recovery miss remains.
+Continue unless blocked or a major gap appears.
+
 # MINT full entry complete; qualify and run original SABLE
 
 Read development/workload_requalification/phase_entries/receipt_entries/mint/review/RUN001-RESULTS.md.
