@@ -1,3 +1,22 @@
+# E18 fresh run002 qualified: publish and execute once
+
+Owner says keep working unless blocked or a major gap appears. MINT001/SABLE003
+constructed closures are complete, reviewed/replayed and pushed61652b37. Read
+development/workload_requalification/evolving_observation_entry/PREPARATION-002-REVIEW.md.
+Native qualification36forms/12scripted+6crowded steps and exact replay559artifacts/
+574bindings/401records/45native inputs pass. Initial6,478-token request fully read;
+user input/request policy unchanged from001; no answer/group supplied. Runtime closed.
+
+Publish then run run_ecological.py run --version 002 in that area once, uncoached,
+32requests/96operations. Do not edit bound code during the run, change settings,
+coach, force release or silently extend. Review every full response/actual input
+and effect. After closure run review/verify_run.py --version 002, then dependent
+review/post_run/assess.py --version 002, then original_contract_next.py --version 002.
+Original contract, not the older overstrict all-ledgers-before-every-edit screen,
+determines procedure; inspect alternate exact action/result payloads if encountered.
+Keep run001/history and all finite outcomes unchanged. Wider phase/probe/fork and
+predecessor work remains; continue after results publication.
+
 # MINT and SABLE constructed closures complete; fresh E18 run002 next
 
 Owner says keep working unless blocked or a major gap appears. Read

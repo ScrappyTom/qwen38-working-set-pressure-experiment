@@ -1,3 +1,12 @@
+# Fresh E18 run002 qualified; publish and execute once
+
+Read evolving_observation_entry/PREPARATION-002-REVIEW.md. Native36forms and12+6
+scripted steps pass; exact replay verifies559artifacts/574bindings/401records/
+45native inputs. Initial user input is unchanged,6,478tokens including updated
+host reference. No model completions or supplied answer/group; runtime closed.
+Run once uncoached32requests/96operations after publication, then direct review,
+exact replay and original-contract assessment. No silent retry or extension.
+
 # Both original constructed closure entries complete; fresh E18 next
 
 SABLE003 completes5requests/8operations,581.298model/643.359loop seconds, unchanged
