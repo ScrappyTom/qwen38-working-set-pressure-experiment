@@ -50,8 +50,9 @@ checkpoint. Those are distinct exposed closure entries, not new source-repair ta
 Experiment 016 is offline event-frame capacity stress; it requires engineering
 regression, not a Qwen artifact. Experiment 017 repeats the closure donors and adds
 an embedded historical-action marker recovery case (event_frame_v2_qualification.py,
-phase_b_text). That embedded case is absent from the TASK.txt inventory and remains
-an explicit recovery obligation. Experiments 018–020 have their own source and
+phase_b_text). That embedded case is absent from the TASK.txt inventory; its current
+host recovery contribution is now complete as documented below. The other E017
+closure donors remain separate obligations. Experiments 018–020 have their own source and
 observation cases. Neither shared wording nor a previous eight-cell pass closes the
 new-host regression requirement.
 
@@ -99,4 +100,27 @@ matched R50/X25 replication, general security certification or proof that all
 historical workloads/pressure transitions passed. No new source release or recovery
 occurs in the continuation; its account update is not used afterward. See
 [continuation results](ecological_verifier_entry/containment_entry/review/RESULTS.md).
-The remaining legacy/temporal mapping includes E17 historical-action recovery.
+The remaining legacy/temporal mapping is not closed by this verifier contribution.
+
+## E17 historical-action current-host entry
+
+The exact constructed boundary and inherited EVT-0001 are retained. Published
+preparation00d8aaf7 precedes one uncoached run001: six new requests/eight operations,
+5.661model minutes. Qwen recovers the retired marker from the actual old/new action,
+reads current report.py, corrects a rejected copied fingerprint, saves the repair,
+checks its successor, consumes the pass and submits1f6f4cc0. The retired source is
+unchanged. Direct full input/output review and exact replay authenticate the path;
+independent ordinary execution and the original checker pass.
+
+This closes E17-HISTORICAL-ACTION-SIGNAL on the current host. One separately
+constructed setup operation is not a new model action. There is no pressure,
+source release or isolated account benefit. The current full-action retrieval and
+eight-request/24-operation allowance differ from the old payload-only route and
+prompt16/runner6 arrangement. No matched efficiency claim or retrospective change
+to historical results follows. See
+[results](historical_action_entry/review/RESULTS.md) and
+[next decision](historical_action_entry/NEXT_DECISION.md).
+
+Next reconcile E18's distinct source/observation acquisition and order contracts.
+E015/E017 closure donors, E013/E014 phase/probe/fork transitions, earlier legacy and
+predecessor mapping, and pressure comparisons remain open.

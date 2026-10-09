@@ -1,4 +1,28 @@
-# E17 historical-action boundary qualified; one attempt next
+# E17 historical-action contribution closed
+
+Read development/workload_requalification/historical_action_entry/review/RESULTS.md,
+complete READING_NOTES.md and NEXT_DECISION.md. Published00d8aaf7 precedes one
+uncoached run001: six new requests/eight operations,5.661model/6.168loop minutes.
+One inherited setup action remains separate. Qwen reopens the exact old/new action,
+reads current target, corrects a copied-fingerprint rejection, saves the repair,
+checks the successor, consumes its pass and submits1f6f4cc0. Archive source stays
+retired. No coaching, retry, extension, source release or pressure occurs.
+
+Replay verifies155artifacts,437bindings,139custody records,9native inputs and10
+snapshots. Independent ordinary execution and original acceptance pass; only
+report.py changes. Public/hidden are identical, not independent coverage. Runtime
+and GPU are released. Preserve the historical budget/transport differences; this
+is functional requalification, not a matched speed comparison or fresh Phase A.
+
+The terminal account retains the marker/patch but stale check/submit instructions;
+actual verification guides closure. No account benefit or mandatory rewrite is
+earned. The generic stale-binding message conflates a wrong copied file hash with
+changed source; record a narrow future diagnostic repair, not a memory failure.
+No shared host code changed in this tranche. Next reconcile E18 source/observation
+entries from their actual tasks and temporal evidence before the next thin adapter.
+The remaining legacy, donor, predecessor and pressure ledger stays open.
+
+# Prior E17 historical-action boundary qualification
 
 Read development/workload_requalification/historical_action_entry/PLAN.md and
 PREPARATION_REVIEW.md. Plan86d6a756 precedes preparation001. Original consumed entry
