@@ -1,3 +1,22 @@
+# Coding continuation qualified: publish then execute once
+
+The first write-safety attempt stopped after9requests/12operations because its
+checker asserted an unsupported exact exception constructor message. Preserve
+configparser_write_safety/run-002 and its direct audit; it saved only the export.
+Read configparser_write_safety_continuation/PREPARATION-001-REVIEW.md under
+workload_requalification. Corrected checker, four CPU integration checks, nine
+behavior/environment routes,44native forms and16scripted decisions qualify. Exact
+396artifacts/531bindings/126records/17inputs and16serialized restores pass.
+
+Publish then run configparser_write_safety_continuation/run_continuation.py run
+--version 001 once. Restore all saved work/state; C10 first,31requests/108operations
+remain from original40/120. Same medium policy, no coaching/reset/retry/extension
+or bound-source changes. Read every input/full reply/effect. Close with exact
+review/verify_run.py and review/assess.py, direct code/tests/prose review and lineage
+costs including the stopped attempt. Continue substantive coding; no paper or
+synthetic reading workload next. The owner authorizes continuing unless blocked
+or a major gap appears.
+
 # Coding package002 ready: publish, then run once
 
 Read configparser_write_safety/PREPARATION-002-REVIEW.md under development/
