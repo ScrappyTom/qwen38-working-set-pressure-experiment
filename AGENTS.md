@@ -1,3 +1,17 @@
+# MINT full-entry package001 ready: publish, then execute once
+
+Read development/workload_requalification/phase_entries/receipt_entries/mint/PREPARATION-001-REVIEW.md.
+Six CPU checks across both adapters; MINT48native forms/26scripted decisions,
+692artifacts/604bindings/476records/52native inputs replay exactly. Full initial
+6,699-token input read, no marker/account/group supplied. Runtime closed.
+Publish then run receipt_entries/run_receipt.py run --case E14-CLOSURE-MINT --version001
+(with CLI spaces). One uncoached32-request/96-operation opportunity across both
+phases. Do not change bound code/settings or reset at fork. Read all actual inputs,
+full responses/effects; replay review/verify_run.py with case/version before
+review/post_run/assess_mint.py. Publish direct procedure/artifact review. Then
+qualify/publish/run original SABLE entry once. Preserve E18 failure and finite
+outcomes. Continue unless blocked or a major gap appears.
+
 # ANCHOR full entry complete; implement remaining original E14 entries
 
 Read development/workload_requalification/phase_entries/probe_entry/review/RUN001-RESULTS.md.
