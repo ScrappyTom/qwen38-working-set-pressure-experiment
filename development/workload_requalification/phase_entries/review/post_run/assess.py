@@ -12,6 +12,7 @@ import tempfile
 AREA = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(AREA))
 import phase_task as study
+from snapshot_compat import restored_diff_keys
 from working_set_exp.jsonutil import canonical_json_bytes, sha256_bytes, sha256_file
 
 
@@ -155,4 +156,5 @@ print(json.dumps(rows,ensure_ascii=False))
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--version', default='002')
-    assess(parser.parse_args().version)
+    with restored_diff_keys(study.Task):
+        assess(parser.parse_args().version)

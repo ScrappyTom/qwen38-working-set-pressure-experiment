@@ -1,3 +1,21 @@
+# Full-phase source entry complete; implement the separate probe entry
+
+Read development/workload_requalification/phase_entries/review/RUN002-RESULTS.md.
+LUMEN002 completes18requests/25operations, both original phases, all728required
+lines, correct two-file repair and actual current passes before fork/submission.
+Capacity rejection was delivered; Qwen chose a narrower group and finished without
+coaching.19.668model/22.850loop minutes. Runtime closed.158other files unchanged.
+All full responses/inputs/effects reviewed; exact replay64native inputs/660records/
+27snapshots/588bindings passes with a separately documented JSON diff-key restore
+compatibility supplement. Preserve the original verifier failure and unchanged run.
+
+Publish result and phase_entries/probe_entry/PLAN.md, then implement/qualify original
+E13-OBS-ANCHOR in-task probe production and later exact recovery. Keep original
+world/task/checkers, shared32/96 finite opportunity, existing medium policy, no live
+coaching/reset/answer import. Load actual serialized snapshots in qualification.
+Publish native preparation before one run. E18 recovery miss and wider phase/probe/
+predecessor entries remain open. Continue unless blocked or a major gap appears.
+
 # Full-phase source package002 ready: publish then execute once
 
 Read development/workload_requalification/phase_entries/PREPARATION-002-REVIEW.md.

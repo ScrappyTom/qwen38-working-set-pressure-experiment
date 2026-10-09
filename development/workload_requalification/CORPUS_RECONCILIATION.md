@@ -1,8 +1,11 @@
 # Corpus reconciliation in progress
 
-Current next action: implement/qualify phase_entries/PLAN.md, starting original
-E13-SOURCE-LUMEN. The completed one-call replacement consultation correctly
-predicts release/recovery but does not close E18 or earn a wording/retention change.
+Current next action: implement/qualify phase_entries/probe_entry/PLAN.md for
+original E13-OBS-ANCHOR. E13-SOURCE-LUMEN run002 is complete across both original
+phases:18requests/25operations, correct saved work, all728required lines delivered,
+actual capacity recovery and consumed current passes. See phase_entries/review/
+RUN002-RESULTS.md for exact replay, audit correction and limits. The completed
+one-call replacement consultation does not close E18 or earn a retention change.
 
 E18 run002 completed10requests/17operations with correct code,
 complete ledger delivery and checked submission, but missed exact recovery before
