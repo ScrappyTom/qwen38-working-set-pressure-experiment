@@ -1,0 +1,180 @@
+--- starting/Doc/library/configparser.rst
++++ saved/Doc/library/configparser.rst
+@@ -1403,6 +1403,22 @@
+       The exact content of the offending continuation line.
+ 
+ 
++.. exception:: InvalidWriteError
++
++   Exception raised when :meth:`ConfigParser.write` or
++   :meth:`RawConfigParser.write` encounters an option name that would
++   be written as a section header or split at a configured key/value
++   delimiter.  Specifically, the option name begins with the parser's
++   ``SECTCRE`` section pattern or contains one of the parser's
++   configured delimiter strings.  Subclass of :exc:`Error`.
++
++   The protection applies to all options in the defaults mapping and
++   in each named section, including valueless options.  Because
++   :meth:`~ConfigParser.write` writes sequentially, earlier content may
++   already have been written to the file by the time the exception is
++   raised.
++
++
+ .. rubric:: Footnotes
+ 
+ .. [1] Config parsers allow for heavy customization.  If you are interested in
+--- starting/Lib/configparser.py
++++ saved/Lib/configparser.py
+@@ -336,6 +336,19 @@
+         self.lineno = lineno
+         self.line = line
+         self.args = (source, lineno, line)
++
++
++class InvalidWriteError(Error):
++    """Raised when writing an option name that would produce ambiguous output.
++
++    Raised by write() when an option name matches the section header pattern
++    or contains a configured delimiter string.
++    """
++
++    def __init__(self, option):
++        Error.__init__(self, 'Option name %r is ambiguous for writing' % (option,))
++        self.option = option
++        self.args = (option,)
+ 
+ 
+ # Used in parser getters to indicate the default behaviour when a specific
+@@ -915,10 +928,23 @@
+             self._write_section(fp, section,
+                                 self._sections[section].items(), d)
+ 
++    def _validate_write_key(self, key):
++        """Check that an option name is safe for writing.
++
++        Raise InvalidWriteError if the key would produce ambiguous output
++        when written to a file.
++        """
++        if self.SECTCRE.match(key):
++            raise InvalidWriteError(key)
++        for d in self._delimiters:
++            if d in key:
++                raise InvalidWriteError(key)
++
+     def _write_section(self, fp, section_name, section_items, delimiter):
+         """Write a single section to the specified `fp`."""
+         fp.write("[{}]\n".format(section_name))
+         for key, value in section_items:
++            self._validate_write_key(key)
+             value = self._interpolation.before_write(self, section_name, key,
+                                                      value)
+             if value is not None or not self._allow_no_value:
+--- starting/Lib/test/test_configparser_write_safety.py
++++ saved/Lib/test/test_configparser_write_safety.py
+@@ -3,4 +3,105 @@
+ import unittest
+ 
+ 
+-# Add public write() regression tests here.
++class TestInvalidWriteError(unittest.TestCase):
++    """Tests for InvalidWriteError raised during write()."""
++
++    def test_option_name_matching_section_pattern(self):
++        """Option name that looks like a section header raises InvalidWriteError."""
++        cp = configparser.RawConfigParser()
++        cp.add_section('MAIN')
++        cp.set('MAIN', '[section]', 'value')
++        buf = io.StringIO()
++        with self.assertRaises(configparser.InvalidWriteError) as ctx:
++            cp.write(buf)
++        self.assertEqual(ctx.exception.option, '[section]')
++
++    def test_option_name_containing_equals_delimiter(self):
++        """Option name containing '=' raises InvalidWriteError."""
++        cp = configparser.RawConfigParser()
++        cp.add_section('MAIN')
++        cp.set('MAIN', 'a=b', 'value')
++        buf = io.StringIO()
++        with self.assertRaises(configparser.InvalidWriteError) as ctx:
++            cp.write(buf)
++        self.assertIn('a=b', str(ctx.exception))
++
++    def test_option_name_containing_colon_delimiter(self):
++        """Option name containing ':' raises InvalidWriteError."""
++        cp = configparser.RawConfigParser()
++        cp.add_section('MAIN')
++        cp.set('MAIN', 'a:b', 'value')
++        buf = io.StringIO()
++        with self.assertRaises(configparser.InvalidWriteError):
++            cp.write(buf)
++
++    def test_custom_delimiter_not_forbidden(self):
++        """A delimiter not configured for this parser is not forbidden."""
++        cp = configparser.RawConfigParser(delimiters=('|',))
++        cp.add_section('MAIN')
++        # '=' is not a configured delimiter, so writing is safe
++        cp.set('MAIN', 'a=b', 'value')
++        buf = io.StringIO()
++        cp.write(buf)  # should not raise
++
++    def test_custom_multicharacter_delimiter(self):
++        """Multicharacter delimiters are matched as whole strings."""
++        cp = configparser.RawConfigParser(delimiters=('::',))
++        cp.add_section('MAIN')
++        cp.set('MAIN', 'a::b', 'value')
++        buf = io.StringIO()
++        with self.assertRaises(configparser.InvalidWriteError):
++            cp.write(buf)
++
++    def test_defaults_section_invalid_name(self):
++        """Invalid option names in the defaults section also raise."""
++        cp = configparser.RawConfigParser()
++        cp.set('DEFAULT', '[bad]', 'value')
++        buf = io.StringIO()
++        with self.assertRaises(configparser.InvalidWriteError):
++            cp.write(buf)
++
++    def test_valueless_option_invalid_name(self):
++        """Valueless options with ambiguous names also raise."""
++        cp = configparser.RawConfigParser(allow_no_value=True)
++        cp.add_section('MAIN')
++        cp.set('MAIN', '[nope]', None)
++        buf = io.StringIO()
++        with self.assertRaises(configparser.InvalidWriteError):
++            cp.write(buf)
++
++    def test_valid_option_name_no_error(self):
++        """Normal option names write without error."""
++        cp = configparser.RawConfigParser()
++        cp.add_section('MAIN')
++        cp.set('MAIN', 'normal', 'value')
++        buf = io.StringIO()
++        cp.write(buf)
++        self.assertIn('[MAIN]', buf.getvalue())
++        self.assertIn('normal = value', buf.getvalue())
++
++    def test_exception_is_error_subclass(self):
++        """InvalidWriteError is a subclass of configparser.Error."""
++        self.assertTrue(issubclass(configparser.InvalidWriteError, configparser.Error))
++
++    def test_exception_identifies_option(self):
++        """The exception identifies the offending option name."""
++        cp = configparser.RawConfigParser()
++        cp.add_section('MAIN')
++        cp.set('MAIN', 'bad=name', 'value')
++        buf = io.StringIO()
++        try:
++            cp.write(buf)
++            self.fail("Expected InvalidWriteError")
++        except configparser.InvalidWriteError as e:
++            self.assertIn('bad=name', str(e))
++            self.assertEqual(e.option, 'bad=name')
++
++    def test_configparser_also_raises(self):
++        """ConfigParser (with interpolation) also raises InvalidWriteError."""
++        cp = configparser.ConfigParser()
++        cp.add_section('MAIN')
++        cp.set('MAIN', 'bad=name', 'value')
++        buf = io.StringIO()
++        with self.assertRaises(configparser.InvalidWriteError):
++            cp.write(buf)

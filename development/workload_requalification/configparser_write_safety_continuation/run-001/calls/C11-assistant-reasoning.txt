@@ -1,0 +1,591 @@
+Let me analyze the current state:
+
+1. The task is to add write-time protection for ambiguous option names in configparser.py.
+2. Looking at the current source, I can see that `InvalidWriteError` class has already been added (from the recent patch at sequence 14).
+3. The `__all__` already includes "InvalidWriteError".
+
+Now I need to:
+- Add validation logic in `_write_section` to check option names against SECTCRE and delimiters
+- Create the test file `Lib/test/test_configparser_write_safety.py`
+- Update `Doc/library/configparser.rst`
+
+Let me look at the current `_write_section` method:
+
+```python
+def _write_section(self, fp, section_name, section_items, delimiter):
+    """Write a single section to the specified `fp`."""
+    fp.write("[{}]\n".format(section_name))
+    for key, value in section_items:
+        value = self._interpolation.before_write(self, section_name, key,
+                                                 value)
+        if value is not None or not self._allow_no_value:
+            value = delimiter + str(value).replace('\n', '\n\t')
+        else:
+            value = ""
+        fp.write("{}{}\n".format(key, value))
+    fp.write("\n")
+```
+
+I need to add validation that checks:
+1. If the option name matches the SECTCRE pattern (starts with `[` and ends with `]` pattern - actually SECTCRE matches `[header]` pattern)
+2. If the option name contains any configured delimiter string
+
+Wait, let me re-read the requirements:
+- "begins with the parser's current SECTCRE section pattern" - this means the option name, when written, would look like a section header. SECTCRE is `\[header\]` - so if an option name looks like `[something]`, it would be ambiguous.
+- "contains any of that parser's configured delimiter strings" - the option name contains a delimiter.
+
+Actually, let me think about this more carefully. The SECTCRE pattern is:
+```
+\[                                 # [
+(?P<header>.+)                     # very permissive!
+\]                                 # ]
+```
+
+So it matches strings that start with `[` and end with `]`. An option name that starts with `[` would be ambiguous when written because it could be mistaken for a section header.
+
+Wait, "begins with the parser's current SECTCRE section pattern" - I think this means the option name, when written as a line, would match SECTCRE. So if the option name starts with `[`, it could be parsed as a section header.
+
+Actually, re-reading: "when writing an option name that begins with the parser's current SECTCRE section pattern" - I think this means the option name would match the SECTCRE pattern. The SECTCRE matches `[...]` patterns. So if an option name is like `[foo]`, it would be ambiguous.
+
+Wait, "begins with" is the key phrase. Let me re-read: "raise it when writing an option name that begins with the parser's current SECTCRE section pattern". Hmm, that's a bit odd. Let me think about what "begins with the SECTCRE section pattern" means.
+
+Actually I think the check should be: does the option name, when written as `option_name: value`, look like it could be a section header? The SECTCRE matches `[header]` - so if an option name starts with `[`, it would be ambiguous.
+
+Wait, let me reconsider. The SECTCRE is a regex that matches section headers like `[section]`. The concern is: if you write an option whose name, when written to the file, could be mistaken for a section header. 
+
+Looking at the write format:
+```
+[key]
+option = value
+```
+
+If an option name is `[weird]`, it would be written as:
+```
+[section]
+[weird] = value
+```
+
+Wait no, the option is written as `{key}{value}` where value includes the delimiter. So it would be:
+```
+[section]
+[weird] = value
+```
+
+And when re-read, `[weird]` would be matched by SECTCRE as a section header! That's the ambiguity.
+
+So the check is: does the option name match SECTCRE? i.e., does it look like `[something]`?
+
+Actually, I think the check should be whether the option name, as written, would match SECTCRE. The option name is written at the start of a line. So if the option name starts with `[` and ends with `]` (or more precisely, if `self.SECTCRE.match(key)` would succeed), then it's ambiguous.
+
+Wait, but SECTCRE.match would match if the string starts with `[` and has `]` somewhere. Let me look at the regex:
+```
+\[                                 # [
+(?P<header>.+)                     # very permissive!
+\]                                 # ]
+```
+
+With `re.VERBOSE` and no `re.MULTILINE`, `SECTCRE.match(string)` would check if the string starts with `[`, has at least one character, then `]`. So `[foo]` matches, `[foo] extra` also matches (since match doesn't require full match, but it starts matching from the beginning). Actually, `.+` is greedy and `]` follows, so `[foo] bar` would match as `[foo]` with the regex... wait no. The pattern is `\[` then `.+` then `\]`. For `[foo] bar`, the regex would try to match `[` at position 0, then `.+` would match `foo] bar` (greedy), then look for `\]`... it would backtrack to `foo` then `]`. So yes, `[foo] bar` matches SECTCRE.
+
+But actually for the write check, what matters is: when we write the option line, would a parser reading it back interpret it as a section header? The line would be `[foo] = value` (for a section-like name). When the parser reads this line, it first checks `SECTCRE.match(value)` where `value` is the stripped line. `[foo] = value` - SECTCRE would match `[foo]` part of it... wait, but `match` only checks from the beginning. Let me think again.
+
+The parser does:
+```python
+mo = self.SECTCRE.match(value)
+```
+
+where `value = line.strip()`. If the line is `[foo] = value`, then SECTCRE.match would try: `\[` matches `[`, `.+` matches `foo` (backtracking from greedy `foo] = value`), `\]` matches `]`. So yes, it would match! The parser would think it's a section header.
+
+So the check is: `self.SECTCRE.match(key)` is not None (where key is the option name as it would be written).
+
+Actually wait - I need to be more careful. The option name is written as `{key}{value}` where value starts with the delimiter. So the full line is like `keyname = value` or `keyname:value`. If keyname is `[foo]`, the line is `[foo] = value`. SECTCRE.match on this would match `[foo]` part.
+
+But what if keyname is just `[foo` (no closing bracket)? Then the line is `[foo = value`. SECTCRE.match: `\[` matches `[`, `.+` needs at least one char, then `\]`. There's no `]` in `foo = value`, so no match. So it wouldn't be ambiguous.
+
+What about `foo]`? The line is `foo] = value`. SECTCRE.match: `\[` needs to match at position 0, but `f` is there. No match. Not ambiguous.
+
+So the check is simply: does `self.SECTCRE.match(key)` succeed? Where key is the option name string as it appears in the dict.
+
+Now for the delimiter check: "contains any of that parser's configured delimiter strings". So if a delimiter is `=`, and the option name is `foo=bar`, then when written it becomes `foo=bar = value`, and when re-read, the parser would split at the first `=` giving option `foo` and value `bar = value`. That's the ambiguity.
+
+Actually wait - the delimiter strings are the ones configured for this parser. By default they're `('=', ':')`. So if an option name contains `=` or `:`, it's ambiguous because the parser would split the option line at that delimiter.
+
+But wait - the option name is already stored in the dict. When we write it, we write `key + delimiter + value`. If the key itself contains a delimiter, the line would be ambiguous.
+
+So the checks in `_write_section` should be:
+1. `self.SECTCRE.match(key)` - if it matches, the option name looks like a section header
+2. Any delimiter in `self._delimiters` is a substring of `key`
+
+Wait, but I need to be careful. The delimiter used for writing is `self._delimiters[0]` (the first one). But the check should be against ALL configured delimiters because any of them could cause ambiguity when the file is re-read.
+
+Actually, let me re-read the task: "contains any of that parser's configured delimiter strings". Yes, any configured delimiter.
+
+Now let me look at where to add the check. The `_write_section` method iterates over `section_items`. I should add the check inside the loop, before writing each option.
+
+Let me also check: should the check be in `_write_section` or in `write`? The task says "Apply the protection to defaults and named sections, including valueless options." Since `_write_section` is called for both defaults and named sections, putting the check there covers both.
+
+Let me also consider: the task says "Both ConfigParser and RawConfigParser must raise it". Since `_write_section` is defined on `RawConfigParser` and `ConfigParser` inherits from it, putting the check in `_write_section` covers both.
+
+Now let me write the code. I'll modify `_write_section`:
+
+```python
+def _write_section(self, fp, section_name, section_items, delimiter):
+    """Write a single section to the specified `fp`."""
+    fp.write("[{}]\n".format(section_name))
+    for key, value in section_items:
+        self._validate_write_key(key)
+        value = self._interpolation.before_write(self, section_name, key,
+                                                 value)
+        if value is not None or not self._allow_no_value:
+            value = delimiter + str(value).replace('\n', '\n\t')
+        else:
+            value = ""
+        fp.write("{}{}\n".format(key, value))
+    fp.write("\n")
+```
+
+And add a helper method:
+
+```python
+def _validate_write_key(self, key):
+    """Check that the option name is safe for writing.
+    
+    Raise InvalidWriteError if the key would produce ambiguous output.
+    """
+    if self.SECTCRE.match(key):
+        raise InvalidWriteError(key)
+    for d in self._delimiters:
+        if d in key:
+            raise InvalidWriteError(key)
+```
+
+Wait, but the SECTCRE is a class-level attribute on RawConfigParser. It's a compiled regex. Let me verify: `SECTCRE = re.compile(_SECT_TMPL, re.VERBOSE)`. Yes, it's a class attribute.
+
+Actually, I realize I should double-check: does the SECTCRE need to be recompiled for custom delimiters? Looking at the code, `SECTCRE` is always the same pattern - it matches `[header]` sections. The delimiters only affect OPTCRE. So `SECTCRE` is the same for all parser instances. Good.
+
+Now let me plan the edits:
+
+1. Add `_validate_write_key` method to `RawConfigParser` (near `_write_section`)
+2. Modify `_write_section` to call `_validate_write_key`
+3. Create `Lib/test/test_configparser_write_safety.py`
+4. Update `Doc/library/configparser.rst`
+
+Let me look at the exact text I need to patch. The current `_write_section`:
+
+```python
+    def _write_section(self, fp, section_name, section_items, delimiter):
+        """Write a single section to the specified `fp`."""
+        fp.write("[{}]\n".format(section_name))
+        for key, value in section_items:
+            value = self._interpolation.before_write(self, section_name, key,
+                                                     value)
+            if value is not None or not self._allow_no_value:
+                value = delimiter + str(value).replace('\n', '\n\t')
+            else:
+                value = ""
+            fp.write("{}{}\n".format(key, value))
+        fp.write("\n")
+```
+
+I'll replace this with a version that includes the validation call, and add the `_validate_write_key` method.
+
+Actually, let me think about whether to make it a separate method or inline. A separate method is cleaner and more testable. Let me add it right before `_write_section`.
+
+Let me craft the patch:
+
+Old:
+```python
+    def _write_section(self, fp, section_name, section_items, delimiter):
+        """Write a single section to the specified `fp`."""
+        fp.write("[{}]\n".format(section_name))
+        for key, value in section_items:
+            value = self._interpolation.before_write(self, section_name, key,
+                                                     value)
+```
+
+New:
+```python
+    def _validate_write_key(self, key):
+        """Check that an option name is safe for writing.
+
+        Raise InvalidWriteError if the key would produce ambiguous output
+        when written to a file.
+        """
+        if self.SECTCRE.match(key):
+            raise InvalidWriteError(key)
+        for d in self._delimiters:
+            if d in key:
+                raise InvalidWriteError(key)
+
+    def _write_section(self, fp, section_name, section_items, delimiter):
+        """Write a single section to the specified `fp`."""
+        fp.write("[{}]\n".format(section_name))
+        for key, value in section_items:
+            self._validate_write_key(key)
+            value = self._interpolation.before_write(self, section_name, key,
+                                                     value)
+```
+
+Now for the test file. The task says:
+- "Add meaningful public-API regression tests in Lib/test/test_configparser_write_safety.py"
+- "The public check runs... your new tests on the current library"
+- "It also runs the new tests against the saved unsafe write implementation with the new exception API supplied"
+- "At least one assertion must detect unsafe writing there; a missing-name/import error alone does not demonstrate a regression test"
+
+So the test file needs to:
+1. Test that valid option names write correctly
+2. Test that ambiguous option names raise InvalidWriteError
+3. Test with both RawConfigParser and ConfigParser
+4. Test with custom delimiters
+5. Test with defaults section
+6. Test valueless options
+7. Test that the exception identifies the offending option name
+
+For the regression test aspect: the tests should import InvalidWriteError from configparser and test that write() raises it. When run against the old (unsafe) implementation, the tests that check for InvalidWriteError being raised would fail because the old implementation doesn't raise it - it would just write the ambiguous name. But the task says "a missing-name/import error alone does not demonstrate a regression test." So I need to make sure the import of InvalidWriteError would work (it's in the API), but the actual assertion is that write() raises it.
+
+Wait, re-reading: "It also runs the new tests against the saved unsafe write implementation with the new exception API supplied." So the exception class IS available in the old implementation context, but write() doesn't check for it. So the tests would fail because `assertRaises(InvalidWriteError)` would not be triggered - the write would succeed (unsafely).
+
+Let me design the test file:
+
+```python
+"""Tests for write-time safety of option names in configparser."""
+
+import io
+import unittest
+
+from configparser import (
+    ConfigParser,
+    RawConfigParser,
+    InvalidWriteError,
+)
+
+
+class TestInvalidWriteErrorSectionHeader(unittest.TestCase):
+    """Option names that look like section headers must raise on write."""
+
+    def _check(self, parser_class, **kwargs):
+        parser = parser_class(**kwargs)
+        parser.add_section('sect')
+        parser.set('sect', '[evil]', 'value')
+        fp = io.StringIO()
+        with self.assertRaises(InvalidWriteError) as ctx:
+            parser.write(fp)
+        self.assertEqual(ctx.exception.option, '[evil]')
+
+    def test_raw(self):
+        self._check(RawConfigParser)
+
+    def test_config(self):
+        self._check(ConfigParser)
+
+    def test_defaults(self):
+        parser = RawConfigParser()
+        parser.set('DEFAULT', '[bad]', 'x')
+        fp = io.StringIO()
+        with self.assertRaises(InvalidWriteError):
+            parser.write(fp)
+
+
+class TestInvalidWriteErrorDelimiter(unittest.TestCase):
+    """Option names containing a configured delimiter must raise on write."""
+
+    def test_equal(self):
+        parser = RawConfigParser()
+        parser.add_section('s')
+        parser.set('s', 'a=b', 'v')
+        fp = io.StringIO()
+        with self.assertRaises(InvalidWriteError) as ctx:
+            parser.write(fp)
+        self.assertEqual(ctx.exception.option, 'a=b')
+
+    def test_colon(self):
+        parser = RawConfigParser()
+        parser.add_section('s')
+        parser.set('s', 'a:b', 'v')
+        fp = io.StringIO()
+        with self.assertRaises(InvalidWriteError) as ctx:
+            parser.write(fp)
+        self.assertEqual(ctx.exception.option, 'a:b')
+
+    def test_custom_delimiter(self):
+        parser = RawConfigParser(delimiters=('>>',))
+        parser.add_section('s')
+        parser.set('s', 'a>>b', 'v')
+        fp = io.StringIO()
+        with self.assertRaises(InvalidWriteError) as ctx:
+            parser.write(fp)
+        self.assertEqual(ctx.exception.option, 'a>>b')
+
+    def test_unconfigured_delimiter_ok(self):
+        """A delimiter not configured for this parser is not forbidden."""
+        parser = RawConfigParser(delimiters=('>>',))
+        parser.add_section('s')
+        parser.set('s', 'a=b', 'v')  # '=' is not a configured delimiter
+        fp = io.StringIO()
+        parser.write(fp)  # Should NOT raise
+        out = fp.getvalue()
+        self.assertIn('a=b', out)
+
+
+class TestValidWrites(unittest.TestCase):
+    """Ordinary option names must still write correctly."""
+
+    def test_normal_option(self):
+        parser = RawConfigParser()
+        parser.add_section('sect')
+        parser.set('sect', 'key', 'value')
+        fp = io.StringIO()
+        parser.write(fp)
+        self.assertIn('key = value', fp.getvalue())
+
+    def test_valueless_option(self):
+        parser = RawConfigParser(allow_no_value=True)
+        parser.add_section('sect')
+        parser.set('sect', 'bare', None)
+        fp = io.StringIO()
+        parser.write(fp)
+        self.assertIn('bare', fp.getvalue())
+
+    def test_valueless_raises_for_bad_name(self):
+        parser = RawConfigParser(allow_no_value=True)
+        parser.add_section('sect')
+        parser.set('sect', '[nope]', None)
+        fp = io.StringIO()
+        with self.assertRaises(InvalidWriteError):
+            parser.write(fp)
+
+    def test_configparser_interpolation(self):
+        parser = ConfigParser()
+        parser.add_section('sect')
+        parser.set('sect', 'key', '%(other)s')
+        parser.set('sect', 'other', 'val')
+        fp = io.StringIO()
+        parser.write(fp)
+        self.assertIn('key = %(other)s', fp.getvalue())
+
+
+class TestExceptionAttributes(unittest.TestCase):
+    """InvalidWriteError must identify the offending option."""
+
+    def test_option_attribute(self):
+        parser = RawConfigParser()
+        parser.add_section('s')
+        parser.set('s', '[x]', 'v')
+        fp = io.StringIO()
+        try:
+            parser.write(fp)
+            self.fail("Expected InvalidWriteError")
+        except InvalidWriteError as e:
+            self.assertEqual(e.option, '[x]')
+            self.assertIn('[x]', str(e))
+
+    def test_is_configparser_error(self):
+        import configparser
+        self.assertTrue(issubclass(InvalidWriteError, configparser.Error))
+
+
+class TestSpaceAroundDelimiters(unittest.TestCase):
+    """space_around_delimiters=False must still protect."""
+
+    def test_no_space(self):
+        parser = RawConfigParser()
+        parser.add_section('s')
+        parser.set('s', 'a=b', 'v')
+        fp = io.StringIO()
+        with self.assertRaises(InvalidWriteError):
+            parser.write(fp, space_around_delimiters=False)
+
+
+class TestMultilineContinuationPreserved(unittest.TestCase):
+    """The multiline-continuation repair must still work for valid names."""
+
+    def test_multiline_value(self):
+        parser = RawConfigParser()
+        parser.add_section('s')
+        parser.set('s', 'key', 'line1\nline2')
+        fp = io.StringIO()
+        parser.write(fp)
+        out = fp.getvalue()
+        self.assertIn('key = line1\n\tline2', out)
+
+
+if __name__ == '__main__':
+    unittest.main()
+```
+
+Wait, I need to think about the regression test requirement more carefully. The task says:
+"It also runs the new tests against the saved unsafe write implementation with the new exception API supplied. At least one assertion must detect unsafe writing there; a missing-name/import error alone does not demonstrate a regression test."
+
+So the check harness will run my test file against the old implementation (without the write validation) but WITH the InvalidWriteError class available. In that case:
+- `assertRaises(InvalidWriteError)` tests would FAIL because the old write() doesn't raise it - it just writes the ambiguous name.
+- The valid-write tests would PASS.
+- The test that checks `a=b` is not forbidden for a parser with `>>` delimiter would PASS (since old implementation doesn't check at all).
+
+So the regression is demonstrated by the `assertRaises` tests failing. That's good.
+
+But wait - I need to make sure the import works. The task says "with the new exception API supplied" - meaning InvalidWriteError is importable from configparser in both versions. So `from configparser import InvalidWriteError` works in both. Good.
+
+Actually, let me reconsider the `test_defaults` test. The `DEFAULT` section is special - you can't `add_section('DEFAULT')`. You use `parser.set('DEFAULT', key, value)` or `parser['DEFAULT'][key] = value`. Let me fix that.
+
+Actually, `parser.set('DEFAULT', '[bad]', 'x')` - would this work? Let me check. In `set()`:
+```python
+def set(self, section, option, value=None):
+    if value:
+        value = self._interpolation.before_set(self, section, option, value)
+    if not section or section == self.default_section:
+        sectdict = self._defaults
+    ...
+```
+
+Yes, setting on 'DEFAULT' section goes to `self._defaults`. And in `write()`:
+```python
+if self._defaults:
+    self._write_section(fp, self.default_section, self._defaults.items(), d)
+```
+
+So defaults are written through `_write_section`. Good, my test should work.
+
+But wait - there's a subtlety. The `set` method on `ConfigParser` validates types:
+```python
+def set(self, section, option, value=None):
+    self._validate_value_types(option=option, value=value)
+    super().set(section, option, value)
+```
+
+And `_validate_value_types` checks `if not isinstance(option, str)` - but `[evil]` IS a string, so it passes. Good. The task says "Do not broaden read-time or set-time rejection as a substitute for protecting write()." So set() should NOT reject ambiguous names - only write() should.
+
+Now let me also think about: should the check be in `_write_section` or should I also check in `write()` before calling `_write_section`? I think `_write_section` is the right place because:
+1. It's called for both defaults and named sections
+2. It's where the actual writing happens
+3. Both RawConfigParser and ConfigParser use it
+
+One more consideration: the task says "writing can already have emitted earlier content when it raises." This means it's OK that some sections are written before the error is raised. My implementation naturally has this property since I check each key as it's written.
+
+Now let me also think about the `SECTCRE.match(key)` check. The SECTCRE pattern is:
+```
+\[                                 # [
+(?P<header>.+)                     # very permissive!
+\]                                 # ]
+```
+
+With `re.VERBOSE`. So it matches strings that start with `[` and contain at least one character followed by `]`. Let me verify: `[evil]` - `\[` matches `[`, `.+` matches `evil`, `\]` matches `]`. Yes.
+
+What about just `[`? `\ [` matches `[`, `.+` needs at least one more char, but there's nothing. No match. Good.
+
+What about `[]`? `\ [` matches `[`, `.+` matches... wait, `.+` needs at least one character. The next char is `]`, so `.+` matches `]`? No wait, `.+` is greedy and matches one or more of any character except newline. So `.+` would match `]`, then `\]` needs another `]`. There isn't one. So `.+` backtracks... but it can't match zero characters. So `[]` does NOT match SECTCRE. Hmm, is that right?
+
+Actually wait: `[]` - position 0: `[` matches `\[]`. Position 1: `.+` needs to match at least one char. It matches `]` (position 1). Position 2: `\]` needs `]` but we're at end of string. Backtrack: `.+` can't match fewer than 1 char. So no match. Correct, `[]` doesn't match.
+
+But would `[]` be ambiguous? If written as `[] = value`, the parser would try SECTCRE.match on `[] = value`. `\ [` matches `[`, `.+` matches `]` (or `] = value` greedily then backtracks), `\]` - after backtracking `.+` to just `]`... wait. Let me think again.
+
+Actually `.+` is greedy. For `[] = value`:
+- Position 0: `\ [` matches `[`
+- Position 1-10: `.+` greedily matches `] = value` (positions 1-9)
+- Position 10: `\]` needs `]` but string ended (or is at position 10 which is past end). Backtrack.
+- `.+` matches `] = val` (positions 1-8)
+- Position 9: `\]` needs `]` but gets `u`. Backtrack.
+- ...keep backtracking...
+- `.+` matches `]` (position 1)
+- Position 2: `\]` needs `]` but gets ` ` (space). No match.
+- `.+` can't go below 1 char. No match overall.
+
+So `[]` doesn't match SECTCRE. And when written as `[] = value`, it also wouldn't be parsed as a section header. So it's NOT ambiguous. Good, my check is correct.
+
+What about `[a]`? SECTCRE: `\ [` matches `[`, `.+` matches `a`, `\]` matches `]`. Match! And when written as `[a] = value`, SECTCRE.match would match `[a]` part. So it IS ambiguous. Correct.
+
+Now, one edge case: what if the option name is just a normal name like `key`? SECTCRE.match('key') - `\ [` needs `[` at position 0, but gets `k`. No match. Good.
+
+I'm satisfied with the logic. Let me now write the actual patch.
+
+Let me look at the exact text in the file to patch. From the source:
+
+```python
+    def _write_section(self, fp, section_name, section_items, delimiter):
+        """Write a single section to the specified `fp`."""
+        fp.write("[{}]\n".format(section_name))
+        for key, value in section_items:
+            value = self._interpolation.before_write(self, section_name, key,
+                                                     value)
+            if value is not None or not self._allow_no_value:
+                value = delimiter + str(value).replace('\n', '\n\t')
+            else:
+                value = ""
+            fp.write("{}{}\n".format(key, value))
+        fp.write("\n")
+```
+
+I'll replace this with the validated version plus the helper method.
+
+Let me also look at what comes after `_write_section` to make sure my patch is unique. After it comes:
+```python
+    def remove_option(self, section, option):
+```
+
+OK let me now construct the patch. The old text needs to be exact and unique in the file.
+
+Let me use this old text:
+```
+    def _write_section(self, fp, section_name, section_items, delimiter):
+        """Write a single section to the specified `fp`."""
+        fp.write("[{}]\n".format(section_name))
+        for key, value in section_items:
+            value = self._interpolation.before_write(self, section_name, key,
+                                                     value)
+```
+
+And new text:
+```
+    def _validate_write_key(self, key):
+        """Check that an option name is safe for writing.
+
+        Raise InvalidWriteError if the key would produce ambiguous output
+        when written to a file.
+        """
+        if self.SECTCRE.match(key):
+            raise InvalidWriteError(key)
+        for d in self._delimiters:
+            if d in key:
+                raise InvalidWriteError(key)
+
+    def _write_section(self, fp, section_name, section_items, delimiter):
+        """Write a single section to the specified `fp`."""
+        fp.write("[{}]\n".format(section_name))
+        for key, value in section_items:
+            self._validate_write_key(key)
+            value = self._interpolation.before_write(self, section_name, key,
+                                                     value)
+```
+
+This should be unique in the file. Let me verify there's no other `_write_section` definition.
+
+Now for the test file and docs, I need to create those files. But wait - the task says `candidate_limits: existing_files_only: true`. That means I can only modify existing files, not create new ones!
+
+Hmm, but the task says "Add meaningful public-API regression tests in Lib/test/test_configparser_write_safety.py" and "Update Doc/library/configparser.rst". Let me check if those files already exist.
+
+Looking at the current p0 page:
+```
+"entries":[
+  {"file_count":1,"kind":"directory","path":"Doc","total_bytes":52812},
+  {"file_count":1,"kind":"file","path":"LICENSE","total_bytes":13936},
+  {"file_count":9,"kind":"directory","path":"Lib","total_bytes":274685}
+]
+```
+
+Let me check if the test file and doc file already exist. I need to look at the directory structure.
+
+Actually wait - `existing_files_only: true` means I can only edit existing files, not create new ones. But the task explicitly says to create the test file. Let me re-read the limits...
+
+Actually, looking more carefully at the candidate limits: `"existing_files_only":true`. This is a constraint on the candidate (the working tree). It means the candidate can only contain existing files - I cannot add new files.
+
+But the task says to create `Lib/test/test_configparser_write_safety.py`. If the file already exists (perhaps as an empty file or a stub), I can edit it. Let me check.
+
+Let me look at the Lib directory structure first.
+
+Actually, I should check what files exist. Let me use tree to look at the structure.
+
+Wait, I already have the full source of configparser.py visible. Let me first make the code change to configparser.py, then check for the other files.
+
+Actually, let me first check what files exist in the test directory and Doc directory. Let me do the patch to configparser.py first since I have the source visible, then explore for the other files.
+
+Let me construct the patch carefully. The current candidate is `04a50457f892f442980a20263144afa3fb8992fb5841ced8922ffce0dcb559d3` and the file sha is `d74cb6e03c077da993c311646991081db47485b49f1c5c52d9e5679f3fcd46da`.
+
+Let me make the edit to configparser.py first.

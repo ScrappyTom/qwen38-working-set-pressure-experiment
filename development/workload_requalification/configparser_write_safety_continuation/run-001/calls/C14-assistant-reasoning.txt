@@ -1,0 +1,419 @@
+Let me analyze the current state:
+
+1. The library code (`Lib/configparser.py`) is complete with:
+   - `InvalidWriteError` class defined
+   - Exported in `__all__`
+   - `_validate_write_key` method in `RawConfigParser`
+   - `_validate_write_key` called in `_write_section`
+
+2. The test file (`Lib/test/test_configparser_write_safety.py`) currently only has:
+```python
+import configparser
+import io
+import unittest
+
+
+# Add public write() regression tests here.
+```
+
+3. I need to:
+   - Add meaningful public-API regression tests to the test file
+   - Update `Doc/library/configparser.rst` to document the new exception
+   - Run the public check
+   - Submit
+
+Let me think about what tests to write:
+
+The task says:
+- "Add meaningful public-API regression tests in Lib/test/test_configparser_write_safety.py"
+- "The public check runs the saved existing suite, independent write-safety cases, and your new tests on the current library. It also runs the new tests against the saved unsafe write implementation with the new exception API supplied. At least one assertion must detect unsafe writing there; a missing-name/import error alone does not demonstrate a regression test."
+
+So I need tests that:
+1. Test that `InvalidWriteError` is raised when writing option names that match the SECTCRE pattern (e.g., `[section]`)
+2. Test that `InvalidWriteError` is raised when writing option names that contain a configured delimiter
+3. Test with custom delimiters
+4. Test with defaults section
+5. Test with valueless options
+6. Test that valid option names still work
+7. Test that the diagnostic identifies the offending option name
+
+Key requirements for the tests:
+- At least one assertion must detect unsafe writing in the old implementation
+- This means the tests should import `InvalidWriteError` from configparser and test that write() raises it
+- On the old implementation, `InvalidWriteError` won't exist, so importing it would fail... wait, the task says "with the new exception API supplied". Let me re-read.
+
+"It also runs the new tests against the saved unsafe write implementation with the new exception API supplied."
+
+So the check harness supplies the `InvalidWriteError` class to the old implementation. This means the tests can import `InvalidWriteError` and it will be available in both cases. But the old implementation won't raise it, so assertions expecting it to be raised will fail on the old implementation.
+
+Wait, but if `InvalidWriteError` is imported from `configparser` and the old implementation doesn't have it, that would be an import error. But the task says "with the new exception API supplied" - so perhaps the test harness injects it somehow. Or perhaps the test should just `from configparser import InvalidWriteError` and the harness ensures it's available.
+
+Actually, re-reading: "a missing-name/import error alone does not demonstrate a regression test." This suggests that simply having `from configparser import InvalidWriteError` fail on the old implementation is NOT sufficient. The tests need to actually assert that `write()` raises `InvalidWriteError` in a way that would pass on the new implementation but fail on the old one (with the API supplied).
+
+So the test should:
+1. Import `InvalidWriteError` (which will be available in both cases due to "the new exception API supplied")
+2. Create a parser with an ambiguous option name
+3. Call `write()` and assert that `InvalidWriteError` is raised
+4. On the old implementation, `write()` won't raise it, so the assertion fails - demonstrating the regression
+
+Let me write the tests:
+
+```python
+import configparser
+import io
+import unittest
+
+
+class TestInvalidWriteError(unittest.TestCase):
+    """Tests for InvalidWriteError raised during write()."""
+
+    def test_option_name_matching_section_pattern(self):
+        """Option name that looks like a section header raises InvalidWriteError."""
+        cp = configparser.RawConfigParser()
+        cp.add_section('MAIN')
+        cp.set('MAIN', '[section]', 'value')
+        buf = io.StringIO()
+        with self.assertRaises(configparser.InvalidWriteError) as ctx:
+            cp.write(buf)
+        self.assertEqual(ctx.exception.option, '[section]')
+
+    def test_option_name_containing_default_delimiter(self):
+        """Option name containing '=' raises InvalidWriteError."""
+        cp = configparser.RawConfigParser()
+        cp.add_section('MAIN')
+        cp.set('MAIN', 'a=b', 'value')
+        buf = io.StringIO()
+        with self.assertRaises(configparser.InvalidWriteError) as ctx:
+            cp.write(buf)
+        self.assertIn('a=b', str(ctx.exception))
+
+    def test_option_name_containing_colon_delimiter(self):
+        """Option name containing ':' raises InvalidWriteError."""
+        cp = configparser.RawConfigParser()
+        cp.add_section('MAIN')
+        cp.set('MAIN', 'a:b', 'value')
+        buf = io.StringIO()
+        with self.assertRaises(configparser.InvalidWriteError) as ctx:
+            cp.write(buf)
+
+    def test_custom_delimiter_not_forbidden(self):
+        """A delimiter not configured for this parser is not forbidden."""
+        cp = configparser.RawConfigParser(delimiters=('|',))
+        cp.add_section('MAIN')
+        # '=' is not a delimiter here, so it should be fine
+        cp.set('MAIN', 'a=b', 'value')
+        buf = io.StringIO()
+        # Should not raise
+        cp.write(buf)
+
+    def test_custom_multicharacter_delimiter(self):
+        """Multicharacter delimiters are matched as whole strings."""
+        cp = configparser.RawConfigParser(delimiters=('::',))
+        cp.add_section('MAIN')
+        cp.set('MAIN', 'a::b', 'value')
+        buf = io.StringIO()
+        with self.assertRaises(configparser.InvalidWriteError):
+            cp.write(buf)
+
+    def test_defaults_section(self):
+        """Invalid option names in defaults also raise."""
+        cp = configparser.RawConfigParser()
+        cp.set('DEFAULT', '[bad]', 'value')
+        buf = io.StringIO()
+        with self.assertRaises(configparser.InvalidWriteError):
+            cp.write(buf)
+
+    def test_valueless_option(self):
+        """Valueless options with ambiguous names also raise."""
+        cp = configparser.RawConfigParser(allow_no_value=True)
+        cp.add_section('MAIN')
+        cp.set('MAIN', '[nope]', None)
+        buf = io.StringIO()
+        with self.assertRaises(configparser.InvalidWriteError):
+            cp.write(buf)
+
+    def test_valid_option_name_no_error(self):
+        """Normal option names write without error."""
+        cp = configparser.RawConfigParser()
+        cp.add_section('MAIN')
+        cp.set('MAIN', 'normal', 'value')
+        buf = io.StringIO()
+        cp.write(buf)
+        self.assertIn('[MAIN]', buf.getvalue())
+        self.assertIn('normal = value', buf.getvalue())
+
+    def test_exception_is_error_subclass(self):
+        """InvalidWriteError is a subclass of configparser.Error."""
+        self.assertTrue(issubclass(configparser.InvalidWriteError, configparser.Error))
+
+    def test_exception_identifies_option(self):
+        """The exception message identifies the offending option name."""
+        cp = configparser.RawConfigParser()
+        cp.add_section('MAIN')
+        cp.set('MAIN', 'bad=name', 'value')
+        buf = io.StringIO()
+        try:
+            cp.write(buf)
+            self.fail("Expected InvalidWriteError")
+        except configparser.InvalidWriteError as e:
+            self.assertIn('bad=name', str(e))
+            self.assertEqual(e.option, 'bad=name')
+
+    def test_configparser_also_raises(self):
+        """ConfigParser (with interpolation) also raises InvalidWriteError."""
+        cp = configparser.ConfigParser()
+        cp.add_section('MAIN')
+        cp.set('MAIN', 'bad=name', 'value')
+        buf = io.StringIO()
+        with self.assertRaises(configparser.InvalidWriteError):
+            cp.write(buf)
+```
+
+Wait, I need to be careful. The `set()` method in ConfigParser calls `_validate_value_types` which validates types, but doesn't validate the option name for write safety. The option name `bad=name` is a valid Python string and can be stored. The validation only happens at write time.
+
+Actually, let me think about whether `cp.set('MAIN', 'bad=name', 'value')` would work. The `set` method just stores the value in a dictionary. The key would be `optionxform('bad=name')` = `'bad=name'`. So yes, it would be stored. Then at write time, `_validate_write_key` would check it and raise.
+
+But wait - for ConfigParser, `set` calls `_validate_value_types` first. Let me check what that does:
+```python
+def _validate_value_types(self, *, section="", option="", value=""):
+    if not isinstance(section, str):
+        raise TypeError("section names must be strings")
+    if not isinstance(option, str):
+        raise TypeError("option keys must be strings")
+    ...
+```
+
+It only validates types, not write safety. So `bad=name` as an option string would pass through. Good.
+
+Now for the test about `test_defaults_section` - using `cp.set('DEFAULT', '[bad]', 'value')`. Wait, can you set on DEFAULT? Let me check... In RawConfigParser.set:
+```python
+def set(self, section, option, value=None):
+    if value:
+        value = self._interpolation.before_set(...)
+    if not section or section == self.default_section:
+        sectdict = self._defaults
+    ...
+    sectdict[self.optionxform(option)] = value
+```
+
+Yes, setting on DEFAULT works. Good.
+
+For `test_valueless_option`, I need `allow_no_value=True`. With that, setting a None value works. Then at write time, the validation would trigger before writing.
+
+Let me also think about whether the test file needs to be self-contained. The task says "The existing test module and all support/data/license files must remain byte-identical." The test module is `Lib/test/test_configparser_write_safety.py` - wait, is that the "existing test module"? Let me re-read.
+
+"Add meaningful public-API regression tests in Lib/test/test_configparser_write_safety.py."
+
+And "The existing test module and all support/data/license files must remain byte-identical."
+
+Hmm, the test file currently has:
+```python
+import configparser
+import io
+import unittest
+
+
+# Add public write() regression tests here.
+```
+
+This IS the test module I need to add tests to. But the constraint says "The existing test module and all support/data/license files must remain byte-identical." 
+
+Wait, that can't be right - I'm explicitly asked to add tests to this file. Let me re-read the task:
+
+"Implement the library change in Lib/configparser.py. Add meaningful public-API regression tests in Lib/test/test_configparser_write_safety.py."
+
+"The existing test module and all support/data/license files must remain byte-identical."
+
+I think "the existing test module" refers to `Lib/test/test_configparser.py` (the main test suite), not the write safety test file. The write safety test file is what I'm supposed to fill in. Let me check the tree output:
+
+```
+{"kind":"file","path":"Lib/test/__init__.py"}
+{"kind":"directory","path":"Lib/test/configdata"}
+{"kind":"directory","path":"Lib/test/support"}
+{"kind":"file","path":"Lib/test/test_configparser.py"}
+{"kind":"file","path":"Lib/test/test_configparser_write_safety.py"}
+```
+
+Yes, there's a separate `test_configparser.py` (the existing test module) and `test_configparser_write_safety.py` (the one I need to fill in). The constraint about byte-identical applies to `test_configparser.py`, support files, data, and license.
+
+OK so I need to:
+1. Replace the test file content with actual tests
+2. Update Doc/library/configparser.rst
+
+Let me also check the Doc file. I haven't read it yet. Let me first write the tests, then read and update the doc.
+
+Actually, I should be efficient with my remaining requests (27 left). Let me:
+1. Write the test file (patch)
+2. Read the Doc file
+3. Update the Doc file (patch)
+4. Run public check
+5. Submit
+
+That's 5 operations. Let me start.
+
+For the test file, I'll use `patch` to replace the current content. The current content is:
+```
+import configparser
+import io
+import unittest
+
+
+# Add public write() regression tests here.
+```
+
+I'll replace it with the full test content. Let me use `replace_region` since I have the full file visible as a region.
+
+Actually, let me use `patch` since I have the exact old text visible. The file is 6 lines, file_sha256 is `400fd4ea328287a0ae4a8787de44015b6713238722b6a1bd78f32ca4100ef24b`, candidate is `31de9f683a94a992a972e353de8eadb3038fe60d80005e72885963b49238a56d`.
+
+Let me craft the test. I need to be careful about what will work on the old implementation. The check "runs the new tests against the saved unsafe write implementation with the new exception API supplied." So `InvalidWriteError` will be importable, but `write()` won't raise it. So tests that use `assertRaises(configparser.InvalidWriteError)` will fail on the old implementation (write succeeds instead of raising). That's the desired behavior - "At least one assertion must detect unsafe writing there."
+
+Let me write the test file now. I'll use the literal SOURCE reply format with replace_region since I have the whole file as a region.
+
+Actually, let me use `patch` for simplicity since I have the exact old text.
+
+Wait, I should use `replace_region` with the region ref `SRC-079fe48768720bb4da31c9f017f515218b00c3486e86bf04cafdb15312d1dd33` since it's the whole file. That's cleaner.
+
+Let me draft the test content:
+
+```python
+import configparser
+import io
+import unittest
+
+
+class TestInvalidWriteError(unittest.TestCase):
+    """Tests for InvalidWriteError raised during write()."""
+
+    def test_option_name_matching_section_pattern(self):
+        """Option name that looks like a section header raises InvalidWriteError."""
+        cp = configparser.RawConfigParser()
+        cp.add_section('MAIN')
+        cp.set('MAIN', '[section]', 'value')
+        buf = io.StringIO()
+        with self.assertRaises(configparser.InvalidWriteError) as ctx:
+            cp.write(buf)
+        self.assertEqual(ctx.exception.option, '[section]')
+
+    def test_option_name_containing_equals_delimiter(self):
+        """Option name containing '=' raises InvalidWriteError."""
+        cp = configparser.RawConfigParser()
+        cp.add_section('MAIN')
+        cp.set('MAIN', 'a=b', 'value')
+        buf = io.StringIO()
+        with self.assertRaises(configparser.InvalidWriteError) as ctx:
+            cp.write(buf)
+        self.assertIn('a=b', str(ctx.exception))
+
+    def test_option_name_containing_colon_delimiter(self):
+        """Option name containing ':' raises InvalidWriteError."""
+        cp = configparser.RawConfigParser()
+        cp.add_section('MAIN')
+        cp.set('MAIN', 'a:b', 'value')
+        buf = io.StringIO()
+        with self.assertRaises(configparser.InvalidWriteError):
+            cp.write(buf)
+
+    def test_custom_delimiter_not_forbidden(self):
+        """A delimiter not configured for this parser is not forbidden."""
+        cp = configparser.RawConfigParser(delimiters=('|',))
+        cp.add_section('MAIN')
+        # '=' is not a configured delimiter, so writing is safe
+        cp.set('MAIN', 'a=b', 'value')
+        buf = io.StringIO()
+        cp.write(buf)  # should not raise
+
+    def test_custom_multicharacter_delimiter(self):
+        """Multicharacter delimiters are matched as whole strings."""
+        cp = configparser.RawConfigParser(delimiters=('::',))
+        cp.add_section('MAIN')
+        cp.set('MAIN', 'a::b', 'value')
+        buf = io.StringIO()
+        with self.assertRaises(configparser.InvalidWriteError):
+            cp.write(buf)
+
+    def test_defaults_section_invalid_name(self):
+        """Invalid option names in the defaults section also raise."""
+        cp = configparser.RawConfigParser()
+        cp.set('DEFAULT', '[bad]', 'value')
+        buf = io.StringIO()
+        with self.assertRaises(configparser.InvalidWriteError):
+            cp.write(buf)
+
+    def test_valueless_option_invalid_name(self):
+        """Valueless options with ambiguous names also raise."""
+        cp = configparser.RawConfigParser(allow_no_value=True)
+        cp.add_section('MAIN')
+        cp.set('MAIN', '[nope]', None)
+        buf = io.StringIO()
+        with self.assertRaises(configparser.InvalidWriteError):
+            cp.write(buf)
+
+    def test_valid_option_name_no_error(self):
+        """Normal option names write without error."""
+        cp = configparser.RawConfigParser()
+        cp.add_section('MAIN')
+        cp.set('MAIN', 'normal', 'value')
+        buf = io.StringIO()
+        cp.write(buf)
+        self.assertIn('[MAIN]', buf.getvalue())
+        self.assertIn('normal = value', buf.getvalue())
+
+    def test_exception_is_error_subclass(self):
+        """InvalidWriteError is a subclass of configparser.Error."""
+        self.assertTrue(issubclass(configparser.InvalidWriteError, configparser.Error))
+
+    def test_exception_identifies_option(self):
+        """The exception identifies the offending option name."""
+        cp = configparser.RawConfigParser()
+        cp.add_section('MAIN')
+        cp.set('MAIN', 'bad=name', 'value')
+        buf = io.StringIO()
+        try:
+            cp.write(buf)
+            self.fail("Expected InvalidWriteError")
+        except configparser.InvalidWriteError as e:
+            self.assertIn('bad=name', str(e))
+            self.assertEqual(e.option, 'bad=name')
+
+    def test_configparser_also_raises(self):
+        """ConfigParser (with interpolation) also raises InvalidWriteError."""
+        cp = configparser.ConfigParser()
+        cp.add_section('MAIN')
+        cp.set('MAIN', 'bad=name', 'value')
+        buf = io.StringIO()
+        with self.assertRaises(configparser.InvalidWriteError):
+            cp.write(buf)
+```
+
+This looks good. Let me now use replace_region to set this.
+
+Actually wait - I need to think about whether the file ends with a newline. The current content shows 6 lines. Line 6 appears to be empty (just a newline). Let me look at the content:
+
+```
+import configparser\nimport io\nimport unittest\n\n\n# Add public write() regression tests here.\n
+```
+
+That's 6 lines. Line 6 is the comment line. Actually looking at the raw content:
+```
+import configparser
+import io
+import unittest
+
+
+# Add public write() regression tests here.
+```
+
+Lines 1-6. Line 6 is `# Add public write() regression tests here.` and there's a trailing newline (since it's 6 lines total).
+
+For replace_region, I'll provide the new text. The region covers the whole file (lines 1-6). The new text should be the complete file content.
+
+Let me use the literal SOURCE format since it avoids JSON escaping issues with the Python code.
+
+Actually, I'll use a regular JSON patch since the content isn't too complex. Let me use replace_region with the region reference.
+
+Let me construct the reply. I'll use replace_region with:
+- region: SRC-079fe48768720bb4da31c9f017f515218b00c3486e86bf04cafdb15312d1dd33
+- expected_candidate_id: 31de9f683a94a992a972e353de8eadb3038fe60d80005e72885963b49238a56d
+- new: the test file content
+
+I'll use the literal SOURCE format to avoid escaping issues.

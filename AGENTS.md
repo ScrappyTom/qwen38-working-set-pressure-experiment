@@ -1,4 +1,28 @@
-# Coding continuation qualified: publish then execute once
+# Parser write safety complete; publish result/plan then implement recovery navigation
+
+Read configparser_write_safety_continuation/review/RUN001-RESULTS.md under
+development/workload_requalification. Correct implementation,11new regressions,
+accurate scoped documentation, actual pass and submission.24new requests/31ops;
+whole lineage33requests/43ops,62.438model/70.179loop minutes.362preserved tests,
+14checker contract methods,11new tests; eight fail the unsafe baseline with API
+supplied. Ordinary373tests and direct12behavior methods pass. Exact replay531
+bindings/1,441records/167native inputs/33states passes; runtime closed. All full
+inputs/replies/effects directly reviewed. Saved source is review/001/saved-work.
+
+One capacity rejection reached recovery, and Qwen completed through recovery
+inspection without work_on. Recent navigation was omitted, causing justified
+recovery/rediscovery; the account remained stale at closure but was overridden by
+actual current evidence. Preserve those costs and the original checker stop.
+
+Publish this result and recovery_navigation/PLAN.md before implementing that opt-in
+extension. Preserve ordinary inputs and an exact no-detail recovery fallback.
+Qualify actual saved states, authority, capacity and serialized/native inputs
+before exposure. No account rewrite, live coaching, old-source modification or
+unchanged-task rerun. Continue substantive coding, not synthetic reading/paper
+workloads, under the owner's standing direction to continue unless blocked or a
+major gap appears.
+
+# Coding continuation qualified: publish then execute once (historical)
 
 The first write-safety attempt stopped after9requests/12operations because its
 checker asserted an unsupported exact exception constructor message. Preserve

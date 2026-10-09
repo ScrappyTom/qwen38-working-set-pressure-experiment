@@ -1,0 +1,727 @@
+Let me analyze the current state:
+
+1. I've already read the entire `Lib/configparser.py` file (lines 1-1351)
+2. A patch was successfully applied that added "InvalidWriteError" to the `__all__` list
+3. The current candidate is `f8c299f79fa9b605b5b0540de3f16adf67b54b784fcececab94f21744d1d9cc3`
+
+Now I need to:
+1. Add the `InvalidWriteError` exception class to the module
+2. Modify `_write_section` (or `write`) in `RawConfigParser` to check option names against SECTCRE and delimiters, raising `InvalidWriteError`
+3. Create `Lib/test/test_configparser_write_safety.py` with regression tests
+4. Update `Doc/library/configparser.rst`
+
+Let me look at what's already done:
+- "InvalidWriteError" was added to `__all__` (the patch that was just applied)
+
+Now I need to:
+1. Add the `InvalidWriteError` class (subclass of `Error`)
+2. Add validation logic in `_write_section` to check each option name
+3. Create the test file
+4. Update the doc
+
+Let me think about the validation logic:
+- An option name is "unsafe" if:
+  - It begins with the pattern matched by `SECTCRE` (i.e., `self.SECTCRE.match(option)` would succeed - meaning it looks like `[section]`)
+  - It contains any of the parser's configured delimiter strings (`self._delimiters`)
+
+Wait, let me re-read the task:
+"Both ConfigParser and RawConfigParser must raise it when writing an option name that begins with the parser's current SECTCRE section pattern or contains any of that parser's configured delimiter strings."
+
+So the check is:
+1. `self.SECTCRE.match(option)` - if the option name matches the SECTCRE pattern (starts with `[...]]`), it's unsafe
+2. Any delimiter string in `self._delimiters` is a substring of the option name
+
+Wait, "begins with the parser's current SECTCRE section pattern" - I think this means the option name, when used in a line, would match as a section header. Let me think about this differently.
+
+Actually, re-reading: "writing an option name that begins with the parser's current SECTCRE section pattern". I think this means: if the option name, when written to the file, would be parsed back as a section header. The SECTCRE pattern matches `[header]`. So if an option name is like `[something]`, it would be written as a line `[something]` which looks like a section header.
+
+Wait, let me re-read more carefully: "begins with the parser's current SECTCRE section pattern". The SECTCRE is `re.compile(r"\[(?P<header>.+)\]", re.VERBOSE)`. So it matches strings that start with `[` and end with `]`. 
+
+Actually, I think the check should be: does `SECTCRE.match(option)` succeed? That would mean the option name starts with `[` and has a closing `]`. Let me think...
+
+Actually `SECTCRE.match(option)` uses `match` which anchors at the start. The pattern is `\[.*\]` (with verbose). So it matches if the string starts with `[` and contains a `]` somewhere after. Actually with `.+` it needs at least one character between `[` and `]`.
+
+So the check is: `self.SECTCRE.match(option) is not None` - this catches option names that look like section headers.
+
+And for delimiters: any of `self._delimiters` appears as a substring in the option name.
+
+Wait, "contains any of that parser's configured delimiter strings" - so if the option name contains any delimiter string (e.g., `=` or `:` for default parsers), it's unsafe.
+
+Let me think about where to add the check. The `_write_section` method iterates over `section_items` and writes each key-value pair. I should add validation before writing each option.
+
+Actually, looking at the code more carefully, the `write` method calls `_write_section` for defaults and for each section. The `_write_section` method writes the section header, then iterates over items.
+
+I think the best place to add the check is in `_write_section`, before writing each option line. Or I could add a helper method that validates an option name.
+
+Let me plan the implementation:
+
+```python
+class InvalidWriteError(Error):
+    """Raised when writing a configuration would produce ambiguous output.
+    
+    Raised by write() when an option name would be ambiguous in the
+    output: it matches the section header pattern or contains a
+    configured delimiter string.
+    """
+    def __init__(self, option):
+        Error.__init__(self, 'Option name %r is ambiguous for writing' % (option,))
+        self.option = option
+        self.args = (option,)
+```
+
+And in `_write_section`, before writing each option:
+```python
+def _validate_option_name_for_write(self, option):
+    if self.SECTCRE.match(option):
+        raise InvalidWriteError(option)
+    for delim in self._delimiters:
+        if delim in option:
+            raise InvalidWriteError(option)
+```
+
+Wait, but I need to be careful. The task says "begins with the parser's current SECTCRE section pattern". Let me re-read.
+
+"Both ConfigParser and RawConfigParser must raise it when writing an option name that begins with the parser's current SECTCRE section pattern or contains any of that parser's configured delimiter strings."
+
+I think "begins with the parser's current SECTCRE section pattern" means the option name matches the SECTCRE pattern. The SECTCRE pattern is `\[.*\]` (with the header group). Using `match` (which anchors at start), `SECTCRE.match(option)` would succeed if the option starts with `[` and has `]` later.
+
+Actually wait - "begins with" might mean something slightly different. Let me think about what "begins with the SECTCRE section pattern" means. The SECTCRE matches section headers like `[section_name]`. If an option name is `[foo]`, when written it would appear as:
+```
+[foo]
+```
+which would be parsed as a section header, not an option. So that's the dangerous case.
+
+But what about an option named `foo]`? When written as `foo = value`, that's fine. What about `[foo`? When written as `[foo = value`, that starts with `[` but doesn't match SECTCRE because there's no closing `]`. Actually wait, if the option is just `[foo` and it's valueless, it would be written as `[foo\n` which looks like an incomplete section header.
+
+I think the safest interpretation is: `self.SECTCRE.match(option)` returns a match. This checks if the option name, as a standalone line, would be interpreted as a section header.
+
+Let me verify: SECTCRE = `re.compile(r"\[(?P<header>.+)\]", re.VERBOSE)`. The `match` method anchors at position 0. So it matches if the string starts with `[`, then has one or more characters, then `]`. So `[foo]` matches, `[foo` doesn't match (no closing `]`), `foo]` doesn't match (doesn't start with `[`).
+
+Hmm, but what about `[foo`? If it's written as an option line `[foo = value`, the parser would try to match it as a section header first (SECTCRE), and `[foo` wouldn't match because there's no `]`. Then it would try OPTCRE, and `[foo` before `=` would be the option name... actually wait, the option name would be `[foo` which contains `[` but that's not a delimiter issue per se.
+
+I think the task is clear: check if `SECTCRE.match(option)` succeeds. Let me go with that.
+
+Now, for delimiters: "contains any of that parser's configured delimiter strings". So if `self._delimiters` is `('=', ':')`, then an option named `foo=bar` contains `=` and is unsafe. An option named `foo:bar` contains `:` and is unsafe. With custom delimiters like `('=>',)`, an option named `foo=>bar` would be unsafe.
+
+The key phrase is "Use the whole configured delimiter string, including custom multicharacter delimiters." So we check the full delimiter string as a substring.
+
+Now let me think about the implementation location. I'll add the check in `_write_section` since that's where each option is written. Let me write the code:
+
+```python
+def _write_section(self, fp, section_name, section_items, delimiter):
+    """Write a single section to the specified `fp`."""
+    fp.write("[{}]\n".format(section_name))
+    for key, value in section_items:
+        value = self._interpolation.before_write(self, section_name, key, value)
+        if value is not None or not self._allow_no_value:
+            value = delimiter + str(value).replace('\n', '\n\t')
+        else:
+            value = ""
+        fp.write("{}{}\n".format(key, value))
+    fp.write("\n")
+```
+
+I need to add validation for `key` before writing it. Let me add a check:
+
+```python
+def _write_section(self, fp, section_name, section_items, delimiter):
+    """Write a single section to the specified `fp`."""
+    fp.write("[{}]\n".format(section_name))
+    for key, value in section_items:
+        self._validate_option_for_write(key)
+        value = self._interpolation.before_write(self, section_name, key, value)
+        if value is not None or not self._allow_no_value:
+            value = delimiter + str(value).replace('\n', '\n\t')
+        else:
+            value = ""
+        fp.write("{}{}\n".format(key, value))
+    fp.write("\n")
+```
+
+And add the helper:
+```python
+def _validate_option_for_write(self, option):
+    if self.SECTCRE.match(option):
+        raise InvalidWriteError(option)
+    for delim in self._delimiters:
+        if delim in option:
+            raise InvalidWriteError(option)
+```
+
+Now let me plan the edits:
+
+1. Add `InvalidWriteError` class after `MultilineContinuationError` (around line 198-200)
+2. Add `_validate_option_for_write` method to `RawConfigParser`
+3. Modify `_write_section` to call the validation
+
+Let me look at the current source more carefully to find exact text to patch.
+
+From the source, after `MultilineContinuationError` class (which ends around line 200), there's:
+
+```
+# Used in parser getters to indicate the default behaviour when a specific
+# option is not found it to raise an exception. Created to enable `None` as
+# a valid fallback value.
+_UNSET = object()
+```
+
+I'll insert the `InvalidWriteError` class between the `MultilineContinuationError` class and the `_UNSET` comment.
+
+Let me find the exact text to use as `old` in a patch. Looking at the source:
+
+```
+class MultilineContinuationError(ParsingError):
+    """Raised when a continuation line follows a valueless option."""
+
+    def __init__(self, source, lineno, line):
+        Error.__init__(
+            self,
+            'Continuation line found for a valueless option.\nfile: %r, line: %d\n%r' %
+            (source, lineno, line))
+        self.source = source
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+
+
+# Used in parser getters to indicate the default behaviour when a specific
+```
+
+I'll patch between the end of `MultilineContinuationError.__init__` and the `_UNSET` comment.
+
+Let me construct the patches. I need to be careful with exact text matching.
+
+For the `InvalidWriteError` class, I'll insert it after the MultilineContinuationError class:
+
+old:
+```
+        self.args = (source, lineno, line)
+
+
+# Used in parser getters to indicate the default behaviour when a specific
+```
+
+new:
+```
+        self.args = (source, lineno, line)
+
+
+class InvalidWriteError(Error):
+    """Raised when writing an option name that would produce ambiguous output.
+
+    Raised by write() when an option name matches the section header pattern
+    or contains a configured delimiter string.
+    """
+
+    def __init__(self, option):
+        Error.__init__(self, 'Option name %r is ambiguous for writing' % (option,))
+        self.option = option
+        self.args = (option,)
+
+
+# Used in parser getters to indicate the default behaviour when a specific
+```
+
+Wait, I need to be careful - the `self.args = (source, lineno, line)` line appears twice in the file (in both `MissingSectionHeaderError` and `MultilineContinuationError`). Let me check...
+
+Looking at the source:
+- `MissingSectionHeaderError.__init__` ends with `self.args = (filename, lineno, line)`
+- `MultilineContinuationError.__init__` ends with `self.args = (source, lineno, line)`
+
+So `self.args = (source, lineno, line)` is unique (only in MultilineContinuationError). Good.
+
+But wait, I need to include enough context to make the match unique. Let me use:
+
+```
+        self.source = source
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+
+
+# Used in parser getters to indicate the default behaviour when a specific
+```
+
+That should be unique.
+
+Now for the `_write_section` method, I need to add the validation call. Current text:
+
+```
+    def _write_section(self, fp, section_name, section_items, delimiter):
+        """Write a single section to the specified `fp`."""
+        fp.write("[{}]\n".format(section_name))
+        for key, value in section_items:
+            value = self._interpolation.before_write(self, section_name, key,
+                                                     value)
+```
+
+I'll change it to:
+
+```
+    def _write_section(self, fp, section_name, section_items, delimiter):
+        """Write a single section to the specified `fp`."""
+        fp.write("[{}]\n".format(section_name))
+        for key, value in section_items:
+            self._validate_option_for_write(key)
+            value = self._interpolation.before_write(self, section_name, key,
+                                                     value)
+```
+
+And I need to add the `_validate_option_for_write` method. I'll add it before `_write_section`:
+
+Actually, let me add it after `_write_section` or before it. Let me add it right before `_write_section`.
+
+Current text around `_write_section`:
+```
+    def _write_section(self, fp, section_name, section_items, delimiter):
+```
+
+I'll insert the method before it. Let me use:
+
+old:
+```
+    def _write_section(self, fp, section_name, section_items, delimiter):
+        """Write a single section to the specified `fp`."""
+```
+
+new:
+```
+    def _validate_option_for_write(self, option):
+        """Validate that an option name is safe to write.
+
+        Raise InvalidWriteError if the option name matches the section
+        header pattern or contains a configured delimiter string.
+        """
+        if self.SECTCRE.match(option):
+            raise InvalidWriteError(option)
+        for delim in self._delimiters:
+            if delim in option:
+                raise InvalidWriteError(option)
+
+    def _write_section(self, fp, section_name, section_items, delimiter):
+        """Write a single section to the specified `fp`."""
+```
+
+And then modify the for loop to call validation.
+
+Let me plan all patches:
+
+Patch 1: Add InvalidWriteError class
+Patch 2: Add _validate_option_for_write method and call it in _write_section
+
+Actually, I can combine patches 2 into one if I match the right text. Let me think...
+
+For patch 2, I'll replace:
+```
+    def _write_section(self, fp, section_name, section_items, delimiter):
+        """Write a single section to the specified `fp`."""
+        fp.write("[{}]\n".format(section_name))
+        for key, value in section_items:
+            value = self._interpolation.before_write(self, section_name, key,
+                                                     value)
+```
+
+with:
+```
+    def _validate_option_for_write(self, option):
+        """Validate that an option name is safe to write.
+
+        Raise InvalidWriteError if the option name matches the section
+        header pattern or contains a configured delimiter string.
+        """
+        if self.SECTCRE.match(option):
+            raise InvalidWriteError(option)
+        for delim in self._delimiters:
+            if delim in option:
+                raise InvalidWriteError(option)
+
+    def _write_section(self, fp, section_name, section_items, delimiter):
+        """Write a single section to the specified `fp`."""
+        fp.write("[{}]\n".format(section_name))
+        for key, value in section_items:
+            self._validate_option_for_write(key)
+            value = self._interpolation.before_write(self, section_name, key,
+                                                     value)
+```
+
+That should work. Let me now also plan the test file and documentation.
+
+For the test file `Lib/test/test_configparser_write_safety.py`, I need to write tests that:
+1. Test that InvalidWriteError is raised for section-like option names
+2. Test that InvalidWriteError is raised for option names containing delimiters
+3. Test with custom delimiters (multicharacter)
+4. Test that valid option names still work
+5. Test with defaults section
+6. Test with valueless options
+7. Test that the error identifies the offending option name
+8. Test that the new exception is a subclass of configparser.Error
+9. Test that the new exception is exported from the module
+
+For the regression test against the old implementation: the task says "It also runs the new tests against the saved unsafe write implementation with the new exception API supplied. At least one assertion must detect unsafe writing there; a missing-name/import error alone does not demonstrate a regression test."
+
+So I need at least one test that would fail against the old implementation (where InvalidWriteError doesn't exist and write() doesn't raise it). The test should import InvalidWriteError and use it in an assertion.
+
+Let me write the test file:
+
+```python
+"""Tests for configparser write-time safety (InvalidWriteError)."""
+
+import io
+import unittest
+
+import configparser
+
+
+class TestInvalidWriteError(unittest.TestCase):
+
+    def test_exception_hierarchy(self):
+        self.assertTrue(issubclass(configparser.InvalidWriteError,
+                                   configparser.Error))
+
+    def test_exception_in_all(self):
+        self.assertIn('InvalidWriteError', configparser.__all__)
+
+    def test_exception_message_identifies_option(self):
+        cp = configparser.RawConfigParser()
+        cp.add_section('sec')
+        cp.set('sec', '[bad]', 'val')
+        f = io.StringIO()
+        with self.assertRaises(configparser.InvalidWriteError) as ctx:
+            cp.write(f)
+        self.assertIn('[bad]', str(ctx.exception))
+
+    def test_section_like_option_name_raises(self):
+        cp = configparser.RawConfigParser()
+        cp.add_section('sec')
+        cp.set('sec', '[evil]', 'value')
+        f = io.StringIO()
+        with self.assertRaises(configparser.InvalidWriteError):
+            cp.write(f)
+
+    def test_delimiter_in_option_name_raises(self):
+        cp = configparser.RawConfigParser()
+        cp.add_section('sec')
+        cp.set('sec', 'bad:name', 'value')
+        f = io.StringIO()
+        with self.assertRaises(configparser.InvalidWriteError):
+            cp.write(f)
+
+    def test_delimiter_equals_in_option_name_raises(self):
+        cp = configparser.RawConfigParser()
+        cp.add_section('sec')
+        cp.set('sec', 'bad=value', 'value')
+        f = io.StringIO()
+        with self.assertRaises(configparser.InvalidWriteError):
+            cp.write(f)
+
+    def test_custom_delimiter_multichar(self):
+        cp = configparser.RawConfigParser(delimiters=('=>',))
+        cp.add_section('sec')
+        cp.set('sec', 'bad=>opt', 'value')
+        f = io.StringIO()
+        with self.assertRaises(configparser.InvalidWriteError):
+            cp.write(f)
+
+    def test_custom_delimiter_not_forbidden_by_default(self):
+        # A delimiter not configured for this parser is not forbidden
+        cp = configparser.RawConfigParser()
+        cp.add_section('sec')
+        cp.set('sec', 'a=>b', 'value')  # '=>' is not a default delimiter
+        f = io.StringIO()
+        cp.write(f)  # Should NOT raise
+
+    def test_valid_option_names_pass(self):
+        cp = configparser.RawConfigParser()
+        cp.add_section('sec')
+        cp.set('sec', 'good_option', 'value')
+        f = io.StringIO()
+        cp.write(f)  # Should not raise
+
+    def test_defaults_section_checked(self):
+        cp = configparser.RawConfigParser()
+        cp.set('DEFAULT', '[bad]', 'val')
+        f = io.StringIO()
+        with self.assertRaises(configparser.InvalidWriteError):
+            cp.write(f)
+
+    def test_valueless_option_checked(self):
+        cp = configparser.RawConfigParser(allow_no_value=True)
+        cp.add_section('sec')
+        cp.set('sec', '[bad]', None)
+        f = io.StringIO()
+        with self.assertRaises(configparser.InvalidWriteError):
+            cp.write(f)
+
+    def test_configparser_also_raises(self):
+        cp = configparser.ConfigParser()
+        cp.add_section('sec')
+        cp.set('sec', '[bad]', 'val')
+        f = io.StringIO()
+        with self.assertRaises(configparser.InvalidWriteError):
+            cp.write(f)
+
+    def test_regression_old_write_silently_emits_section(self):
+        """Regression: old write() silently emits a section-like option as a section."""
+        cp = configparser.RawConfigParser()
+        cp.add_section('real_section')
+        cp.set('real_section', 'key', 'value')
+        # The old implementation would write [evil] as if it were a section header
+        cp._sections['evil_option'] = {}
+        cp._sections['evil_option']['key'] = 'val'
+        # Actually, let's use a simpler regression test:
+        # Verify that InvalidWriteError exists and is raised
+        self.assertTrue(issubclass(configparser.InvalidWriteError,
+                                   configparser.Error))
+        cp2 = configparser.RawConfigParser()
+        cp2.add_section('s')
+        cp2.set('s', '[regression]', 'x')
+        f = io.StringIO()
+        with self.assertRaises(configparser.InvalidWriteError):
+            cp2.write(f)
+
+
+if __name__ == '__main__':
+    unittest.main()
+```
+
+Wait, I need to be more careful about the regression test. The task says:
+"It also runs the new tests against the saved unsafe write implementation with the new exception API supplied. At least one assertion must detect unsafe writing there; a missing-name/import error alone does not demonstrate a regression test."
+
+So the tests will be run against:
+1. The current (fixed) implementation - should pass
+2. The old (unsafe) implementation but WITH the new exception class supplied - at least one test must FAIL there
+
+The key is: in the old implementation, `write()` doesn't raise `InvalidWriteError`. So a test that does:
+```python
+with self.assertRaises(configparser.InvalidWriteError):
+    cp.write(f)
+```
+would fail against the old implementation because `write()` succeeds (writes the ambiguous output) instead of raising.
+
+But the task says "a missing-name/import error alone does not demonstrate a regression test." So I need to make sure the test actually exercises the behavior (calling write and expecting an exception) rather than just checking that the class exists.
+
+My tests above do this - they create a parser with a bad option name and call write(), expecting InvalidWriteError. Against the old implementation (with the exception class injected), `write()` would succeed without raising, so the `assertRaises` would fail. Good.
+
+Actually wait - I need to think about this more carefully. The task says "with the new exception API supplied". So the old implementation will have the `InvalidWriteError` class available (importable), but the `write()` method won't check for it. So my tests that do `assertRaises(configparser.InvalidWriteError)` on `cp.write(f)` will fail because `write()` completes successfully.
+
+Good, that's exactly what I want.
+
+Now for the documentation update. Let me check what's in `Doc/library/configparser.rst`. I need to read it first.
+
+Let me also think about whether I need to handle the case where `_defaults` contains the bad option. Looking at the `write` method:
+
+```python
+def write(self, fp, space_around_delimiters=True):
+    if space_around_delimiters:
+        d = " {} ".format(self._delimiters[0])
+    else:
+        d = self._delimiters[0]
+    if self._defaults:
+        self._write_section(fp, self.default_section,
+                                self._defaults.items(), d)
+    for section in self._sections:
+        self._write_section(fp, section,
+                            self._sections[section].items(), d)
+```
+
+Both `_defaults` and section items go through `_write_section`, so my validation in `_write_section` covers both. Good.
+
+Now let me also think about edge cases:
+- What if the option name is empty? `SECTCRE.match('')` won't match (needs at least `[` and `]`). Delimiter check: empty string doesn't contain any non-empty delimiter. So empty option names pass, which is fine.
+- What about option names with spaces? They're fine as long as they don't match SECTCRE or contain delimiters.
+
+Let me now execute the patches. I'll do them one at a time.
+
+First, let me add the InvalidWriteError class. I need to find a unique anchor. Let me use the text between MultilineContinuationError and the _UNSET comment.
+
+Actually, looking at the source again, I see:
+
+```
+class MultilineContinuationError(ParsingError):
+    """Raised when a continuation line follows a valueless option."""
+
+    def __init__(self, source, lineno, line):
+        Error.__init__(
+            self,
+            'Continuation line found for a valueless option.\nfile: %r, line: %d\n%r' %
+            (source, lineno, line))
+        self.source = source
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+
+
+# Used in parser getters to indicate the default behaviour when a specific
+# option is not found it to raise an exception. Created to enable `None` as
+# a valid fallback value.
+_UNSET = object()
+```
+
+I'll use the patch:
+old: `        self.args = (source, lineno, line)\n\n\n# Used in parser getters`
+new: `        self.args = (source, lineno, line)\n\n\nclass InvalidWriteError(Error):\n    \"\"\"Raised when writing an option name that would produce ambiguous output.\n\n    Raised by write() when an option name matches the section header pattern\n    or contains a configured delimiter string.\n    \"\"\"\n\n    def __init__(self, option):\n        Error.__init__(self, 'Option name %r is ambiguous for writing' % (option,))\n        self.option = option\n        self.args = (option,)\n\n\n# Used in parser getters`
+
+Wait, I need to be careful about the `\n` in the string. In JSON, `\n` is a newline character. Let me write the patch properly.
+
+Actually, let me use the `replace_region` approach since I have the full file visible. But actually, `patch` with exact text is fine too. Let me just use `patch` with the exact text from the source.
+
+Let me re-examine the source to get the exact text. From the source:
+
+```
+        self.source = source
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+
+
+# Used in parser getters to indicate the default behaviour when a specific
+```
+
+This should be unique. Let me verify - searching for `self.source = source` in the file... it appears in `MultilineContinuationError.__init__` and also in `MissingSectionHeaderError.__init__`. But `self.source = source` with `self.lineno = lineno` and `self.line = line` and `self.args = (source, lineno, line)` together is unique to `MultilineContinuationError`.
+
+OK let me proceed with the patches. I'll do patch 1 first (add the class), then patch 2 (add validation to _write_section).
+
+Let me also think about the file path for the test file. The task says `Lib/test/test_configparser_write_safety.py`. But wait, I can only modify existing files! Let me check: "existing_files_only": true in candidate_limits.
+
+Hmm, that's a problem. Can I create a new file? Let me re-read the limits:
+"existing_files_only": true
+
+That means I can only patch existing files, not create new ones. But the task says "Add meaningful public-API regression tests in Lib/test/test_configparser_write_safety.py."
+
+Wait, let me re-read: "candidate_limits":{"existing_files_only":true,...}
+
+This is a limit on the candidate. But maybe the check expects the file to exist? Let me look at the root directory structure. The root has:
+- Doc (directory, 1 file)
+- LICENSE (file)
+- Lib (directory, 9 files)
+
+Let me check if `Lib/test/test_configparser_write_safety.py` already exists. The Lib directory has 9 files. Let me check what files are there.
+
+Actually, I should check the directory structure. Let me look at the Lib directory.
+
+Wait, I think "existing_files_only" means the candidate can only contain existing files (no new files can be added). But the task explicitly says to create a new test file. Let me re-read...
+
+Actually, I think I'm misreading. Let me look at this again: "candidate_limits":{"existing_files_only":true,...}
+
+Hmm, maybe this means the candidate is limited to existing files only - i.e., I can't create new files. But the task requires creating a test file. This seems contradictory.
+
+Wait, maybe "existing_files_only" is about the file system constraint - the candidate can only modify files that already exist in the workspace. But I need to create `Lib/test/test_configparser_write_safety.py`. Let me check if this file already exists.
+
+Let me look at the Lib directory structure. The root page shows Lib has 9 files. Let me check what's there.
+
+Actually, I think I need to explore the directory structure first to understand what's available. Let me do a tree of the Lib directory.
+
+But wait - I should focus on what I can do. The `patch` action says "Replaces exactly one occurrence of old with new in an existing file". So I can only patch existing files. If the test file doesn't exist, I can't create it with patch.
+
+Hmm, but maybe the file already exists as an empty file or with some content. Let me check.
+
+Actually, looking at the task description again: "Add meaningful public-API regression tests in Lib/test/test_configparser_write_safety.py." This implies the file might need to be created. But if `existing_files_only` is true, maybe the file already exists.
+
+Let me check the directory structure to see if the file exists.
+
+Actually, I realize I should just try to proceed. Let me first check what files exist in the relevant directories, then proceed with the implementation.
+
+Let me start by checking the Lib directory and Doc directory structure.
+
+Actually, I'll just proceed with the patches to configparser.py first (since I have the full file visible), then deal with the test file and documentation.
+
+Let me do the first patch now.
+
+Wait, I need to be more careful. Let me re-read the source to find the exact text. The file content shows:
+
+```
+class MultilineContinuationError(ParsingError):
+    """Raised when a continuation line follows a valueless option."""
+
+    def __init__(self, source, lineno, line):
+        Error.__init__(
+            self,
+            'Continuation line found for a valueless option.\nfile: %r, line: %d\n%r' %
+            (source, lineno, line))
+        self.source = source
+        self.lineno = lineno
+        self.line = line
+        self.args = (source, lineno, line)
+
+
+# Used in parser getters to indicate the default behaviour when a specific
+# option is not found it to raise an exception. Created to enable `None` as
+# a valid fallback value.
+_UNSET = object()
+```
+
+I'll patch this. The `old` text needs to be exact. Let me use a smaller unique portion:
+
+old:
+```
+        self.args = (source, lineno, line)
+
+
+# Used in parser getters to indicate the default behaviour when a specific
+```
+
+new:
+```
+        self.args = (source, lineno, line)
+
+
+class InvalidWriteError(Error):
+    """Raised when writing an option name that would produce ambiguous output.
+
+    Raised by write() when an option name matches the section header pattern
+    or contains a configured delimiter string.
+    """
+
+    def __init__(self, option):
+        Error.__init__(self, 'Option name %r is ambiguous for writing' % (option,))
+        self.option = option
+        self.args = (option,)
+
+
+# Used in parser getters to indicate the default behaviour when a specific
+```
+
+Let me verify uniqueness: `self.args = (source, lineno, line)` appears only once in the file (in MultilineContinuationError). The MissingSectionHeaderError uses `self.args = (filename, lineno, line)`. So this is unique.
+
+Now for the second patch (modifying _write_section):
+
+old:
+```
+    def _write_section(self, fp, section_name, section_items, delimiter):
+        """Write a single section to the specified `fp`."""
+        fp.write("[{}]\n".format(section_name))
+        for key, value in section_items:
+            value = self._interpolation.before_write(self, section_name, key,
+                                                     value)
+```
+
+new:
+```
+    def _validate_option_for_write(self, option):
+        """Validate that an option name is safe to write.
+
+        Raise InvalidWriteError if the option name matches the section
+        header pattern or contains a configured delimiter string.
+        """
+        if self.SECTCRE.match(option):
+            raise InvalidWriteError(option)
+        for delim in self._delimiters:
+            if delim in option:
+                raise InvalidWriteError(option)
+
+    def _write_section(self, fp, section_name, section_items, delimiter):
+        """Write a single section to the specified `fp`."""
+        fp.write("[{}]\n".format(section_name))
+        for key, value in section_items:
+            self._validate_option_for_write(key)
+            value = self._interpolation.before_write(self, section_name, key,
+                                                     value)
+```
+
+This should work. Let me proceed.
+
+Actually, I realize I should check the file for the `expected_file_sha256`. From the latest patch result, the file sha is `7f846ee280b4439a163f38acf848aa0c9ceb40c61a28118f2c98da286f6e5a17`. And the current candidate is `f8c299f79fa9b605b5b0540de3f16adf67b54b784fcececab94f21744d1d9cc3`.
+
+Let me proceed with the patches. I'll do one patch per reply to be safe.
+
+Actually wait - I can only do one operation per reply. Let me do the first patch (add InvalidWriteError class) now.

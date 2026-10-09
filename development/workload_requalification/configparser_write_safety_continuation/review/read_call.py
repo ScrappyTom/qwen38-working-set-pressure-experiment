@@ -9,6 +9,7 @@ import difflib
 import hashlib
 import json
 from pathlib import Path
+import sys
 
 AREA = Path(__file__).resolve().parents[1]
 
@@ -44,7 +45,7 @@ def differences(a, b, known, path='input'):
             if i>=len(b):print(path+'/'+str(i),'[removed]')
             else:differences(a[i] if i<len(a) else None,b[i],known,path+'/'+str(i))
     elif path.endswith('/content') and isinstance(b,str) and b in known:
-        print(path, '[exact preceding result body]',hashlib.sha256(b.encode()).hexdigest())
+        print(path, '[exact preceding input/result body]',hashlib.sha256(b.encode()).hexdigest())
     elif path.endswith('/content') and isinstance(a,str) and isinstance(b,str) and any(b == a+x for x in known):
         print(path, '[exact preceding input plus preceding result body]',hashlib.sha256(b.encode()).hexdigest())
     elif path.endswith('/content') and isinstance(a,str) and isinstance(b,str):
@@ -56,6 +57,7 @@ def differences(a, b, known, path='input'):
 
 
 if __name__ == '__main__':
+    sys.stdout.reconfigure(encoding='utf-8')
     parser=argparse.ArgumentParser()
     parser.add_argument('number',type=int)
     parser.add_argument('--version',default='001')
@@ -76,6 +78,7 @@ if __name__ == '__main__':
             assert current['messages'][0] == previous['messages'][0], 'System changed; read both in full'
             old=json.loads(previous['messages'][-1]['content'])
             known=set(contents(read(previous_folder/f'C{args.number-1:02d}-host-result.json')))
+            known.update(contents(old))
         differences(old,packet,known)
     else:
         suffix={'reasoning':'assistant-reasoning.txt','final':'assistant-content.txt','effect':'host-result.json'}[args.part]
