@@ -1,4 +1,28 @@
-# E17 historical-action contribution closed
+# E18 source qualified; continue the authorized programme
+
+Owner says keep working unless blocked or a major gap appears. Read
+development/workload_requalification/evolving_source_entry/PLAN.md,
+RECONCILIATION.md and PREPARATION_REVIEW.md. Published plan50d896e5 precedes
+preparation001:10host/6task checks,31native forms,13scripted decisions and exact
+replay of278artifacts/563bindings/118custody records/14native inputs. Zero model
+completions. Initial5,284/peak18,802tokens. Runtime is closed after preparation.
+
+The original130-file E18 source world/checker remain exact; an explicit task-author
+clarification resolves the previously observed dynamic-versus-preserved-prefix
+ambiguity. No old prefix/patch/group/account is supplied. The shared binding
+diagnostic now reports the field comparisons actually failing; guard strength and
+editing authority are unchanged. Old observations/revisions remain historical.
+
+Publish then run one uncoached run001,24requests/72operations,medium uncapped,
+seed173205. Review actual complete inputs/outputs and effects, exact replay,
+ordinary artifact behavior and all temporal obligations. Complete delivered ledger
+coverage and requested changed-policy acquisition are not supplied by a passing
+artifact check or automatic source refresh. No forced source group, mandatory
+account, retry, silent extension or live coaching. This is clarified functional
+requalification, not an unchanged-task or R50/X25 comparison. Continue to earned
+repairs or the next distinct E18 observation entry after closing and publishing.
+
+# Prior E17 historical-action contribution closed
 
 Read development/workload_requalification/historical_action_entry/review/RESULTS.md,
 complete READING_NOTES.md and NEXT_DECISION.md. Published00d8aaf7 precedes one

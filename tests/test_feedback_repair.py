@@ -75,7 +75,7 @@ class FeedbackTests(unittest.TestCase):
         again=s.execute(action,lambda v:1000)
         self.assertEqual(again['same_old_as_rejected_action'],'EVT-0001')
         for changes,code in ((dict(old='z'),'old_not_found'),(dict(new='x'),'unchanged_replacement'),
-                             (dict(old=''),'empty_anchor'),(dict(expected_candidate_id='0'*64),'stale_binding')):
+                             (dict(old=''),'empty_anchor'),(dict(expected_candidate_id='0'*64),'binding_mismatch')):
             self.assertEqual(s.execute({**action,**changes},lambda v:1000)['rejection_code'],code)
 
     def test_non_eof_literal_boundary_preserves_proposal_and_following_line(self):

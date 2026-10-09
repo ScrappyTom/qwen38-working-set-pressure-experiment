@@ -58,9 +58,14 @@ class FeedbackSession(DecisionSession):
     def _patch(self, action):
         if action['action'] == 'patch':
             path = canonical_path(action['path'])
-            if (action['expected_candidate_id'] != self.candidate.candidate_id or
-                    action['expected_file_sha256'] != self.candidate.file_sha256(path)):
-                return dict(accepted=False, rejection_code='stale_binding', error='Candidate or pre-edit file binding is stale; no edit committed.')
+            matches = dict(expected_candidate_id=action['expected_candidate_id'] == self.candidate.candidate_id,
+                expected_file_sha256=action['expected_file_sha256'] == self.candidate.file_sha256(path))
+            mismatches = [key for key, matches_current in matches.items() if not matches_current]
+            if mismatches:
+                # A mismatch may be a copied value, not a formerly current version.
+                return dict(accepted=False, rejection_code='binding_mismatch', path=path,
+                    binding_matches=matches, mismatched_bindings=mismatches,
+                    error='Supplied ' + ', '.join(mismatches) + ' does not match current state; no edit committed.')
             old, new = action['old'], action['new']
             if max(len(old.encode()), len(new.encode())) > MAX_FRAGMENT_BYTES:
                 return dict(accepted=False, rejection_code='fragment_limit', error='Complete edit exceeds 65,536 UTF-8 bytes; no edit committed.')
