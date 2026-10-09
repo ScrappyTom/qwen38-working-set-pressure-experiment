@@ -1,3 +1,23 @@
+# E18 observation entry qualified; publish and run once
+
+Owner says keep working unless blocked or a major gap appears. Read
+development/workload_requalification/evolving_observation_entry/PLAN.md,
+SPEC.md and PREPARATION_REVIEW.md. Plan 5bddfd3b precedes preparation 001:
+six CPU checks, 36 native decoder cases, 12 scripted contribution steps and six
+crowded-state steps. Exact replay verifies 559 artifacts, 569 source bindings,
+401 custody records and 45 native inputs. Zero model completions; runtime closed.
+
+Keep the original E18-OBS-HARBOR task/world/probe bindings. The initial 6,402-token
+input has both directory rows but no marker body, selected answer, source, account
+or prior check. Publish this package, then run evolving_observation_entry/
+run_ecological.py run --version 001 once: 32 requests/96 operations, medium uncapped,
+seed 173205. No coaching, forced release, supplied group, retry or silent extension.
+Read all actual inputs/full outputs/effects, replay custody, and assess artifact
+behavior plus complete ledger delivery, label-before-footer, marker availability
+and consumed current pass. Exact capture retention can satisfy the conditional
+recovery obligation. The 12-step script is not actor behavior. Keep the failed
+CPU harness qualification intact. Continue the wider programme after closure.
+
 # E18 source lineage closed; proceed to original observation entry
 
 Owner says keep working unless blocked or a major gap appears. Read

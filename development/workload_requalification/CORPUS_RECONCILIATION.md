@@ -80,6 +80,18 @@ for the required transition types, and close every required entry with new saved
 work, actual checks and direct transcript/artifact review. Keep this ledger open
 throughout the running repair cycle. A list of task files is not yet corpus closure.
 
+## E18 observation current-host preparation
+
+The exact E18-OBS-HARBOR task, 130 files and original marker probes now have a
+qualified thin capture adapter. Preparation 001 has no model completions: six CPU
+checks, 36 native forms, a 12-step scripted contribution and six crowded-state
+recovery steps. The initial source/account/result selection is empty. Publish
+before one prospectively bounded uncoached run with 32 requests/96 operations.
+This is functional requalification, not the original matched R50/X25 treatment.
+Final grading, complete ledger delivery, edit order and actual marker availability
+must be assessed separately. See evolving_observation_entry/PREPARATION_REVIEW.md.
+The observation entry remains open until actual model work and direct review close it.
+
 ## E20 verifier current-host entry
 
 The functional lineage now closes with c880924b. Fresh uncoached run003 preserves
