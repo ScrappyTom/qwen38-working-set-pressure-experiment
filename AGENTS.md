@@ -1,3 +1,21 @@
+# E18 run002 closed; focused replacement interpretation next
+
+Owner says keep working unless blocked or a major gap appears. Read
+development/workload_requalification/evolving_observation_entry/review/RUN002-RESULTS.md
+and RUN002-READING_NOTES.md.10requests/17operations, correct code, all904 ledger
+lines delivered, consumed current pass. Original procedure still fails: marker
+released atC02, no exact recovery before footerC04. Preserve this result; no late
+continuation can repair the earlier temporal miss.552records/60native inputs/
+19snapshots replayed; independent examples pass; runtime closed.
+
+Publish this record and prepare one nonexecuting consultation under
+evolving_observation_entry/replacement_dialogue/SPEC.md. Quote exact C02 messages
+and public proposal, without subsequent effects, private thinking or diagnosis.
+First test predicted selection/recovery consequences; no automatic follow-up,
+unchanged task retry, sticky-selection feature or task-specific gate. Read the
+whole actual answer before settling any remedy. Wider phase/probe/fork and
+predecessor reconciliation remains open; continue after publication.
+
 # E18 fresh run002 qualified: publish and execute once
 
 Owner says keep working unless blocked or a major gap appears. MINT001/SABLE003

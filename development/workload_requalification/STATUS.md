@@ -1,3 +1,17 @@
+# E18 run002: correct work/full coverage; exact recovery procedure still open
+
+Read evolving_observation_entry/review/RUN002-RESULTS.md.10requests/17operations,
+12.615model minutes, correct two-file repair and all904required lines delivered.
+128other files remain exact; original acceptance and eight concrete examples pass.
+The marker body was released atC02 and not exactly recovered before footerC04.
+This remains an original-task failure despite checked submission. Exact replay
+552records/60native inputs/19snapshots and direct full-response review are complete.
+
+Next: one separate C02 interpretation consultation per replacement_dialogue/SPEC.md,
+after native qualification/publication. It must allow retain/no change and receives
+no later effects or diagnosis. Do not repeat unchanged E18 or silently add retention.
+Keep wider phase/probe/fork and predecessor entries open. Continue working.
+
 # Fresh E18 run002 qualified; publish and execute once
 
 Read evolving_observation_entry/PREPARATION-002-REVIEW.md. Native36forms and12+6

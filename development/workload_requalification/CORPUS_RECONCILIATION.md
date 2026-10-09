@@ -1,11 +1,12 @@
 # Corpus reconciliation in progress
 
-Current next action: MINT001 and SABLE003 constructed closures passed, respectively
-3requests/4operations and5requests/8operations, preserving all157/158files. Exact
-replay, direct input/output/effect review and independent artifact assessment are
-complete. SABLE preparations001/002 remain unexecuted. Qualify/run fresh E18 run002
-under its original contract per evolving_observation_entry/RUN002_PLAN.md.
-A passing artifact still does not close missed ledger delivery or temporal recovery.
+Current next action: E18 run002 completed10requests/17operations with correct code,
+complete ledger delivery and checked submission, but missed exact recovery before
+the footer after releasing the marker. Preserve this procedural failure. One separate
+interpretation consultation on the actual C02 selection is next; no unchanged retry
+or new retention policy is yet earned. MINT001/SABLE003 constructed closures remain
+complete; full phase/probe/fork and predecessor entries remain open. Read
+evolving_observation_entry/review/RUN002-RESULTS.md and replacement_dialogue/SPEC.md.
 
 The first inventory finds 50 distinct tracked task.txt texts at 66 locations in this
 project, plus 27 task.md/task.input texts at 178 locations in the predecessor. These
