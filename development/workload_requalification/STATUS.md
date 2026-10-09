@@ -1,3 +1,22 @@
+# Verifier run closed; containment qualification remains open
+
+Read development/workload_requalification/ecological_verifier_entry/review/RESULTS.md,
+GOVERNANCE_NOTES.md and containment_entry/PLAN.md. Uncoached run003 closes with a
+checked submission of 36e21200: 20 requests, 29 operations, 36.723 model minutes.
+Actual capacity recovery, required ten-file delivery, three edits, failed-check
+correction and pass consumption all occur. Runtime/GPU are released. Exact audit
+verifies 703 artifacts, 469 bindings, 624 custody records and 31 checkpoints.
+All original public/hidden and declared expanded checks pass independently.
+
+Do not close the substantive containment task: direct post-seal review shows
+nested/dot-prefixed drive components can survive validation and change the native
+Windows join outside the workspace. No outside write was performed. This is our
+checker-qualification gap and a remaining artifact defect. Preserve the old pass,
+checks, candidate and run. Next qualify a new composition check, then a separately
+published review-directed continuation from exact saved work (12 new requests,
+36 operations; absolute 32/65). No replacement patch, live coaching, automatic
+retry or account/effort redesign. The wider workload ledger remains open.
+
 # Fresh E20 verifier contribution qualified
 
 Read development/workload_requalification/ecological_verifier_entry/PLAN.md and

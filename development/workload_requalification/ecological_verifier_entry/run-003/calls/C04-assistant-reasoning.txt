@@ -1,0 +1,76 @@
+Let me analyze the current state:
+
+1. I've read `verifiers.py` (319 lines) and `records.py` (460 lines) so far.
+2. I still need to read 8 more files to satisfy the task prerequisites:
+   - hashing.py (39 lines)
+   - readiness.py (141 lines)
+   - policy.py (140 lines)
+   - routing.py (55 lines)
+   - reducers.py (134 lines)
+   - verifier_logs.py (49 lines)
+   - storage.py (58 lines)
+   - artifact_units.py (459 lines)
+
+3. The bugs I need to fix in `verifiers.py`:
+   - `_safe_relative_path`: The current logic has a bug. The condition `path.is_absolute() and ".." in path.parts or not path.parts` uses incorrect operator precedence. It should reject absolute paths, parent traversal (`..`), and empty paths.
+   
+   Current code:
+   ```python
+   def _safe_relative_path(path_or_name: str) -> PurePosixPath | None:
+       normalized = path_or_name.replace("\\", "/")
+       path = PurePosixPath(normalized)
+       if path.is_absolute() and ".." in path.parts or not path.parts:
+           return None
+       return path
+   ```
+   
+   Due to Python operator precedence, `and` binds tighter than `or`, so this is:
+   `(path.is_absolute() and ".." in path.parts) or (not path.parts)`
+   
+   This means:
+   - Empty paths: rejected ✓ (not path.parts is True)
+   - Absolute path without `..`: NOT rejected (first condition is False, second is False)
+   - Absolute path with `..`: rejected ✓
+   - Relative path with `..`: NOT rejected (first condition is False, second is False)
+   
+   The fix should reject:
+   - Absolute paths (any)
+   - Parent traversal (any `..` in parts)
+   - Empty paths
+   
+   So the correct logic should be:
+   ```python
+   def _safe_relative_path(path_or_name: str) -> PurePosixPath | None:
+       normalized = path_or_name.replace("\\", "/")
+       path = PurePosixPath(normalized)
+       if not path.parts or path.is_absolute() or ".." in path.parts:
+           return None
+       return path
+   ```
+
+   - `_bounded_timeout`: The current code:
+   ```python
+   def _bounded_timeout(value) -> int:
+       try:
+           timeout = int(value)
+       except (TypeError, ValueError):
+           timeout = 20
+       return max(1, max(timeout, MAX_COMMAND_TIMEOUT_SECONDS))
+   ```
+   
+   The bug: `max(1, max(timeout, MAX_COMMAND_TIMEOUT_SECONDS))` always returns `MAX_COMMAND_TIMEOUT_SECONDS` (60) because `max(timeout, 60)` is always >= 60, and then `max(1, 60)` is 60. So it always returns 60.
+   
+   The fix should clamp to the inclusive range 1..MAX_COMMAND_TIMEOUT_SECONDS:
+   ```python
+   def _bounded_timeout(value) -> int:
+       try:
+           timeout = int(value)
+       except (TypeError, ValueError):
+           timeout = 20
+       return max(1, min(timeout, MAX_COMMAND_TIMEOUT_SECONDS))
+   ```
+   
+   This clamps: if timeout < 1, returns 1; if timeout > 60, returns 60; otherwise returns timeout.
+   For invalid values (None, "abc", float('inf'), etc.), int() raises and defaults to 20.
+
+Let me continue reading the remaining files. I'll read them one by one. Let me start with hashing.py since it's the smallest.

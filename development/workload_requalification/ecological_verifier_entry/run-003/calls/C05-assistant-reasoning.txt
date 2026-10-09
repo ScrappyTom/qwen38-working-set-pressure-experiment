@@ -1,0 +1,104 @@
+Let me analyze the current state:
+
+1. I've read verifiers.py (319 lines), records.py (460 lines), and hashing.py (39 lines) - all fully visible.
+2. The task prerequisites require reading 10 files before the first mutation. I have coverage for verifiers.py and records.py (complete). I still need to read: hashing.py (39 lines - just read but shows covered_lines:0 in prerequisites), readiness.py (141), policy.py (140), routing.py (55), reducers.py (134), verifier_logs.py (49), storage.py (58), artifact_units.py (459).
+
+Wait, looking at the prerequisites more carefully:
+- verifiers.py: complete=true, covered_lines=319
+- records.py: complete=true, covered_lines=460
+- hashing.py: complete=false, covered_lines=0 (I just read it in the latest action, so it should gain coverage on dispatch)
+- readiness.py: complete=false, covered_lines=0
+- policy.py: complete=false, covered_lines=0
+- routing.py: complete=false, covered_lines=0
+- reducers.py: complete=false, covered_lines=0
+- verifier_logs.py: complete=false, covered_lines=0
+- storage.py: complete=false, covered_lines=0
+- artifact_units.py: complete=false, covered_lines=0
+
+The note says: "exact source shown here gains coverage on dispatch without another read" - so hashing.py which I just read (line 1 to 0 meaning to end, 39 lines) should gain coverage on dispatch. But it still shows covered_lines=0 in the prerequisites. Let me re-read: "Status covers previous dispatches; exact source shown here gains coverage on dispatch and need not be reread solely for the barrier."
+
+So the source shown in working_set.sources (hashing.py) will gain coverage when I dispatch my next action. That means I need to read the remaining 7 files: readiness.py, policy.py, routing.py, reducers.py, verifier_logs.py, storage.py, artifact_units.py.
+
+Wait, actually the prerequisites say "exact source shown here gains coverage on dispatch without another read" - so hashing.py is already shown in this input and will gain coverage when I dispatch. But I still need to read the other 7 files.
+
+Let me look at what I need to fix in verifiers.py:
+
+1. `_safe_relative_path`: The current implementation is:
+```python
+def _safe_relative_path(path_or_name: str) -> PurePosixPath | None:
+    normalized = path_or_name.replace("\\", "/")
+    path = PurePosixPath(normalized)
+    if path.is_absolute() and ".." in path.parts or not path.parts:
+        return None
+    return path
+```
+
+The problem: The operator precedence is wrong. `path.is_absolute() and ".." in path.parts or not path.parts` is parsed as `(path.is_absolute() and ".." in path.parts) or (not path.parts)`. So:
+- It only rejects absolute paths IF they also contain ".." - a plain absolute path like `/etc/passwd` would NOT be rejected.
+- It only rejects parent traversal if the path is absolute - a relative path like `../../etc/passwd` would NOT be rejected.
+- Empty paths are rejected (not path.parts is True for empty).
+
+The fix should be: reject if absolute, OR if contains ".." as a part, OR if empty.
+
+```python
+def _safe_relative_path(path_or_name: str) -> PurePosixPath | None:
+    normalized = path_or_name.replace("\\", "/")
+    path = PurePosixPath(normalized)
+    if not path.parts or path.is_absolute() or ".." in path.parts:
+        return None
+    return path
+```
+
+2. `_bounded_timeout`: The current implementation is:
+```python
+def _bounded_timeout(value) -> int:
+    try:
+        timeout = int(value)
+    except (TypeError, ValueError):
+        timeout = 20
+    return max(1, max(timeout, MAX_COMMAND_TIMEOUT_SECONDS))
+```
+
+The problem: `max(1, max(timeout, MAX_COMMAND_TIMEOUT_SECONDS))` - this clamps to [MAX_COMMAND_TIMEOUT_SECONDS, infinity) when timeout > 1, or [1, MAX_COMMAND_TIMEOUT_SECONDS] only if timeout < 1. Actually let me think again:
+- If timeout = 5: max(5, 60) = 60, max(1, 60) = 60. So it returns 60.
+- If timeout = 100: max(100, 60) = 100, max(1, 100) = 100. So it returns 100 (above max!).
+- If timeout = 0: max(0, 60) = 60, max(1, 60) = 60. Returns 60.
+- If timeout = -5: max(-5, 60) = 60, max(1, 60) = 60. Returns 60.
+- If timeout = 30: max(30, 60) = 60, max(1, 60) = 60. Returns 60.
+
+Wait that's wrong. The behavior should be: clamp to [1, MAX_COMMAND_TIMEOUT_SECONDS]. So:
+- If timeout < 1, return 1
+- If timeout > MAX_COMMAND_TIMEOUT_SECONDS (60), return 60
+- Otherwise return timeout
+- Invalid values default to 20
+
+The current code `max(1, max(timeout, MAX_COMMAND_TIMEOUT_SECONDS))` always returns at least MAX_COMMAND_TIMEOUT_SECONDS (60). So a valid timeout of 30 gets clamped to 60, and a timeout of 100 stays at 100 (exceeds max).
+
+The fix should be:
+```python
+def _bounded_timeout(value) -> int:
+    try:
+        timeout = int(value)
+    except (TypeError, ValueError):
+        timeout = 20
+    return max(1, min(timeout, MAX_COMMAND_TIMEOUT_SECONDS))
+```
+
+This clamps to [1, 60]:
+- timeout=5 → min(5,60)=5, max(1,5)=5 ✓
+- timeout=100 → min(100,60)=60, max(1,60)=60 ✓
+- timeout=0 → min(0,60)=0, max(1,0)=1 ✓
+- timeout=-5 → min(-5,60)=-5, max(1,-5)=1 ✓
+- invalid → timeout=20, min(20,60)=20, max(1,20)=20 ✓
+
+Now I need to:
+1. Read the remaining 7 files to satisfy prerequisites (readiness.py, policy.py, routing.py, reducers.py, verifier_logs.py, storage.py, artifact_units.py)
+2. Then patch verifiers.py with the fixes
+3. Run check public
+4. Submit
+
+Let me read the remaining files. I can only do one operation per response. Let me read readiness.py first (141 lines).
+
+Actually wait - I can read multiple files? No, each operation is one action. Let me read them one at a time. I have 28 requests remaining and 90 actions remaining, so I have plenty.
+
+Let me start reading readiness.py.

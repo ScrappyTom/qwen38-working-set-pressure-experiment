@@ -78,3 +78,15 @@ Finish exact candidate/checker/entry/exposure mapping, implement qualified adapt
 for the required transition types, and close every required entry with new saved
 work, actual checks and direct transcript/artifact review. Keep this ledger open
 throughout the running repair cycle. A list of task files is not yet corpus closure.
+
+## E20 verifier current-host entry
+
+E20-OBS-VERIFIER-SAFETY now has one fresh uncoached current-host run003 with
+original task/source/observations, a prospectively expanded public definition,
+and actual ten-file preread delivery. It completed 20 requests/29 operations,
+capacity recovery, failed-check correction and checked submission. All three
+original/expanded acceptance scripts pass independently. However, post-seal
+review found a native path-composition containment gap absent from those checks.
+Keep this entry open for the separately declared containment-contract correction.
+This is not a successful full-contract closure or a matched R50/X25 replication.
+See ecological_verifier_entry/review/RESULTS.md and containment_entry/PLAN.md.
