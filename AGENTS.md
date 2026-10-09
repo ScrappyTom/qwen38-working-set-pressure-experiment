@@ -1,3 +1,26 @@
+# E18 source lineage closed; proceed to original observation entry
+
+Owner says keep working unless blocked or a major gap appears. Read
+development/workload_requalification/evolving_source_entry/continuation_entry/review/RESULTS.md,
+READING_NOTES.md and ../NEXT_DECISION.md. Published24973769 precedes4uncoached
+requests/7operations: joint required policy/secondary acquisition, secondary edit,
+actual public check, consumed pass and submissionc074cb7f.129inherited files exact.
+Independent acceptance/eight examples and combined temporal audit pass. The whole
+lineage is28requests/44operations,56.005model/63.752loop minutes; original24-request
+incomplete outcome and task-author clarification remain explicit and unchanged.
+
+Replay verifies125artifacts/583bindings/110custody records/7native inputs/9snapshots
+plus the original1443-record archive. All4complete new inputs/responses/effects
+directly reviewed. Runtime is closed. No new host, memory, effort or account policy
+is earned; current feedback and actual outcomes support closure despite stale plans.
+
+Publish then implement development/workload_requalification/evolving_observation_entry/PLAN.md.
+Keep original E18-OBS-HARBOR task/world/probe bindings; qualify conditional exact
+marker recovery and all ledger/order obligations.32requests/96operations prospective,
+not a matched R50/X25 replication. Publish qualified native inputs before one
+uncoached run. No supplied marker, group, account, patch, forced release or coaching.
+Continue the wider corpus; do not stop after routine publication.
+
 # E18 source continuation qualified; publish and execute once
 
 Owner says keep working unless blocked or a major gap appears. Read

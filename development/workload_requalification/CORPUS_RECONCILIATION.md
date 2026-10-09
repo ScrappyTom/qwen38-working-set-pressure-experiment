@@ -125,7 +125,7 @@ Next reconcile E18's distinct source/observation acquisition and order contracts
 E015/E017 closure donors, E013/E014 phase/probe/fork transitions, earlier legacy and
 predecessor mapping, and pressure comparisons remain open.
 
-## E18 source current-host entry remains incomplete
+## E18 source current-host entry and declared completion
 
 The new job preserves the130-file E18-SOURCE-LANTERN world and checker, with a
 prospective task-author clarification of primary's preserved pre-change value.
@@ -148,3 +148,17 @@ preparation001 restores99e533ea with12new requests/36new operations and unchange
 task/checker. Its9,624-token starting input and four scripted steps replay exactly;
 31native forms and43focused CPUchecks pass. No new model completion is established
 by preparation. See evolving_source_entry/continuation_entry/PREPARATION_REVIEW.md.
+
+Published24973769 then precedes one uncoached continuation001. Four new requests/
+seven operations perform joint current-policy/secondary acquisition, the remaining
+edit, actual public check and checked submission ofc074cb7f.129inherited files remain
+exact. Independent ordinary examples and original acceptance pass; actual-input
+audit verifies all lineage acquisition/order obligations. Total28requests/44ops,
+56.005model minutes,63.752loop minutes. The source contribution now closes under
+its declared clarification and renewed opportunity; the original finite result
+does not change. See continuation_entry/review/RESULTS.md under evolving_source_entry.
+
+Next implement the original E18 observation entry under evolving_observation_entry/
+PLAN.md. Its32-request allowance is prospective, not a replication of the old
+24-action or R50/X25 regime. No further shared-host repair follows from this
+successful source continuation. Other historical/temporal obligations remain open.
