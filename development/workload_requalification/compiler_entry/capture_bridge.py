@@ -244,15 +244,24 @@ class Session(SearchNavigationMixin, navigation.NavigationMixin, repair_task.Ses
         return result
 
     def _capture_identity(self, result):
-        """Recognize only an exact direct acquisition of a bound imported OBS."""
-        if (not isinstance(result, dict) or result.get("accepted") is not True
-                or result.get("kind") != "imported_observation"):
+        """Authenticate modern and preserved legacy receipts against exact custody."""
+        if not isinstance(result, dict) or result.get("accepted") is not True:
             return None
         try:
             row, raw = self.imported_record(result["handle"])
         except (KeyError, ValueError, UnicodeError):
             return None
-        if (result.get("observed_candidate_id") == row["candidate_id"]
+        # Historical receipts remain in their original transport envelope. Their
+        # exact body carries the original binding; recognizing actual delivery
+        # neither rebinds the observation nor supplies current edit/check authority.
+        if set(result) == {"accepted", "handle", "size_bytes", "exact_result_sha256", "exact_result_utf8"}:
+            if (result["size_bytes"] == len(raw)
+                    and result["exact_result_sha256"] == row["sha256"]
+                    and result["exact_result_utf8"] == raw.decode()):
+                return row["handle"]
+            return None
+        if (result.get("kind") == "imported_observation"
+                and result.get("observed_candidate_id") == row["candidate_id"]
                 and result.get("target") == row["target"]
                 and result.get("size_bytes") == len(raw)
                 and result.get("sha256") == row["sha256"]
@@ -305,16 +314,9 @@ class Session(SearchNavigationMixin, navigation.NavigationMixin, repair_task.Ses
                 results.append(result)
         shown = set()
         for result in results:
-            if not result.get("accepted") or result.get("kind") != "imported_observation":
-                continue
-            try:
-                row, raw = self.imported_record(result["handle"])
-            except (KeyError, ValueError, UnicodeError):
-                continue
-            if (result.get("observed_candidate_id") == row["candidate_id"]
-                    and result.get("size_bytes") == len(raw) and result.get("sha256") == row["sha256"]
-                    and result.get("content_utf8") == raw.decode()):
-                shown.add(row["handle"])
+            handle = self._capture_identity(result)
+            if handle is not None:
+                shown.add(handle)
         return shown
 
     def view(self, **kwargs):
