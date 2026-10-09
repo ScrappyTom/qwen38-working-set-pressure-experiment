@@ -4,6 +4,7 @@ import copy
 import bootstrap
 import repair_task
 import operational_reply
+import phase_reports
 from navigation import NavigationMixin
 from search_navigation import SearchNavigationMixin
 from working_set_exp import decision_view, working_view
@@ -42,6 +43,8 @@ class Session(SearchNavigationMixin, NavigationMixin, repair_task.Session):
     Coverage is historical presentation evidence. It never populates the current
     delivered_sources guard and is not semantic proof of reading/understanding.
     """
+    assessment_api = phase_reports
+
     def __init__(self, *args, phase_texts, phase_required, **kwargs):
         if set(phase_texts) != {'A', 'B'} or set(phase_required) != {'A', 'B'}:
             raise ValueError('exactly the original two phases are required')

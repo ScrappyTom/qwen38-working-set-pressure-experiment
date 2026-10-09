@@ -29,3 +29,10 @@ adapter reuses that matcher with fork forms rather than copying native machinery
 The bank manifest is additionally pinned; original tasks/checkers/source and the
 starting candidate remain unchanged. The scripted route labels evaluator choices
 and names actual input support; a successful script is not actor capability.
+
+Direct001 input review found the inherited assessor calling a prefork failure
+public_execution. Package001 remains preserved/unexecuted. Package002 adds only a
+phase-local derived-label/reference correction, qualified against the unchanged
+raw stderr and both actual scopes. Eleven CPU checks,38native forms and25scripted
+decisions pass; exact preparation replay is separate. This is a truthful scope
+correction earned by the new phase responsibility, not an inference about Qwen.

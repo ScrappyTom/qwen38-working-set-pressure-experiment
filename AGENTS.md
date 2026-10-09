@@ -1,3 +1,17 @@
+# Full-phase source package002 ready: publish then execute once
+
+Read development/workload_requalification/phase_entries/PREPARATION-002-REVIEW.md.
+11CPU checks,38native forms,25scripted decisions; exact replay637artifacts/588bindings/
+445records/50native inputs. Initial6,111 tokens; actual initial input and scope
+correction reviewed. Runtime closed.001 is preserved unexecuted (scope wording).
+Publish then run phase_entries/run_phase.py run --version 002, one uncoached
+E13-SOURCE-LUMEN attempt,32requests/96operations across both phases. No reset atfork,
+coaching, settings change or silent extension. Do not alter bound source while open.
+Read every actual input/full response/effect; replay review/verify_run.py --version002
+then review/post_run/assess.py --version002 (CLI values separated by spaces). Preserve
+all outcomes and publish. Source-task success does not close probe/predecessor cases
+or E18's original recovery miss. Continue unless blocked/major gap appears.
+
 # Full-phase package001 qualified; correct scope wording before exposure
 
 Read development/workload_requalification/phase_entries/PREPARATION-001-REVIEW.md.

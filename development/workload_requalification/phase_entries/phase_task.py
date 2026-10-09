@@ -81,6 +81,9 @@ def operating_reference():
     before, after = canonical_json_bytes(old_check).decode(), canonical_json_bytes(new_check).decode()
     assert text.count(before) == 1
     text = text.replace(before, after)
+    label = 'The original public checker must pass; there are no injected fault tests in this task.'
+    assert text.count(label) == 1
+    text = text.replace(label, 'The selected original checker reports its own named scope; there are no injected fault tests in this task.')
     text = text.replace('request check public in a later reply', 'request the active phase check in a later reply')
     return text + '\n\n' + navigation.REFERENCE_ADDITION + '\n\n' + search_navigation.REFERENCE_ADDITION + (
         '\n\nPhase A uses check prefork; Phase B uses check public. Checks of the inactive scope are rejected. '

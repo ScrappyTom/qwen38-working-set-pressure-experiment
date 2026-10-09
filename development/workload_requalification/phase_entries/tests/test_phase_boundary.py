@@ -188,6 +188,25 @@ class PhaseBoundaryTests(unittest.TestCase):
         self.assertTrue(any(r['name'] == 'observed-prefork-failure' for r in recorded))
         self.assertTrue(any(r['name'] == 'released-source-not-editable' for r in recorded))
 
+    def test_prefork_report_names_actual_scope_without_rewriting_observation(self):
+        failed = self.check('prefork')
+        handle = failed['observation']
+        raw_before = (self.s.observations.directory(handle) / 'stderr.bin').read_bytes()
+        report = self.s.view()['latest_feedback']['result']['report']
+        self.assertFalse(report['passed'])
+        self.assertEqual(report['scope'], 'prefork')
+        self.assertEqual(report['failed_criteria'], ['prefork_execution'])
+        self.assertIn('Phase A prefork checker', report['criteria'][0]['meaning'])
+        self.assertEqual(report['criteria'][0]['stderr']['text'].encode(), raw_before)
+        inspected = self.call(dict(action='inspect_check', observation=handle, offset=0))
+        self.assertEqual(inspected['entries'][0]['criterion'], 'prefork_execution')
+        self.assertEqual((self.s.observations.directory(handle) / 'stderr.bin').read_bytes(), raw_before)
+        self.ready()
+        self.fork()
+        public = self.check('public')
+        self.assertFalse(public['passed'])
+        self.assertEqual(self.s.view()['latest_feedback']['result']['report']['failed_criteria'], ['public_execution'])
+
 
 if __name__ == '__main__':
     unittest.main()
