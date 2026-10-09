@@ -142,3 +142,9 @@ a declared12-request continuation from saved work. The prior finite outcome stay
 unchanged; any completion is a lineage result. This does not reproduce R50/X25 or
 close E18-OBS-HARBOR, whose separate source/observation entry is reconciled in
 review/NEXT_E18_OBSERVATION_NOTES.md.
+
+The acquisition repair is now qualified on actual crowded states. Continuation
+preparation001 restores99e533ea with12new requests/36new operations and unchanged
+task/checker. Its9,624-token starting input and four scripted steps replay exactly;
+31native forms and43focused CPUchecks pass. No new model completion is established
+by preparation. See evolving_source_entry/continuation_entry/PREPARATION_REVIEW.md.

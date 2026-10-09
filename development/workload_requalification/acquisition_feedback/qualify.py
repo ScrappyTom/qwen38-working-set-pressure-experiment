@@ -1,0 +1,159 @@
+"""Native information-path checks on sealed crowded states; zero completions."""
+import argparse
+import copy
+import json
+from pathlib import Path
+import sys
+from types import SimpleNamespace
+
+AREA = Path(__file__).resolve().parent
+sys.path.insert(0, str(AREA.parent / 'evolving_source_entry'))
+import bootstrap
+import source_task as study
+from manage import RUNTIME, legacy, load_helper
+from working_set_exp.custody import ArtifactStore, verify_records
+from working_set_exp.jsonutil import canonical_json_bytes, sha256_bytes, sha256_file
+
+ROOT = study.ROOT
+OLD = study.AREA / 'run-001'
+runner = load_helper('acquisition_qualified_runner', 'scripts/run_uncoached_contribution.py')
+BOUND_INPUTS = {}
+
+
+def stored(name):
+    seal_path = OLD / 'RESPONSE_SEAL.json'
+    seal = study.read(seal_path)
+    assert sha256_bytes(canonical_json_bytes(seal['files'])) == seal['aggregate_sha256']
+    row, = [row for row in seal['files'] if row['path'] == name]
+    path = OLD / name
+    assert path.stat().st_size == row['size_bytes'] and sha256_file(path) == row['sha256']
+    BOUND_INPUTS[seal_path.relative_to(ROOT).as_posix()] = sha256_file(seal_path)
+    BOUND_INPUTS[path.relative_to(ROOT).as_posix()] = row['sha256']
+    return study.read(path)
+
+
+def restored(stem):
+    state, candidate = stored(stem + '-state.json'), stored(stem + '-candidate.json')
+    session = study.restore(state, candidate, OLD, replay=True)
+    adapter = runner.Adapter(study.Task())
+    adapter.preceding_feedback = stored(stem + '-preceding-feedback.json')
+    return session, adapter
+
+
+def qualify(version):
+    cases = []
+    for tag, stem in [('C16', 'after/C15-O02'), ('C17', 'after/C16-O01'),
+                      ('C18', 'after/C17-O01'), ('C19', 'after/C18-O02')]:
+        session, adapter = restored(stem)
+        reply = stored(f'calls/{tag}-reply.json')
+        original = stored(f'calls/{tag}-endpoint-response.json')['usage']['prompt_tokens']
+        cases.append((tag, session, adapter, reply, original))
+    folder = AREA / ('qualification-' + version)
+    folder.mkdir(parents=True, exist_ok=False)
+    module = study.Task()
+    store = ArtifactStore(folder)
+    log = legacy.QualificationLog(folder / 'records.jsonl', 'acquisition-feedback-qualification', task_module=module)
+    bound = {**module.source_identities(), **BOUND_INPUTS,
+        **{p.relative_to(ROOT).as_posix(): sha256_file(p) for p in AREA.glob('*.py')},
+        (AREA / 'PLAN.md').relative_to(ROOT).as_posix(): sha256_file(AREA / 'PLAN.md'),
+        'tests/test_acquisition_feedback.py': sha256_file(ROOT / 'tests/test_acquisition_feedback.py')}
+    rows, error = [], None
+
+    def save(name, value):
+        artifact = store.put(name, canonical_json_bytes(value))
+        log.append('qualification_artifact', dict(name=name, completion_sent=False), [artifact])
+
+    try:
+        save('INPUT_BINDINGS.json', BOUND_INPUTS)
+        server, model, _ = module.runtime_paths()
+        with RUNTIME.owned_runtime(SimpleNamespace(server=server, model=model, output=folder), store, log) as url:
+            loop = runner.Loop(folder, store, log, url=url, task_module=cases[0][2],
+                source_check=lambda: module.verify_sources(bound))
+
+            def keep(stem, session):
+                count = loop.measure(session.view())
+                save(stem + '-view.json', session.view())
+                loop.snapshot(session, stem)
+                return count
+
+            def step(tag, session, adapter, reply):
+                loop.task = adapter
+                archive = canonical_json_bytes(session.pairs)
+                candidate, ranges = session.candidate, copy.deepcopy(session.ranges)
+                raw = loop.measure(session.view())
+                if raw > 23808:
+                    # A fresh entry has no operation receipt to re-admit. The
+                    # ordinary runner measures it directly, as we do above.
+                    assert session.last is not None and session._fits_feedback(loop.measure), 'existing recovery must admit this new input'
+                admitted = keep(tag + '-input', session)
+                assert admitted <= 23808
+                assert session.candidate == candidate and session.ranges == ranges
+                assert canonical_json_bytes(session.pairs) == archive
+                session.mark_delivered(session.view())
+                session.begin_request()
+                result = module.process_reply(session, reply, loop.measure, adapter.preceding_feedback)
+                following = keep(tag + '-after', session)
+                assert following <= 23808 and not session.delivery_blocked
+                assert session.candidate == candidate
+                save(tag + '-operation.json', dict(reply=reply, result=result))
+                projected = session.view()['latest_feedback']['result']
+                if result['operations'][-1]['result'].get('accepted'):
+                    for row in projected.get('source_regions', []):
+                        assert 'requested_extent_complete' in row and 'page_end_reason' in row
+                restored_again = study.restore(module.snapshot(session), candidate, OLD, replay=True)
+                assert restored_again.view() == session.view()
+                return dict(case=tag, proposed_input_tokens=raw, admitted_input_tokens=admitted,
+                    following_input_tokens=following, mode=session.view()['presentation']['mode'],
+                    operations=[dict(action=row['action'], result=row['result']) for row in result['operations']],
+                    projected_result=projected, restored_exactly=True)
+
+            for tag, session, adapter, reply, original in cases:
+                if tag == 'C16':
+                    hard_session, hard_adapter = restored('after/C15-O02')
+                    class HardCeilingOnly(type(hard_session)):
+                        def _fits(self, measure, *, margin=1024):
+                            return super()._fits(measure, margin=0)
+                    hard_session.__class__ = HardCeilingOnly
+                    # Explicit engineering counterfactual only, never a production
+                    # or model policy. Show why "cannot fit" would be too strong.
+                    hard_row = step('C16-hard-ceiling-diagnostic', hard_session, hard_adapter, reply)
+                    hard_row['classification'] = 'counterfactual_headroom_policy_not_adopted'
+                    rows.append(hard_row)
+                row = step(tag, session, adapter, reply)
+                row.update(original_sent_input_tokens=original,
+                    classification='saved_public_choice_under_prospective_host_not_model_behavior')
+                rows.append(row)
+
+            group, adapter = module.initial_session(), runner.Adapter(module)
+            group_reply = dict(discussion='Engineering acquisition qualification.', operation=dict(action='work_on',
+                sources=[dict(path=p, start_line=1, end_line=0) for p in (study.POLICY, study.TARGET)], results=[]))
+            row = step('unseen-two-source-group', group, adapter, group_reply)
+            assert {r['path'] for r in group.view()['working_set']['sources']} == {study.POLICY, study.TARGET}
+            assert all(r['requested_extent_complete'] for r in row['projected_result']['source_regions'])
+            row['classification'] = 'researcher_selected_mechanical_fixture_not_actor_selection'
+            rows.append(row)
+            module.verify_sources(bound)
+    except BaseException as problem:
+        error = problem
+        save('FAILED.json', dict(type=type(problem).__name__, message=str(problem)))
+    finally:
+        save('QUALIFICATION.json', dict(status='failed' if error else 'qualified', completion_requests=0,
+            cases=rows, memory=RUNTIME.memory_stats(folder / 'memory.csv'),
+            port_free=RUNTIME.port_free(RUNTIME.PORT), policy_changed=False,
+            limits=['Researcher-selected saved public choices, not new Qwen behavior.',
+                'Hard-ceiling-only case is labelled diagnostic; ordinary headroom policy remains unchanged.',
+                'Counts qualify these actual complete inputs, not all future choices.']))
+        verify_records(folder / 'records.jsonl', folder)
+        legacy.seal(folder, 'failed_preserved' if error else 'qualified_no_model_inference', bound, completion_requests=0)
+    if error:
+        raise error
+    print(json.dumps(dict(status='qualified', completion_requests=0,
+        cases=[{k:v for k,v in row.items() if k not in ('operations', 'projected_result')} for row in rows]), indent=2))
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--version', default='001')
+    args = parser.parse_args()
+    assert len(args.version) == 3 and args.version.isdecimal() and args.version.isascii()
+    qualify(args.version)

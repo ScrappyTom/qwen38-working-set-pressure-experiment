@@ -30,12 +30,32 @@ class FeedbackSession(DecisionSession):
     def view(self, **kwargs):
         value = super().view(**kwargs)
         value['schema_version'] = 'decision-feedback-v2'
+        value['working_set']['source_extent_scope'] = 'current_selection_not_one_acquisition'
         for row in value['visibility']['retained_inventory']['entries']:
             if row['kind'] == 'source':
                 shown = row.pop('body_shown_in_full')
                 row['selected_extent_shown_in_full'] = shown
                 row['whole_file_shown'] = shown and row['selected_extent_is_whole_file']
         return value
+
+    def _record(self, action, result):
+        # _fit_pages records each staged trial BEFORE measuring it. Decorate here,
+        # never after an admitted operation, so the complete receipt is sized too.
+        kind = action['action']
+        if result.get('accepted') and kind in ('read', 'work_on', 'work_on_exact'):
+            result = copy.deepcopy(result)
+            sources = [result['source']] if kind == 'read' else result['sources']
+            requested = ([action] if kind == 'read' else action['sources']
+                         if kind == 'work_on' else [dict(start_line=s['returned_start_line'],
+                             end_line=s['returned_end_line']) for s in sources])
+            for source, span in zip(sources, requested, strict=True):
+                last = min(span['end_line'] or source['file_total_lines'], source['file_total_lines'])
+                complete = (source['returned_start_line'] == span['start_line']
+                            and source['returned_end_line'] == last)
+                source.update(requested_start_line=span['start_line'],
+                    requested_end_line=span['end_line'], requested_extent_complete=complete,
+                    page_end_reason='requested_extent_delivered' if complete else 'input_sizing_policy')
+        super()._record(action, result)
 
     def resolve_region(self, reference):
         # Rejected ambiguous patches expose addresses, not source/edit authority.
@@ -49,7 +69,13 @@ class FeedbackSession(DecisionSession):
 
     def summary(self, sequence):
         value = super().summary(sequence)
-        result = self.pairs[sequence-1]['result']
+        pair = self.pairs[sequence-1]
+        result = pair['result']
+        if pair['response']['action'] == 'read' and result.get('accepted') and 'source' in result:
+            source = result['source']
+            # A historical return extent, not a claim about today's visible body.
+            value['returned_range'] = dict(start_line=source['returned_start_line'],
+                                           end_line=source['returned_end_line'])
         for key in ('rejection_code', 'match_count', 'proposed_old_sha256'):
             if key in result:
                 value[key] = result[key]
@@ -125,9 +151,19 @@ def operating_reference(checks):
         'Ordinary tests must pass before mutation failures count as detection. Each declared fault target must be detected by the new tests; normal failure blocks that assessment.')
     text = text.replace('Empty replacement deletes the region.',
         'This is a whole-line operation. Before an unselected following line, the host supplies a missing original line separator for nonempty replacement text and records it separately from your exact proposal. Empty replacement deletes the region; at EOF the text stays exact. Ordinary patch remains byte-exact.')
+    text = text.replace('read: Reads exact current source.',
+        'read: Acquires and delivers an exact current-source page. The host measures the complete next input and prefers room for later feedback; this sizing policy may shorten the requested range. The host does the counting.')
+    text = text.replace('work_on: Replaces designated sources and saved RES/EVT records using requested paths/ranges.',
+        'work_on: Acquires and delivers current-source pages for all requested paths/ranges together, replacing the prior selected group. The sources array can contain multiple files or ranges, including source not previously read. This is one acquisition operation, not just a selection label. It also selects the requested saved RES/EVT records.')
     text += ('\nPatch rejection names its cause and returns actual match counts and up to four reusable whole-line match regions. '
         'A region address alone does not grant editing authority; its source must be shown before editing. '
         'same_old_as_rejected_action identifies reuse of an earlier rejected anchor. '
         'file_total_lines and whole_file_shown describe the file; returned_extent_complete and selected_extent_shown_in_full describe only the indicated range. '
-        'A complete range is not necessarily a complete file. Reports give total, shown and remaining entries for each shortened list, with exact observations available.')
+        'A complete range is not necessarily a complete file. Reports give total, shown and remaining entries for each shortened list, with exact observations available.'
+        '\nAcquisition receipts describe that operation\'s individual page: requested_start/end_line are the request, '
+        'returned_start/end_line are the actual page, and requested_extent_complete says whether all requested lines were delivered, stopping at EOF if reached. '
+        'page_end_reason=input_sizing_policy means the host selected a shorter page under its complete-input/feedback-room policy; '
+        'it does not mean the file ended or that later lines are blank. It is not a proof that no larger page could fit the hard ceiling. '
+        'working_set.sources describes the current selected source view, which may merge several acquired pages and refresh after edits; '
+        'its extents are not attributed to one earlier read. A recent read row\'s returned_range is that historical operation\'s actual page.')
     return text

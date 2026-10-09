@@ -110,6 +110,8 @@ def receipt_view(receipt):
         result['raw_page_may_split_serialized_record']=not result['page_complete']
     sources = ([result.pop('source')] if 'source' in result else result.pop('sources', []))
     if sources:
-        result['source_regions'] = [{k:s[k] for k in ('path','file_sha256','returned_start_line','returned_end_line','region_ref') if k in s} for s in sources]
+        result['source_regions'] = [{k:s[k] for k in ('path','file_sha256','returned_start_line','returned_end_line','region_ref',
+            'requested_start_line','requested_end_line','requested_extent_complete','page_end_reason',
+            'file_total_lines','whole_file_shown') if k in s} for s in sources]
         result['source_body_location'] = 'working_set.sources if shown; otherwise visibility marks omission'
     return value

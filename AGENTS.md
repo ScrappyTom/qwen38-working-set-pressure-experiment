@@ -1,3 +1,26 @@
+# E18 source continuation qualified; publish and execute once
+
+Owner says keep working unless blocked or a major gap appears. Read
+development/workload_requalification/acquisition_feedback/RESULTS.md and
+evolving_source_entry/continuation_entry/PREPARATION_REVIEW.md under that same
+workload_requalification directory. The acquisition reporting repair passes38host
+checks and six native saved-state cases;5continuation checks also pass. Keep the
+failed qualifier/helper audits and the original24-request incomplete run intact.
+
+Continuation preparation001 restores exact99e533ea work, account and37operations;
+task/checker unchanged.12new requests/36new operations, cumulative36/73. Initial
+9,624tokens,31native forms, four scripted completion steps; exact replay verifies
+181artifacts/583bindings/45custody records/5native inputs plus inherited history.
+The script is engineering evidence and is never supplied to Qwen. Runtime closed.
+
+Publish then run one uncoached continuation001 beginningC25. No forced group,
+account rewrite, live coaching, retry or silent extension. Review complete actual
+inputs/responses/effects, replay receipts/checkpoints, grade ordinary behavior and
+combined temporal obligations. Correct primary/policy work must survive and the
+requested changed-policy acquisition must actually happen before secondary.
+Count parent and continuation costs. A successful lineage does not rewrite the
+original finite outcome. Continue to the distinct E18 observation entry afterward.
+
 # E18 source run001 closed incomplete; repair acquisition reports and continue
 
 Owner says keep working unless blocked or a major gap appears. Read
