@@ -1,3 +1,22 @@
+# E17 historical-action boundary qualified; one attempt next
+
+Read development/workload_requalification/historical_action_entry/PLAN.md and
+PREPARATION_REVIEW.md. Plan86d6a756 precedes preparation001. Original consumed entry
+and setup action are exact; the marker is absent from current source/initial input
+and remains in prior EVT-0001. Existing host prior-work support suffices: no host
+or memory-policy change. Eight new requests/24operations, inherited setup counted
+separately, seed173205, current medium uncapped. Original prompt16/runner6 mismatch
+is recorded, not ported. This is functional requalification, not replication.
+
+Five CPU checks and31native forms pass; initial5002/peak7531tokens. Seven scripted
+decisions include exact recovery, current source, fail/stale rejection/repair/pass
+and submission. Zero model completions. Corrected post-qualification replay verifies
+223artifacts,437bindings,64custody records,8inputs and2saved checks. Preserve the
+original auditor's missing-record_count error separately; sealed host/input unchanged.
+Publish preparation, run one uncoached attempt, then full direct input/output/artifact
+review and exact audit. No coaching, retries, budget extension or hidden-draft use.
+The wider legacy/temporal and pressure ledger remains open.
+
 # Verifier containment contribution closed; return to remaining entries
 
 Read development/workload_requalification/ecological_verifier_entry/containment_entry/review/RESULTS.md and its complete
