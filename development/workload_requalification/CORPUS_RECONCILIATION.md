@@ -1,11 +1,12 @@
 # Corpus reconciliation in progress
 
-Current next action: implement/qualify phase_entries/probe_entry/PLAN.md for
-original E13-OBS-ANCHOR. E13-SOURCE-LUMEN run002 is complete across both original
-phases:18requests/25operations, correct saved work, all728required lines delivered,
-actual capacity recovery and consumed current passes. See phase_entries/review/
-RUN002-RESULTS.md for exact replay, audit correction and limits. The completed
-one-call replacement consultation does not close E18 or earn a retention change.
+Current next action: implement/qualify phase_entries/receipt_entries/PLAN.md for
+original E14 MINT and SABLE full entries. E13-OBS-ANCHOR run001 is complete across
+both phases:17requests/26operations, current integrity produced and exactly recovered
+before repair, all728required lines, correct saved work and checked submission.
+See phase_entries/probe_entry/review/RUN001-RESULTS.md for replay, costs and limits.
+E13-SOURCE-LUMEN run002 remains complete. Constructed closures do not substitute
+for remaining fresh entries; no unchanged rerun or new retention policy is earned.
 
 E18 run002 completed10requests/17operations with correct code,
 complete ledger delivery and checked submission, but missed exact recovery before

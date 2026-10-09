@@ -1,3 +1,23 @@
+# ANCHOR full entry complete; implement remaining original E14 entries
+
+Read development/workload_requalification/phase_entries/probe_entry/review/RUN001-RESULTS.md.
+17requests/26operations, original probe produced/recovered before label edit,
+all728required lines delivered, correct two-file work and current checked submission.
+All full responses/inputs/effects read; exact replay698records/70native inputs/
+28serialized states/769bindings passes; original programs and independent examples
+pass with158other files unchanged.20.495model/24.548loop minutes. Runtime closed.
+Keep the recovered chronology uncertainty and inefficient small pages in the report;
+no unchanged retry or new general account/retention policy is earned.
+
+Publish this result and phase_entries/receipt_entries/PLAN.md, then implement the
+remaining original E14 MINT and SABLE full entries sequentially. Reuse phase/probe/
+runner machinery, preserve exact bank files/tasks/checkers and finite32/96 total
+opportunity, current medium policy. Qualify actual serialized restoration, complete
+inputs and relevant original procedures; publish before one uncoached run per entry.
+No coaching, reset, silent extension or retrospective repair of E18's recovery miss.
+Keep SABLE's public stable-invariant scope separate from independent name behavior.
+Continue unless blocked or a major gap appears.
+
 # ANCHOR phase/probe package001 qualified; publish then execute once
 
 Read development/workload_requalification/phase_entries/probe_entry/PREPARATION-001-REVIEW.md.
