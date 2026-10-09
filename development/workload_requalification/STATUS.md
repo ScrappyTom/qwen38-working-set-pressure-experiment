@@ -1,3 +1,17 @@
+# MINT closure passed; SABLE003 qualified; fresh E18 plan recorded
+
+MINT001 closes its constructed boundary in3requests/4operations,160.016model
+seconds, preserving157files. Original public/hidden and ordinary examples pass;
+exact replay and full response review are complete. See closure_entries/review/
+MINT-001-RESULTS.md. It is not a fresh discovery/full-phase result.
+
+Legacy exact-capture visibility and missing-assessment-link wording are corrected
+and qualified. SABLE preparations001/002 are preserved unexecuted. Publish003
+then run once, eight requests/24operations. SABLE-003-PREPARATION.md records full
+input comparison, native qualification and replay. After closure, qualify/run
+fresh E18 run002 per evolving_observation_entry/RUN002_PLAN.md. The original
+run001 remains incomplete and historical metrics remain preserved. Continue.
+
 # Original MINT/SABLE closure entries natively prepared
 
 Read closure_entries/PREPARATION_REVIEW.md. Both preparation001 packages pass36

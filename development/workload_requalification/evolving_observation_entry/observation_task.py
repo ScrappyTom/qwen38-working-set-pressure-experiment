@@ -123,7 +123,8 @@ def attach_observations(session, folder, log):
 
 def source_identities():
     paths = [CORE_PATH, *AREA.glob('*.py'), *(AREA / 'tests').glob('*.py'), *(AREA / 'review').glob('*.py'),
-        *(AREA / name for name in ('PLAN.md', 'SPEC.md', 'SYSTEM.txt', 'TASK.txt')),
+        *(AREA / name for name in ('PLAN.md', 'SPEC.md', 'SYSTEM.txt', 'TASK.txt', 'RUN002_PLAN.md')),
+        AREA / 'review/post_run/assess.py',
         *AREA.glob('*TESTS*.log'), EXECUTION_ONLY / 'FIXTURE.json', MODEL_VISIBLE / 'TASK.txt',
         EXECUTION_ONLY / 'public.py', EVALUATOR_ONLY / 'hidden.py',
         *(MODEL_VISIBLE / 'candidate' / row['path'] for row in fixture()['candidate_files']),

@@ -1,4 +1,8 @@
-# Frozen original E18 observation configuration
+# Original E18 observation configuration, prospective run002
+
+Run001's sealed specification and outcome remain unchanged. Run002 starts fresh
+under the currently qualified host package; see RUN002_PLAN.md. This corrects an
+evaluator-side extra ordering requirement without changing the actor's original task.
 
 - Preserve the exact E18-OBS-HARBOR task,130files and both original marker probes.
   Candidatee331513f;24,000-byte/file admission. TaskSHA25676b8a52b, public/hidden
@@ -21,5 +25,11 @@
   stop. No coaching, private-draft execution, automatic retry or silent extension.
 - After sealing: exact replay, complete direct input/output/effect review, original
   acceptance and ordinary additional cases. Separately verify marker binding and
-  delivery, four complete ledgers before mutations, label-before-footer, exact
-  marker availability or recovery at the footer, and consumed current pass.
+  delivery, four complete ledgers by submission, label-before-footer, exact marker
+  availability or permitted exact historical action/result recovery at the footer,
+  and consumed current pass. Ledger completion is not a prerequisite to every
+  unrelated edit. A recognizer limited to OBS receipts cannot reject a different
+  permitted recovery route without direct assessment of its actual delivered bytes.
+  The old temporal audit remains a separately reported sufficient-condition screen;
+  original_contract_next.py records the prospective task contract and flags any
+  alternative exact payload needing semantic review instead of inventing support.

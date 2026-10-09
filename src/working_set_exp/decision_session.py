@@ -65,7 +65,7 @@ class DecisionSession(OperableSession):
                     state['assessment'] = self.assessment_api.overview(value)
                     state['inspect'] = dict(action='inspect_check', observation=result['observation'], offset=0)
                 else:
-                    state['assessment_unavailable'] = 'Historical receipt has no preserved observation in this configuration.'
+                    state['assessment_unavailable'] = 'No observation is linked to this historical receipt for structured assessment.'
             checks[scope] = state
         public = checks['public']
         return dict(checks=checks, after_accepted_edit=dict(self.edit_checks),

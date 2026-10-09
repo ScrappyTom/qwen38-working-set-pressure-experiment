@@ -1,3 +1,28 @@
+# MINT closed; SABLE003 qualified and ready, then fresh E18 run002
+
+Owner says keep working unless blocked or a major gap appears. MINT001 completed
+3uncoached requests/4operations, unchanged157files, actual pass and submission;
+160.016model seconds. All full inputs/outputs/effects reviewed and replayed. Read
+closure_entries/review/MINT-001-RESULTS.md under development/workload_requalification.
+
+Two reporting corrections are qualified: exact old capture receipts now count as
+present when delivered; absence of a structured observation link no longer claims
+raw historical evidence absent. Read closure_entries/LEGACY_CAPTURE_RESULTS.md
+and SABLE-003-PREPARATION.md. Prior preparations001/002 stay unexecuted. Publish
+then run run_closure.py run --case E14-STALE-SABLE --version003 once (space between
+--version and003).8new requests/24operations; five setup actions separate. No live
+coaching, forced edits, retry or silent extension. Review all actual input/output,
+replay and independently assess. Public scope is only its stable invariant.
+
+Then qualify evolving_observation_entry run002 per RUN002_PLAN.md.10CPU checks
+pass (CPU-TESTS-RUN002.log). Preserve run001 and its failed original procedure.
+Prospective original contract requires full ledger delivery by submission, not
+before every edit, and permits exact recovered action/result support. Alternate
+payloads get direct semantic review; a narrow OBS recognizer is not the contract.
+32requests/96operations, original task/world/probes/seed/reasoning, no supplied
+marker/group/account, forced release or task-specific gate. Preparation still
+required before exposure. Wider phase/probe/fork/predecessor work remains open.
+
 # Original closure entries prepared; publish and run each once
 
 Owner says keep working unless blocked or a major gap appears. Read

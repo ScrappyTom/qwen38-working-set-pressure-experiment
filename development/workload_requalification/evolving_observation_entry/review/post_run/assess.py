@@ -1,5 +1,6 @@
 """Post-seal cost, exact information-path and ordinary artifact assessment."""
 from collections import Counter
+import argparse
 import difflib
 import importlib.util
 import json
@@ -24,10 +25,10 @@ def save(path, value):
             stream.write(raw)
 
 
-def main():
-    run, review = AREA / 'run-001', AREA / 'review'
+def main(version='001'):
+    run, review = AREA / f'run-{version}', AREA / 'review'
     seal = study.read(run / 'RESPONSE_SEAL.json')
-    verified = study.read(review / 'VERIFICATION-001.json')
+    verified = study.read(review / f'VERIFICATION-{version}.json')
     assert verified['status'] == 'replayed_exactly'
     assert verified['response_seal_sha256'] == sha256_file(run / 'RESPONSE_SEAL.json')
     assert verified['records_sha256'] == sha256_file(run / 'records.jsonl')
@@ -44,7 +45,7 @@ def main():
     assert closed['owned_server_shutdown_verified'] and closed['dedicated_port_free']
     common = dict(response_seal_sha256=sha256_file(run / 'RESPONSE_SEAL.json'),
         assessment_source_sha256=sha256_file(Path(__file__)))
-    save(review / 'METRICS-001.json', dict(**common, status='recomputed_from_sealed_evidence',
+    save(review / f'METRICS-{version}.json', dict(**common, status='recomputed_from_sealed_evidence',
         aggregate=metric.aggregate(calls), calls=calls,
         endpoint_timings=[dict(id=row['id'], timings=study.read(run / f"calls/{row['id']}-endpoint-response.json").get('timings'))
             for row in calls if (run / f"calls/{row['id']}-endpoint-response.json").exists()],
@@ -75,7 +76,7 @@ def main():
             actions=[dict(action=op['action'], result={k:v for k,v in op['result'].items()
                 if k not in ('source', 'sources')}) for op in own]))
     temporal = trace.result()
-    save(review / 'TEMPORAL-AUDIT-001.json', dict(**common, status='actual_sent_inputs_and_effects',
+    save(review / f'TEMPORAL-AUDIT-{version}.json', dict(**common, status='actual_sent_inputs_and_effects',
         case=study.CASE, **temporal, decision_context=decisions))
 
     candidate = study.read(run / (stem + '-candidate.json'))
@@ -86,7 +87,7 @@ def main():
     allowed = {study.TARGET, study.SECONDARY}
     diff = ''.join(''.join(difflib.unified_diff(original[name].decode().splitlines(True),
         files[name].decode().splitlines(True), fromfile='entry/' + name, tofile='saved/' + name)) for name in changed)
-    diff_path = review / 'SAVED-PATCH.diff'
+    diff_path = review / ('SAVED-PATCH.diff' if version=='001' else f'SAVED-PATCH-{version}.diff')
     if diff_path.exists():
         assert diff_path.read_bytes() == diff.encode()
     else:
@@ -130,11 +131,14 @@ print(json.dumps(rows, ensure_ascii=False))
         limits=['Repeated original acceptance establishes reproducibility, not independent hidden coverage.',
             'Independent concrete examples and source review are not new model trajectories.',
             'Successful execution does not establish the separate acquisition/order contract.'])
-    save(review / 'ARTIFACT-ASSESSMENT-001.json', assessment)
+    save(review / f'ARTIFACT-ASSESSMENT-{version}.json', assessment)
     print(json.dumps(dict(metrics=metric.aggregate(calls),
         temporal={k:v for k,v in temporal.items() if k not in ('decisions','marker_deliveries')},
         artifact=assessment), indent=2))
 
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--version', default='001')
+    args = parser.parse_args()
+    main(args.version)

@@ -81,6 +81,20 @@ class ClosureTests(unittest.TestCase):
         self.assertFalse(result['accepted'])
         self.assertFalse(session.submitted)
 
+    def test_missing_assessment_link_does_not_claim_historical_evidence_absent(self):
+        task, session, feedback = self.new('E14-STALE-SABLE')
+        state = session.view()['verification']['checks']['public']
+        self.assertEqual(state['assessment_unavailable'],
+            'No observation is linked to this historical receipt for structured assessment.')
+        original = task.inherited_pairs()[0]['result']
+        self.assertNotIn('observation', original)
+        self.assertEqual(session.payload('RES-0001'), canonical_json_bytes(original))
+        recovered = self.act(task, session, feedback, dict(action='reopen_observation', handle='OBS-0003'))
+        self.assertTrue(recovered['accepted'])
+        self.assertEqual(recovered['content_utf8'].encode(), task.imports()[2]['OBS-0003'])
+        self.assertFalse(session.view()['verification']['checks']['public']['applies_to_current'])
+        self.assertFalse(session.view()['verification']['submission']['eligible'])
+
     def test_historical_source_read_is_not_current_edit_authority(self):
         for case, path in [('E14-CLOSURE-MINT', 'codec/label.py'), ('E14-STALE-SABLE', 'api/name.py')]:
             with self.subTest(case=case):
