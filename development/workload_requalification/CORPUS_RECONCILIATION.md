@@ -92,6 +92,22 @@ Final grading, complete ledger delivery, edit order and actual marker availabili
 must be assessed separately. See evolving_observation_entry/PREPARATION_REVIEW.md.
 The observation entry remains open until actual model work and direct review close it.
 
+Run001 is now reviewed and closed as a finite attempt, not as a complete original
+task.32requests/51operations produce correct checked code750433f8 and preserve128
+other files. Only ledger00 is fully delivered; three tails remain. Exact marker
+recovery does not occur before footer after its release. Later recovery and the
+artifact pass do not satisfy that temporal condition retrospectively. The separate
+original-contract assessment also corrects our uncommunicated requirement to read
+all ledgers before every edit, preserving the frozen metric and actor inputs.
+
+Five exact native counterfactuals establish that omitted tiny requested target
+regions fit under the existing preferred target without dropping ledger content.
+The next bounded repair also addresses missing returned extents in recent grouped
+rows. See evolving_observation_entry/NEXT_DECISION.md. This original procedural
+entry remains open while the independently reconciled MINT/SABLE closure entries
+advance to native qualification after the repair. Their CPU qualification is not
+actor success, and their constructed setup does not close full E13/E14 phase work.
+
 ## E20 verifier current-host entry
 
 The functional lineage now closes with c880924b. Fresh uncoached run003 preserves

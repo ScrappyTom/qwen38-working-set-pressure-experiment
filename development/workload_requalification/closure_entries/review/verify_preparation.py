@@ -26,7 +26,7 @@ def verify(case, version='001'):
     verify_run._inventory(folder, seal)
     assert seal['source_sha256'] == manifest['source_sha256']
     records = verify_records(folder / 'records.jsonl', folder)
-    assert len(records) == seal['record_count']
+    assert seal['completion_requests'] == 0 and seal['status'] == 'qualified_no_model_inference'
     assert not any(r['record_type'] == 'invocation_started' for r in records)
     imported = verify_run._imported_custody(module, folder, records, ['', 'closure/', 'historical/', 'failed-check/'])
     adapter = run_closure.runner.Adapter(module)

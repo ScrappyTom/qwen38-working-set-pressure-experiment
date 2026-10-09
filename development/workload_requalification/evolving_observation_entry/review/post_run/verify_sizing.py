@@ -1,0 +1,58 @@
+"""Reconstruct the ten measured inputs without another runtime invocation."""
+import importlib.util
+import json
+from pathlib import Path
+import sys
+
+import size_counterfactual as case
+from working_set_exp.custody import verify_records
+from working_set_exp.jsonutil import canonical_json_bytes, sha256_bytes, sha256_file
+
+
+def main():
+    folder=case.AREA/'review/sizing-001'
+    report=case.study.read(folder/'QUALIFICATION.json')
+    seal=case.study.read(folder/'SEAL.json')
+    assert report['status']=='measured' and report['completion_requests']==0
+    assert not report['production_policy_changed'] and report['port_free']
+    helper=case.study.ROOT/'development/workload_requalification/closure_entries/review/verify_run.py'
+    sys.path.insert(0,str(helper.parents[1]))
+    spec=importlib.util.spec_from_file_location('sizing_native_custody_helpers',helper)
+    audit=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(audit)
+    audit._inventory(folder,seal)
+    case.study.verify_sources(seal['source_sha256'])
+    records=verify_records(folder/'records.jsonl',folder)
+    assert seal['completion_requests']==0 and seal['status']=='qualified_no_model_inference'
+    assert not any(r['record_type'] in ('invocation_started','check_observation_preserved') for r in records)
+    rows=case.cases()
+    counts=audit._native_counts(folder,records,rows[0][3])
+    checked=[]
+    for (tag,baseline,expanded,adapter,original,completed),row in zip(rows,report['cases'],strict=True):
+        assert tag==row['after_request'] and completed==row['completed_paths']
+        for name,session in [('actual',baseline),('completed_requested_regions',expanded)]:
+            key=sha256_bytes(canonical_json_bytes(adapter.request_for(session.view())))
+            assert counts[key]==row['input_tokens'][name]
+            assert session.view()==case.study.read(folder/f'{tag}-{name}-view.json')
+            assert canonical_json_bytes(case.study.snapshot(session))==(folder/f'{tag}-{name}-state.json').read_bytes()
+            assert case.study.candidate_bytes(session.candidate)==(folder/f'{tag}-{name}-candidate.json').read_bytes()
+            assert adapter.preceding_feedback==case.study.read(folder/f'{tag}-{name}-preceding-feedback.json')
+        assert original==row['input_tokens']['actual']
+        assert row['fits_preferred']==(row['input_tokens']['completed_requested_regions']<=22784)
+        assert row['fits_hard']==(row['input_tokens']['completed_requested_regions']<=23808)
+        checked.append(tag)
+    closed=[r['payload'] for r in records if r['record_type']=='runtime_closed']
+    assert len(closed)==1 and closed[0]['owned_server_shutdown_verified'] and closed[0]['dedicated_port_free']
+    result=dict(status='exact_inputs_reconstructed',cases=checked,native_inputs=len(counts),
+        artifacts=len(seal['files']),source_bindings=len(seal['source_sha256']),custody_records=len(records),
+        qualification_seal_sha256=sha256_file(folder/'SEAL.json'),
+        verification_source_sha256=sha256_file(Path(__file__)),native_helper_sha256=sha256_file(helper),
+        completion_requests=0,no_additional_execution=True,production_policy_unchanged=True)
+    path=case.AREA/'review/SIZING-VERIFICATION-001.json'
+    raw=canonical_json_bytes(result)
+    if path.exists(): assert path.read_bytes()==raw
+    else: path.write_bytes(raw)
+    print(json.dumps(result,indent=2))
+
+
+if __name__=='__main__': main()

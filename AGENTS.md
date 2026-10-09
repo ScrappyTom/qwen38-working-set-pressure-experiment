@@ -1,3 +1,28 @@
+# E18 observation run closed; qualify acquisition sizing and recent-range repairs
+
+Owner says keep working unless blocked or a major gap appears. Read
+development/workload_requalification/evolving_observation_entry/review/RESULTS.md,
+READING_NOTES.md, GOVERNANCE_NOTES.md and ../NEXT_DECISION.md. Run001 uses32requests/
+51operations and66.008model minutes. Code750433f8 passes independently and all128
+other files remain exact, but three ledger tails and the pre-footer exact-recovery
+condition are missed. Do not label this a full-task pass. Our stronger all-ledgers-
+before-every-edit evaluator was unjustified; original and supplemental results stay.
+
+All32complete responses/inputs/effects reviewed. Exact replay verifies1627records,
+177native inputs/53snapshots/569bindings. Runtime closed. Five saved-state native
+counterfactuals prove the omitted tiny requested target regions fit beside every
+unchanged ledger page, within preferred22784. Recent grouped rows also omit actual
+returned extents. Implement only the earned bounded repairs in NEXT_DECISION,
+qualify complete native transitions, and publish before exposure. No live coaching,
+new account policy, semantic summary, case-specific task gate or silent extension.
+
+Then natively qualify/run the two reconciled closure_entries (eight new requests/
+24new operations each; five original setup operations separate). Ten CPU tests pass.
+The native preparation verifier's run-versus-qualification seal assumption was fixed
+before exposure. No closure GPU/model run has happened. Preserve original sources,
+weak SABLE public scope and independent artifact review. E18 original procedure and
+the wider legacy/phase/predecessor ledger remain open. Continue after publication.
+
 # E18 observation entry qualified; publish and run once
 
 Owner says keep working unless blocked or a major gap appears. Read

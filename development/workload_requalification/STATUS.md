@@ -1,3 +1,20 @@
+# E18 observation: checked artifact, incomplete procedure; acquisition repairs next
+
+Read evolving_observation_entry/review/RESULTS.md and NEXT_DECISION.md. Run001
+closes normally after32uncoached requests/51operations: correct code750433f8,
+current pass consumed, submission accepted,128other files exact. However only
+ledger00 was delivered completely, and footer was edited without the required
+exact recovery after marker release.66.008model/73.527loop minutes. Do not close
+the original task obligation or erase our overstrict ledger-order evaluator.
+
+Actual full-input/output review and exact replay authenticate the result. Five
+native counterfactuals complete tiny requested code regions within the existing
+preferred input target without removing any ledger content. Recent work_on rows
+also omit the returned ranges available for ordinary reads. Qualify these two
+bounded host repairs, publish, then run the prepared original MINT/SABLE closure
+entries under the repaired host. Their ten CPU checks pass; no native/model
+exposure yet. Keep the wider corpus open and continue without routine approval.
+
 # Verifier containment contribution closed; return to remaining entries
 
 Read ecological_verifier_entry/containment_entry/review/RESULTS.md and its complete

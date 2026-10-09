@@ -60,3 +60,11 @@ incorrect proposed Unicode-wire expectation from becoming a grading assertion.
 No such failed assertion was executed or attributed to the task. SABLE's name
 examples may include Unicode because its inspected implementation uses casefold
 and has no wire-encoding boundary.
+
+The separate E18 sizing replay exposed a verifier-only schema assumption:
+legacy qualification seals have completion_requests/status but no run-style
+record_count. That failed verifier and source are preserved with the E18 review.
+The same assumption was present here and was removed before native preparation.
+The complete hash-linked record chain is still verified; qualification status and
+zero model calls use the actual qualification-seal fields. No closure native
+attempt was consumed by this correction.
