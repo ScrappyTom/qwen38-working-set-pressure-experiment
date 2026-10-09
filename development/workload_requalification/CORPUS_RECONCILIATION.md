@@ -1,10 +1,10 @@
 # Corpus reconciliation in progress
 
-Current next action: MINT001 constructed closure passed,3requests/4operations,
-with all157files preserved. Exact legacy capture visibility and historical
-assessment-link reporting are corrected. SABLE003 is natively qualified; publish
-and run once, preserving preparations001/002 unexecuted. Then qualify/run fresh
-E18 run002 under its original contract per evolving_observation_entry/RUN002_PLAN.md.
+Current next action: MINT001 and SABLE003 constructed closures passed, respectively
+3requests/4operations and5requests/8operations, preserving all157/158files. Exact
+replay, direct input/output/effect review and independent artifact assessment are
+complete. SABLE preparations001/002 remain unexecuted. Qualify/run fresh E18 run002
+under its original contract per evolving_observation_entry/RUN002_PLAN.md.
 A passing artifact still does not close missed ledger delivery or temporal recovery.
 
 The first inventory finds 50 distinct tracked task.txt texts at 66 locations in this

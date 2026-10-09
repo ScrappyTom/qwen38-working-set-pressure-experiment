@@ -1,3 +1,23 @@
+# MINT and SABLE constructed closures complete; fresh E18 run002 next
+
+Owner says keep working unless blocked or a major gap appears. Read
+development/workload_requalification/closure_entries/review/SABLE-003-RESULTS.md.
+SABLE003 completes5requests/8operations,581.298model seconds, all158files unchanged.
+Actual full responses/inputs/effects reviewed;182records/16native inputs replayed;
+original public/hidden and ordinary Unicode examples pass. Runtime closed. Two
+duplicate record acquisitions occurred; contemplated recheck was not executed.
+The current pass's narrow stable-invariant scope is not proof of name behavior.
+Preserve the framing/scope observations; no unchanged SABLE rerun is justified.
+
+Next natively prepare evolving_observation_entry run002 per RUN002_PLAN.md, replay
+preparation, inspect actual full initial input and information paths, publish, run
+once uncoached32requests/96operations. CPU qualification is complete. Keep original
+task/world/seed/reasoning and corrected original-contract evaluation: complete
+ledger delivery by submission, permitted exact recovered action/result support.
+No forced release/group/account, live coaching or silent extension. Review all
+actual responses/effects and finish verification before dependent assessment.
+Wider phase/probe/fork and predecessor corpus remains open; continue after closure.
+
 # MINT closed; SABLE003 qualified and ready, then fresh E18 run002
 
 Owner says keep working unless blocked or a major gap appears. MINT001 completed

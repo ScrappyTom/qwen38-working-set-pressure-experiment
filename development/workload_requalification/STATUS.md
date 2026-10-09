@@ -1,3 +1,16 @@
+# Both original constructed closure entries complete; fresh E18 next
+
+SABLE003 completes5requests/8operations,581.298model/643.359loop seconds, unchanged
+158files and checked submission. Original hidden plus ordinary Unicode examples
+independently qualify the name behavior beyond the weak public scope. Exact replay,
+direct input/output/effect review and runtime closure are complete. See
+closure_entries/review/SABLE-003-RESULTS.md. Duplicate record reads and repeated
+chronology interpretation remain findings, not reasons to repeat this closed entry.
+
+MINT001 and SABLE003 close their original constructed boundaries; full Phase A,
+probe/fork, predecessor and E18 procedural obligations remain. Next prepare/replay
+fresh E18 run002 per evolving_observation_entry/RUN002_PLAN.md, publish and run once.
+
 # MINT closure passed; SABLE003 qualified; fresh E18 plan recorded
 
 MINT001 closes its constructed boundary in3requests/4operations,160.016model
