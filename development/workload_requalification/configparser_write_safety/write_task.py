@@ -66,7 +66,10 @@ def expected_native(request):
 
 
 def snapshot(session):
-    return common.snapshot(session)
+    value = common.snapshot(session)
+    # JSON object addresses must sort identically before and after restoration.
+    value['diffs'] = {str(k): v for k, v in value['diffs'].items()}
+    return value
 
 
 def candidate_from_snapshot(value):

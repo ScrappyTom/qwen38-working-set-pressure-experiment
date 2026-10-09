@@ -29,8 +29,8 @@ modules qualifies the custom harness's current-library interpretation.
 
 40 requests, 120 operations, seed 314159, medium reasoning. Existing 56,576-token
 physical context and 23,808 input ceiling; 32,768 is a prospective generation
-reserve, not an output cap. No automatic checks after every edit: explicit checks
-and the existing model-requested edit/check combination are available. All reply
+reserve, not an output cap. No automatic checks after every edit: request an
+explicit check in a subsequent reply. A combined edit/check reply is not offered. All reply
 forms must be verified by the actual decoder before exposure. No live coaching,
 silent extensions, fallback actor, automatic retry or unfinished-draft execution.
 

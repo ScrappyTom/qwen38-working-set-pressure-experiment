@@ -1,4 +1,19 @@
-# Coding priority; COMPASS stopped, parser preparation needs one adapter correction
+# Coding package002 ready: publish, then run once
+
+Read configparser_write_safety/PREPARATION-002-REVIEW.md under development/
+workload_requalification. Five CPU tests,44native forms,17scripted decisions,
+408artifacts/515bindings/133records/18native inputs and all17serialized states
+verify. Initial5,613-token input directly read; no model completion. The prior
+mixed-digit snapshot mismatch and combined-check prose claim are corrected;
+package001 remains preserved. This host offers checks in a later reply.
+
+Publish then execute run_write_safety.py run --version 002 once,40requests/
+120operations, medium uncapped, no coaching/reset/retry/silent extension. Directly
+review every actual input/full reply/effect. At closure run review/verify_run.py
+then review/assess.py with --version 002; review saved implementation, meaningful
+tests, existing-work preservation and prose. No synthetic reading task next.
+
+# Coding priority; COMPASS stopped, parser preparation needs one adapter correction (historical)
 
 The owner's October 9 priority is substantive coding, not papers or additional
 reading-comprehension fixtures. Detailed reports remain appropriate for coding.

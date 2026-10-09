@@ -4,8 +4,9 @@ Current action: real configparser write-safety coding, under the owner's October
 priority. COMPASS001 closed operator_stopped after21requests/29operations with
 partial work, no submission and939/1,092required lines actually delivered. See
 recurrent_probe/review/RUN001-RESULTS.md. It remains incomplete/deferred alongside
-E2. configparser_write_safety preparation001 awaits the bounded serialized-state
-correction described in PREPARATION-001-REVIEW.md; no model completion was sent.
+E2. configparser_write_safety preparation002 now passes the bounded serialized-state
+correction and native/exact-replay qualification; see PREPARATION-002-REVIEW.md.
+Publish then run that coding task once; no model completion has yet been sent.
 
 Historical entry: COMPASS001 began after published qualification85b1a0ac.
 Original SABLE001 and ORBIT001

@@ -66,7 +66,8 @@ Use the existing medium reasoning, uncapped generation, 56,576 physical context,
 seed 314159, 40 requests and 120 operations across the whole contribution.
 These are finite opportunity bounds, not a guarantee of action completion.
 Keep the reasoning, transport and selection policy fixed. Ordinary explicit
-checks and the existing requested edit/check combination remain available.
+checks remain available in a subsequent reply after an accepted edit. This
+selected operating contract does not offer a combined edit/check reply.
 No live coaching, hidden retries, silently enlarged allowance or extraction of
 private drafts. Wait for COMPASS runtime closure before any GPU preparation.
 

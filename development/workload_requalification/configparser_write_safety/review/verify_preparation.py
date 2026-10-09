@@ -1,4 +1,5 @@
 """Replay the saved qualification without inference, native calls or checks."""
+import argparse
 import json
 from pathlib import Path
 import sys
@@ -12,8 +13,8 @@ from working_set_exp.custody import verify_records
 from working_set_exp.jsonutil import canonical_json_bytes, sha256_bytes
 
 
-def verify():
-    task = replay.study.Task('001')
+def verify(version):
+    task = replay.study.Task(version)
     runner = replay.run_write_safety.runner.runner
     manifest = runner.verify_package(task)
     seal = task.read(task.PACKAGE/'SEAL.json')
@@ -61,9 +62,12 @@ def verify():
 
 
 if __name__ == '__main__':
-    path = Path(__file__).with_name('PREPARATION-VERIFICATION-001.json')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--version', default='002')
+    args = parser.parse_args()
+    path = Path(__file__).with_name(f'PREPARATION-VERIFICATION-{args.version}.json')
     try:
-        value = verify()
+        value = verify(args.version)
     except BaseException as error:
         replay.save(path.with_name(path.stem+'-FAILED.json'), dict(status='failed',
             type=type(error).__name__, message=str(error), traceback=traceback.format_exc()))

@@ -95,6 +95,30 @@ class CodingTaskTests(unittest.TestCase):
         self.assertFalse(result['passed'])
         self.assertIn('test_preserves_saved_tests', canonical_json_bytes(self.session.view()).decode())
 
+    def test_serialized_restore_preserves_mixed_digit_edit_history(self):
+        self.act(dict(action='read', path=material.NEW_TESTS, start_line=1, end_line=0))
+        original = self.session.candidate.file_map[material.NEW_TESTS].decode()
+        def append_marker(marker):
+            old = self.session.candidate.file_map[material.NEW_TESTS].decode()
+            result = self.act(dict(action='patch', path=material.NEW_TESTS,
+                old=old, new=old+marker,
+                expected_candidate_id=self.session.candidate.candidate_id,
+                expected_file_sha256=self.session.candidate.file_sha256(material.NEW_TESTS)))
+            self.assertTrue(result['accepted'])
+        append_marker('\n# first saved edit\n')
+        for _ in range(7):
+            self.act(dict(action='read', path=material.NEW_TESTS, start_line=1, end_line=0))
+        append_marker('# second saved edit\n')
+        self.assertEqual(set(self.session.diffs), {2, 10})
+        raw = canonical_json_bytes(study.snapshot(self.session))
+        state = json.loads(raw)
+        candidate = json.loads(study.candidate_bytes(self.session.candidate))
+        restored = self.task.restore(state, candidate, self.folder, replay=True)
+        self.assertEqual(canonical_json_bytes(study.snapshot(restored)), raw)
+        self.assertEqual(canonical_json_bytes(restored.view()), canonical_json_bytes(self.session.view()))
+        self.assertEqual(restored.candidate.file_map[material.NEW_TESTS].decode(),
+                         original+'\n# first saved edit\n# second saved edit\n')
+
 
 if __name__ == '__main__':
     unittest.main()
