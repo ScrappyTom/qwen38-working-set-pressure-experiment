@@ -1,3 +1,12 @@
+# E18 replacement consultation qualified; publish and run D1 once
+
+Read development/workload_requalification/evolving_observation_entry/replacement_dialogue/
+PREPARATION_REVIEW.md. Exact C02 messages/public proposal plus focused questions,
+7,935native tokens,3CPU checks,6artifacts/4custody records, zero completions.
+Publish then consult.py run once. No executor, active-task coaching, automatic
+clarification or task retry. Read full answer and actual evidence before deciding.
+Run002 remains correct code/full coverage but missed original exact recovery.
+
 # E18 run002 closed; focused replacement interpretation next
 
 Owner says keep working unless blocked or a major gap appears. Read
