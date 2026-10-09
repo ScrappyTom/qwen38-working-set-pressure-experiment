@@ -1,4 +1,20 @@
-# Unnamed-section coding package001 ready; publish then execute once
+# Unnamed-section attempt stopped by owner; GPU closed, review complete
+
+Read configparser_unnamed/review/RUN001-RESULTS.md. After 3 hours 35 minutes the
+owner requested immediate shutdown. 17 replies completed and C18 was interrupted;
+8 library edits / 28 operations survive. No parsing/writing implementation, new
+tests, documentation, check request or submission was completed. Existing 373 tests
+pass with 5 skips; the feature contract fails. Exact replay passes and all completed
+inputs/full replies/effects have been reviewed. GPU process/port are closed and the
+temporary heartbeat is paused. Partial work is exported, clearly marked incomplete.
+
+The owner has requested shutdown and review. Do not resume this attempt, advance
+the workload ledger, or start any GPU successor. Retain the complete result and
+the report's observations about repeated planning, action granularity, account
+content and missing progress/cost review. These warrant prospective qualification,
+not a claim that a particular untested host change will solve the problem.
+
+# Unnamed-section coding package001 ready; publish then execute once (historical)
 
 Read configparser_unnamed/PREPARATION-001-REVIEW.md under workload_requalification.
 13CPU execution/environment cases, four integration tests,44native forms and a

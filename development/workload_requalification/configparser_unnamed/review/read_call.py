@@ -46,8 +46,8 @@ def differences(a, b, known, path='input'):
             else:differences(a[i] if i<len(a) else None,b[i],known,path+'/'+str(i))
     elif path.endswith('/content') and isinstance(b,str) and b in known:
         print(path, '[exact preceding input/result body]',hashlib.sha256(b.encode()).hexdigest())
-    elif path.endswith('/content') and isinstance(a,str) and isinstance(b,str) and any(b == a+x for x in known):
-        print(path, '[exact preceding input plus preceding result body]',hashlib.sha256(b.encode()).hexdigest())
+    elif path.endswith('/content') and isinstance(a,str) and isinstance(b,str) and b.startswith(a) and any(b[len(a):] in x for x in known):
+        print(path, '[exact preceding input plus text present in preceding input/result]',hashlib.sha256(b.encode()).hexdigest())
     elif path.endswith('/content') and isinstance(a,str) and isinstance(b,str):
         print(path, '[exact textual delta from preceding input]',hashlib.sha256(b.encode()).hexdigest())
         print(''.join(difflib.unified_diff(a.splitlines(True),b.splitlines(True),fromfile='preceding',tofile='current')))

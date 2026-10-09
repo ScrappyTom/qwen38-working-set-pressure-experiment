@@ -1,0 +1,713 @@
+Let me analyze the current state:
+
+1. I've already added the `_UnnamedSection` class and `UNNAMED_SECTION` sentinel to `Lib/configparser.py`
+2. I've added `UNNAMED_SECTION` to `__all__`
+3. I've added `UnnamedSectionDisabledError` to `__all__`
+4. Current candidate: `dd781e0798b2db4962fd285fded69d9fb54b33db0ac164af30918727833b2c4d`
+5. File SHA: `edd0a67cda5b411506be5b5608872768d62580c0b9fb43a304328dacaacf5b8e`
+
+Looking at the current source, I can see:
+- `UNNAMED_SECTION` sentinel is defined
+- `UnnamedSectionDisabledError` is in `__all__` but NOT yet defined as a class
+- The `RawConfigParser.__init__` doesn't yet have `allow_unnamed_section` parameter
+- `add_section` doesn't handle the sentinel
+- `_read` doesn't handle headerless options for the unnamed section
+- `write()` doesn't emit unnamed section options
+- `read_dict` doesn't preserve sentinel identity
+- `set`, `get`, `_unify_values`, `has_section`, `has_option`, etc. don't handle the sentinel
+
+I need to:
+1. Add `UnnamedSectionDisabledError` class
+2. Add `allow_unnamed_section` parameter to `RawConfigParser.__init__` and `ConfigParser`
+3. Modify `add_section` to handle UNNAMED_SECTION (both allow it when enabled, raise error when disabled)
+4. Modify `_read` to handle headerless options when `allow_unnamed_section=True`
+5. Modify `read_dict` to preserve sentinel identity
+6. Modify `set`, `get`, `_unify_values`, `has_section`, `has_option`, `options`, `items`, `remove_option`, `remove_section`, `__getitem__`, `__setitem__`, `__delitem__`, `__contains__`, `__iter__`, `__len__`, `sections` to handle the sentinel
+7. Modify `write()` to emit unnamed options before headers
+8. Create test file
+9. Update documentation
+
+Let me start by reading the current file to understand the full structure, then make the edits systematically.
+
+I already have the full file visible (lines 1-1388). Let me plan the edits:
+
+1. Add `UnnamedSectionDisabledError` class after `MissingSectionHeaderError` or near other error classes
+2. Add `allow_unnamed_section=False` to `RawConfigParser.__init__`
+3. Store `self._allow_unnamed_section = allow_unnamed_section`
+4. Modify `add_section` to:
+   - If section is UNNAMED_SECTION and not allow_unnamed_section, raise UnnamedSectionDisabledError
+   - If section is UNNAMED_SECTION and allow_unnamed_section, handle it normally
+5. Modify `_read` to handle the case where cursect is None but allow_unnamed_section is True
+6. Modify `read_dict` to preserve sentinel identity (don't convert to str)
+7. Modify `set` to handle UNNAMED_SECTION
+8. Modify `_unify_values` to handle UNNAMED_SECTION
+9. Modify `has_section` to handle UNNAMED_SECTION
+10. Modify `has_option` to handle UNNAMED_SECTION
+11. Modify `options` to handle UNNAMED_SECTION
+12. Modify `items` to handle UNNAMED_SECTION
+13. Modify `remove_option` to handle UNNAMED_SECTION
+14. Modify `remove_section` to handle UNNAMED_SECTION
+15. Modify `__getitem__`, `__setitem__`, `__delitem__`, `__contains__`, `__iter__`, `__len__`, `sections` to handle UNNAMED_SECTION
+16. Modify `write()` to emit unnamed options first
+
+Wait, let me think about the design more carefully.
+
+The UNNAMED_SECTION is a sentinel object (not a string). The `_sections` dict normally maps string section names to dicts. For UNNAMED_SECTION, we need to store it in `_sections` using the sentinel object as a key.
+
+Actually, looking at this more carefully, the `_sections` dict uses section names as keys. Since UNNAMED_SECTION is a hashable object (it's an instance of `_UnnamedSection` with default `__hash__` and `__eq__`), it can be used as a dict key. But we need to be careful:
+- `str(UNNAMED_SECTION)` would give something like `<_configparser._UnnamedSection object at 0x...>` - not useful
+- The section name in `_sections` should be the UNNAMED_SECTION sentinel itself
+
+Wait, but `add_section` currently checks `section == self.default_section` and `section in self._sections`. If we use the sentinel as a key, this should work.
+
+Let me think about what "dictionary input must preserve the sentinel identity rather than convert it to a named string section" means for `read_dict`. Currently `read_dict` does `section = str(section)`. For the unnamed section, we need to NOT convert the sentinel to a string.
+
+Actually, looking more carefully at the requirements:
+- "Support the sentinel through add_section, get/set, section-proxy access, read_dict, and parser[UNNAMED_SECTION] = mapping"
+- "Dictionary input must preserve the sentinel identity rather than convert it to a named string section"
+- "Mapping replacement must replace that section's own options as for ordinary sections"
+
+So in `read_dict`, when the key is UNNAMED_SECTION, we should NOT call `str(section)` on it. We should use it directly as the section key.
+
+For `set()`: The sentinel needs to work as a section name. Currently `set` checks `if not section or section == self.default_section`. For UNNAMED_SECTION, `not section` would be False (it's a truthy object), and `section == self.default_section` would be False. So it would try `self._sections[section]` which would work if we stored it there.
+
+But wait - `set` currently does:
+```python
+def set(self, section, option, value=None):
+    if value:
+        value = self._interpolation.before_set(self, section, option, value)
+    if not section or section == self.default_section:
+        sectdict = self._defaults
+    else:
+        try:
+            sectdict = self._sections[section]
+        except KeyError:
+            raise NoSectionError(section) from None
+    sectdict[self.optionxform(option)] = value
+```
+
+For UNNAMED_SECTION, this should work if the section is in `_sections`. The `not section` check: `not UNNAMED_SECTION` is `False` (the object is truthy by default), so it won't go to defaults. Good.
+
+For `get()`:
+```python
+def get(self, section, option, *, raw=False, vars=None, fallback=_UNSET):
+    try:
+        d = self._unify_values(section, vars)
+    except NoSectionError:
+        ...
+```
+
+`_unify_values` does:
+```python
+def _unify_values(self, section, vars):
+    sectiondict = {}
+    try:
+        sectiondict = self._sections[section]
+    except KeyError:
+        if section != self.default_section:
+            raise NoSectionError(section) from None
+    ...
+    return _ChainMap(vardict, sectiondict, self._defaults)
+```
+
+This should work for UNNAMED_SECTION if it's in `_sections`.
+
+For `has_section`:
+```python
+def has_section(self, section):
+    return section in self._sections
+```
+This should work.
+
+For `has_option`:
+```python
+def has_option(self, section, option):
+    if not section or section == self.default_section:
+        option = self.optionxform(option)
+        return option in self._defaults
+    elif section not in self._sections:
+        return False
+    else:
+        option = self.optionxform(option)
+        return (option in self._sections[section]
+                or option in self._defaults)
+```
+`not UNNAMED_SECTION` is False, so it goes to `section not in self._sections`. This should work.
+
+For `options`:
+```python
+def options(self, section):
+    try:
+        opts = self._sections[section].copy()
+    except KeyError:
+        raise NoSectionError(section) from None
+    opts.update(self._defaults)
+    return list(opts.keys())
+```
+This should work.
+
+For `items`:
+```python
+def items(self, section=_UNSET, raw=False, vars=None):
+    if section is _UNSET:
+        return super().items()
+    d = self._defaults.copy()
+    try:
+        d.update(self._sections[section])
+    except KeyError:
+        if section != self.default_section:
+            raise NoSectionError(section)
+    ...
+```
+This should work.
+
+For `remove_option`:
+```python
+def remove_option(self, section, option):
+    if not section or section == self.default_section:
+        sectdict = self._defaults
+    else:
+        try:
+            sectdict = self._sections[section]
+        except KeyError:
+            raise NoSectionError(section) from None
+    ...
+```
+This should work.
+
+For `remove_section`:
+```python
+def remove_section(self, section):
+    existed = section in self._sections
+    if existed:
+        del self._sections[section]
+        del self._proxies[section]
+    return existed
+```
+This should work.
+
+For `__getitem__`:
+```python
+def __getitem__(self, key):
+    if key != self.default_section and not self.has_section(key):
+        raise KeyError(key)
+    return self._proxies[key]
+```
+This should work if the proxy is stored.
+
+For `__setitem__`:
+```python
+def __setitem__(self, key, value):
+    if key in self and self[key] is value:
+        return
+    if key == self.default_section:
+        self._defaults.clear()
+    elif key in self._sections:
+        self._sections[key].clear()
+    self.read_dict({key: value})
+```
+This calls `read_dict({key: value})` where key is UNNAMED_SECTION. In `read_dict`, we need to NOT convert it to string.
+
+For `__delitem__`:
+```python
+def __delitem__(self, key):
+    if key == self.default_section:
+        raise ValueError("Cannot remove the default section.")
+    if not self.has_section(key):
+        raise KeyError(key)
+    self.remove_section(key)
+```
+This should work.
+
+For `__contains__`:
+```python
+def __contains__(self, key):
+    return key == self.default_section or self.has_section(key)
+```
+This should work.
+
+For `__iter__`:
+```python
+def __iter__(self):
+    return itertools.chain((self.default_section,), self._sections.keys())
+```
+This should work - UNNAMED_SECTION would appear in `self._sections.keys()`.
+
+For `__len__`:
+```python
+def __len__(self):
+    return len(self._sections) + 1
+```
+This should work.
+
+For `sections`:
+```python
+def sections(self):
+    return list(self._sections.keys())
+```
+This should work.
+
+Now for `add_section`:
+```python
+def add_section(self, section):
+    if section == self.default_section:
+        raise ValueError('Invalid section name: %r' % section)
+    if section in self._sections:
+        raise DuplicateSectionError(section)
+    self._sections[section] = self._dict()
+    self._proxies[section] = SectionProxy(self, section)
+```
+
+We need to add a check: if section is UNNAMED_SECTION and not self._allow_unnamed_section, raise UnnamedSectionDisabledError.
+
+For `_read`, the key change is in the "no section header" case:
+```python
+elif cursect is None:
+    raise MissingSectionHeaderError(fpname, lineno, line)
+```
+
+When `allow_unnamed_section` is True, instead of raising, we should create/use the unnamed section:
+```python
+elif cursect is None:
+    if self._allow_unnamed_section:
+        if UNNAMED_SECTION not in self._sections:
+            self._sections[UNNAMED_SECTION] = self._dict()
+            self._proxies[UNNAMED_SECTION] = SectionProxy(self, UNNAMED_SECTION)
+        cursect = self._sections[UNNAMED_SECTION]
+        sectname = UNNAMED_SECTION
+    else:
+        raise MissingSectionHeaderError(fpname, lineno, line)
+```
+
+Wait, but there's a subtlety. The `_read` method tracks `sectname` for duplicate detection. If we use UNNAMED_SECTION as sectname, the duplicate check `(sectname, optname) in elements_added` would work correctly.
+
+Actually wait, there's another issue. In `_read`, when we encounter a section header, we set `sectname = mo.group('header')`. For the unnamed section, we'd set `sectname = UNNAMED_SECTION`. But later, the duplicate option check uses `(sectname, optname) in elements_added`. This should be fine since we're using the same object.
+
+But there's another issue: `elements_added.add(sectname)` for sections. If UNNAMED_SECTION is in elements_added and we encounter another headerless option line, we'd check `(UNNAMED_SECTION, optname) in elements_added` for duplicate options. That's correct behavior.
+
+Now for `read_dict`:
+```python
+def read_dict(self, dictionary, source='<dict>'):
+    elements_added = set()
+    for section, keys in dictionary.items():
+        section = str(section)
+        ...
+```
+
+The problem: `str(UNNAMED_SECTION)` would convert it to a string, losing identity. We need to NOT convert it:
+
+```python
+for section, keys in dictionary.items():
+    if section is not UNNAMED_SECTION:
+        section = str(section)
+    ...
+```
+
+Wait, but the requirement says "The ordinary non-string conversion rules for read_dict remain." So for regular sections, `str(section)` is applied. For UNNAMED_SECTION specifically, we preserve it.
+
+Actually, re-reading: "Dictionary input must preserve the sentinel identity rather than convert it to a named string section." So the sentinel should NOT be converted to a string. Other non-string keys still get converted.
+
+Let me also think about `write()`:
+```python
+def write(self, fp, space_around_delimiters=True):
+    if space_around_delimiters:
+        d = " {} ".format(self._delimiters[0])
+    else:
+        d = self._delimiters[0]
+    if self._defaults:
+        self._write_section(fp, self.default_section,
+                                self._defaults.items(), d)
+    for section in self._sections:
+        self._write_section(fp, section,
+                            self._sections[section].items(), d)
+```
+
+For the unnamed section, we need to write its options WITHOUT a section header, and BEFORE all headers (including the default section header). So the write order is:
+1. Unnamed section options (no header)
+2. Default section (with header)
+3. Named sections (with headers)
+
+But wait - the unnamed section has no header. So we can't use `_write_section` directly (which writes `[section_name]`). We need a different approach: just write the options without a header.
+
+Actually, looking at `_write_section`:
+```python
+def _write_section(self, fp, section_name, section_items, delimiter):
+    fp.write("[{}]\n".format(section_name))
+    for key, value in section_items:
+        self._validate_write_key(key)
+        value = self._interpolation.before_write(self, section_name, key, value)
+        if value is not None or not self._allow_no_value:
+            value = delimiter + str(value).replace('\n', '\n\t')
+        else:
+            value = ""
+        fp.write("{}{}\n".format(key, value))
+    fp.write("\n")
+```
+
+For the unnamed section, we need to write just the items (no header, no trailing blank line? or with trailing blank line?). The requirement says "write() must emit nonempty unnamed options without a section header and before all headers, including the default-section header."
+
+And "An empty unnamed section emits nothing."
+
+So if the unnamed section has no options, we skip it. If it has options, we write them without a header.
+
+Let me think about the format. If we have:
+```
+key1 = value1
+key2 = value2
+[DEFAULT]
+...
+[section1]
+...
+```
+
+The unnamed options come first, then a blank line before the first header? Or immediately followed by the first header?
+
+Looking at the existing `_write_section`, each section ends with `fp.write("\n")` (a blank line). So sections are separated by blank lines. For the unnamed section (no header), I think the options should just be written, followed by a blank line (to separate from the next section header).
+
+Actually, let me reconsider. The format should be:
+```
+key1 = value1
+key2 = value2
+
+[DEFAULT]
+...
+
+[section1]
+...
+```
+
+So unnamed options, blank line, then the rest as normal.
+
+Let me write a helper or modify `write()`:
+
+```python
+def write(self, fp, space_around_delimiters=True):
+    if space_around_delimiters:
+        d = " {} ".format(self._delimiters[0])
+    else:
+        d = self._delimiters[0]
+    # Write unnamed section options first (no header)
+    if UNNAMED_SECTION in self._sections:
+        unnamed_items = list(self._sections[UNNAMED_SECTION].items())
+        if unnamed_items:
+            for key, value in unnamed_items:
+                self._validate_write_key(key)
+                value = self._interpolation.before_write(self, UNNAMED_SECTION, key, value)
+                if value is not None or not self._allow_no_value:
+                    value = d + str(value).replace('\n', '\n\t')
+                else:
+                    value = ""
+                fp.write("{}{}\n".format(key, value))
+            fp.write("\n")
+    if self._defaults:
+        self._write_section(fp, self.default_section,
+                                self._defaults.items(), d)
+    for section in self._sections:
+        if section is UNNAMED_SECTION:
+            continue
+        self._write_section(fp, section,
+                            self._sections[section].items(), d)
+```
+
+Wait, but there's a subtlety: "Reading that output with the feature enabled must preserve the distinct unnamed, default and named values". So if I write unnamed options, then read them back with `allow_unnamed_section=True`, they should be in UNNAMED_SECTION.
+
+But what about reading with the feature disabled? The unnamed options would trigger MissingSectionHeaderError, which is the expected behavior.
+
+Now let me also think about `_join_multiline_values`:
+```python
+def _join_multiline_values(self):
+    defaults = self.default_section, self._defaults
+    all_sections = itertools.chain((defaults,),
+                                   self._sections.items())
+    for section, options in all_sections:
+        for name, val in options.items():
+            if isinstance(val, list):
+                val = '\n'.join(val).rstrip()
+            options[name] = self._interpolation.before_read(self,
+                                                            section,
+                                                            name, val)
+```
+
+This iterates over `self._sections.items()`, which would include UNNAMED_SECTION if it's there. The `before_read` call passes the section (which would be UNNAMED_SECTION). This should be fine since interpolation just passes the value through for `Interpolation()`.
+
+But wait, for `BasicInterpolation.before_read`, it just returns the value unchanged. Same for `ExtendedInterpolation`. So this should be fine.
+
+Now let me also think about `ConfigParser`'s `set` and `add_section`:
+```python
+class ConfigParser(RawConfigParser):
+    def set(self, section, option, value=None):
+        self._validate_value_types(option=option, value=value)
+        super().set(section, option, value)
+
+    def add_section(self, section):
+        self._validate_value_types(section=section)
+        super().add_section(section)
+```
+
+`_validate_value_types` checks `if not isinstance(section, str): raise TypeError(...)`. But UNNAMED_SECTION is NOT a string! So `ConfigParser.add_section(UNNAMED_SECTION)` would raise TypeError.
+
+We need to handle this. The requirement says "Support the sentinel through add_section". So we need to allow the sentinel through `_validate_value_types` or bypass it.
+
+Looking at `_validate_value_types`:
+```python
+def _validate_value_types(self, *, section="", option="", value=""):
+    if not isinstance(section, str):
+        raise TypeError("section names must be strings")
+    if not isinstance(option, str):
+        raise TypeError("option keys must be strings")
+    if not self._allow_no_value or value:
+        if not isinstance(value, str):
+            raise TypeError("option values must be strings")
+```
+
+We need to allow `UNNAMED_SECTION` through. We can modify the check:
+```python
+if section is not UNNAMED_SECTION and not isinstance(section, str):
+    raise TypeError("section names must be strings")
+```
+
+Or we could modify `ConfigParser.add_section` to check for UNNAMED_SECTION before calling `_validate_value_types`.
+
+Actually, I think the cleanest approach is to modify `_validate_value_types` to accept the sentinel:
+
+```python
+def _validate_value_types(self, *, section="", option="", value=""):
+    if section is not UNNAMED_SECTION and not isinstance(section, str):
+        raise TypeError("section names must be strings")
+    ...
+```
+
+Wait, but the default for section is `""` which is a string. And UNNAMED_SECTION is explicitly the sentinel. Let me think...
+
+Actually, the simplest approach: in `ConfigParser.add_section`, check for UNNAMED_SECTION and the disabled error before calling `_validate_value_types`. And in `ConfigParser.set`, allow UNNAMED_SECTION through.
+
+Hmm, but actually `_validate_value_types` is also called from `SectionProxy.__setitem__`. Let me think about this differently.
+
+The cleanest solution: modify `_validate_value_types` to recognize UNNAMED_SECTION as a valid section:
+
+```python
+def _validate_value_types(self, *, section="", option="", value=""):
+    if section is not UNNAMED_SECTION and not isinstance(section, str):
+        raise TypeError("section names must be strings")
+    if not isinstance(option, str):
+        raise TypeError("option keys must be strings")
+    if not self._allow_no_value or value:
+        if not isinstance(value, str):
+            raise TypeError("option values must be strings")
+```
+
+This way, UNNAMED_SECTION passes the type check.
+
+Now, for `ConfigParser.add_section`:
+```python
+def add_section(self, section):
+    self._validate_value_types(section=section)
+    super().add_section(section)
+```
+
+With the modified `_validate_value_types`, UNNAMED_SECTION would pass. Then `super().add_section(section)` would be `RawConfigParser.add_section(UNNAMED_SECTION)`. In that method, we need to check:
+- If section is UNNAMED_SECTION and not self._allow_unnamed_section: raise UnnamedSectionDisabledError
+- Otherwise, proceed normally
+
+Let me also think about what happens with the `ConfigParser` constructor. The requirement says "Add keyword-only allow_unnamed_section=False to both parser constructors." Since `ConfigParser` inherits from `RawConfigParser`, adding it to `RawConfigParser.__init__` should be sufficient (it's already keyword-only with `*`).
+
+Wait, looking at the current `__init__`:
+```python
+def __init__(self, defaults=None, dict_type=_default_dict,
+             allow_no_value=False, *, delimiters=('=', ':'),
+             comment_prefixes=('#', ';'), inline_comment_prefixes=None,
+             strict=True, empty_lines_in_values=True,
+             default_section=DEFAULTSECT,
+             interpolation=_UNSET, converters=_UNSET):
+```
+
+I need to add `allow_unnamed_section=False` as a keyword-only parameter. Since it's after `*`, it's already keyword-only. I'll add it after `allow_no_value` or near the end.
+
+Actually, looking at the parameter list, `allow_no_value` is a positional-or-keyword parameter (before `*`). The rest are keyword-only. I should add `allow_unnamed_section` in the keyword-only section.
+
+Now let me plan all the edits I need to make to the file. This is a substantial feature. Let me list them:
+
+1. Add `UnnamedSectionDisabledError` class (after `InvalidWriteError` or near other errors)
+2. Modify `RawConfigParser.__init__` to add `allow_unnamed_section=False` parameter and store it
+3. Modify `add_section` to handle UNNAMED_SECTION
+4. Modify `read_dict` to preserve sentinel identity
+5. Modify `_read` to handle headerless options when feature enabled
+6. Modify `write()` to emit unnamed options
+7. Modify `_validate_value_types` to accept UNNAMED_SECTION
+8. Modify `ConfigParser.__init__` (if needed - probably not since it inherits)
+
+Wait, `ConfigParser` doesn't override `__init__`, so it inherits from `RawConfigParser`. Good.
+
+Let me now start making edits. I'll do them one at a time.
+
+First, let me add the `UnnamedSectionDisabledError` class. I'll put it after `InvalidWriteError`:
+
+Looking at the source, `InvalidWriteError` ends around line 270:
+```python
+class InvalidWriteError(Error):
+    """Raised when writing an option name that would produce ambiguous output.
+
+    Raised by write() when an option name matches the section header pattern
+    or contains a configured delimiter string.
+    """
+
+    def __init__(self, option):
+        Error.__init__(self, 'Option name %r is ambiguous for writing' % (option,))
+        self.option = option
+        self.args = (option,)
+```
+
+After that comes the `_UNSET = object()` line. I'll add `UnnamedSectionDisabledError` between them.
+
+Actually, let me re-read the file more carefully to get exact line positions. The file is 1388 lines. Let me identify the exact text I need to patch.
+
+Let me start with the first edit: adding `UnnamedSectionDisabledError`. I'll use the text after `InvalidWriteError`'s `self.args = (option,)` line and before the `_UNSET` comment.
+
+Looking at the source:
+```
+    def __init__(self, option):
+        Error.__init__(self, 'Option name %r is ambiguous for writing' % (option,))
+        self.option = option
+        self.args = (option,)
+
+
+# Used in parser getters to indicate the default behaviour when a specific
+# option is not found it to raise an exception. Created to enable `None` as
+# a valid fallback value.
+_UNSET = object()
+```
+
+I'll insert `UnnamedSectionDisabledError` between `self.args = (option,)` and the `_UNSET` comment.
+
+Let me do this edit:
+
+old:
+```
+        self.args = (option,)
+
+
+# Used in parser getters to indicate the default behaviour when a specific
+# option is not found it to raise an exception. Created to enable `None` as
+# a valid fallback value.
+_UNSET = object()
+```
+
+new:
+```
+        self.args = (option,)
+
+
+class UnnamedSectionDisabledError(Error):
+    """Raised when attempting to use the unnamed section while the feature
+    is disabled."""
+
+    def __init__(self):
+        Error.__init__(self, 'Unnamed section is not enabled')
+        self.args = ()
+
+
+# Used in parser getters to indicate the default behaviour when a specific
+# option is not found it to raise an exception. Created to enable `None` as
+# a valid fallback value.
+_UNSET = object()
+```
+
+Wait, I need to be careful about what text is unique. Let me check - `self.args = (option,)` appears in `InvalidWriteError.__init__`. Is it unique? Let me check... `InvalidWriteError` is the last error class. The `self.args = (option,)` line with the specific indentation should be unique in context.
+
+Actually, let me use a longer, more unique match. Let me use:
+
+```
+class InvalidWriteError(Error):
+    """Raised when writing an option name that would produce ambiguous output.
+
+    Raised by write() when an option name matches the section header pattern
+    or contains a configured delimiter string.
+    """
+
+    def __init__(self, option):
+        Error.__init__(self, 'Option name %r is ambiguous for writing' % (option,))
+        self.option = option
+        self.args = (option,)
+
+
+# Used in parser getters to indicate the default behaviour when a specific
+# option is not found it to raise an exception. Created to enable `None` as
+# a valid fallback value.
+_UNSET = object()
+```
+
+This is definitely unique. Let me use this as the old text and insert the new class.
+
+Actually, this is getting complex. Let me think about the most efficient way to do this. I have 107 actions remaining. Let me be systematic.
+
+Let me start with the edits. I'll do them in order:
+
+Edit 1: Add UnnamedSectionDisabledError class
+Edit 2: Add allow_unnamed_section to __init__
+Edit 3: Modify add_section
+Edit 4: Modify read_dict
+Edit 5: Modify _read (the cursect is None case)
+Edit 6: Modify write()
+Edit 7: Modify _validate_value_types
+Edit 8: Create test file
+Edit 9: Update docs
+
+Let me start. I'll use patch for each.
+
+Actually, I realize I should be more careful. Let me re-read the requirements:
+
+"Add keyword-only allow_unnamed_section=False to both parser constructors."
+
+Since ConfigParser inherits from RawConfigParser and doesn't override __init__, adding it to RawConfigParser.__init__ covers both.
+
+"Export UNNAMED_SECTION, a distinct non-string section sentinel, and UnnamedSectionDisabledError, a subclass of Error."
+
+Done for UNNAMED_SECTION. Need UnnamedSectionDisabledError.
+
+"With the feature disabled, headerless option input must still raise MissingSectionHeaderError; explicitly adding the sentinel section must raise UnnamedSectionDisabledError."
+
+So:
+- `read_string("key=value")` with allow_unnamed_section=False → MissingSectionHeaderError
+- `parser.add_section(UNNAMED_SECTION)` with allow_unnamed_section=False → UnnamedSectionDisabledError
+
+"With the feature enabled, options before the first section header belong to UNNAMED_SECTION, separately from defaults and named sections."
+
+"Support read_string, read_file and normal multi-source merging."
+
+"Comments/blank lines, option name transformation, strict duplicate checks, continuation and allow_no_value behavior must remain consistent with existing sections."
+
+"Empty/comment-only input and input beginning with an ordinary section need not create an unused unnamed section."
+
+So if the input is just comments/blanks, or starts with a section header, we should NOT create the UNNAMED_SECTION in _sections. The section should only be created when we actually encounter an option line before any header.
+
+"Support the sentinel through add_section, get/set, section-proxy access, read_dict, and parser[UNNAMED_SECTION] = mapping."
+
+"Dictionary input must preserve the sentinel identity rather than convert it to a named string section."
+
+"Mapping replacement must replace that section's own options as for ordinary sections."
+
+"Preserve defaults, interpolation and converters; unnamed options must not become defaults inherited by named sections."
+
+So UNNAMED_SECTION options are NOT in _defaults. They're in _sections[UNNAMED_SECTION].
+
+"The ordinary non-string conversion rules for read_dict remain."
+
+So for read_dict, non-string section keys (other than UNNAMED_SECTION) still get converted to str.
+
+"write() must emit nonempty unnamed options without a section header and before all headers, including the default-section header."
+
+"Reading that output with the feature enabled must preserve the distinct unnamed, default and named values, including with a customized default-section name."
+
+"An empty unnamed section emits nothing."
+
+"Preserve delimiters, valueless options and existing formatting for named sections."
+
+"The saved InvalidWriteError key protections must apply to unnamed options too."
+
+So `_validate_write_key` must be called for unnamed options.
+
+"Do not weaken the existing multiline-continuation repair."
+
+OK, I think I have a good understanding. Let me proceed with the edits.
+
+Let me start with edit 1: Adding UnnamedSectionDisabledError.
