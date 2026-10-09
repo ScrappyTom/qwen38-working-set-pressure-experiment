@@ -1,6 +1,20 @@
 # Corpus reconciliation in progress
 
-Current next action: native qualification/publication and one original SABLE run
+Current action: original E12-OBS-COMPASS run001 is in progress after published
+qualification85b1a0ac. No outcome is claimed yet. Original SABLE001 and ORBIT001
+are now closed with exact replay, direct transcript review and independent
+artifact/procedure assessment. See phase_entries/receipt_entries/sable/review/
+RUN001-RESULTS.md and recurrent_entries/review/RUN001-RESULTS.md. ORBIT's failed
+conservative route/byte screen remains alongside its separate original-contract
+assessment; it is not silently overwritten. COMPASS adds three actual recurrent
+probe productions and later exact recovery. The owner's October 9 direction
+prioritizes coding, not further reading-comprehension fixtures. Finish and seal
+the already-running COMPASS attempt, then proceed to real implementation and
+regression work. E2's distinct predecessor-probe entry is deferred and remains
+open; it cannot inherit a current-probe-at-fork guard or be counted as passed.
+Detailed reports remain outputs of coding work. See configparser_write_safety/PLAN.md.
+
+Historical prior next action: native qualification/publication and one original SABLE run
 under phase_entries/receipt_entries/PLAN.md. Original E14 MINT run001 is complete:
 22requests/37operations, all728required lines, current probe produced and exactly
 recovered before edit, capacity rejection/replacement recovery, correct saved code
