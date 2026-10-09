@@ -1,3 +1,17 @@
+# ANCHOR phase/probe package001 qualified; publish then execute once
+
+Read development/workload_requalification/phase_entries/probe_entry/PREPARATION-001-REVIEW.md.
+10CPU checks,48native forms,26scripted decisions; exact replay692artifacts/769bindings/
+476records/52native inputs. Initial6,670tokens, full input read; no supplied marker,
+account or group. Original in-task probe production and exact recovery are ready.
+Runtime closed. Publish then run run_probe.py run --version 001 once in that area.
+32requests/96operations across both phases, current medium policy, no coaching,
+reset/retry/silent extension or bound-source change. Read every full response and
+actual input/effect. After normal closure run review/verify_run.py --version 001,
+then review/post_run/assess.py --version 001; direct procedure/artifact review and
+publication remain required. LUMEN closed; E18 and wider corpus obligations remain.
+Continue unless blocked or a major gap appears.
+
 # Full-phase source entry complete; implement the separate probe entry
 
 Read development/workload_requalification/phase_entries/review/RUN002-RESULTS.md.
