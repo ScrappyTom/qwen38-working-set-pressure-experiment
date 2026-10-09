@@ -1,3 +1,15 @@
+# ORBIT package001 qualified: publish then run once
+
+See recurrent_entries/PREPARATION-001-REVIEW.md.38native forms/40scripted decisions,
+806artifacts/604bindings/561records/64native inputs replay exactly; actual serialized
+restores pass. Full6,333-token initial input and consequential script support read;
+zero model completions, runtime closed. Publish then one uncoached original four-phase
+entry,64requests/192operations total, unchanged medium policy. No reset/coaching/
+retry/silent extension or bound-source changes. Review exact inputs/full replies,
+replay, independently grade phase-specific work and policy reacquisition, publish.
+Scripted feasibility is not actor completion. Remaining original requirements stay
+open; continue unless blocked or major gap.
+
 # SABLE full entry complete; original recurrent source entry next
 
 SABLE001 completed17requests/26operations with correct two-file work, all728required

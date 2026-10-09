@@ -1,3 +1,18 @@
+# ORBIT package001 qualified: publish then execute once
+
+Read development/workload_requalification/recurrent_entries/PREPARATION-001-REVIEW.md.
+38native forms/40scripted decisions, exact806artifacts/604bindings/561records/
+64native inputs and serialized restores pass. Complete6,333-token initial input
+and consequential script support reviewed; no completions; runtime closed.
+Publish then run recurrent_entries/run_recurrent.py run --version 001 once.
+64requests/192operations across original A/B/C/D, no reset/coaching/retry/silent
+extension or bound-source change. Read all actual inputs/full replies/effects.
+At closure exact review/verify_run.py then review/post_run/assess.py with version001
+(CLI spaces), direct artifact/procedure review and publication. Preserve B name
+through C policy mutation; assess D post-C policy reacquisition separately from
+correct final output. Account benefit is not assumed. Continue unless blocked or
+major gap. E18 recovery miss and predecessor/recurrent-probe entries remain open.
+
 # SABLE full entry complete; implement original recurrent source entry
 
 Read development/workload_requalification/phase_entries/receipt_entries/sable/review/RUN001-RESULTS.md
