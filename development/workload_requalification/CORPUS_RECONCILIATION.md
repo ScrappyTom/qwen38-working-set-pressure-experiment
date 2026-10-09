@@ -1,7 +1,12 @@
 # Corpus reconciliation in progress
 
-Current next action: implement/qualify phase_entries/receipt_entries/PLAN.md for
-original E14 MINT and SABLE full entries. E13-OBS-ANCHOR run001 is complete across
+Current next action: native qualification/publication and one original SABLE run
+under phase_entries/receipt_entries/PLAN.md. Original E14 MINT run001 is complete:
+22requests/37operations, all728required lines, current probe produced and exactly
+recovered before edit, capacity rejection/replacement recovery, correct saved code
+and checked submission. See receipt_entries/mint/review/RUN001-RESULTS.md under
+phase_entries for costs, exact replay and retained friction. This is separate from
+the earlier constructed MINT closure entry. E13-OBS-ANCHOR run001 is complete across
 both phases:17requests/26operations, current integrity produced and exactly recovered
 before repair, all728required lines, correct saved work and checked submission.
 See phase_entries/probe_entry/review/RUN001-RESULTS.md for replay, costs and limits.

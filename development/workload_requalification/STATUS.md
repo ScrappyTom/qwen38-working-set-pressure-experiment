@@ -1,3 +1,25 @@
+# MINT full entry complete; qualify and run original SABLE
+
+Read development/workload_requalification/phase_entries/receipt_entries/mint/review/RUN001-RESULTS.md.
+MINT001 completed 22 requests/37 operations, correct two-file work, all728 required
+lines, exact current probe recovery before editing, and checked submission. One
+capacity rejection reached Qwen; it chose the replacement and completed. Replay:
+864 records,84 native inputs,39 serialized states,604 bindings. Original programs,
+eight independent examples and wire assertion pass;155 other files unchanged.
+27.932 model/32.028 loop minutes. All full responses/actual inputs/effects reviewed.
+Runtime closed. Preserve extra recoveries and tiny-page costs in the result.
+
+Publish this result, then qualify the existing SABLE adapter with run_receipt.py
+prepare --case E14-STALE-SABLE --version 001. Replay preparation and inspect actual
+initial input and scope; publish before one uncoached run. Preserve original
+predecessor public check and successor check; public tests only the stable invariant,
+so independently assess normalized-name behavior. Keep32/96 total opportunity,
+medium policy, no coaching/reset/retry/silent extension or bound-source changes.
+After closure replay and directly review before the next workload. The account rows
+crowding bounded history are a recorded follow-up candidate, not an adopted policy.
+E18's missed recovery and recurrent/predecessor contracts remain open. Continue
+unless blocked or a major gap appears.
+
 # MINT full-entry package001 ready: publish, then execute once
 
 Read development/workload_requalification/phase_entries/receipt_entries/mint/PREPARATION-001-REVIEW.md.
