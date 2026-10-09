@@ -1,3 +1,20 @@
+# Fresh E20 verifier contribution qualified
+
+Read development/workload_requalification/ecological_verifier_entry/PLAN.md and
+PREPARATION_REVIEW.md. Plan192d4716 precedes preparation003: five CPU checks,
+36native forms,20scripted decisions, four actual fail/fail/fail/pass checks and
+submission; zero model completions. Initial7,639/peak14,823 tokens;397artifacts,
+469bindings,238custody records and20checkpoints verify. Preserve the two failed
+preparations and corrected inspector/test assumptions.
+
+The original25-file E20-OBS-VERIFIER-SAFETY world, exact task and two observations
+remain. A declared expanded public checker covers native Windows paths and invalid
+nonfinite timeouts omitted by the old graders; preserve original grades separately.
+Publish the qualified package, then one finite uncoached run003 with32requests/
+96operations, seed173205, medium uncapped. No prior account/source/history, supplied
+repair, live coaching, retries or extension. Full review/audit precedes conclusions.
+Interpolation stays closed; the wider workload ledger and pressure work stay open.
+
 # Interpolation lineage closed; return to the distinct workload ledger
 
 Read development/workload_requalification/interpolation_completion/closure_entry/
