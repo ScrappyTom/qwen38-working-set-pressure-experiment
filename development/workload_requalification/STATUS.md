@@ -1,3 +1,33 @@
+# Verifier containment contribution closed; return to remaining entries
+
+Read ecological_verifier_entry/containment_entry/review/RESULTS.md and its complete
+READING_NOTES.md. Published preparation efef19e7 precedes one review-directed,
+uncoached continuation001. Qwen saves three validator lines, checks the actual
+successor, consumes its pass, updates the account and submits c880924b. Three new
+requests/four operations:15.309model/15.972loop minutes. No new read, failed check,
+selection change or coaching. All24other files and prior timeout repair are exact.
+
+Replay verifies106artifacts,1206source bindings,82custody records,6checkpoints and
+three private runtime hashes. Independent original public/hidden, parent and
+successor checks pass; native consumer review rejects1152unsafe spellings and
+preserves7valid controls under two roots. Runtime/GPU are released. Whole lineage:
+23requests/33operations,52.033model minutes. Preserve the original parent grades
+and incomplete-containment outcome; this is a declared successor, not a fresh
+three-request solution or general security certification.
+
+The account ends factual but lacks the repair explanation; no later use or account
+benefit is established. Generation remains costly (C21=7231tokens,C22=5012before
+checking). Record the category ambiguity and mandated later check turn without
+claiming a tested remedy. A separate reporting correction scopes inherited check
+opportunities to their original96-limit job, and new check31to65. The raw sealed
+summary had recomputed old rows under65; no model input/counter was affected.
+
+Close this contribution. Next reconcile the exact E17 historical-action recovery
+entry and other remaining temporal/legacy obligations before choosing its thin
+adapter. Preserve genuine retired-source/history dependencies and qualify actual
+retrieval-to-edit information paths. No new memory system, forced account update,
+effort change or repeat of this repair. The corpus and pressure ledger remain open.
+
 # Verifier run closed; containment qualification remains open
 
 Read development/workload_requalification/ecological_verifier_entry/review/RESULTS.md,

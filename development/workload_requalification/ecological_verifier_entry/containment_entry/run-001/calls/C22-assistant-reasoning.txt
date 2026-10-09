@@ -1,0 +1,232 @@
+Let me understand the current situation:
+
+1. This is a new containment-contract completion job continuing from a previously submitted verifier repair.
+2. The previous job was submitted and passed - that's historical.
+3. The new job adds path-component normalization and Windows joining checks.
+4. The task says: "The new public checker retains all original and parent checks and adds initial, dot-prefixed and interior drive forms, rooted/UNC and traversal forms, plus valid relative paths composed under two Windows workspace roots."
+
+Looking at the current state:
+- Current candidate: `c880924bc283743b17d054df83b3848c38700a713e461740b41b50e0981c9f30`
+- The previous patch (EVT-0030) added drive-letter detection in `_safe_relative_path` for individual path parts
+- The last check (RES-0028) was on candidate `36e21200c5213d1621ed91025ce0f8404bd41846d6a42e3d44d90085a6f53c34` which PASSED, but that was the PREVIOUS candidate before the drive-letter fix was applied
+- Wait, let me re-read. The sequence is:
+  - EVT-0025: check public on candidate 4c920efc... → FAILED
+  - EVT-0026: patch on verifiers.py → candidate 36e21200...
+  - EVT-0027: record_account
+  - EVT-0028: check public on candidate 36e21200... → PASSED
+  - EVT-0029: submit (the previous job's submission)
+  - EVT-0030: patch on verifiers.py → candidate c880924b... (current)
+
+So the current candidate c880924b has the drive-letter fix applied (rejecting parts matching `^[A-Za-z]:`), but no check has been run on it yet.
+
+The new public checker adds:
+- initial, dot-prefixed and interior drive forms
+- rooted/UNC and traversal forms
+- plus valid relative paths composed under two Windows workspace roots
+
+Let me look at the current `_safe_relative_path` function:
+
+```python
+def _safe_relative_path(path_or_name: str) -> PurePosixPath | None:
+    normalized = path_or_name.replace("\\", "/")
+    if re.match(r"^[A-Za-z]:", normalized):
+        return None
+    path = PurePosixPath(normalized)
+    if path.is_absolute() or ".." in path.parts or not path.parts:
+        return None
+    for part in path.parts:
+        if re.match(r"^[A-Za-z]:", part):
+            return None
+    return path
+```
+
+The new checker adds:
+1. **initial drive forms** - like `C:path` or `C:file.txt` (drive letter followed by colon but not slash) - these are "drive-relative" paths on Windows
+2. **dot-prefixed drive forms** - like `./C:path` or `.//C:file`
+3. **interior drive forms** - drive letters appearing in interior path components
+4. **rooted/UNC forms** - like `//server/share` or `/drive/path` or `\\?\C:\path`
+5. **traversal forms** - `..` in various positions
+6. **valid relative paths composed under two Windows workspace roots** - ensuring that when you join a workspace root with a relative path, you stay within the workspace
+
+Let me think about what the new checker likely tests:
+
+For Windows path containment:
+- `C:file.txt` - drive-relative path (no slash after colon) - should be rejected
+- `./C:file.txt` - dot-prefixed drive form - should be rejected  
+- `sub/C:file.txt` - interior drive form - should be rejected
+- `//server/share/file` - UNC path - should be rejected
+- `///etc/passwd` - rooted path - should be rejected (PurePosixPath would see this as absolute)
+- `..\\..\\etc\\passwd` - traversal with backslashes - should be rejected
+- Valid relative paths like `src/main.py`, `data/file.json` - should be accepted
+- Two Windows workspace roots - paths composed under them should stay within bounds
+
+Wait, let me think more carefully about what "initial, dot-prefixed and interior drive forms" means:
+
+1. **Initial drive forms**: `C:path`, `D:file.txt` - a path that starts with a drive letter. These are "drive-relative" on Windows (relative to the current directory on that drive). Currently the code checks `re.match(r"^[A-Za-z]:", normalized)` which catches `C:path` and `C:file.txt`. Good.
+
+2. **Dot-prefixed drive forms**: `./C:path`, `.\C:file.txt` - a dot/./ prefix followed by a drive form. After normalization to `/`, this becomes `./C:path` → `./C:file`. PurePosixPath would parse this as parts `['.', 'C:file']`... wait no. Let me think.
+
+Actually `PurePosixPath("./C:path")` - let's think about what parts this gives. PurePosixPath splits on `/`. So `"./C:path"` → parts would be `('.', 'C:path')`. Wait, actually I need to be careful. `PurePosixPath` normalizes `.` away. Let me think...
+
+Actually in Python:
+- `PurePosixPath("./C:path").parts` → `('C:path',)` - the `.` is normalized away
+- `PurePosixPath("./C:file.txt").parts` → `('C:file.txt',)`
+
+So a dot-prefixed drive form like `./C:path` would have parts `('C:path',)` after PurePosixPath normalization. The current code checks each part with `re.match(r"^[A-Za-z]:", part)` which would catch `C:path` since it starts with a letter followed by `:`.
+
+Wait, but what about `..` prefixed? Like `../C:path`? The `..` would be caught by the `".." in path.parts` check.
+
+3. **Interior drive forms**: Like `subdir/C:file.txt` or `data/D:notes`. After PurePosixPath parsing, parts would be `('subdir', 'C:file.txt')`. The current code checks each part with the regex, so `C:file.txt` would match `^[A-Za-z]:` and be rejected. Good.
+
+4. **Rooted/UNC forms**: 
+   - UNC: `//server/share/file` → PurePosixPath would give parts `('server', 'share', 'file')`... wait, actually on POSIX, `//` is implementation-defined but typically treated as `/`. Let me check: `PurePosixPath("//server/share").parts` → `('/', 'server', 'share')`. So `path.is_absolute()` would be True. Good, that's caught.
+   - What about `\\?\C:\path`? After backslash replacement: `//?/C:/path` → PurePosixPath gives `('/', '?', 'C:', 'path')`. `is_absolute()` is True. Caught.
+   - What about a single leading slash? `/etc/passwd` → `is_absolute()` True. Caught.
+   - What about `///path`? → `is_absolute()` True. Caught.
+
+5. **Traversal forms**: `..` in any position. Already handled by `".." in path.parts`.
+
+6. **Valid relative paths composed under two Windows workspace roots**: This is about the `_resolve_safe_cwd` and `_materialize_artifacts` functions. When you do `workspace.joinpath(*relative.parts)`, the result should stay within the workspace. The `_resolve_safe_cwd` already does a `cwd.relative_to(workspace_resolved)` check. But `_materialize_artifacts` doesn't have that check - it just does `workspace.joinpath(*relative.parts)` and writes.
+
+Wait, let me re-read `_materialize_artifacts`:
+```python
+def _materialize_artifacts(workspace: Path, artifacts: dict[str, Artifact]) -> None:
+    for artifact in artifacts.values():
+        relative = _safe_relative_path(artifact.path_or_name)
+        if relative is None:
+            continue
+        target = workspace.joinpath(*relative.parts)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(artifact.text, encoding="utf-8")
+```
+
+It relies on `_safe_relative_path` to reject dangerous paths. If `_safe_relative_path` correctly rejects all absolute, traversal, and drive-letter paths, then `joinpath` with only relative parts should stay within the workspace.
+
+But wait - what about the "two Windows workspace roots" aspect? The task says "valid relative paths composed under two Windows workspace roots." This might mean the checker tests that:
+- Given workspace root `/tmp/abc123/` (or `C:\temp\abc123\` on Windows), a relative path like `src/main.py` joins to stay within
+- Given another workspace root, same behavior
+
+Since we're running on Windows (the task says "ordinary Python on Windows"), the workspace path would be a Windows path. `tempfile.TemporaryDirectory()` on Windows gives something like `C:\Users\...\Temp\ail_verify_XXXX`.
+
+Let me think about what could go wrong:
+
+The key issue is: on Windows, `PurePosixPath` is being used to parse paths that might contain Windows-style syntax. The code normalizes backslashes to forward slashes first, then uses PurePosixPath.
+
+Let me think about edge cases:
+- `C:\Windows\System32` → normalized to `C:/Windows/System32` → caught by `^[A-Za-z]:` prefix check
+- `C:file.txt` → normalized to `C:file.txt` → caught by `^[A-Za-z]:` prefix check
+- `./C:file.txt` → normalized to `./C:file.txt` → PurePosixPath parts: `('C:file.txt',)` → caught by per-part regex
+- `../etc/passwd` → normalized to `../etc/passwd` → PurePosixPath parts: `('..', 'etc', 'passwd')` → caught by `".." in path.parts`
+- `//server/share` → normalized to `//server/share` → PurePosixPath: `('/', 'server', 'share')` → `is_absolute()` True
+- `subdir/../../etc/passwd` → PurePosixPath: `('subdir', '..', '..', 'etc', 'passwd')` → `".." in path.parts` → caught
+
+Hmm, what about a path like `..C:file`? That's not a drive form, just a file named `..C:file`. That should be fine - it's a valid relative path.
+
+What about `C:` alone (just the drive letter and colon)? 
+- `re.match(r"^[A-Za-z]:", "C:")` → matches → rejected. Good.
+
+What about just `:` or `C` without colon?
+- `:` → PurePosixPath(":").parts → `(':')` → doesn't match `^[A-Za-z]:` → would be accepted as a relative path. Is that a problem? A file named `:` is unusual but not a traversal risk.
+- `C` → PurePosixPath("C").parts → `('C',)` → doesn't match → accepted. Fine, it's just a relative filename.
+
+What about the "dot-prefixed" forms more carefully?
+- `./C:/path` → normalized same → PurePosixPath("./C:/path").parts → let me think... PurePosixPath normalizes `.` so parts would be `('C:', 'path')`. The part `C:` matches `^[A-Za-z]:` → rejected. Good.
+- `.\C:file` on Windows → normalized to `./C:file` → PurePosixPath parts `('C:file',)` → rejected. Good.
+
+What about `../C:file`?
+- PurePosixPath("../C:file").parts → `('..', 'C:file')` → caught by `".." in path.parts`. Good.
+
+What about interior forms like `data/C:notes.txt`?
+- PurePosixPath("data/C:notes.txt").parts → `('data', 'C:notes.txt')` → part `C:notes.txt` matches `^[A-Za-z]:` → rejected. Good.
+
+What about `data/c:file.txt` (lowercase)?
+- `re.match(r"^[A-Za-z]:", "c:file.txt")` → matches (lowercase c is in `[A-Za-z]`) → rejected. Good.
+
+What about a path like `a:C` (single letter, colon, then more)?
+- If it's the first part: `re.match(r"^[A-Za-z]:", "a:C")` → matches → rejected. But wait, is `a:C` really a drive path? On Windows, `a:C` means "file C on drive A". So yes, it should be rejected.
+
+What about `ab:C`? On Windows, `ab:C` is NOT a drive-relative path - it's a file named `ab:C` in the current directory (since only single-letter prefixes are drive letters). So `re.match(r"^[A-Za-z]:", "ab:C")` would match and reject it, which is overly strict but safe. For a containment check, being overly strict is fine.
+
+Now, the "two Windows workspace roots" aspect. I think this means the checker tests the containment property with different workspace paths. Since `_safe_relative_path` just returns a PurePosixPath or None, and the actual joining happens in `_materialize_artifacts` and `_resolve_safe_cwd`, the key is that:
+1. `_safe_relative_path` rejects anything that could escape
+2. The joining operations stay within bounds
+
+For `_resolve_safe_cwd`, there's already an explicit `relative_to` check. For `_materialize_artifacts`, there's no explicit check - it trusts `_safe_relative_path`. If `_safe_relative_path` correctly rejects all dangerous forms, the join is safe.
+
+But wait - what if the path is something like `a/b` and the workspace is `/tmp/ws`? Then `workspace.joinpath('a', 'b')` → `/tmp/ws/a/b`. That's fine.
+
+What about empty parts or weird PurePosixPath behavior? `PurePosixPath("")` has `.parts` → `()`. The `not path.parts` check catches that.
+
+I think the current code with the EVT-0030 patch might actually be sufficient. Let me think about what the new checker specifically tests that the old one didn't:
+
+The task says: "adds initial, dot-prefixed and interior drive forms, rooted/UNC and traversal forms, plus valid relative paths composed under two Windows workspace roots"
+
+Let me think about whether there are any gaps:
+
+1. **Initial drive forms**: `C:path`, `C:file` → caught by prefix regex ✓
+2. **Dot-prefixed drive forms**: `./C:path` → PurePosixPath normalizes `.` away, part `C:path` caught by per-part regex ✓
+3. **Interior drive forms**: `dir/C:file` → part `C:file` caught by per-part regex ✓
+4. **Rooted forms**: `/path`, `//path` → `is_absolute()` ✓
+5. **UNC forms**: `//server/share` → `is_absolute()` ✓ (PurePosixPath treats `//` as root)
+6. **Traversal forms**: `..` anywhere → `".." in path.parts` ✓
+7. **Valid relative paths under workspace roots**: `src/file.py`, `data/sub/file.json` → accepted, join stays within ✓
+
+Wait, I need to think about one more thing. What about Windows UNC paths with backslashes?
+- `\\server\share\file` → normalized to `//server/share/file` → PurePosixPath: `('/', 'server', 'share', 'file')` → `is_absolute()` ✓
+
+What about `\\?\C:\path` (Windows extended path)?
+- Normalized to `//?/C:/path` → PurePosixPath: `('/', '?', 'C:', 'path')` → `is_absolute()` ✓
+
+What about a path that's just `.`?
+- `PurePosixPath(".")` → parts `()` → `not path.parts` → rejected. Is that correct? A `.` path means "current directory" which is the workspace itself. For `_resolve_safe_cwd`, the code already handles `.` specially (returns workspace). For `_materialize_artifacts`, a `.` path would be rejected and the artifact skipped. That seems fine - an artifact shouldn't have a path of just `.`.
+
+What about `..`?
+- `PurePosixPath("..")` → parts `('..',)` → caught by `".." in path.parts` ✓
+
+Now, the critical question: is there any case where `_safe_relative_path` accepts a path that, when joined with a Windows workspace path, would escape the workspace?
+
+On Windows, `Path("C:/temp/ws").joinpath("a", "b")` → `C:/temp/ws/a/b`. As long as the parts are truly relative (no absolute, no `..`, no drive letters), the join stays within.
+
+But what about a subtle case: what if `_safe_relative_path` accepts a path, but on Windows, the resulting join behaves differently? For instance, if we're using `PurePosixPath` for parsing but `Path` (which on Windows is `WindowsPath`) for joining...
+
+`workspace.joinpath(*relative.parts)` where `relative` is a `PurePosixPath` and `workspace` is a `Path` (WindowsPath on Windows). The `joinpath` with string parts should work fine - it just appends them.
+
+Actually wait - `PurePosixPath.parts` returns a tuple of strings. `Path.joinpath(*parts)` where parts are strings like `('src', 'main.py')` → `Path("C:/temp/ws/src/main.py")`. That's correct.
+
+I'm becoming fairly confident the current code is correct. But let me think about whether there's a subtle issue with the per-part regex.
+
+The regex `r"^[A-Za-z]:"` matches any path component that starts with a single letter (upper or lower case) followed by a colon. This would match:
+- `C:` (drive reference)
+- `C:file` (drive-relative)
+- `a:b` (single-letter drive relative)
+- BUT ALSO: `a:b` where `a` is not meant as a drive (but in context, any single letter + colon is ambiguous and safe to reject)
+
+Would this reject any legitimate relative path? A file named `a:b.txt` in a subdirectory? Technically on Windows, `a:b.txt` in a path component IS interpreted as drive-relative. So rejecting it is correct for Windows safety.
+
+What about on non-Windows? The task says "ordinary Python on Windows" so we're targeting Windows. On Windows, any `X:` where X is a single letter is a drive reference, so rejecting all such components is correct.
+
+I think the code is correct. Let me now think about what to do:
+
+The current candidate is `c880924bc283743b17d054df83b3848c38700a713e461740b41b50e0981c9f30`. No check has been run on this candidate yet. The last check (RES-0028) was on the PREVIOUS candidate `36e21200...`.
+
+Wait, actually let me re-read. The verification section says:
+- `checks.public`: candidate_id is `36e21200...`, candidate_matches is `false`, passed is `true`
+
+So the last check was on the old candidate. The current candidate `c880924b...` has NOT been checked.
+
+The task says: "Run check `public` on the current candidate and submit."
+
+But also: "Obtain applicable evidence, correct remaining contract mismatches, check the actual successor and submit this new job."
+
+So I need to:
+1. Run the public check on the current candidate to see if it passes
+2. If it fails, fix the issues
+3. If it passes, submit
+
+Let me run the check first. I have 11 requests remaining and 35 actions remaining. Let me be efficient.
+
+Actually wait - I should first understand what the new checker tests. The task description says the new checker "adds initial, dot-prefixed and interior drive forms, rooted/UNC and traversal forms, plus valid relative paths composed under two Windows workspace roots."
+
+I've analyzed the code and believe the current implementation handles all these cases. Let me just run the check and see what happens.
+
+Let me run the public check on the current candidate.

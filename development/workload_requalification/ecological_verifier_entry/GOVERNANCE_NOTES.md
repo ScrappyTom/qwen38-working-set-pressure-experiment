@@ -33,3 +33,28 @@
 These are recorded lessons, not a mandate for a new memory system, mandatory
 accounts, different reasoning effort or automatic semantic repair. The immediate
 earned work is checker composition and an explicitly reopened containment job.
+
+## Containment successor001
+
+- The checker amendment, exact new-job transition and frozen preparation must precede
+  inference. Preserve both the earlier passing observation and the later finding
+  that its scope was insufficient. This continuation closes the concrete gap.
+- Evaluate the trajectory selected: Qwen repaired from source before checking.
+  The scripted failure/recovery path was qualified but not behaviorally exercised.
+  A direct correct solution should not be forced into a failed-check narrative.
+- Category labels can create interpretation work. Here "dot-prefixed" elicited
+  repeated guesses; the task gave categories and an available check, not the exact
+  new counterexample. Record that actual information arrangement before blaming
+  deliberation alone. No causal wording benefit has been measured.
+- Host sequencing costs matter: this configuration requires a later explicit check
+  request. C22spent5012tokens before requesting that check. Preserve this as a
+  concrete future coordination question; do not silently enable automatic checks
+  mid-run or equate every token with waste.
+- Scope diagnostics to jobs. A changed operation ceiling must not retrospectively
+  become the budget of inherited actions, and a prior-job check must not determine
+  first-check status in the new job. Preserve old raw output; derive corrected
+  reports with the original and new intervals/limits. The current correction did
+  not change model inputs, counters, code or acceptance.
+- A factual terminal account can still omit the explanation useful to later work.
+  This one states the current pass and readiness but is not subsequently used.
+  That does not establish continuity through accounts or justify mandatory updates.

@@ -81,12 +81,22 @@ throughout the running repair cycle. A list of task files is not yet corpus clos
 
 ## E20 verifier current-host entry
 
-E20-OBS-VERIFIER-SAFETY now has one fresh uncoached current-host run003 with
-original task/source/observations, a prospectively expanded public definition,
-and actual ten-file preread delivery. It completed 20 requests/29 operations,
-capacity recovery, failed-check correction and checked submission. All three
-original/expanded acceptance scripts pass independently. However, post-seal
-review found a native path-composition containment gap absent from those checks.
-Keep this entry open for the separately declared containment-contract correction.
-This is not a successful full-contract closure or a matched R50/X25 replication.
-See ecological_verifier_entry/review/RESULTS.md and containment_entry/PLAN.md.
+The functional lineage now closes with c880924b. Fresh uncoached run003 preserves
+the original task/source/observations and actual ten-file preread, completing20
+requests/29operations with capacity and failed-check recovery. Its original and
+expanded passes remain historical; post-seal native composition review found a
+remaining containment defect. That parent outcome was not retroactively changed.
+
+A published successor checker and exact saved-work continuation001 then supply
+review-directed scope without a repair or selected group. Qwen adds a three-line
+component guard, checks the actual successor, consumes its pass and submits in
+3requests/4operations. Original public/hidden, parent and successor definitions
+pass independently; source/consumer review confirms the demonstrated gap corrected,
+24otherfiles and the timeout repair preserved. Combined23/33 and52.033modelminutes.
+
+This closes this contribution under declared expanded qualification. It is not a
+matched R50/X25 replication, general security certification or proof that all
+historical workloads/pressure transitions passed. No new source release or recovery
+occurs in the continuation; its account update is not used afterward. See
+[continuation results](ecological_verifier_entry/containment_entry/review/RESULTS.md).
+The remaining legacy/temporal mapping includes E17 historical-action recovery.
