@@ -19,6 +19,7 @@ from working_set_exp.thinking_grammar import with_thinking
 ROOT, AREA = material.ROOT, material.AREA
 ACTOR, SEED = dict(common.ACTOR), 314159
 MAX_REQUESTS, MAX_OPERATIONS, FILE_LIMIT = 40, 120, 1_048_576
+STARTING_ID = '4be95d88223269e05bbb366cad6169872d74b8a82a14f2622bf8a4cffd8e96da'
 DESCRIPTIONS = {'public': 'Run preserved parser tests, independent write-safety cases, current new tests and unsafe-baseline sensitivity. Required for submission; prose needs direct review.'}
 REQUIRED_INSPECTION_PATHS = (material.LIBRARY, material.NEW_TESTS, material.DOC)
 OWNER_DIRECTION = 'Prioritize substantive coding: extend the saved parser, add meaningful regressions, preserve earlier work, and report the complete contribution.'
@@ -91,6 +92,7 @@ class Task:
         baseline = Candidate.create(material.baseline_files(), max_file_bytes=FILE_LIMIT)
         assert baseline.candidate_id == material.BASELINE_ID
         candidate = Candidate.create(material.starting_files(), max_file_bytes=FILE_LIMIT)
+        assert candidate.candidate_id == STARTING_ID
         code = qualify_cpu.checker()
         return Session(candidate, {'public': code}, (AREA/'TASK.txt').read_text(encoding='utf-8'),
             edit_checks={}, call_limit=MAX_OPERATIONS, request_limit=MAX_REQUESTS,

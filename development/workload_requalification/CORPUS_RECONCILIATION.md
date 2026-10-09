@@ -1,15 +1,22 @@
 # Corpus reconciliation in progress
 
-Current action: original E12-OBS-COMPASS run001 is in progress after published
-qualification85b1a0ac. No outcome is claimed yet. Original SABLE001 and ORBIT001
+Current action: real configparser write-safety coding, under the owner's October9
+priority. COMPASS001 closed operator_stopped after21requests/29operations with
+partial work, no submission and939/1,092required lines actually delivered. See
+recurrent_probe/review/RUN001-RESULTS.md. It remains incomplete/deferred alongside
+E2. configparser_write_safety preparation001 awaits the bounded serialized-state
+correction described in PREPARATION-001-REVIEW.md; no model completion was sent.
+
+Historical entry: COMPASS001 began after published qualification85b1a0ac.
+Original SABLE001 and ORBIT001
 are now closed with exact replay, direct transcript review and independent
 artifact/procedure assessment. See phase_entries/receipt_entries/sable/review/
 RUN001-RESULTS.md and recurrent_entries/review/RUN001-RESULTS.md. ORBIT's failed
 conservative route/byte screen remains alongside its separate original-contract
 assessment; it is not silently overwritten. COMPASS adds three actual recurrent
 probe productions and later exact recovery. The owner's October 9 direction
-prioritizes coding, not further reading-comprehension fixtures. Finish and seal
-the already-running COMPASS attempt, then proceed to real implementation and
+prioritizes coding, not further reading-comprehension fixtures. The running COMPASS
+attempt has been sealed. Proceed to real implementation and
 regression work. E2's distinct predecessor-probe entry is deferred and remains
 open; it cannot inherit a current-probe-at-fork guard or be counted as passed.
 Detailed reports remain outputs of coding work. See configparser_write_safety/PLAN.md.

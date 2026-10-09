@@ -1,4 +1,17 @@
-# COMPASS001 qualified; one original uncoached attempt next
+# Coding is the current priority
+
+The owner redirects the next work to real code changes and executable regressions.
+COMPASS001 closed operator_stopped after21requests/29operations, with A/B complete
+and correct partial C code.939/1,092required lines reached actual inputs; the final
+constructed tails did not. Exact replay passes; see recurrent_probe/review/
+RUN001-RESULTS.md. No submission; E2 and COMPASS remain deferred, not passed.
+
+configparser_write_safety preparation001 completed native forms and a scripted
+contribution, but additional replay found mixed-digit diff-key serialization on
+checkpoint restoration. No model completions. Preserve it, apply the bounded
+correction in PREPARATION-001-REVIEW.md, qualify002, publish then run once uncoached.
+
+# COMPASS001 qualified; one original uncoached attempt next (historical)
 
 See recurrent_probe/PREPARATION-001-REVIEW.md and decision_facts/QUALIFICATION.md.
 Current-input coverage projection and recorded region-edit paths are qualified

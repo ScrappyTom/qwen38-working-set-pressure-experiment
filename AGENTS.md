@@ -1,4 +1,22 @@
-# COMPASS001 qualified: publish then execute once
+# Coding priority; COMPASS stopped, parser preparation needs one adapter correction
+
+The owner's October 9 priority is substantive coding, not papers or additional
+reading-comprehension fixtures. Detailed reports remain appropriate for coding.
+COMPASS001 is closed operator_stopped after21requests/29operations: A/B complete,
+correct partial C code, no submission,939/1,092required lines actually delivered.
+Exact replay passes; all actual full inputs/replies/effects reviewed. Preserve
+recurrent_probe/review/RUN001-RESULTS.md and the shared-GPU timing limitation.
+COMPASS and E2 remain incomplete/deferred; do not launch another synthetic entry.
+
+The new configparser_write_safety coding package implements the next task on
+saved code. Read PREPARATION-001-REVIEW.md. Native forms and scripted work pass,
+but exact serialized restoration exposes mixed-digit diff-key ordering at step10.
+Publish the failed preparation, fix that adapter and the inaccurate combined-check
+claim in PLAN/SPEC, then qualify package002 and publish before one uncoached run.
+No completion has been sent for this task. Keep40requests/120operations, medium,
+no coaching/reset/retry/silent extension. Continue unless blocked or a major gap.
+
+# COMPASS001 qualified: publish then execute once (historical)
 
 Read development/workload_requalification/recurrent_probe/PREPARATION-001-REVIEW.md.
 The opt-in decision-facts correction is CPU/native-qualified; historical renderers
