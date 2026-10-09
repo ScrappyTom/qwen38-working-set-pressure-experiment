@@ -27,3 +27,15 @@ The first two points justify a narrow host correction. They do not justify a cau
 token-saving estimate, compulsory account maintenance, or a new memory architecture.
 The third is a constraint on our own assessment apparatus. The fourth is a boundary
 the existing check/delivery machinery exercised correctly on the observed path.
+
+Qualification additions:
+
+- An input projection adds space even when its facts are mechanically correct.
+  Native002 adds40–46tokens. An inherited23,794-token state no longer fits and
+  must not bypass ordinary admission. Qualify new construction and the recovery
+  path; do not silently increase the ceiling or claim unchanged trajectories.
+- Select checkpoints by completed effects, not only response number. C03/C20
+  each contain an account followed by acquisition. Measuring O01 would measure
+  a state that was never the following model input. Native001 preserved that
+  mistake; Native002 uses O02. The event order is valid but is not the same thing
+  as the presentation boundary.

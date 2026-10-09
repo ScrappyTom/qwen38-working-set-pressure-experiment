@@ -1,3 +1,23 @@
+# COMPASS001 qualified; one original uncoached attempt next
+
+See recurrent_probe/PREPARATION-001-REVIEW.md and decision_facts/QUALIFICATION.md.
+Current-input coverage projection and recorded region-edit paths are qualified
+prospectively, without changing historical renderers. Eight CPU checks plus actual
+ORBIT native projections/recovery pass their declared boundaries. The old crowded
+state gains41tokens and exceeds admission; it cannot be silently imported.
+
+Original COMPASS preparation: five CPU contract tests,48native forms,45scripted
+decisions; exact925artifacts/1,142bindings/644records/73native inputs and checkpoint
+restores replay. Full6,962-token initial input and recovery/edit support inspected.
+No model completion; owned runtime closed. Publish before run_compass.py run
+--version 001 once,64requests/192operations across four phases, medium/uncapped,
+no coaching/reset/retry/silent extension. Review every actual input/full response
+and effect; replay and independently assess procedure/artifact after closure.
+
+Three actual phase-bound probes and exact applicable recoveries before dependent
+edits are separate obligations from final behavior. E18's missed recovery and E2's
+distinct predecessor-probe entry remain open. No account-benefit claim is assumed.
+
 # ORBIT001 complete; two earned presentation corrections next
 
 See recurrent_entries/review/RUN001-RESULTS.md.30requests/45operations,47.802model/

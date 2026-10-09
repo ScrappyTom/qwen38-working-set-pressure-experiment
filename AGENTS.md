@@ -1,3 +1,22 @@
+# COMPASS001 qualified: publish then execute once
+
+Read development/workload_requalification/recurrent_probe/PREPARATION-001-REVIEW.md.
+The opt-in decision-facts correction is CPU/native-qualified; historical renderers
+and ORBIT evidence are unchanged. COMPASS original four-phase/probe package has
+48native forms/45scripted decisions; exact925artifacts/1,142bindings/644records/
+73native inputs and serialized checkpoints replay. Full6,962-token initial input
+and consequential script inputs reviewed; no completion sent; runtime closed.
+
+Publish then run recurrent_probe/run_compass.py run --version 001 once.64requests/
+192operations across A/B/C/D, medium/uncapped, no reset/coaching/retry/silent
+extension or bound-source changes. Read every actual input/full reply/effect.
+After closure exact review/verify_run.py then review/post_run/assess.py with
+version001 (CLI spaces). Independently assess three actual current phase probes,
+exact applicable recovery before B/C/D dependent edits,1,092required lines,
+preserved work, current pass consumption and cost. Correct final code alone is
+not the original recovery procedure. Publish and continue original workloads.
+E18 recovery miss and distinct E2 predecessor-probe contract remain open.
+
 # ORBIT001 closed: publish result/plan, then correct two decision facts
 
 Read development/workload_requalification/recurrent_entries/review/RUN001-RESULTS.md
