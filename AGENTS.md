@@ -1,4 +1,33 @@
-# E18 source qualified; continue the authorized programme
+# E18 source run001 closed incomplete; repair acquisition reports and continue
+
+Owner says keep working unless blocked or a major gap appears. Read
+development/workload_requalification/evolving_source_entry/review/RESULTS.md and
+complete READING_NOTES.md, then acquisition_feedback/PLAN.md under that same
+workload_requalification directory. Preparation0363a46f precedes24complete
+responses/37operations: all four ledgers delivered, three real capacity recoveries,
+correct primary and policy edits saved as99e533ea, but no changed-policy acquisition,
+secondary repair, check or submission. The finite request limit ended the attempt.
+49.939model/57.185loop minutes; preserve this incomplete result unchanged.
+
+Exact replay verifies1624artifacts/563bindings/1443custody records/165native inputs
+and39snapshots. Ordinary final grading fails on unfinished secondary. Runtime is
+closed. All24complete inputs/responses/effects reviewed; no live coaching or retry.
+
+Publish then implement the bounded acquisition report/reference repair: distinguish
+requested/returned pages from merged current selected view; report whole-input
+sizing policy without conflating preferred headroom with hard capacity; explain
+work_on's existing multi-source acquisition. Include metadata before measurement.
+Qualify real crowded states before native exposure. Preserve accounts/guards/check
+and reasoning policies. No new batch tool, summary system or source eviction.
+
+Then declare a12-request/36-new-operation continuation from exact final work and
+history with no evaluator group, account or repair. Count the whole lineage. The
+remaining changed-policy acquisition/secondary/check/submission must be real model
+actions; a terminal refreshed view is not retrospective acquisition. The later E18
+observation entry and broader corpus remain open. Do not stop after routine
+publication; continue the authorized programme.
+
+# Prior E18 source preparation
 
 Owner says keep working unless blocked or a major gap appears. Read
 development/workload_requalification/evolving_source_entry/PLAN.md,

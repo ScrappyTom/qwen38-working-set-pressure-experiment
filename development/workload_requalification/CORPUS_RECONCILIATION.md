@@ -124,3 +124,21 @@ to historical results follows. See
 Next reconcile E18's distinct source/observation acquisition and order contracts.
 E015/E017 closure donors, E013/E014 phase/probe/fork transitions, earlier legacy and
 predecessor mapping, and pressure comparisons remain open.
+
+## E18 source current-host entry remains incomplete
+
+The new job preserves the130-file E18-SOURCE-LANTERN world and checker, with a
+prospective task-author clarification of primary's preserved pre-change value.
+Run001 ends at24requests/37operations after delivering all four full ledgers,
+performing three model-selected capacity recoveries, and saving correct primary
+and policy edits. Secondary, explicit changed-policy acquisition, check and
+submission remain undone. The final ordinary artifact fails; no current-host pass
+is claimed.49.939model minutes and57.185loop minutes are retained.
+
+Actual input/output review and exact replay identify bounded acquisition-reporting
+gaps and an insufficient remaining request allowance, not missing stored source.
+The prospective acquisition_feedback plan repairs those descriptions and qualifies
+a declared12-request continuation from saved work. The prior finite outcome stays
+unchanged; any completion is a lineage result. This does not reproduce R50/X25 or
+close E18-OBS-HARBOR, whose separate source/observation entry is reconciled in
+review/NEXT_E18_OBSERVATION_NOTES.md.

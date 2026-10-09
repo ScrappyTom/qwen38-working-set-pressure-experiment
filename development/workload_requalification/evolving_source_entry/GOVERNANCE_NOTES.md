@@ -34,3 +34,29 @@
   revision and observations; their replay should use that revision, not silently
   reinterpret old actions with today's diagnostic. The correction does not alter
   the archived E17 rejection or attribute its successful recovery to new feedback.
+- Run001 now closes incomplete at24requests/37operations. All required ledgers
+  were actually delivered; three truthful capacity rejections reached the actor,
+  which used account/group replacement. Primary and policy edits are correct,
+  but secondary/reacquisition/check/submission remain. Preserve both the real
+  progress and the real incompleteness.
+- Describe actual operation effects, not only internal state designations.
+  work_on already acquires multiple unseen source ranges; introducing it mainly
+  as selection helped leave that affordance unclear. No duplicate batch tool is
+  earned. Requested versus returned page and merged current view also need distinct
+  scopes. Capacity sizing belongs to the host, including its own preferred margin.
+- A feasible researcher route is not an adequate actor opportunity qualification.
+  ByC21 the remaining4requests could not complete the required adaptive sequence.
+  Do not spend diagnosis attributing that impossibility solely to the actor. A
+  successor must explicitly renew finite opportunity and retain lineage cost.
+- Review raw responses before assigning cause. C21/C22 spend19,671generatedtokens
+  on missing source, impossible schedules, byte-count speculation and misunderstood
+  acquisition effects. C23/C24 then save correct edits in1,714tokens. This does not
+  isolate a wording effect or establish that all long reasoning was necessary.
+- Information-path testing must include merged read pages, recent requested
+  coordinates and complete next-input rendering together. Individually truthful
+  fields can imply different scopes. Added explanation must be measured before
+  admission; otherwise a presentation repair can recreate a capacity defect.
+- The post-seal independent example script was syntax-checked before use. Its
+  failed first assertion is recorded as such, not called eight passing examples.
+  The frozen verifier's copied SOURCE_REOPEN label is disclosed; exact bound case,
+  task/candidate/checker identities still verify LANTERN. No old receipt is rewritten.
