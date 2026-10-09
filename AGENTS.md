@@ -1,3 +1,25 @@
+# SABLE full entry complete; implement original recurrent source entry
+
+Read development/workload_requalification/phase_entries/receipt_entries/sable/review/RUN001-RESULTS.md
+and development/workload_requalification/recurrent_entries/PLAN.md. SABLE001 completed
+17requests/26operations, original predecessor-check order, correct two-file work,
+all728required lines and consumed successor pass. One delivered capacity rejection
+led to a model-selected replacement. Exact replay664records/65native inputs/28states/
+604bindings and independent examples pass;156other files unchanged.22.890model/
+26.057loop minutes. All full responses/actual inputs/effects reviewed; runtime closed.
+Preserve recurring chronology uncertainty and the oversized recovery acquisition.
+
+Publish this result and plan, then implement E12-SOURCE-ORBIT as a thin four-phase
+adapter on the existing host. Preserve original task/files/checkers, derive ordered
+boundaries from accepted records, register actual phase checker definitions and
+preserve historical scope. Qualify real serialized restores, current-source authority
+after release, original procedure and an evidence-supported scripted route. Keep
+medium uncapped policy, prospective64requests/192operations across four phases,
+no reset/coaching/retry/silent extension. Publish qualification before one uncoached
+run; directly review/replay/grade afterward. Do not change old bound implementations
+to silently reinterpret completed evidence. E18's missed recovery and remaining
+predecessor/probe workloads remain open. Continue unless blocked or a major gap.
+
 # SABLE full-entry package001 ready: publish, then run once
 
 Read development/workload_requalification/phase_entries/receipt_entries/sable/PREPARATION-001-REVIEW.md.

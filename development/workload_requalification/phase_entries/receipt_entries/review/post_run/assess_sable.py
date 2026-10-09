@@ -108,7 +108,7 @@ print(json.dumps(rows,ensure_ascii=False))
             a, r = op['action'], op['result']
             if not r['accepted']:
                 continue
-            if a['action'] in ('patch', 'replace_region') and a.get('path') == 'api/name.py':
+            if a['action'] in ('patch', 'replace_region') and r.get('path', a.get('path')) == 'api/name.py':
                 check = view['verification']['checks']['public']
                 name_edits.append(dict(id=tag, predecessor=view['candidate_id'], successor=r['candidate_id'],
                     consumed_predecessor_pass=bool(check and check['passed'] and check['applies_to_current'])))

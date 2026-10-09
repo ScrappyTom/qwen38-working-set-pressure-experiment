@@ -46,7 +46,7 @@ if prior:
     for key in ('task', 'episode_annotation', 'candidate_limits', 'current_p0',
                 'phase', 'verification', 'observation_directory', 'working_account',
                 'presentation', 'visibility'):
-        if view['workspace'][key] == prior['workspace'][key]:
+        if key in view['workspace'] and key in prior['workspace'] and view['workspace'][key] == prior['workspace'][key]:
             view['workspace'][key] = {'evaluator_display': 'unchanged from preceding actual input'}
 print(json.dumps(view, indent=2, ensure_ascii=False))
 for suffix in ('assistant-reasoning.txt', 'assistant-content.txt'):

@@ -32,3 +32,15 @@ execution_only/E2-OBSERVATION/FIXTURE.json; experiments/012_large_world_recurren
 fresh_bank/model_visible/{E12-SOURCE-ORBIT,E12-OBS-COMPASS}/TASK.txt; the ORBIT fixture;
 and phase_entries/phase_session.py. This note identifies differences, not a new
 live-run approval package or evidence that the unimplemented transitions work.
+
+Further original ORBIT inspection while SABLE001 runs: B, C and D each name the
+public scope but have different actual checker definitions. B requires the old
+policy/name relationship; C requires the new policy while preserving the B name;
+D requires the new footer and integrated rendering while preserving that name.
+A recurrent adapter must change the registered checker at the phase boundary and
+leave older observations intact. Same candidate identity at a boundary does not
+make the earlier checker applicable to the new phase. Its existing source/checker
+binding machinery can express this; the current two-phase task adapter cannot.
+These are original contract differences, not grounds to add automatic checks or
+semantic completion guesses. D has no extra record-file requirement; do not invent
+one. The exact governing policy must actually be reacquired after C's mutation.

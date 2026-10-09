@@ -1,3 +1,21 @@
+# SABLE full entry complete; original recurrent source entry next
+
+SABLE001 completed17requests/26operations with correct two-file work, all728required
+lines, predecessor public check before the name edit and consumed successor pass.
+One capacity rejection was delivered and recovered through a model-selected group.
+Exact replay664records/65native inputs/28states/604bindings passes; fresh original
+programs and eight independent examples pass;156other files unchanged.22.890model/
+26.057loop minutes. All full replies/actual inputs/effects reviewed; runtime closed.
+See phase_entries/receipt_entries/sable/review/RUN001-RESULTS.md. Preserve chronology
+reconstruction and excess reacquisition as costs, not lost-result claims.
+
+Publish result and recurrent_entries/PLAN.md, then implement/qualify original
+E12-SOURCE-ORBIT on the existing host. Four ordered phases, changing actual public
+checker definitions, source release and reacquisition after an authorized policy
+mutation; prospective64requests/192operations, unchanged medium policy. No coaching,
+reset/retry/silent extension. Publish preparation before one uncoached run. Preserve
+E18's recovery miss and the separate remaining predecessor/recurrent probe contracts.
+
 # SABLE full-entry package001 ready: publish, then run once
 
 Read development/workload_requalification/phase_entries/receipt_entries/sable/PREPARATION-001-REVIEW.md.
