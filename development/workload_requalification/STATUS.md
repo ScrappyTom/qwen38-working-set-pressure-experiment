@@ -1,3 +1,15 @@
+# Replacement consultation complete; full-phase adapter next
+
+One nonexecuting call correctly predicts the C02 release/recovery consequence;
+full input/output/effects and custody reviewed. It uses300.5model seconds. Secondary
+claims about operation cost, ordering and coverage are corrected, not adopted.
+Read evolving_observation_entry/replacement_dialogue/RESULTS.md. Retain the interface;
+no unchanged E18 retry. Its original procedural obligation remains unresolved.
+
+Proceed under phase_entries/PLAN.md: original E13-SOURCE-LUMEN first, with actual
+Phase A delivery/check/fork and Phase B continuation, preserved work/history and
+finite shared allowance. Native qualification/publication precede any run.
+
 # E18 run002: correct work/full coverage; exact recovery procedure still open
 
 Read evolving_observation_entry/review/RUN002-RESULTS.md.10requests/17operations,

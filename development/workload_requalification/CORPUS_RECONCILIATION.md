@@ -1,10 +1,14 @@
 # Corpus reconciliation in progress
 
-Current next action: E18 run002 completed10requests/17operations with correct code,
+Current next action: implement/qualify phase_entries/PLAN.md, starting original
+E13-SOURCE-LUMEN. The completed one-call replacement consultation correctly
+predicts release/recovery but does not close E18 or earn a wording/retention change.
+
+E18 run002 completed10requests/17operations with correct code,
 complete ledger delivery and checked submission, but missed exact recovery before
 the footer after releasing the marker. Preserve this procedural failure. One separate
-interpretation consultation on the actual C02 selection is next; no unchanged retry
-or new retention policy is yet earned. MINT001/SABLE003 constructed closures remain
+interpretation consultation on the actual C02 selection is now closed; no unchanged
+retry or new retention policy is earned. MINT001/SABLE003 constructed closures remain
 complete; full phase/probe/fork and predecessor entries remain open. Read
 evolving_observation_entry/review/RUN002-RESULTS.md and replacement_dialogue/SPEC.md.
 

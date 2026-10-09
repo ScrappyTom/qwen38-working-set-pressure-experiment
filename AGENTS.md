@@ -1,3 +1,20 @@
+# Replacement consultation closed; implement the missing full-phase adapter
+
+Owner says keep working unless blocked or a major gap appears. Read
+development/workload_requalification/evolving_observation_entry/replacement_dialogue/RESULTS.md.
+D1 correctly predicts release and required recovery from exact C02 input/proposal.
+No interface/account/retention change or unchanged E18 rerun is earned. Correct
+consultation is not correct ordinary task behavior; original recovery miss remains.
+Several secondary claims are corrected in the audit. One call only, runtime closed.
+
+Publish the record and phase_entries/PLAN.md, then implement/qualify the existing
+full Phase A/fork/Phase B task responsibility as a thin adapter. Start original
+E13-SOURCE-LUMEN, original sources/tasks/checkers,32requests/96operations across
+both phases, current medium policy. No live coaching, reset at fork or silent
+extension. Preserve actual delivered coverage and distinct current check scopes.
+Publish native qualification before one run. Other probe/phase/predecessor entries
+remain open; do not flatten them into candidate-only passes or repeat closed entries.
+
 # E18 replacement consultation qualified; publish and run D1 once
 
 Read development/workload_requalification/evolving_observation_entry/replacement_dialogue/
