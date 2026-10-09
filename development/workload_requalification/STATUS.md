@@ -1,3 +1,19 @@
+# ORBIT001 complete; two earned presentation corrections next
+
+See recurrent_entries/review/RUN001-RESULTS.md.30requests/45operations,47.802model/
+53.119loop minutes. Original four phases completed, real dependency regression
+corrected after actual failure feedback, all1,092required lines delivered and D
+post-change policy reacquired before footer work. Exact replay1,094records/105native
+inputs/47states/604bindings; original programs and independent examples pass.
+156other files unchanged. All full responses/inputs/effects reviewed, runtime closed.
+
+Preserve the conservative route/byte screen as false; its separately qualified
+original-contract interpretation passes. Preserve the assessor Path error and
+partial output separately. Publish result and decision_facts/PLAN.md, then implement
+only the opt-in actual-input coverage projection and recent region-edit target path.
+Qualify before the next original E12-OBS-COMPASS task. No live coaching, original-run
+rewrite, compulsory accounts or new memory architecture. E18 and E2 remain open.
+
 # ORBIT package001 qualified: publish then run once
 
 See recurrent_entries/PREPARATION-001-REVIEW.md.38native forms/40scripted decisions,

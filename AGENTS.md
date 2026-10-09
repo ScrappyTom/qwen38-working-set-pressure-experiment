@@ -1,3 +1,24 @@
+# ORBIT001 closed: publish result/plan, then correct two decision facts
+
+Read development/workload_requalification/recurrent_entries/review/RUN001-RESULTS.md
+and development/workload_requalification/decision_facts/PLAN.md. Original four-phase
+entry completed30requests/45operations, real C regression/feedback/correction,
+all1,092required lines, D post-mutation reacquisition, current checked submission.
+47.802model/53.119loop minutes. All full replies/inputs/effects reviewed. Exact replay
+1,094records/105native inputs/47states/604bindings passes; original phase programs
+and independent examples pass;156other files unchanged. Runtime closed. Preserve
+the failed conservative route/byte screen and separately qualified original-contract
+interpretation; preserve first assessment's Path error/draft/partial outputs too.
+
+Publish result and decision_facts plan BEFORE implementation. Add an opt-in view
+that projects coverage including actual current input without committing delivery,
+and gives recent accepted region edits their recorded target path. No account
+rewriting, inferred semantic truth, historical renderer change, or unchanged ORBIT
+retry. Qualify actual C14 and edge transitions/current authority/native full input.
+Then prepare original E12-OBS-COMPASS as a thin recurrent-probe adapter, prospectively
+bind/qualify/publish before one uncoached run. E18 recovery miss and E2 predecessor
+probe remain open. Continue unless blocked or a major gap appears.
+
 # ORBIT package001 qualified: publish then execute once
 
 Read development/workload_requalification/recurrent_entries/PREPARATION-001-REVIEW.md.

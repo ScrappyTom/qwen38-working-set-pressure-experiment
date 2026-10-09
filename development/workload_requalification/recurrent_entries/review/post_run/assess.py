@@ -89,8 +89,15 @@ def assess(version):
         assert view['task'] == task.task_text()
         phase = view['phase']['current']
         own = [op for selected, op in operations if selected == tag]
-        checkpoint = task.restore(task.read(run / f'before/{tag}-state.json'),
-            task.read(run / f'before/{tag}-candidate.json'), replay_folder=run, replay=True)
+        number = int(tag[1:])
+        if number == 1:
+            checkpoint_stem = run / 'starting'
+        else:
+            states = sorted((run / 'after').glob(f'C{number-1:02d}-O*-state.json'))
+            assert states, 'Preceding call must have an actual saved operation state'
+            checkpoint_stem = states[-1].with_name(states[-1].name.removesuffix('-state.json'))
+        checkpoint = task.restore(task.read(Path(str(checkpoint_stem) + '-state.json')),
+            task.read(Path(str(checkpoint_stem) + '-candidate.json')), replay_folder=run, replay=True)
         checkpoint.mark_delivered(view)
         policy = [r for r in checkpoint.delivered_sources if r.get('path') == 'policies/current.py'
                   and r.get('file_sha256') == checkpoint.candidate.file_sha256('policies/current.py')]
