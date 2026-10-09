@@ -1,3 +1,23 @@
+# Original closure entries prepared; publish and run each once
+
+Owner says keep working unless blocked or a major gap appears. Read
+development/workload_requalification/closure_entries/PREPARATION_REVIEW.md. MINT
+and SABLE preparation001 each qualify36native decoder cases and12scripted decisions;
+replay verifies317artifacts/13native inputs/163records,761 and763source bindings.
+Initial inputs7471/7657tokens were fully reviewed. No model exposure; runtime closed.
+
+The original MINT verifier failed on QualificationLog's extra envelope flags.
+Preserve it and both sealed preparations. Use review/post_run/
+verify_preparation_envelope.py and the separately recorded SUPPLEMENT proofs;
+actual-log positive/negative test passes. No actor input/host/checker changed.
+Shared host repair ea251fdb is already pushed. Publish these packages then execute
+run_closure.py run --case E14-CLOSURE-MINT --version 001 and, after its closure,
+E14-STALE-SABLE once. Eight new requests/24operations each; five constructed setup
+operations separate. Uncoached, no forced retrieval/edit/error or silent extension.
+Read all actual full inputs/outputs/effects, replay and independently assess.
+Direct check/submission is valid closure. Keep SABLE's weak public scope explicit,
+and the E18 original procedure and wider legacy/phase obligations open. Continue.
+
 # Group acquisition repairs qualified; prepare and run original closure entries
 
 Owner says keep working unless blocked or a major gap appears. Read

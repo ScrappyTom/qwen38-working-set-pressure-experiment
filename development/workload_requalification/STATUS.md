@@ -1,3 +1,14 @@
+# Original MINT/SABLE closure entries natively prepared
+
+Read closure_entries/PREPARATION_REVIEW.md. Both preparation001 packages pass36
+decoder cases and12scripted decisions, then exact replay of13native inputs,
+317artifacts and163records per case. Initial7471/7657tokens; no model exposure and
+runtime closed. A separate supplemental audit corrects qualification-envelope
+handling, preserving the failed original verifier and sealed evidence unchanged.
+Publish and run each finite eight-request entry once, MINT then SABLE. Review and
+grade actual closure separately from five constructed setup operations. Keep E18
+original-procedure and full phase/fork/legacy obligations open; continue working.
+
 # Group acquisition package qualified; constructed closure entries next
 
 Read group_acquisition/RESULTS.md and GOVERNANCE_NOTES.md. Five native mixed-group
