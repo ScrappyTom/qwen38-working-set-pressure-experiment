@@ -1,3 +1,26 @@
+# Group acquisition repairs qualified; prepare and run original closure entries
+
+Owner says keep working unless blocked or a major gap appears. Read
+development/workload_requalification/group_acquisition/RESULTS.md and
+GOVERNANCE_NOTES.md. FeedbackSession now tries complete small requested regions
+without removing any admitted bulk page and projects original grouped-return
+ranges/candidate into bounded recent activity. Five real mixed cases complete
+targets within preferred22784. History metadata has measured cost; do not claim
+all old-host page lengths are preserved. Original baseline classes remain intact.
+
+Qualification001:13saved-state variants,12scripted contribution steps and6crowded
+steps. Replay verifies151native inputs/1290artifacts/615bindings/1108records. Zero
+model completions; runtime closed.16focused checks and10closure tests pass. The
+broader invocation/import errors and pre-existing historical wording-comparison
+failure remain documented; no claim that the full suite is green.
+
+Publish this package, then prepare/replay both closure_entries natively, inspect
+the full starting inputs, publish, and run each once uncoached (eight new requests/
+24new operations; five setup operations separate). Preserve original task/checker
+scope, captures/history and no-source authority at entry. Direct check/submission
+is legitimate success. No supplied next action, forced error or silent extension.
+E18's original procedure and wider corpus remain open. Continue after publication.
+
 # E18 observation run closed; qualify acquisition sizing and recent-range repairs
 
 Owner says keep working unless blocked or a major gap appears. Read

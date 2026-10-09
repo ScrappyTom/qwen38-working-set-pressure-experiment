@@ -57,6 +57,37 @@ class FeedbackSession(DecisionSession):
                     page_end_reason='requested_extent_delivered' if complete else 'input_sizing_policy')
         super()._record(action, result)
 
+    def _fit_pages(self, action, spans, handles, measure, replace):
+        selected = super()._fit_pages(action, spans, handles, measure, replace)
+        if not replace or action['action'] != 'work_on':
+            return selected
+        # Keep the admitted proportional page. Complete cheaper requested regions
+        # where the whole next input still fits, without taking back other pages.
+        # There are at most 16 requested regions, hence at most 16 extra trials.
+        full = [self.source(span) for span in spans]
+        pages = selected.pairs[-1]['result']['sources']
+        pending = sorted((len(whole['content'].encode()) - len(page['content'].encode()), i)
+            for i, (whole, page) in enumerate(zip(full, pages, strict=True))
+            if whole['returned_end_line'] != page['returned_end_line'])
+        margin = selected.admissions[-1]['margin']
+        trials = list(selected.admissions)
+        for _, index in pending:
+            proposed = selected.clone()
+            result = copy.deepcopy(proposed.pairs.pop()['result'])
+            result['sources'][index] = full[index]
+            # Rebuild from all individual returns, including disjoint or
+            # overlapping regions of the same path. Saved records stay selected.
+            proposed.ranges = []
+            for source in result['sources']:
+                proposed.add_source(source)
+            proposed._record(action, result)
+            fits = proposed._fits(measure, margin=margin)
+            trials.extend(proposed.admissions)
+            if fits:
+                selected = proposed
+        selected.admissions = trials
+        return selected
+
     def resolve_region(self, reference):
         # Rejected ambiguous patches expose addresses, not source/edit authority.
         for pair in reversed(self.pairs):
@@ -76,6 +107,20 @@ class FeedbackSession(DecisionSession):
             # A historical return extent, not a claim about today's visible body.
             value['returned_range'] = dict(start_line=source['returned_start_line'],
                                            end_line=source['returned_end_line'])
+        if pair['response']['action'] in ('work_on', 'work_on_exact') and result.get('accepted'):
+            sources = result.get('sources', [])
+            candidates = {s['candidate_id'] for s in sources}
+            if len(candidates) == 1:
+                value['returned_candidate_id'] = next(iter(candidates))
+            value['returned_sources'] = []
+            for source in sources:
+                row = {key: source[key] for key in ('path', 'returned_start_line', 'returned_end_line',
+                    'requested_start_line', 'requested_end_line', 'requested_extent_complete') if key in source}
+                if len(candidates) != 1:
+                    row['candidate_id'] = source['candidate_id']
+                value['returned_sources'].append(row)
+            if 'complete_requested_group' in result:
+                value['complete_requested_group'] = result['complete_requested_group']
         for key in ('rejection_code', 'match_count', 'proposed_old_sha256'):
             if key in result:
                 value[key] = result[key]
@@ -165,5 +210,9 @@ def operating_reference(checks):
         'page_end_reason=input_sizing_policy means the host selected a shorter page under its complete-input/feedback-room policy; '
         'it does not mean the file ended or that later lines are blank. It is not a proof that no larger page could fit the hard ceiling. '
         'working_set.sources describes the current selected source view, which may merge several acquired pages and refresh after edits; '
-        'its extents are not attributed to one earlier read. A recent read row\'s returned_range is that historical operation\'s actual page.')
+        'its extents are not attributed to one earlier read. A recent read row\'s returned_range is that historical operation\'s actual page. '
+        'A recent grouped acquisition\'s returned_sources and returned_candidate_id describe its historical returned ranges and version, '
+        'not current visibility, editing authority or task completion. '
+        'After sizing a work_on group, the host tries to complete shorter requested regions in order of additional byte size, '
+        'keeping the other returned pages and the same input margin. Requested ranges can still be incomplete; inspect their actual returned extents.')
     return text

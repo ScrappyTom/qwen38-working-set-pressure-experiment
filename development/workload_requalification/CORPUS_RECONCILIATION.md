@@ -1,5 +1,11 @@
 # Corpus reconciliation in progress
 
+Current next action: group_acquisition/RESULTS.md qualifies two bounded acquisition
+repairs against the completed E18 observation run. No new actor result follows
+yet. Publish and natively qualify/run the two original constructed closure_entries;
+then return to the still-open E18 original procedure. A passing functional artifact
+does not close missed ledger delivery or a temporal exact-recovery requirement.
+
 The first inventory finds 50 distinct tracked task.txt texts at 66 locations in this
 project, plus 27 task.md/task.input texts at 178 locations in the predecessor. These
 are text identities, not counts of independent experiments or required reruns.

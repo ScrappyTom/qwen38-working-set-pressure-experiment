@@ -1,3 +1,18 @@
+# Group acquisition package qualified; constructed closure entries next
+
+Read group_acquisition/RESULTS.md and GOVERNANCE_NOTES.md. Five native mixed-group
+cases deliver complete requested target regions without removing any bulk byte
+admitted under the same reporting. Grouped recent rows now carry historical ranges
+and candidate binding. Metadata cost shortens some pages versus the old renderer;
+there is no model-benefit or costless-change claim. Original classes/history stay.
+
+Replay authenticates151native inputs/1290artifacts/615bindings/1108records across
+13saved-state variants and12+6 scripted contribution/recovery steps. Runtime closed,
+zero model completions.16focused and10closure CPU checks pass; preserve documented
+invocation errors and the pre-existing historical wording-comparison limitation.
+Publish, natively qualify and run MINT/SABLE closure entries once each. Keep the
+E18 original procedure and wider legacy/phase ledger open; continue working.
+
 # E18 observation: checked artifact, incomplete procedure; acquisition repairs next
 
 Read evolving_observation_entry/review/RESULTS.md and NEXT_DECISION.md. Run001
