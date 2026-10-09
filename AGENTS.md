@@ -1,3 +1,19 @@
+# Unnamed-section coding package001 ready; publish then execute once
+
+Read configparser_unnamed/PREPARATION-001-REVIEW.md under workload_requalification.
+13CPU execution/environment cases, four integration tests,44native forms and a
+38-decision scripted contribution pass. Exact681artifacts/538bindings/280records/
+39native inputs/38serialized states replay. Full5,780-token initial input read;
+no model completion, runtime closed. Preserve all earlier parser work.
+
+Publish then execute configparser_unnamed/run_unnamed.py run --version 001 once.
+40requests/120operations, medium, uncoached, no reset/retry/extension or bound-source
+changes. Read every input/full response/effect. At closure use review/verify_run.py
+and review/assess.py; inspect actual code, tests, docs/examples and behavioral
+sensitivity, export work and report cost. Do not confuse baseline missing-API errors
+with meaningful assertion coverage. The owner requests substantive coding, not
+papers or synthetic reading fixtures; continue unless blocked or a major gap.
+
 # Recovery navigation qualified; implement the next real parser feature
 
 Read recovery_navigation/QUALIFICATION.md and configparser_unnamed/PLAN.md under
