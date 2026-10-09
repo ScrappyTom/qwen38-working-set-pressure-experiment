@@ -15,7 +15,11 @@ continuation repair and tests, and document the limited new API behavior.
 
 This is a real standard-library maintenance backport, not novel discovery. Python
 3.14 documents InvalidWriteError. Pin evaluator reference material to CPython
-v3.14.0, resolved by git ls-remote to ac991beb29b1783316c4016c99468c008568d08a.
+v3.14.0. The first git ls-remote result ac991beb29b1783316c4016c99468c008568d08a
+is its annotated tag object; the peeled source commit is
+ebf955df7a89ed0c7968f79faec1de49f61ed7cb. The initial raw-source request using the
+tag object returned HTTP 404 before saving any file. Preserve this acquisition
+correction; source qualification uses the peeled commit.
 Before freezing the task, inspect the exact implementation/tests and reproduce
 the behavior through ordinary write/read execution. Do not claim that these two
 checks guarantee lossless serialization for every customizable parser setting.
