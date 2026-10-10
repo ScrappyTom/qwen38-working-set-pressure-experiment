@@ -86,9 +86,12 @@ interface suggestions into the results decision. Generated excerpts, counters,
 and custody checks assist review; running a script cannot certify that a human
 or reviewing agent directly read the transcripts.
 
-For consequential misunderstanding, diagnosis must lead into a small separate
-development conversation with the operating model before settling the next
-presentation. Ask how it interprets the actual input and which associations are
+For consequential misunderstanding, use a small separate development conversation
+when an unresolved interpretation could change the proposed remedy. Do not make
+an interview an automatic prerequisite for repairing a demonstrated host defect
+or implementing explicitly authorized mechanical/policy work. The owner's GPU
+stop takes precedence; any resulting intervention remains unproven until tested.
+Ask how the operating model interprets the actual input and which associations are
 explicit or inferred. Preserve its answer before providing source-checked
 clarification, then respond to that answer and assess whether an unresolved
 problem is established. Ask neutral questions before soliciting alternatives;
@@ -100,6 +103,14 @@ Retaining the current input is a complete outcome. Neither long thinking alone
 nor an available suggestion obliges implementation or a comparison. Check
 proposed examples against actual records. Neither agreement with the reviewer
 nor a retrospective explanation is proof of the original cause.
+
+Follow docs/DEVELOPMENT_METHOD.md: one declared question, actual saved-state
+support for each scripted decision, fixed comparison settings, and an explicit
+retain/repair/test/stop decision. Measure a completed coding contribution and its
+cost; a shorter response or a saved objective/account is not the outcome. Spending
+limits and opportunity limits are different. A deadline must preserve actual
+effects and interrupted transport, never manufacture a final action or refund
+elapsed time through a focus change or restart. Account for extra selection turns.
 
 Keep this dialogue separate from frozen evaluation: do not rescue, rewrite or
 rerun the completed trajectory. It is informed development work, not independent

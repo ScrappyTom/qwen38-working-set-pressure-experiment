@@ -16,6 +16,22 @@ for this map and an implementation plan on September 14, 2026.
 
 ## Purpose and boundaries
 
+The optional [contribution cycle](development/workload_requalification/contribution_cycle/QUALIFICATION.md)
+adds a current-job objective selected by the model, derived from an ordinary
+archived operation. Its companion status lists actual accepted edits and the
+selected check's applicability. It does not infer semantic completion, change
+source selection, or promote account text into evidence. Older job objectives
+remain historical. This is a presentation/coordination policy over the same
+world and functions, not another store.
+
+The opt-in runner separately bounds completion-request spending and declines
+further inference when the declared attempt or unchecked-edit time is exhausted.
+It preserves committed work and partial transport, then returns for owned-runtime
+closure. It does not force a final reply at the deadline, interrupt an executed
+edit/check transaction, or guarantee a correct contribution within that budget.
+CPU qualification is complete; native capacity, real runtime cancellation and
+behavioral benefit remain unqualified. See [development method](docs/DEVELOPMENT_METHOD.md).
+
 The objective is durable, correct contributions across changing information needs
 and bounded model inputs. Exact recovery is a prerequisite, not the final outcome.
 

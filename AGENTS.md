@@ -1,4 +1,20 @@
-# Unnamed-section attempt stopped by owner; GPU closed, review complete
+# Current direction: contribution coordination implemented; CPU qualification only
+
+The owner's latest direction authorizes implementation to make development more
+effective and intentional. Read docs/DEVELOPMENT_METHOD.md and development/
+workload_requalification/contribution_cycle/QUALIFICATION.md. An opt-in local
+objective now accompanies actual edit/check status, with explicit spending limits.
+21 new and 46 existing focused tests pass; three real saved coding states qualify
+on CPU. This is host evidence, not evidence of improved Qwen productivity.
+
+No GPU runtime, native tokenizer or completion was launched. Keep the unnamed
+attempt and all earlier runs unchanged. Do not resume the stopped run or start a
+model comparison without separately qualifying and declaring its native contract,
+cost limits and owned-runtime shutdown. The adapter has no launch command.
+Optional objectives/accounts may earn their place; do not mandate either because
+it exists. Keep quantization, source refocusing and multi-edit changes separate.
+
+# Unnamed-section attempt stopped by owner; GPU closed, review complete (historical)
 
 Read configparser_unnamed/review/RUN001-RESULTS.md under workload_requalification.
 The owner requested immediate shutdown on October 9 after 3 hours 35 minutes.
@@ -15,7 +31,7 @@ No missing-source or capacity failure was found. Repeated whole-feature planning
 small edits and two redundant reads consumed the run; accounts omitted decisive
 design distinctions. Qualify progress/cost controls and coherent action construction
 before proposing another model attempt. No new host mechanism is proved by this
-review, and no further implementation is authorized by the shutdown request.
+review. The later implementation authorization is recorded above; GPU work remains stopped.
 
 # Unnamed-section coding package001 ready; publish then execute once (historical)
 

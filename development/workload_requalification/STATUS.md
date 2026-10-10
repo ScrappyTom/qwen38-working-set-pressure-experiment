@@ -1,4 +1,18 @@
-# Unnamed-section attempt stopped by owner; GPU closed, review complete
+# Contribution coordination and spending controls: CPU-qualified, no model result
+
+Read contribution_cycle/QUALIFICATION.md, CONTRACT.json and INFORMATION_PATH.md.
+The owner authorized intentional host/process development. The new opt-in adapter
+records a model-selected immediate objective and shows actual saved edits/check
+applicability. It enforces declared request/attempt/unchecked-edit elapsed limits,
+preserves interrupted transport and committed work, and never retries itself.
+21 new plus 46 existing focused tests and three saved-state fixtures pass.
+
+No GPU/native/completion calls. The stopped unnamed task remains incomplete and
+unchanged. Native decoder/capacity and owned-runtime cancellation remain separate
+gates before any authorized model comparison. The effects on correctness and cost
+are unknown. Keep the comparison narrow and count optional planning overhead.
+
+# Unnamed-section attempt stopped by owner; GPU closed, review complete (historical)
 
 Read configparser_unnamed/review/RUN001-RESULTS.md. After 3 hours 35 minutes the
 owner requested immediate shutdown. 17 replies completed and C18 was interrupted;
